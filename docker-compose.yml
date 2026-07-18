@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: obehy_test
+      POSTGRES_USER: obehy
+      POSTGRES_PASSWORD: obehy-m0-local-only
+    ports:
+      - "45873:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U obehy -d obehy_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - obehy-pgdata:/var/lib/postgresql/data
+
+volumes:
+  obehy-pgdata:

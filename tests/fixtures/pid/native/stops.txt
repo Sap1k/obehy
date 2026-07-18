@@ -1,0 +1,5 @@
+stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station,platform_code
+smrkov,Smrkov,50.1000,14.1000,1,,
+smrkov-1,Smrkov,50.1001,14.1001,0,smrkov,1
+jedlova,Jedlová,50.2000,14.2000,1,,
+jedlova-2,Jedlová,50.2001,14.2001,0,jedlova,2

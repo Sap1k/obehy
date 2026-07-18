@@ -1,0 +1,8 @@
+{
+  "format": "PID GTFS normalized projection",
+  "source_trip_id": "pid-segment-9001",
+  "train_number": 9001,
+  "service_date": "2026-07-18",
+  "direction": 0,
+  "passenger_location_keys": ["smrkov", "jedlova"]
+}

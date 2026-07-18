@@ -1,0 +1,17 @@
+{
+  "format": "JDF 1.11 normalized projection",
+  "export": "A",
+  "stops": [
+    {
+      "export_stop_id": "JDF-A-101",
+      "authoritative_cis_stop_id": "CIS-SYN-0001",
+      "name": "Lhotka, nádraží"
+    },
+    {
+      "export_stop_id": "JDF-A-102",
+      "authoritative_cis_stop_id": "CIS-SYN-0002",
+      "name": "Lhotka, náměstí",
+      "posts": [{"source_id": "1", "name": "stanoviště A"}]
+    }
+  ]
+}

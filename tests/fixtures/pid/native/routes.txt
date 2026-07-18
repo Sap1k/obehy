@@ -1,0 +1,2 @@
+route_id,agency_id,route_short_name,route_long_name,route_type
+train-9001,synthetic,S9,Smrkov – Jedlová,2

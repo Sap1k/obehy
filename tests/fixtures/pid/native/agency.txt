@@ -1,0 +1,2 @@
+agency_id,agency_name,agency_url,agency_timezone
+synthetic,Syntetická PID doprava,https://invalid.example,Europe/Prague

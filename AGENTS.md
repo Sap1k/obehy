@@ -8,7 +8,11 @@
 
 ## Repository state
 
-- This repository is at the bootstrap stage; most of the planned application structure does not exist yet.
+- Milestone 0 is implemented. Read `PROGRESS.md` before starting work for the current handoff,
+  validation state, known limitations, and next intended milestone.
+- The Python project, canonical domain model, initial PostgreSQL/PostGIS schema, synthetic fixtures,
+  and Milestone 0 tests exist. Production source adapters, national imports, exports, and realtime
+  processes do not exist yet.
 - `converters/jrutil` is a pinned Git submodule. Do not edit submodule contents or advance its pointer unless the task explicitly calls for JrUtil work.
 - Keep generated data, source snapshots, build artifacts, credentials, and local environment files out of version control.
 
@@ -19,6 +23,11 @@
 - Preserve Czech text as UTF-8 and retain diacritics in public-facing names.
 - Add or update the closest relevant tests and fixtures with behavior changes. Use small deterministic fixtures for data-conversion and matching work.
 - Never silently guess an identity match. Quarantine ambiguity and expose it in diagnostics.
+- Update `PROGRESS.md` whenever work materially changes repository capabilities, decisions, known
+  limitations, validation results, or the recommended next step. Keep it factual and concise; do
+  not use it as a speculative backlog or duplicate `BASE_PLAN.md`.
+- A progress entry must state what changed, what was actually validated (including skipped or
+  unavailable checks), any remaining caveats, and the next safe handoff point.
 
 ## Validation
 
@@ -26,3 +35,5 @@
 - For documentation-only changes, inspect the rendered structure and review `git diff --check` plus `git diff`.
 - For JrUtil changes explicitly requested inside the submodule, run the relevant .NET tests from `converters/jrutil` and report the exact command and result.
 - If a planned command or project structure has not been bootstrapped yet, say so instead of inventing a passing check.
+- When validating native fixtures with JrUtil, inspect its log output as well as the process exit
+  code: current conversion commands may log an entity-level error while returning exit code zero.

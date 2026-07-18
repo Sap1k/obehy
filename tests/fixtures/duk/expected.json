@@ -1,0 +1,8 @@
+{
+  "format": "DÚK normalized projection",
+  "vehicle_id": "synthetic-bus-42",
+  "observed_cis_line_id": "582588",
+  "normalized_cis_line_id": "001588",
+  "cis_trip_id": 7,
+  "event_time": "2026-07-18T08:15:00Z"
+}

@@ -1,0 +1,3 @@
+trip_id,arrival_time,departure_time,stop_id,stop_sequence
+pid-segment-9001,08:20:00,08:21:00,smrkov-1,1
+pid-segment-9001,08:35:00,08:35:00,jedlova-2,2

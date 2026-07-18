@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CZPTTCISMessage>
+  <Identifiers>
+    <PlannedTransportIdentifiers>
+      <ObjectType>PA</ObjectType><Company>54</Company><Core>000000009001</Core><Variant>00</Variant><TimetableYear>2026</TimetableYear>
+    </PlannedTransportIdentifiers>
+    <PlannedTransportIdentifiers>
+      <ObjectType>TR</ObjectType><Company>54</Company><Core>000000009001</Core><Variant>00</Variant><TimetableYear>2026</TimetableYear>
+    </PlannedTransportIdentifiers>
+  </Identifiers>
+  <CZPTTCreation>2026-07-18T12:00:00</CZPTTCreation>
+  <CZPTTInformation>
+    <PlannedCalendar><BitmapDays>1</BitmapDays><ValidityPeriod><StartDateTime>2026-07-18T00:00:00</StartDateTime><EndDateTime>2026-07-18T00:00:00</EndDateTime></ValidityPeriod></PlannedCalendar>
+    <CZPTTLocation><Location><CountryCodeISO>CZ</CountryCodeISO><LocationPrimaryCode>54001</LocationPrimaryCode><PrimaryLocationName>Lhotka</PrimaryLocationName></Location><TimingAtLocation><Timing TimingQualifierCode="ALA"><Time>08:00:00.000+02:00</Time><Offset>0</Offset></Timing><Timing TimingQualifierCode="ALD"><Time>08:02:00.000+02:00</Time><Offset>0</Offset></Timing></TimingAtLocation><TrainType>1</TrainType><OperationalTrainNumber>09001</OperationalTrainNumber><TrainActivity><TrainActivityType>0001</TrainActivityType></TrainActivity></CZPTTLocation>
+    <CZPTTLocation><Location><CountryCodeISO>CZ</CountryCodeISO><LocationPrimaryCode>54002</LocationPrimaryCode><PrimaryLocationName>Borový výhybna</PrimaryLocationName></Location><TimingAtLocation><Timing TimingQualifierCode="ALD"><Time>08:12:00.000+02:00</Time><Offset>0</Offset></Timing></TimingAtLocation><TrainType>1</TrainType><OperationalTrainNumber>09001</OperationalTrainNumber><TrainActivity><TrainActivityType>0040</TrainActivityType></TrainActivity></CZPTTLocation>
+    <CZPTTLocation><Location><CountryCodeISO>CZ</CountryCodeISO><LocationPrimaryCode>54003</LocationPrimaryCode><PrimaryLocationName>Smrkov</PrimaryLocationName></Location><TimingAtLocation><Timing TimingQualifierCode="ALA"><Time>08:20:00.000+02:00</Time><Offset>0</Offset></Timing><Timing TimingQualifierCode="ALD"><Time>08:21:00.000+02:00</Time><Offset>0</Offset></Timing></TimingAtLocation><TrainType>1</TrainType><OperationalTrainNumber>09001</OperationalTrainNumber><TrainActivity><TrainActivityType>0001</TrainActivityType></TrainActivity></CZPTTLocation>
+    <CZPTTLocation><Location><CountryCodeISO>CZ</CountryCodeISO><LocationPrimaryCode>54004</LocationPrimaryCode><PrimaryLocationName>Jedlová</PrimaryLocationName></Location><TimingAtLocation><Timing TimingQualifierCode="ALA"><Time>08:35:00.000+02:00</Time><Offset>0</Offset></Timing></TimingAtLocation><TrainType>1</TrainType><OperationalTrainNumber>09001</OperationalTrainNumber><TrainActivity><TrainActivityType>0001</TrainActivityType></TrainActivity></CZPTTLocation>
+  </CZPTTInformation>
+</CZPTTCISMessage>

@@ -1,0 +1,12 @@
+{
+  "format": "CZPTTCIS normalized projection",
+  "train_number": 9001,
+  "service_date": "2026-07-18",
+  "direction": 0,
+  "calls": [
+    {"sequence": 10, "kind": "passenger", "location_key": "lhotka", "arrival": 28800, "departure": 28920},
+    {"sequence": 20, "kind": "operational", "location_key": "borovy-vyhybna", "passage": 29520},
+    {"sequence": 30, "kind": "passenger", "location_key": "smrkov", "arrival": 30000, "departure": 30060},
+    {"sequence": 40, "kind": "passenger", "location_key": "jedlova", "arrival": 30900}
+  ]
+}

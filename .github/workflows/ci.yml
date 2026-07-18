@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: docker compose config --quiet
+      - run: docker compose up -d --wait db
+      - run: uv sync --locked
+      - run: uv run alembic upgrade head
+        env:
+          OBEHY_DATABASE_URL: postgresql+psycopg://obehy:obehy-m0-local-only@localhost:45873/obehy_test
+      - run: uv run pytest
+        env:
+          OBEHY_TEST_DATABASE_URL: postgresql+psycopg://obehy:obehy-m0-local-only@localhost:45873/obehy_test
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
