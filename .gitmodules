@@ -1,0 +1,3 @@
+[submodule "converters/jrutil"]
+	path = converters/jrutil
+	url = git@github.com:Sap1k/jrutil.git
