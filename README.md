@@ -29,3 +29,23 @@ The default credentials are development-only.
 
 Fixture boundaries and the temporary mock CIS stop-identity assumption are documented in
 `tests/fixtures/README.md`.
+
+## National JDF conversion bundle
+
+The national raw-input builder uses the separately checked-out root-level JrUtil fork and pinned
+external geodata. It downloads the current CIS JŘ VLD and municipal-dráhy archives plus the Czech
+Geofabrik OSM extract, combines the nested archives under deterministic `vld-`/`drahy-` staging
+names, fixes the national batch set in one OSM/geodata pass, merges stops by name, and writes an
+immutable GTFS-plus-Parquet bundle:
+
+```powershell
+uv run obehy-national-jdf build --output C:\data\obehy-national-jdf
+```
+
+The output path must not exist. By default, JrUtil is resolved at `../jrutil` and geodata at
+`../jrunify-ext-geodata/other`. Use `--jrutil-root` or `--geodata-root` to override those paths.
+`--keep-work` retains extracted and fixed intermediate batches after a successful build. Failed
+runs always retain their staging directory, raw process logs, partial downloads and
+`logs/failure.json` for diagnosis. `--progress auto` uses Rich on an interactive terminal and
+periodic text when redirected; `rich`, `plain`, and `off` can be selected explicitly. Progress is
+written to stderr. The builder does not enable JrUtil's experimental persistent cache.

@@ -292,12 +292,17 @@ PID stop U123Z4                -> P000014842
 CIS StopID 12345               -> S000003012
 JDF stop 98142 in export A     -> S000003012
 JDF stop 41287 in export B     -> S000003012
-DÚK line 582588                -> normalized CISLineID 001588
+PID trip 775_80_251220         -> T000000456
 ```
 
-## 6.3 Manual aliases
+## 6.3 Explicit identifier aliases
 
-Manual mappings must be supported because some source systems transform identifiers.
+Aliases normalize an identifier that a source claims is from a known external namespace but
+encodes differently. They are not a way to invent a missing CISLineID from a public line number,
+route name or arbitrary GTFS ID.
+
+Manual aliases must be supported because some source systems transform identifiers. The initial
+use case is a realtime API that is not keyed by the static GTFS identifiers:
 
 Example:
 
@@ -309,14 +314,56 @@ aliases:
     canonical_value: "001588"
     valid_from: "2026-01-01"
     valid_to: null
-    reason: "DÚK API-specific encoding"
+    reason: "DÚK realtime API-specific encoding"
 ```
 
 Aliases should be applied before canonical matching.
 
 They should support validity ranges because upstream conventions may change.
 
-## 6.4 Canonical redirects
+## 6.4 Keep identity claims, aliases and source bindings separate
+
+These mechanisms solve different problems:
+
+1. An **identity claim** is an explicit source assertion such as
+   `route_licence_number=260775`, `cis_stop_id=50619` or a trip ID documented to contain a
+   CISTripID. Preserve its field-level provenance and validate its syntax and consistency against
+   the applicable national snapshot.
+2. An **identifier alias** deterministically rewrites one asserted external identifier into the
+   same external namespace, such as a DÚK realtime API-specific line encoding into a CISLineID.
+   Alias rules are explicit, versioned and validity-bounded. They never use fuzzy matching.
+3. A **source binding** links an arbitrary source-local object such as a PID or DPMLJ GTFS trip to
+   a canonical entity after exact identifiers, calendars and structural evidence have been
+   considered. This includes a provider-supplied, snapshot-scoped crosswalk between that
+   provider's realtime/operational key and its own static GTFS `trip_id`. A binding may exist even
+   when the source never exposes a CISLineID.
+
+Do not copy a guessed CISLineID into normalized source data merely to make downstream matching
+look uniform. Store the original fact, the matching evidence and the resulting canonical binding
+separately.
+
+For realtime tied to a known static feed, prefer the static binding chain:
+
+```text
+PID GTFS-RT trip_id
+ -> PID static GTFS trip_id
+ -> active source trip binding
+ -> canonical trip instance
+```
+
+No CISLineID remapping is needed in that path. CIS aliases are mainly for sources such as custom
+realtime APIs that emit CIS-like identifiers but do not reference an imported static timetable.
+They may also be used by a static adapter when that source explicitly publishes a transformed CIS
+identifier, but not when the identifier is absent.
+
+Treat a provider-supplied operational-to-static crosswalk as a candidate relation, not necessarily
+as a unique dictionary. IDS JMK `api.txt`, for example, maps `(source line code, source
+course/train number)` to its numeric GTFS `trip_id`; the same operational key can map to multiple
+static rows for different calendars or timetable variants. Resolve it using the active snapshot,
+operating date and, when still necessary, scheduled time or call context. If two active candidates
+remain plausible, quarantine the realtime claim rather than selecting the first row.
+
+## 6.5 Canonical redirects
 
 If two canonical entities are later proven to be the same:
 
@@ -516,6 +563,25 @@ The concrete operating instance is:
 CISLineID + CISTripID + operating date
 ```
 
+These are identities of the national/canonical timetable, not mandatory fields in every regional
+overlay. A regional GTFS trip may reach this identity through a source binding without ever
+exposing either CIS identifier itself.
+
+Match regional data at the operating-instance level first whenever calendars overlap:
+
+```text
+source trip + source service date
+ -> national candidates active on that date
+ -> route/operator/mode constraints
+ -> ordered stop and time comparison
+ -> canonical trip instance
+```
+
+Only collapse those results into one scheduled-trip binding when the same unique relationship is
+valid across the relevant dates. If one regional GTFS trip represents multiple national
+CISTripIDs on disjoint service dates, retain date-scoped instance bindings instead of guessing one
+scheduled identity.
+
 ## 9.2 Rail
 
 The scheduled-trip anchor is the train number.
@@ -609,15 +675,83 @@ conversion/
 │   ├── trips.txt
 │   ├── stops.txt
 │   └── stop_times.txt
-├── source_routes.parquet
-├── source_stops.parquet
-├── source_trips.parquet
-├── source_calls.parquet
-├── operational_points.parquet
-├── operational_calls.parquet
-├── fare_zones.parquet
+├── extensions/
+│   ├── cz_routes.txt
+│   ├── cz_trips.txt
+│   ├── cz_stops.txt
+│   └── cz_stop_zones.txt
+├── source_route_metadata.parquet
+├── source_stop_metadata.parquet
+├── source_call_metadata.parquet
+├── source_route_stop_zone_metadata.parquet
+├── source_notice_metadata.parquet
+├── source_transfer_metadata.parquet
+├── source_travel_restriction_metadata.parquet
+├── diagnostics.json
 └── manifest.json
 ```
+
+Bundle format version 1 is implemented for JDF in the standalone JrUtil fork.
+It uses explicit flat Parquet schemas, Snappy compression, fixed row groups,
+deterministic ordering and per-file SHA-256 metadata. Operational point/call
+sidecars remain part of the later CZPTT slice rather than empty JDF files.
+
+Standard GTFS plus the Oběhy extension tables are the primary normalized
+representation. Parquet must not repeat fields that can be reconstructed from
+those tables. Bundle v1 retains seven narrow enrichment relations:
+
+```text
+source_route_metadata
+    gtfs_route_id, source_route_id, route_distinction,
+    source_agency_id, source_agency_distinction, valid_from, valid_to
+
+source_stop_metadata
+    gtfs_stop_id, town, district, nearby_place, country,
+    coordinates_missing
+
+source_call_metadata
+    gtfs_trip_id, stop_sequence, source_route_stop_id
+
+source_route_stop_zone_metadata
+    gtfs_route_id, source_route_stop_id, zone_id, zone_order
+
+source_notice_metadata
+    source_notice_id, notice_kind, gtfs_route_id?, gtfs_trip_id?,
+    label?, text?, valid_from?, valid_to?, service_note_type?
+
+source_transfer_metadata
+    source_transfer_id, gtfs_trip_id, source_route_stop_id,
+    source target identifiers, wait_minutes?, note?
+
+source_travel_restriction_metadata
+    assignment_scope, gtfs_route_id?, gtfs_trip_id?,
+    source_route_stop_id, group_code
+```
+
+The call `stop_sequence` is the exact GTFS join key, not a separately numbered
+sequence. Snapshot/source identity belongs in the manifest and Parquet file
+metadata rather than on every row. Route/trip/stop/post identities, names,
+coordinates, modes, public numbers, times, distances, pickup/drop-off rules and
+zone catalogs remain solely in GTFS/extensions unless a future source exposes a
+genuinely non-projectable value.
+
+JDF zones are normalized as route-distinction-scoped source identities because
+the raw token does not identify its IDS owner. Stop memberships are stored as
+rows in `cz_stop_zones.txt`; `source_route_stop_zone_metadata.parquet` adds only
+their route-stop scope and token order. `source_call_metadata.parquet` supplies
+the join from emitted GTFS calls to those route stops, so zone membership is
+not duplicated once per trip. Standard GTFS `stops.zone_id` is
+populated only for a single source-zone identity and remains blank for plural
+membership; `stop_times.txt` contains no custom zone column.
+
+JDF `Udaje`, text-bearing or otherwise unhandled `Caskody`, `Mistenky` and
+`Navaznosti` are retained as typed source notices or connection claims.
+Calendar-only `Caskody` are omitted because their complete effect is already
+represented by GTFS calendars. The `§`/`A`/`B`/`C` travel-exclusion codes retain
+their original `Zaslinky` route-stop or `Zasspoje` trip-call scope rather than
+being expanded over every trip. Bundle Parquet is an immutable import format;
+the importer resolves it into indexed PostgreSQL source-claim relations before
+runtime queries.
 
 Required changes:
 
@@ -662,6 +796,11 @@ Regional and operator feeds should overlay:
 - selected metadata.
 
 They should not replace entire trips merely because a matching trip exists.
+Every imported notice, zone, connection and travel restriction is a positive
+source claim. A regional feed that omits the corresponding field makes no
+deletion claim against national data. Precedence is resolved during static
+compilation and materialized for the active build; runtime requests must not
+scan Parquet or arbitrate source claims dynamically.
 
 ## 12.1 Source coverage
 
@@ -729,6 +868,53 @@ Prefer:
 4. structural candidate;
 5. manual mapping;
 6. new canonical allocation.
+
+## 12.4 Regional GTFS adapter and matching contract
+
+GTFS identifiers are source-local unless the provider explicitly documents another namespace.
+Every static adapter should preserve the original GTFS row and emit typed hints or identity
+claims; it should not manufacture canonical or CIS identifiers.
+
+Normalize common custom attributes into namespaced facts, for example:
+
+```text
+duk_stop_id  -> source-local stop-place hint in the DÚK namespace
+cis_stop_id  -> asserted CIS StopID
+stop_post    -> source post designation
+duk_zone     -> zone code in the DÚK fare-system namespace
+```
+
+Keep the raw custom columns in snapshot storage so an adapter rule can be audited and replayed.
+Keep nonstandard companion files such as IDS JMK `api.txt` as well. Simple field mappings may be
+declarative. Provider-specific parsing belongs in a small, versioned adapter with real-feed golden
+fixtures.
+
+Static road/MHD matching should proceed in this order:
+
+1. documented CISLineID/CISTripID claims, validated against the national snapshot;
+2. explicit, validity-bounded aliases for transformed identifiers;
+3. an already reviewed source binding that remains structurally consistent;
+4. candidate routes constrained by operator, mode, validity, public designation and geography;
+5. operating-instance comparison using active service date, ordered canonicalized stops and
+   scheduled times;
+6. a reviewed manual binding;
+7. unresolved or ambiguous quarantine.
+
+Names, public line numbers, numeric suffixes and zero-padding may generate candidates, but must
+not establish a CIS identity on their own. A source route can map to multiple CISLineIDs: PID, for
+example, associates licences with `(route_id, sub_agency_id)`, so `route_id` alone is not always a
+valid binding key. Route, trip, stop and post resolution remain independent so useful stop/post or
+shape data is not discarded solely because another entity is unresolved.
+
+Source capability is field-specific. The presence of a regional GTFS archive does not make that
+source authoritative for shapes, posts or any other table it omits. For example, a feed without
+`shapes.txt` can still contribute exact static/realtime crosswalks, stop hierarchy, zones, colours
+and timetable evidence while national or generated geometry remains active.
+
+When scheduled rows with different CISTripIDs have identical calls and times, compare service
+calendars and operating dates. If ambiguity remains, applying an attribute to a proven common
+route/segment may still be safe, but trip-specific timetable or post replacement must remain
+quarantined.
 
 ---
 
@@ -802,6 +988,57 @@ Trip 3 -> unspecified boarding point
 ```
 
 This preserves useful precision without pretending all sources know the same posts.
+
+## 14.1 Flat regional stop feeds
+
+Do not assume that a parentless GTFS `location_type=0` row represents a complete independent stop
+place. Many otherwise useful feeds publish one boarding post as one GTFS stop and omit
+`parent_station` entirely. Import such rows first as **source boarding-point observations** and
+resolve their source-local grouping separately from canonical identity.
+
+Prefer source-local grouping evidence in this order:
+
+1. a valid explicit `parent_station`;
+2. a documented stop-place key such as PID `asw_node_id`, DÚK `cis_stop_id` or DÚK
+   `duk_stop_id`;
+3. reviewed provider-specific parsing of a source stop ID;
+4. a trustworthy grouping carried forward from an earlier source snapshot;
+5. structural candidates using normalized name, coordinates, route/call structure and post labels;
+6. otherwise a singleton source stop place.
+
+Grouping rows within one source and binding that group to a canonical stop place are different
+decisions. For example, a shared PID `asw_node_id` can establish that several PID rows are posts of
+one PID stop without itself proving which national stop that group represents. Similar names and
+nearby coordinates may generate candidates but must not silently merge railway facilities,
+grade-separated stops or similarly named nearby places.
+
+Preserve each post's own coordinates, labels and source identifiers after grouping. An uncertain
+group or canonical match remains unresolved rather than blocking ingestion or forcing a false
+merge.
+
+## 14.2 Regional coverage never limits the national stop universe
+
+The national JDF/CZPTT baseline defines timetable completeness. A regional feed may add a stop
+place, posts or exact call assignments, but its trip coverage does not determine which canonical
+trips are allowed to use that stop.
+
+Example:
+
+```text
+PID U1Z1P (ASW node 1, post A) --\
+                                      -> canonical Boletická
+PID U1Z2P (ASW node 1, post B) --/
+
+matched PID/national trip 1 -> Boletická, post A
+matched PID/national trip 2 -> Boletická, post B
+national-only trip 3        -> Boletická, unspecified boarding point
+```
+
+Creating or matching posts never assigns them to every call at the stop. Use an exact post only
+for a matched source trip/call, another authoritative call-level claim, or an explicit reviewed
+rule. Every other national call remains attached to the canonical stop's permanent unspecified
+boarding point. This allows partial regional precision without deleting, duplicating or inventing
+the rest of the national timetable.
 
 ---
 
@@ -900,8 +1137,6 @@ cz_routes.txt
     route_id
     cis_line_id
     public_line_number
-    ids_system_id
-    ids_zone_ids
     source_provenance
 
 cz_trips.txt
@@ -919,9 +1154,36 @@ cz_stops.txt
     post_id
     asw_id
     source_ids
+
+cz_stop_zones.txt
+    stop_place_id
+    zone_id
+    zone_code
+    route_id
+    ids_system_id
+    source_provenance
 ```
 
 Operational points should generally remain internal sidecars rather than public GTFS stops.
+
+`cz_routes.txt` deliberately has no route-level IDS-system or zone union. A route can participate
+in multiple systems and its zones vary by route stop, trip and call, so a singular system field or
+comma-separated route union is ambiguous and not useful for compilation. Exact route-stop
+membership remains in `cz_stop_zones.txt`; its per-membership `ids_system_id` can be populated
+later when ownership is known.
+
+In `cz_stops.txt`, `stop_id` is the exact GTFS row used by calls and may identify either a stop
+place or a boarding post. `stop_place_id` is always the containing place-level GTFS row. The two
+are equal on place rows and differ on child post rows, which also carry standard GTFS
+`parent_station`. Post identifiers use the common `:post:` hierarchy: authoritative
+`Oznacniky` values use `:post:id:<value>`, while textual `Zasspoje` values use bare
+`:post:<value>`, so the two mechanisms cannot collide.
+
+JrUtil-generated intermediate IDs use colon-separated namespaces consistently, including
+`jdf:agency:…`, `jdf:route:…`, `jdf:trip:…`, `jdf:stop:…`, `jdf:zone:…` and
+the enrichment namespaces. CIS-backed stop IDs use `cis:stop:…`; these remain source/intermediate
+identities rather than permanent canonical Oběhy IDs. Deduplicated GTFS operating patterns use
+the derived `gtfs:service:<weekday-bitmap>:<ordinal>` namespace.
 
 ## Version compatibility
 
@@ -1015,6 +1277,7 @@ Connectors are not responsible for deciding which provider is trusted more.
 fetch
  -> decode
  -> normalize source identifiers
+ -> resolve active source-local static crosswalk
  -> apply aliases
  -> resolve canonical trip instance
  -> validate timestamps and geography

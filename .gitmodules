@@ -1,3 +1,6 @@
 [submodule "converters/jrutil"]
 	path = converters/jrutil
 	url = git@github.com:Sap1k/jrutil.git
+[submodule "converters/jrunify-ext-geodata"]
+	path = converters/jrunify-ext-geodata
+	url = git@github.com:Sap1k/jrunify-ext-geodata.git

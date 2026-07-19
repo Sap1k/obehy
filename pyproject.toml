@@ -8,8 +8,12 @@ dependencies = [
   "alembic>=1.16,<2",
   "geoalchemy2>=0.18,<1",
   "psycopg[binary]>=3.2,<4",
+  "rich>=14,<15",
   "sqlalchemy>=2.0.41,<3",
 ]
+
+[project.scripts]
+obehy-national-jdf = "obehy.national_jdf:main"
 
 [dependency-groups]
 dev = [
@@ -29,7 +33,10 @@ packages = ["src/obehy"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
-markers = ["integration: requires the PostgreSQL/PostGIS test database"]
+markers = [
+  "integration: requires the PostgreSQL/PostGIS test database",
+  "national_jdf_live: downloads and converts the complete live national JDF inputs",
+]
 
 [tool.ruff]
 target-version = "py313"
