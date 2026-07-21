@@ -42,15 +42,20 @@ authoritative roadmap and architecture document.
   within 120/60 km timetable span/depth limits (200/80 km when integrated), supports audited CSV
   keep/drop overrides, and removes all dependent GTFS, extension and Parquet rows. Bundle manifests
   record the policy/counts and rejected routes receive structured diagnostics without per-route log
-  flooding. During national `fix-jdf`, wholly rejected one-route batches bypass stop matching and
-  geocoding, while remaining in the merged JDF for deterministic bundle filtering and diagnostics.
+  flooding. All source batches retain stop matching because route classification can change after
+  merge. The merge phase reconciles still-missing final normalized stop identities against external
+  geodata, preferring strict-okres candidates before boundary-tolerant alternatives and using a
+  unique RUIAN town as the final conservative fallback.
 
 ### Validation and remaining live maintenance
 
-- JrUtil passed **44 tests** and the multitool CLI built successfully. Geodata adapters/gap-fill
+- JrUtil passed **47 tests** and the multitool CLI built successfully. Geodata adapters/gap-fill
   include **37 tests**; the current review environment passed the five stdlib-only residual-plan
   tests but could not import the other modules because `lxml` was unavailable. Oběhy passed **26
   tests** with **10 expected skips**; Ruff, formatting and strict Pyright passed.
+- The regenerated `JDF-final` initially contained 75 referenced stop-place identities without
+  coordinates. A clean post-merge reconciliation against only the checked external/manual
+  catalogue recovered all 75; the eight final aliases are now recorded in the geodata repository.
 - A conversion of the already-merged national JDF (performed before the final provenance-table
   adjustment) reduced 37,960 stop places to the 37,708 actually referenced places: **zero**
   unreferenced boarding stops remained. Of these, 35,314 were stop-precise, 805 used town precision
