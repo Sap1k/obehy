@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -762,9 +763,72 @@ def _verify_bundle(bundle: Path, reporter: Reporter | None = None) -> dict[str, 
     trips = bundle / "gtfs-intermediate" / "trips.txt"
     if not trips.is_file() or len(trips.read_text(encoding="utf-8-sig").splitlines()) < 2:
         raise PipelineError("Bundle GTFS contains no trips")
+    verify_gtfs_stops(bundle / "gtfs-intermediate", reporter)
     if reporter is not None and task is not None:
         reporter.finish(task, f"{len(entries)} payloads")
     return manifest
+
+
+def verify_gtfs_stops(gtfs: Path, reporter: Reporter | None = None) -> None:
+    stops_path = gtfs / "stops.txt"
+    stop_times_path = gtfs / "stop_times.txt"
+    if not stops_path.is_file() or not stop_times_path.is_file():
+        raise PipelineError("Bundle GTFS is missing stops.txt or stop_times.txt")
+
+    referenced: set[str] = set()
+    with stop_times_path.open(encoding="utf-8-sig", newline="") as stream:
+        for row in csv.DictReader(stream):
+            stop_id = row.get("stop_id", "").strip()
+            if not stop_id:
+                raise PipelineError("Bundle GTFS contains a stop_time without stop_id")
+            referenced.add(stop_id)
+
+    emitted: set[str] = set()
+    boarding: set[str] = set()
+    parents: set[str] = set()
+    missing_coordinates: list[str] = []
+    with stops_path.open(encoding="utf-8-sig", newline="") as stream:
+        rows = csv.DictReader(stream)
+        required = {"stop_id", "stop_lat", "stop_lon", "location_type", "parent_station"}
+        if not rows.fieldnames or not required.issubset(rows.fieldnames):
+            raise PipelineError("Bundle GTFS stops.txt is missing required stop fields")
+        for row in rows:
+            stop_id = row["stop_id"].strip()
+            if not stop_id or stop_id in emitted:
+                raise PipelineError(f"Bundle GTFS has blank or duplicate stop_id: {stop_id!r}")
+            emitted.add(stop_id)
+            if row["location_type"].strip() != "1":
+                boarding.add(stop_id)
+            parent = row["parent_station"].strip()
+            if parent:
+                parents.add(parent)
+            try:
+                latitude = float(row["stop_lat"])
+                longitude = float(row["stop_lon"])
+            except ValueError as error:
+                raise PipelineError(f"Invalid coordinates for GTFS stop {stop_id}") from error
+            if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+                raise PipelineError(f"Out-of-range coordinates for GTFS stop {stop_id}")
+            if latitude == 0 and longitude == 0:
+                missing_coordinates.append(stop_id)
+
+    dangling = referenced - emitted
+    unreferenced = boarding - referenced
+    missing_parents = parents - emitted
+    extra_stations = (emitted - boarding) - parents
+    if dangling or unreferenced or missing_parents or extra_stations:
+        raise PipelineError(
+            "Bundle GTFS stop reachability mismatch: "
+            f"dangling={sorted(dangling)[:20]}, unreferenced={sorted(unreferenced)[:20]}, "
+            f"missing_parents={sorted(missing_parents)[:20]}, "
+            f"extra_stations={sorted(extra_stations)[:20]}"
+        )
+    if missing_coordinates and reporter is not None:
+        reporter.problem(
+            "warning",
+            f"{len(missing_coordinates)} emitted GTFS stops use unresolved 0,0 coordinates; "
+            f"stop_ids={','.join(missing_coordinates[:20])}",
+        )
 
 
 def _converter_version(identity: Mapping[str, Any]) -> str:
@@ -847,6 +911,7 @@ def build(
                 [
                     "fix-jdf",
                     "--strict",
+                    "--international-route-policy=regional-adjacent",
                     f"--ext-geodata={config.geodata_root}",
                     f"--cz-pbf={sources / 'czech-republic.osm.pbf'}",
                     f"--logfile={logs / 'fix.log'}",
@@ -911,6 +976,7 @@ def build(
                 config,
                 [
                     "jdf-to-bundle",
+                    "--international-route-policy=regional-adjacent",
                     f"--snapshot-descriptor={descriptor_path}",
                     f"--converter-version={_converter_version(jrutil_identity)}",
                     f"--logfile={logs / 'bundle.log'}",
@@ -931,7 +997,12 @@ def build(
             "sources_manifest_sha256": file_digest(sources / "sources.json"),
             "geodata": geodata,
             "jrutil": jrutil_identity,
-            "conversion": {"stop_ids_cis": False, "stop_merge": "name", "strict": True},
+            "conversion": {
+                "stop_ids_cis": False,
+                "stop_merge": "name",
+                "strict": True,
+                "international_route_policy": "regional-adjacent",
+            },
             "batch_counts": {
                 "vld": len(vld_batches),
                 "drahy": len(drahy_batches),

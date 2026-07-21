@@ -170,11 +170,26 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(tmp_path: Path) -> N
             (bundle / "gtfs-intermediate" / "trips.txt").write_text(
                 "route_id,service_id,trip_id\nr,s,t\n", encoding="utf-8"
             )
+            (bundle / "gtfs-intermediate" / "stops.txt").write_text(
+                "stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station\n"
+                "s,Stop,50,14,0,p\n"
+                "p,Station,50,14,1,\n",
+                encoding="utf-8",
+            )
+            (bundle / "gtfs-intermediate" / "stop_times.txt").write_text(
+                "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+                "t,08:00:00,08:00:00,s,1\n",
+                encoding="utf-8",
+            )
             for name in national_jdf.PARQUET_FILES:
                 (bundle / name).write_bytes(b"PAR1")
             diagnostics: dict[str, object] = {"schema_version": 1, "diagnostics": []}
             national_jdf.write_json(bundle / "diagnostics.json", diagnostics)
-            payloads = [bundle / "diagnostics.json", bundle / "gtfs-intermediate" / "trips.txt"]
+            payloads = [bundle / "diagnostics.json"]
+            payloads.extend(
+                (bundle / "gtfs-intermediate" / name)
+                for name in ("trips.txt", "stops.txt", "stop_times.txt")
+            )
             payloads.extend(bundle / name for name in national_jdf.PARQUET_FILES)
             manifest = {
                 "files": [
@@ -211,6 +226,9 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(tmp_path: Path) -> N
     assert all("--strict" in command for command in commands[:2])
     assert all("--by-id" not in command for command in commands)
     assert all("--stop-ids-cis" not in command for command in commands)
+    bundle_command = commands[2]
+    assert "--international-route-policy=regional-adjacent" in commands[0]
+    assert "--international-route-policy=regional-adjacent" in bundle_command
     assert all(
         not any(argument.startswith("--cache=") for argument in command) for command in commands
     )
@@ -225,10 +243,37 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(tmp_path: Path) -> N
         },
     ]
     assert run_manifest["conversion"] == {
+        "international_route_policy": "regional-adjacent",
         "stop_ids_cis": False,
         "stop_merge": "name",
         "strict": True,
     }
+
+
+def test_gtfs_stop_verifier_allows_zero_coordinates_with_aggregate_warning(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "stops.txt").write_text(
+        "stop_id,stop_lat,stop_lon,location_type,parent_station\ns,0,0,0,p\np,50,14,1,\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "stop_times.txt").write_text("trip_id,stop_id\nt,s\n", encoding="utf-8")
+    reporter = national_jdf.BuildReporter("off")
+
+    national_jdf.verify_gtfs_stops(tmp_path, reporter)
+
+    assert reporter.snapshot()["problems"] == {"pipeline:warning": 1}
+
+
+def test_gtfs_stop_verifier_rejects_unreferenced_boarding_stop(tmp_path: Path) -> None:
+    (tmp_path / "stops.txt").write_text(
+        "stop_id,stop_lat,stop_lon,location_type,parent_station\nused,50,14,0,\norphan,50,14,0,\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "stop_times.txt").write_text("trip_id,stop_id\nt,used\n", encoding="utf-8")
+
+    with pytest.raises(national_jdf.PipelineError, match="unreferenced"):
+        national_jdf.verify_gtfs_stops(tmp_path)
 
 
 def test_build_retains_staging_directory_after_failure(tmp_path: Path) -> None:
@@ -349,7 +394,11 @@ def test_download_hashes_incrementally(
     chunks = [b"one", b"two", b"three"]
     payload = b"".join(chunks)
     response = _Response(chunks, len(payload) if known_size else None)
-    monkeypatch.setattr(national_jdf, "urlopen", lambda *_args, **_kwargs: response)
+
+    def fake_urlopen(*_args: object, **_kwargs: object) -> _Response:
+        return response
+
+    monkeypatch.setattr(national_jdf, "urlopen", fake_urlopen)
     reporter = _Reporter()
 
     record = download_file("https://example.invalid/data", tmp_path / "data", "data", reporter)
@@ -369,9 +418,10 @@ def test_interrupted_download_retains_partial_file(
                 raise OSError("connection lost")
             return chunk
 
-    monkeypatch.setattr(
-        national_jdf, "urlopen", lambda *_args, **_kwargs: Interrupted([b"partial"])
-    )
+    def interrupted_urlopen(*_args: object, **_kwargs: object) -> Interrupted:
+        return Interrupted([b"partial"])
+
+    monkeypatch.setattr(national_jdf, "urlopen", interrupted_urlopen)
 
     with pytest.raises(OSError, match="connection lost"):
         download_file("https://example.invalid/data", tmp_path / "data", "data")

@@ -3,6 +3,83 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-07-21 — Referenced-stop pruning and refresh-first coordinate repair
+
+### Delivered
+
+- JrUtil now derives its stop set from the final emitted `stop_times`, retaining only called
+  boarding points and required parents. The same set filters `cz_stops`, `cz_stop_zones` and
+  `source_stop_metadata.parquet`, preventing dangling extension metadata and removing stops that
+  occur only on filtered/pass-through calls or nowhere in the emitted service.
+- Coordinate selection now preserves stop versus town precision and source provenance. Bundle
+  schema v2 adds `coordinate_precision`, `coordinate_source` and `coordinates_missing`; invalid
+  finite/range values still fail, while unresolved stops remain valid mandatory `0,0` GTFS rows
+  with one aggregate warning and structured stop-ID diagnostics. GTFS stop places and their
+  boarding-point/post children now append ` [APPROX]` exactly once when the selected coordinate is
+  town-level; stop-precise and missing-coordinate names remain unchanged.
+- The matcher keeps strict country/okres checks as its fast path, precomputes okres adjacency and
+  only performs a cached 1,000-metre boundary check for exact-name same-country candidates rejected
+  solely by okres. Aggregate strict/border/country/region counters replace per-candidate noise. The
+  observed national JDF alias `OL` is normalized to boundary code `OC` for matching only; source JDF
+  values are unchanged.
+- Refreshed all 24 active `jrunify-ext-geodata` catalogues through validated temporary outputs.
+  Country values are normalized to historical JDF codes, five-column files remain compatible and
+  optional `S`/`T` precision is supported. Added official KHK (4,454 rows), DPMLJ (581) and DPMO
+  (373) sources. DPMLJ names are municipality-qualified from its tariff zones; DPMO names are
+  explicitly Olomouc-qualified. Retired Karlovy and first-generation IREDO endpoints remain as
+  documented snapshots rather than active failing sources.
+- Added conservative one-shot audit, Overpass and Mapy tooling. OSM covers nodes, ways, relations,
+  aliases and centers, accepts exact identities with compatible municipality or okres, and uses
+  cached rate-limited Nominatim only once per unresolved foreign municipality. Mapy reads its key
+  only from `MAPY_API_KEY`, never persists raw/rejected responses, and accepts only unique exact
+  stop identities or explicit town-level results.
+- Oběhy bundle verification now enforces complete stop references, required parents, no extra
+  boarding stops and numeric in-range mandatory coordinates while permitting `0,0` with one
+  aggregate warning.
+- Added an opt-in JrUtil `regional-adjacent` international-route policy and enabled it in the
+  Oběhy national builder. It classifies whole route distinctions from service-valid emitted calls,
+  catches foreign services mislabeled as city/regional, retains only neighboring-country services
+  within 120/60 km timetable span/depth limits (200/80 km when integrated), supports audited CSV
+  keep/drop overrides, and removes all dependent GTFS, extension and Parquet rows. Bundle manifests
+  record the policy/counts and rejected routes receive structured diagnostics without per-route log
+  flooding. During national `fix-jdf`, wholly rejected one-route batches bypass stop matching and
+  geocoding, while remaining in the merged JDF for deterministic bundle filtering and diagnostics.
+
+### Validation and remaining live maintenance
+
+- JrUtil passed **44 tests** and the multitool CLI built successfully. Geodata adapters/gap-fill
+  include **37 tests**; the current review environment passed the five stdlib-only residual-plan
+  tests but could not import the other modules because `lxml` was unavailable. Oběhy passed **26
+  tests** with **10 expected skips**; Ruff, formatting and strict Pyright passed.
+- A conversion of the already-merged national JDF (performed before the final provenance-table
+  adjustment) reduced 37,960 stop places to the 37,708 actually referenced places: **zero**
+  unreferenced boarding stops remained. Of these, 35,314 were stop-precise, 805 used town precision
+  and 1,589 remained missing (`0,0`). Independent bundle verification passed and reported the
+  missing coordinates once; its 3,178-row count includes both parent and boarding rows.
+- A no-cache Olomouc route fixture matched all 20 source stops. DPMO contributed to five matches;
+  after the `OL`/`OC` matcher alias, all 40 relevant candidates used the strict path with no region
+  rejects. No persistent JrUtil cache was created or used.
+- A read-only classifier analysis of the existing merged national JDF found 619 route distinctions
+  with foreign stops. The selected policy retains 98 regional cross-border distinctions and rejects
+  521; applied to the current coordinate audit, the expected residual falls from 895 to about 182
+  stop places before OSM/Mapy gap-filling. Targeted fixtures cover threshold boundaries,
+  integrations, mislabeled routes, passing/filtered calls, missing kilometres, foreign-only trips,
+  overrides and an end-to-end empty/dangling-free rejected-route bundle.
+- The reproducible offline residual audit now joins the existing emitted GTFS trip set to the merged
+  JDF, applies the route policy, and reconciles refreshed external CSVs without a JrUtil cache. From
+  1,589 legacy `0,0` stop IDs, 810 remain on retained routes and 694 have conservative exact
+  refreshed-source matches, leaving **116 actionable stop identities**: CZ 52, D 32, PL 17, SK 11
+  and A 4. The generated work list includes route names and a provider/OSM/Mapy/town fallback order.
+- The complete national pipeline was deliberately not rerun after these final changes because it is
+  the dominant runtime cost. The original serial Overpass-box approach was stopped after poor
+  progress and replaced with cached, rate-limited per-stop Nominatim searches. Municipality context
+  corrections, localized municipality aliases and nearby-platform clustering repaired false
+  ambiguity. The 116 actionable identities now reconcile to **14 OSM**, **100 Mapy** and **2
+  refreshed-source recoveries**, leaving **zero unresolved work-list identities**. The Mapy key and
+  raw responses were not retained. One manually reviewed school POI fallback is marked town-level;
+  all other new accepted rows are stop-level except explicit Mapy town fallbacks. A final national
+  conversion and the <=5% matcher benchmark remain deferred.
+
 ## 2026-07-19 — Runnable national VLD/municipal-dráhy JDF bundle pipeline
 
 ### Delivered
