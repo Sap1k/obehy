@@ -939,8 +939,6 @@ def build(
                 [
                     "merge-jdf",
                     "--strict",
-                    f"--ext-geodata={config.geodata_root}",
-                    f"--cz-pbf={sources / 'czech-republic.osm.pbf'}",
                     f"--logfile={logs / 'merge.log'}",
                     str(merged_directory),
                     str(fixed_root),

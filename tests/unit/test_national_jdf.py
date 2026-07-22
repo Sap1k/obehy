@@ -227,8 +227,10 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(tmp_path: Path) -> N
     assert all("--by-id" not in command for command in commands)
     assert all("--stop-ids-cis" not in command for command in commands)
     bundle_command = commands[2]
-    assert any(argument.startswith("--ext-geodata=") for argument in commands[1])
-    assert any(argument.startswith("--cz-pbf=") for argument in commands[1])
+    assert any(argument.startswith("--ext-geodata=") for argument in commands[0])
+    assert any(argument.startswith("--cz-pbf=") for argument in commands[0])
+    assert not any(argument.startswith("--ext-geodata=") for argument in commands[1])
+    assert not any(argument.startswith("--cz-pbf=") for argument in commands[1])
     assert "--international-route-policy=regional-adjacent" in commands[0]
     assert "--international-route-policy=regional-adjacent" in bundle_command
     assert all(

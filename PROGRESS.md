@@ -11,12 +11,12 @@ authoritative roadmap and architecture document.
   boarding points and required parents. The same set filters `cz_stops`, `cz_stop_zones` and
   `source_stop_metadata.parquet`, preventing dangling extension metadata and removing stops that
   occur only on filtered/pass-through calls or nowhere in the emitted service.
-- Coordinate selection now preserves stop versus town precision and source provenance. Bundle
-  schema v2 adds `coordinate_precision`, `coordinate_source` and `coordinates_missing`; invalid
+- Coordinate selection now preserves stop versus estimated precision and source provenance. Bundle
+  schema v3 carries `coordinate_precision`, `coordinate_source` and `coordinates_missing`; invalid
   finite/range values still fail, while unresolved stops remain valid mandatory `0,0` GTFS rows
   with one aggregate warning and structured stop-ID diagnostics. GTFS stop places and their
-  boarding-point/post children now append ` [APPROX]` exactly once when the selected coordinate is
-  town-level; stop-precise and missing-coordinate names remain unchanged.
+  boarding-point/post children now append ` [?]` exactly once when coordinates are route-estimated;
+  stop-precise and missing-coordinate names remain unchanged.
 - The matcher keeps strict country/okres checks as its fast path, precomputes okres adjacency and
   only performs a cached 1,000-metre boundary check for exact-name same-country candidates rejected
   solely by okres. Aggregate strict/border/country/region counters replace per-candidate noise. The
@@ -43,24 +43,26 @@ authoritative roadmap and architecture document.
   keep/drop overrides, and removes all dependent GTFS, extension and Parquet rows. Bundle manifests
   record the policy/counts and rejected routes receive structured diagnostics without per-route log
   flooding. All source batches retain stop matching because route classification can change after
-  merge. The merge phase reconciles still-missing final normalized stop identities against external
-  geodata, preferring strict-okres candidates before boundary-tolerant alternatives and using a
-  unique RUIAN town as the final conservative fallback.
+  merge. Matching is owned entirely by `fix-jdf`: checked external candidates take precedence over
+  OSM, town centroids are never emitted as stop coordinates, matches contradicted by scheduled
+  travel time are rejected, interior gaps are interpolated by time between valid anchors and
+  unmatched route ends are offset north. Untimed passing/not-passing calls are skipped when finding
+  anchors, and degenerate batches with fewer than two distinct called stops are dropped completely.
+  `merge-jdf` only preserves and combines those results.
 
 ### Validation and remaining live maintenance
 
-- JrUtil passed **47 tests** and the multitool CLI built successfully. Geodata adapters/gap-fill
-  include **37 tests**; the current review environment passed the five stdlib-only residual-plan
-  tests but could not import the other modules because `lxml` was unavailable. Oběhy passed **26
-  tests** with **10 expected skips**; Ruff, formatting and strict Pyright passed.
+- JrUtil passed **51 tests** and the multitool CLI built successfully. Geodata adapters/gap-fill
+  passed **39 tests** in an isolated dependency environment. Oběhy passed **26 tests** with **10
+  expected skips**; Ruff, formatting and strict Pyright passed.
 - The regenerated `JDF-final` initially contained 75 referenced stop-place identities without
-  coordinates. A clean post-merge reconciliation against only the checked external/manual
-  catalogue recovered all 75; the eight final aliases are now recorded in the geodata repository.
-- A conversion of the already-merged national JDF (performed before the final provenance-table
-  adjustment) reduced 37,960 stop places to the 37,708 actually referenced places: **zero**
-  unreferenced boarding stops remained. Of these, 35,314 were stop-precise, 805 used town precision
-  and 1,589 remained missing (`0,0`). Independent bundle verification passed and reported the
-  missing coordinates once; its 3,178-row count includes both parent and boarding rows.
+  coordinates. The audit recovered eight missing rename/spelling aliases into the checked geodata
+  repository; a clean rebuild now resolves or route-estimates gaps during `fix-jdf` rather than
+  geocoding isolated stops after merge.
+- External geodata now has a strict five-column stop-only contract. The former OSM, Mapy, and
+  recovered supplements are consolidated into one 336-row `other/gapfill.csv`; all approximate
+  town rows and the `TownPrecise` model/serializer path were removed. Missing stop coordinates are
+  route-estimated and remain visibly marked until a real stop-level coordinate is accepted.
 - A no-cache Olomouc route fixture matched all 20 source stops. DPMO contributed to five matches;
   after the `OL`/`OC` matcher alias, all 40 relevant candidates used the strict path with no region
   rejects. No persistent JrUtil cache was created or used.
