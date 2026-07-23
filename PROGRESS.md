@@ -49,12 +49,21 @@ authoritative roadmap and architecture document.
   unmatched route ends are offset north. Untimed passing/not-passing calls are skipped when finding
   anchors, and degenerate batches with fewer than two distinct called stops are dropped completely.
   `merge-jdf` only preserves and combines those results.
+- The national builder now streams nested source batches directly into deterministic staging ZIPs,
+  builds JrUtil once, and uses memory-capped parallel workers for both `fix-jdf` and `merge-jdf`.
+  Structured JrUtil progress reports resolved worker plans and concurrent batches; requested and
+  resolved execution settings, stage timings, and merged-JDF compression metadata are recorded in
+  `run-manifest.json`. Fixed batches use uncompressed ZIP intermediates, merged-JDF packaging offers
+  deterministic fast/balanced/small Deflate presets, and `--keep-work` retains all intermediates.
 
 ### Validation and remaining live maintenance
 
 - JrUtil passed **51 tests** and the multitool CLI built successfully. Geodata adapters/gap-fill
-  passed **39 tests** in an isolated dependency environment. Oběhy passed **26 tests** with **10
-  expected skips**; Ruff, formatting and strict Pyright passed.
+  passed **39 tests** in an isolated dependency environment. Oběhy passed **33 tests** with **10
+  expected skips**; the changed national-builder Python files passed Ruff lint and formatting, and
+  strict Pyright passed. The focused national builder suite accounts for 21 of the passing tests.
+  A whole-tree Ruff run remains blocked by 16 pre-existing findings in the unchanged
+  `converters/jrunify-ext-geodata` scripts, whose two Python files also remain unformatted.
 - The regenerated `JDF-final` initially contained 75 referenced stop-place identities without
   coordinates. The audit recovered eight missing rename/spelling aliases into the checked geodata
   repository; a clean rebuild now resolves or route-estimates gaps during `fix-jdf` rather than
@@ -82,10 +91,11 @@ authoritative roadmap and architecture document.
   progress and replaced with cached, rate-limited per-stop Nominatim searches. Municipality context
   corrections, localized municipality aliases and nearby-platform clustering repaired false
   ambiguity. The 116 actionable identities now reconcile to **14 OSM**, **100 Mapy** and **2
-  refreshed-source recoveries**, leaving **zero unresolved work-list identities**. The Mapy key and
-  raw responses were not retained. One manually reviewed school POI fallback is marked town-level;
-  all other new accepted rows are stop-level except explicit Mapy town fallbacks. A final national
-  conversion and the <=5% matcher benchmark remain deferred.
+  refreshed-source recoveries**, leaving **zero unresolved work-list identities**. These were review
+  inputs rather than the final external-geodata contract: accepted stop-level coordinates were
+  consolidated into `other/gapfill.csv`, while town-level and school-POI fallbacks were removed and
+  are now handled by visibly marked route estimation. The Mapy key and raw responses were not
+  retained. A final national conversion and the <=5% matcher benchmark remain deferred.
 
 ## 2026-07-19 — Runnable national VLD/municipal-dráhy JDF bundle pipeline
 

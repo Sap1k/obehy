@@ -44,8 +44,17 @@ uv run obehy-national-jdf build --output C:\data\obehy-national-jdf
 
 The output path must not exist. By default, JrUtil is resolved at `../jrutil` and geodata at
 `../jrunify-ext-geodata/other`. Use `--jrutil-root` or `--geodata-root` to override those paths.
-`--keep-work` retains extracted and fixed intermediate batches after a successful build. Failed
+`--keep-work` retains staged source batches, fixed batch ZIPs, and merged intermediates after a successful build. Failed
 runs always retain their staging directory, raw process logs, partial downloads and
 `logs/failure.json` for diagnosis. `--progress auto` uses Rich on an interactive terminal and
 periodic text when redirected; `rich`, `plain`, and `off` can be selected explicitly. Progress is
-written to stderr. The builder does not enable JrUtil's experimental persistent cache.
+written to stderr.
+
+Use `--jobs=auto|N` to configure both parallel JrUtil stages, with `--fix-jobs` and
+`--merge-jobs` as optional stage overrides. `--memory-budget=auto|SIZE` controls the
+memory-derived worker cap; the requested and resolved worker plans are shown in progress
+and recorded in `run-manifest.json`. Merged JDF packaging defaults to deterministic balanced
+Deflate (`--zip-compression=balanced`); `fast` and `small` select levels 1 and 9.
+
+The builder writes fixed work batches as uncompressed ZIPs to reduce temporary file count.
+The builder does not enable JrUtil's experimental persistent cache.
