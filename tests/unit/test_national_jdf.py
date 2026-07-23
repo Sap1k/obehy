@@ -175,11 +175,25 @@ def test_osm_checksum_rollover_retries_once(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("keep_work", [False, True])
 def test_build_orchestrates_fix_merge_and_bundle_atomically(
-    tmp_path: Path, keep_work: bool
+    tmp_path: Path, keep_work: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "national"
-    jrutil_root = WORKSPACE / "jrutil"
-    geodata_root = WORKSPACE / "jrunify-ext-geodata" / "other"
+    jrutil_root = tmp_path / "jrutil"
+    project = jrutil_root / "jrutil-multitool" / "jrutil-multitool.fsproj"
+    project.parent.mkdir(parents=True)
+    project.write_text("<Project />\n", encoding="utf-8")
+    geodata_root = tmp_path / "jrunify-ext-geodata" / "other"
+    geodata_root.mkdir(parents=True)
+    (geodata_root / "fixture.csv").write_text("Town,Stop,49.0,14.0,CZ\n", encoding="utf-8")
+
+    def fake_git_identity(_repository: Path) -> dict[str, object]:
+        return {
+            "commit": "0123456789abcdef0123456789abcdef01234567",
+            "dirty": False,
+            "status": [],
+        }
+
+    monkeypatch.setattr(national_jdf, "_git_identity", fake_git_identity)
     commands: list[list[str]] = []
     osm_payload = b"fixture-osm"
 
@@ -269,7 +283,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     result = build(
         BuildConfig(
             output=output,
-            repo_root=WORKSPACE / "repo",
+            repo_root=tmp_path / "repo",
             jrutil_root=jrutil_root,
             geodata_root=geodata_root,
             progress="off",
@@ -332,6 +346,12 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     }
     assert run_manifest["merged_jdf"]["compression"] == "balanced"
     assert run_manifest["merged_jdf"]["compression_level"] == 6
+    assert run_manifest["jrutil"] == {
+        "commit": "0123456789abcdef0123456789abcdef01234567",
+        "dirty": False,
+        "status": [],
+    }
+    assert [file["path"] for file in run_manifest["geodata"]["files"]] == ["fixture.csv"]
 
 
 def test_gtfs_stop_verifier_allows_zero_coordinates_with_aggregate_warning(

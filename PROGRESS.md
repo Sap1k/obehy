@@ -3,6 +3,23 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-07-23 — National-builder CI test isolation
+
+### Delivered
+
+- Made the mocked national JDF orchestration test self-contained by creating temporary JrUtil and
+  geodata fixtures and deterministic converter provenance. The unit test no longer depends on the
+  developer-only `../jrutil` and `../jrunify-ext-geodata` sibling checkouts that are intentionally
+  absent when CI checks out the main repository without submodules.
+
+### Validation and handoff
+
+- The focused regression passed both work-retention variants. The full local suite passed with
+  database-backed and large live tests skipped because their opt-in environment was unavailable;
+  Ruff lint/format and strict Pyright passed for `src` and `tests`.
+- Docker is unavailable in the local validation environment, so the Compose and database-backed
+  CI stages were not rerun. The next safe handoff is to push the change and confirm GitHub Actions.
+
 ## 2026-07-21 — Referenced-stop pruning and refresh-first coordinate repair
 
 ### Delivered
