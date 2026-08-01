@@ -24,8 +24,10 @@ def test_live_national_jdf_build(tmp_path: Path) -> None:
     build(
         BuildConfig(
             output=output,
-            repo_root=WORKSPACE / "repo",
+            workdir=WORKSPACE / "work",
+            osm_file=WORKSPACE / "obehy-region.osm.pbf",
             jrutil_root=WORKSPACE / "jrutil",
+            jrutil_command=None,
             geodata_root=WORKSPACE / "jrunify-ext-geodata" / "other",
         )
     )

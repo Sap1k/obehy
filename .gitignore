@@ -7,6 +7,9 @@ __pycache__/
 .coverage
 htmlcov/
 .env
+config/obehy.local.toml
 data/
+!src/obehy/data/
+!src/obehy/data/czptt_osm_aliases.json
 dist/
 build/

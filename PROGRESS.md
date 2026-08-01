@@ -3,6 +3,248 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-08-01 — Dense passenger estimates and municipality fallback routes
+
+### Delivered
+
+- CZPTT route estimation now applies only to identities referenced by an accepted passenger call.
+  Every occurrence is ranked by two-sided real passenger anchors, source-call density, geographic
+  anchor span, active service days, and PA/sequence. Only the winning occurrence is used;
+  estimates are neither averaged nor reused as anchors. Estimated GTFS station parents and
+  children receive one shared JDF-style ` [?]` suffix, while Parquet source names, headsigns, and
+  route labels remain raw.
+- Pure timing/operational identities are never estimated. If SR70/OSM has no real coordinate, the
+  GTFS stop-time and now-unused child/parent/zone/call projection are omitted; the complete source
+  point and call remain in `operational_points`/`operational_calls` for provenance.
+- Eager OSM fuzzy matching now preserves distinguishing direction/locality tokens, so
+  `Bad Schandau Ost` cannot collapse onto `Bad Schandau`. PLC, reviewed alias, exact, cleaned, and
+  qualified fuzzy matching otherwise remain eager and corridor-vetoed.
+- Synthesized fallback routes now use country-aware municipalities rather than station/facility
+  names or SŽ `Název 20`. Reviewed major-city station families collapse to their city root;
+  compound municipalities remain intact; terminal railway qualifiers are removed conservatively;
+  and each endpoint retains the deterministic 20-character cap. The production regression is
+  `Os Karlovy Vary – Johanngeorgenst.`. `SR70_Nazev20.csv` and its CLI/config interface remain
+  validated, copied, and checksummed as reserved provenance data but cannot affect output.
+- Full-feed MobilityData validation exposed and fixed two older serialization defects: negative
+  CZPTT source-day offsets are shifted by whole days only in GTFS (raw operational seconds remain
+  unchanged), schemeless KADR operator URLs receive `https://`, and calls with no source time are
+  emitted as `timepoint=0` rather than exact-time rows.
+
+### Validation evidence
+
+- The current JrUtil Release suite passes **104 tests**; the focused CZPTT class contains **35**
+  bundle/conversion regressions covering dense-vs-sparse selection, passenger-vs-operational
+  anchors, non-chaining estimates, qualifier retention, municipality labels, Název20 independence,
+  timing-only omission, negative day offsets, valid operator URLs, and untimed calls. `dotnet
+  format --verify-no-changes` passes. The Release multitool build succeeds with the existing
+  package/compiler warnings.
+- Oběhy remains at **61 passed, 10 expected skips**; Ruff lint, Ruff formatting, and strict Pyright
+  pass for `src` and `tests`.
+- The full 135,433-message GTFS replay resolves **3,483** used locations as **3,415 authoritative
+  SR70**, **68 OSM**, and **0 estimates**. Every passenger-referenced location has a real
+  coordinate. The four unresolved timing-only identities—`DE:10535` (Bad Schandau Ost),
+  `DE:25606` (Schmilka Überleitstelle), `PL:07397`, and `PL:63752`—remain in operational Parquet
+  and diagnostics but do not occur in `stops.txt` or `stop_times.txt`. No known SR70 coordinate
+  was replaced by OSM.
+- MobilityData GTFS Validator **v8.0.1** (documented JAR SHA-256) parsed all **40 agencies**,
+  **9,178 stops**, **47,098 trips**, and **952,854 stop times** with **zero ERROR notices**. The
+  remaining 8,028 notices are warnings dominated by source travel-speed anomalies, extended rail
+  route types, long combined route names, and source casing. Only `gtfs-intermediate/` was
+  validated; extension foreign keys are checked separately by the national builder.
+
+## 2026-07-26 — Shared OSM snapshots and CZPTT bundle v1
+
+### Delivered
+
+- Added mandatory machine-local TOML configuration with absolute `workdir`, active `osm_file`,
+  JrUnify-Ext-GeoData, and exclusive JrUtil directory/command modes. National CLIs accept
+  `--config`; sibling-parent discovery and the old JrUtil/geodata path flags were removed.
+- Added `obehy-osm build [--verify]` for the fixed Czechia, Austria, Bavaria, Saxony, Slovakia,
+  Dolnośląskie, Opolskie, and Śląskie Geofabrik set. It checks remote MD5 sidecars before and
+  after downloads, caches source extracts, and writes the single configured PBF atomically with
+  native `osmium merge --progress`. Its sibling manifest records ordered source hashes, Osmium
+  identity, output hash, size, and local file stats; matching inputs and output skip regeneration.
+  There are no versioned merged copies, hard links, replay lookup, or PyOsmium fallback. The same
+  command runs native `osmium tags-filter --omit-referenced` once per changed snapshot and caches
+  a node-only railway-location PBF under `workdir/osm`; Python never parses OSM objects. Windows
+  automatically uses Osmium from the default WSL distribution. Every long stage reports
+  progress. JDF and CZPTT validate and record the artifacts rather than processing OSM.
+- Made SŽ SR70 the strict CZPTT coordinate authority. Exact OSM PLC, reviewed alias, and eager
+  global exact/cleaned/fuzzy name matching fill only absent/invalid/conflicting SR70 identities.
+  SR70/OSM differences retain SR70 and emit object/distance diagnostics; the converter does not
+  interpret `uic_ref` or `railway:ref` as a PLC. A real synthetic-PBF smoke deliberately placed
+  all three OSM stations roughly 154–172 km away and confirmed that all six generated
+  parent/child stops retained SR70. No known SR70 coordinate was replaced by OSM.
+- Removed the CZPTT coordinate hot path that materialized full OSM feature geometry and scanned
+  the candidate array repeatedly. JrUtil now reads only raw nodes from a native railway-only
+  extract, builds PLC/object/name indexes once, and treats country tags as ranking hints rather
+  than match gates. A name candidate is rejected only when every usable timetable occurrence
+  exceeds 150 km/h plus 2 km slack; one anomalous occurrence cannot veto a clear match. JrUtil
+  then tries secondary match methods and finally route-time/end-offset estimation. IDS projection
+  also uses a prebuilt PA-to-calls index instead of rescanning every operational call.
+- Introduced CZPTT bundle v1: standard GTFS is isolated in `gtfs-intermediate/`, Czech extension
+  tables are in `extensions/`, and the provisional four mirror Parquets were replaced by the five
+  normalized operational/source-projection relations. PA/TR identities moved to
+  `cz_trips.source_trip_ids`; generated-trip lists became typed call/IDS bridges, including
+  interval-overlap filtering.
+
+### Validation evidence and limits
+
+- Oběhy unit/integration collection: **61 passed, 10 skipped** (database and live-national tests
+  remain opt-in). Ruff on `src`/`tests` and strict Pyright pass.
+- Full JrUtil solution tests: **97 passed**. The JrUtil multitool Release build succeeds with the
+  existing package/compiler warnings. The full solution Release build reaches every relevant
+  project but remains blocked in unrelated `rtview` because `sassc` is not installed. Tests
+  inspect all five exact Parquet schemas and metadata and assert that the old mirrors are absent.
+- A full eight-extract output was rebuilt from the existing **3.37 GiB** source cache directly
+  into the configured PBF. Native merging took **90.6s**, SHA-256 **3.1s**, and the full command
+  **101.9s**. A second run reused it from the source/output manifest in **6.1s** with no merge.
+  The obsolete 3.37 GiB versioned merged-output directory was removed.
+- Native filtering of that 3.37 GiB PBF produced a **0.8 MiB**, **19,617-node** extract containing
+  only `railway=station|halt|stop` in **79.8s** under WSL. This replaced an earlier 4.5 MiB extract
+  that accidentally admitted unrelated bus/trolleybus `public_transport=stop_position` nodes.
+  Its next validated reuse took **0.48s** and performed no OSM scan.
+- A final replay of the current national CZPTT snapshot completed in about **217s**, including
+  every Parquet/GTFS write. It resolved all **3,491** used locations as **3,415 SR70**, **69 OSM**,
+  and **7 route estimates**—down from the initial **1 OSM / 75 estimates**. All seven estimates are
+  non-passenger operational calls; every passenger-referenced point has a real SR70 or OSM
+  coordinate. OSM matches comprise **45 normalized exact**, **15 cleaned railway-name**, and
+  **9 fuzzy-name** resolutions. No known SR70 coordinate was replaced. The old `index-stop-times`
+  stall did not recur, and the separate post-conversion full stop-time-key materialization was
+  replaced by a streaming required-key check.
+- Current national JDF/CZPTT rebuilds, MobilityData validation, and both full CZPTT operational
+  modes remain outstanding live acceptance work.
+
+## 2026-07-25 — CZPTT service classes, line expiry, and SR70 Název20
+
+### Delivered
+
+- Unified CZPTT route type and color classification: InterCity `b91c1c`, fast `b45309`,
+  regional `1c1745`, night `4c1d95`, and other rail `475569`, all with white text. Exact train
+  categories remain in route/trip labels.
+- Made location-level `CZPassengerServiceNumber` authoritative for the onward section. Missing or
+  blank location values now clear the line. Activation remains at the newly marked location;
+  expiry shares the preceding source point so the last lined passenger call already presents the
+  fallback service. Root values apply only when a PA has no location-level records. Fallback
+  routes continue to use complete-PA passenger endpoints.
+- Added paired SR70 `Název 20` snapshot support. Synthesized Czech fallback labels prefer the
+  compact SŽ name and remove only a presentation-time terminal ` z` or ` nz`; stop names and raw
+  snapshots stay unchanged. Endpoints without a unique `Název 20`, especially foreign stations,
+  receive a deterministic best-effort route-label abbreviation of at most 20 characters while
+  their GTFS stop names and trip headsigns remain untouched. Both SR70 files are checksummed in
+  immutable source and run manifests.
+- Refreshed both checked rail CSVs from the official workbook effective 2026-08-15 and documented
+  its source SHA-256. The deterministic converter validates identifiers, coordinates, required
+  columns, uniqueness, and writes both snapshots from one workbook load.
+
+### Validation and handoff
+
+- The full sibling JrUtil suite passes **90 tests** and its Release multitool build succeeds with
+  the existing package/compiler warnings. CZPTT tests cover every category alias, line
+  activation/expiry/root fallback, full-PA fallback labels, cleaned and ambiguous `Název 20`, and
+  coordinate behavior.
+- The full Oběhy suite passes **45 tests** with **10 expected skips** for unavailable database/live
+  environments. Ruff and strict Pyright pass on the changed Python files. Two focused SR70
+  converter tests pass and preserve raw official `Název 20` values; byte-identical regeneration
+  produced 4,367 rows in each CSV.
+- Release bundle smokes passed in both `gtfs` and `sidecar` operational-point modes using the
+  refreshed SR70 pair. No CI configuration changed.
+- The next safe handoff is a local full-current-GVD rebuild in both operational-point modes and
+  review of production fallback-route counts and unresolved SR70 diagnostics.
+
+## 2026-07-24 — CZPTT GTFS presentation and station cleanup
+
+### Delivered
+
+- Added the selected rail palette with white text: regional `1c1745`, InterCity `0076a3`,
+  express `7a4eab`, night `312e81`, and other rail `5b6472`. Train categories now carry through
+  normalized calls, split a through service when they change, and prefix standard
+  `trip_short_name`; `cz_trips.train_number` remains the unmodified operational number.
+- Replaced stop-pattern fallback routes with operator/category/mode/canonical-endpoint grouping.
+  Reverse directions and intermediate-pattern variants share a route whose combined short name
+  uses the service-day-dominant direction. Mapped KADR line names are unchanged. Every linked
+  segment now uses the complete PA's final passenger call as its headsign.
+- Replaced legacy CZPTT generated IDs with `czptt:` colon namespaces. Every primary point now has
+  one station parent and an unspecified or platform child, and all calls reference children.
+  Platform values remain solely in `platform_code`.
+- Made SR70 matching country-aware and propagated resolved coordinates to parents and children.
+  Diagnostics schema v2 reports resolution counts, unresolved points by country, and conflicting
+  used SR70 codes. The operational-call Parquet schema is now v2 and carries generated station and
+  child-stop IDs. Oběhy bundle verification rejects malformed hierarchy or missing/mismatched
+  coordinates for any Czech point present unambiguously in the SR70 snapshot.
+
+### Validation and handoff
+
+- The sibling JrUtil suite passes **85 tests**; its Release multitool build succeeds with the
+  existing package/compiler warnings. Synthetic bundle conversions passed in both `gtfs` and
+  `sidecar` operational-point modes and were inspected for namespaced IDs, hierarchy, route
+  presentation, headsigns, and coordinate diagnostics.
+- The focused Oběhy CZPTT suite passes **10 tests**. Ruff, formatting, and Pyright checks cover the
+  changed Python files. No CI configuration changed.
+- The next safe handoff is a full current-GVD conversion in both operational-point modes followed
+  by inspection of production route/station counts; this remains a local smoke rather than a CI
+  job.
+
+## 2026-07-23 — Initial national CZPTT conversion bundle
+
+### Delivered
+
+- Switched live CZPTT acquisition from the pathologically slow FTP hierarchy to the official
+  `portal.cisjr.cz` HTTPS mirror. Discovery now fetches monthly directory listings concurrently,
+  makes no per-object probe requests, reports discovery/download/recheck progress, and rejects FTP
+  overrides with HTTPS guidance. Downloaded bytes and SHA-256 hashes are the immutable source
+  identity.
+- Added `obehy-national-czptt build` with Europe/Prague second-Sunday GVD selection, an anonymous
+  HTTPS/local-server source root, eight-worker automatic acquisition, frozen inventories,
+  offline `sources/` snapshots, KADR and SR70 snapshots, deterministic message flattening, atomic
+  publication, failure retention, and file/run manifests. The run manifest records the separately
+  checked-out sibling JrUtil commit; `converters/jrutil` remains unchanged.
+- Updated the sibling JrUtil model so repeated root and per-location
+  `NetworkSpecificParameter` values survive XML deserialization. Complete transport identity now
+  includes object type, company, core, variant, and timetable year. Exact duplicate payloads are
+  deduplicated, conflicting PA identities are fatal, cancellations are applied in flattened
+  interval order, and unknown targets are aggregated.
+- Added offline CZPTT conversion and bundle commands. Only activity-`0001` creates a passenger call.
+  Internal points default to exact non-boardable/non-alightable GTFS timing points, with a
+  sidecar-only compatibility mode; deadhead tails remain operational metadata. Whole PAs with no
+  passenger calls or backward/inconsistent chronology are rejected without day-rollover repair.
+- Platform children keep the source station name and put the passenger-facing subsidiary name,
+  or raw code fallback, only in `platform_code`. Consecutive subsidiary-only duplicates collapse
+  in GTFS while raw call evidence remains in Parquet. SR70 coordinates are snapshotted and applied
+  where their five-digit point identity is unambiguous.
+- Friendly KADR lines now own route identity and names; train numbers remain trip metadata.
+  Mid-journey line/operator/mode changes create linked trips with a shared PA block and
+  `transfer_type=4`. Sidecar-mode internal boundaries are approximated at the following passenger
+  call and diagnosed.
+- Added `cz_trip_stop_zones.txt` and repeated `CZIPTS`/`CZCalendarIPTS` preservation. Explicit
+  catalog fare bands such as `PID_PrahaP` become trip-stop memberships, broader IDS records remain
+  coverage metadata, and standard `stops.zone_id` is set only for globally unambiguous memberships.
+  Added four Snappy Parquet sidecars for source journeys, operational points, operational calls,
+  and IDS coverage.
+
+### Validation and handoff
+
+- Eleven focused JrUtil CZPTT tests cover repeated parameters, both operational-point modes,
+  unchanged platform names/friendly platform codes, linked `S1 -> S12` trips, full chronology
+  rejection, passenger activity variants, values above 24 hours, omission of non-passenger PAs,
+  PID fare-band projection including overlapping bands, and real Parquet sidecar creation.
+- Nine Python tests cover the GVD boundary, concurrent prior-calendar-year change discovery,
+  HTTPS-only source selection, persistent streaming HTTP downloads, malformed gzip, deterministic
+  cancellation ordering, conflicting PA identities, byte-identical network-free snapshot
+  builds/default operational mode, and incompatible source options. A read-only live discovery
+  enumerated 115,077 GVD 2026 objects in 3.21 seconds; a 16-object persistent-connection download
+  sample transferred in 0.33 seconds. The live official KADR SOAP schema was checked read-only:
+  the snapshot parser retained
+  1,162 companies, 408 public lines, 44 IDS entries, 18 train types, and 15 commercial types,
+  including IDS code 11 `PID_PrahaP` / `PID pásmo P`.
+- Locally generated synthetic feeds for both operational modes passed MobilityData GTFS Validator
+  v8.0.1 (pinned CLI SHA-256
+  `19293ddd9b6f954f216d4f12054bd8a3232921751c4484339e339764a91000e2`) with zero errors.
+  The remaining production acceptance gate is the opt-in full-current-GVD build.
+  Calendar-restricted `CZCalendarIPTS`
+  records are preserved losslessly, but service-calendar partitioning by differing IDS membership
+  still needs a real-data golden before the nationwide smoke test is enabled.
+
 ## 2026-07-23 — National-builder CI test isolation
 
 ### Delivered

@@ -14,6 +14,8 @@ dependencies = [
 
 [project.scripts]
 obehy-national-jdf = "obehy.national_jdf:main"
+obehy-national-czptt = "obehy.national_czptt:main"
+obehy-osm = "obehy.osm_snapshot:main"
 
 [dependency-groups]
 dev = [
@@ -30,12 +32,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/obehy"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/obehy/data/czptt_osm_aliases.json" = "obehy/data/czptt_osm_aliases.json"
+
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
 markers = [
   "integration: requires the PostgreSQL/PostGIS test database",
   "national_jdf_live: downloads and converts the complete live national JDF inputs",
+  "national_czptt_live: downloads and converts the complete current GVD",
 ]
 
 [tool.ruff]

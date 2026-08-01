@@ -1,0 +1,11 @@
+schema_version = 1
+
+[paths]
+workdir = "D:/obehy-work"
+osm_file = "D:/obehy-data/osm/obehy-region.osm.pbf"
+jrunify_ext_geodata_dir = "D:/src/jrunify-ext-geodata"
+
+[jrutil]
+directory = "D:/src/jrutil"
+# Alternatively, remove directory and use:
+# command = ["dotnet", "D:/tools/jrutil-multitool.dll"]

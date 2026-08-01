@@ -23,7 +23,6 @@ from obehy.national_jdf import (
     deterministic_zip,
     discover_jdf_batches,
     download_file,
-    download_osm,
     extract_zip_safely,
     file_digest,
     run_command,
@@ -145,34 +144,6 @@ def test_stage_nested_batches_rejects_malformed_inner_archive(tmp_path: Path) ->
     assert (tmp_path / "batches" / "vld-bad.zip.part").is_file()
 
 
-def test_osm_checksum_rollover_retries_once(tmp_path: Path) -> None:
-    pbf = tmp_path / "czech.osm.pbf"
-    sidecar = tmp_path / "czech.osm.pbf.md5"
-    calls: list[str] = []
-    expected_payload = b"second-version"
-
-    def fake_download(
-        url: str, destination: Path, name: str, _reporter: object = None
-    ) -> DownloadRecord:
-        calls.append(name)
-        if name == "osm-md5":
-            destination.write_text(
-                hashlib.md5(expected_payload).hexdigest() + "  czech.osm.pbf\n",
-                encoding="ascii",
-            )
-        else:
-            destination.write_bytes(
-                b"first-version" if calls.count("osm") == 1 else expected_payload
-            )
-        return _download_record(name, url, destination)
-
-    record = download_osm(pbf, sidecar, fake_download)
-
-    assert calls == ["osm-md5", "osm", "osm-md5", "osm"]
-    assert record.md5 == hashlib.md5(expected_payload).hexdigest()
-    assert not sidecar.exists()
-
-
 @pytest.mark.parametrize("keep_work", [False, True])
 def test_build_orchestrates_fix_merge_and_bundle_atomically(
     tmp_path: Path, keep_work: bool, monkeypatch: pytest.MonkeyPatch
@@ -193,24 +164,26 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             "status": [],
         }
 
-    monkeypatch.setattr(national_jdf, "_git_identity", fake_git_identity)
+    monkeypatch.setattr(national_jdf, "git_identity", fake_git_identity)
+
+    def valid_snapshot(_osm: Path, _workdir: Path) -> dict[str, object]:
+        return {"merge_key": "fixture-osm"}
+
+    monkeypatch.setattr(
+        national_jdf,
+        "validate_snapshot",
+        valid_snapshot,
+    )
     commands: list[list[str]] = []
-    osm_payload = b"fixture-osm"
+    download_names: list[str] = []
 
     def fake_download(
         url: str, destination: Path, name: str, _reporter: object = None
     ) -> DownloadRecord:
+        download_names.append(name)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if name == "osm-md5":
-            destination.write_text(
-                hashlib.md5(osm_payload).hexdigest() + "  czech-republic-latest.osm.pbf\n",
-                encoding="ascii",
-            )
-        elif name == "osm":
-            destination.write_bytes(osm_payload)
-        else:
-            inner = _zip_bytes({"VerzeJDF.txt": b'"1.11";\r\n'})
-            destination.write_bytes(_zip_bytes({"1.zip": inner}))
+        inner = _zip_bytes({"VerzeJDF.txt": b'"1.11";\r\n'})
+        destination.write_bytes(_zip_bytes({"1.zip": inner}))
         return _download_record(name, url, destination)
 
     def fake_command(
@@ -283,8 +256,10 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     result = build(
         BuildConfig(
             output=output,
-            repo_root=tmp_path / "repo",
+            workdir=tmp_path / "workdir",
+            osm_file=tmp_path / "osm" / "regional.osm.pbf",
             jrutil_root=jrutil_root,
+            jrutil_command=None,
             geodata_root=geodata_root,
             progress="off",
             keep_work=keep_work,
@@ -294,6 +269,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     )
 
     assert result == output
+    assert download_names == ["VLD", "dráhy"]
     assert (output / "derived" / "merged-jdf.zip").is_file()
     assert (output / "bundle" / "manifest.json").is_file()
     assert (output / "work").exists() is keep_work
@@ -380,7 +356,9 @@ def test_gtfs_stop_verifier_rejects_unreferenced_boarding_stop(tmp_path: Path) -
         national_jdf.verify_gtfs_stops(tmp_path)
 
 
-def test_build_retains_staging_directory_after_failure(tmp_path: Path) -> None:
+def test_build_retains_staging_directory_after_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     output = tmp_path / "failed-output"
 
     def failing_download(
@@ -388,12 +366,22 @@ def test_build_retains_staging_directory_after_failure(tmp_path: Path) -> None:
     ) -> DownloadRecord:
         raise OSError("fixture download failure")
 
+    def valid_snapshot(_osm: Path, _workdir: Path) -> dict[str, object]:
+        return {"merge_key": "fixture-osm"}
+
+    monkeypatch.setattr(
+        national_jdf,
+        "validate_snapshot",
+        valid_snapshot,
+    )
     with pytest.raises(OSError, match="fixture download failure"):
         build(
             BuildConfig(
                 output=output,
-                repo_root=WORKSPACE / "repo",
+                workdir=tmp_path / "workdir",
+                osm_file=tmp_path / "regional.osm.pbf",
                 jrutil_root=WORKSPACE / "jrutil",
+                jrutil_command=None,
                 geodata_root=WORKSPACE / "jrunify-ext-geodata" / "other",
                 progress="off",
             ),

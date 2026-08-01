@@ -18,7 +18,7 @@ import uuid
 import zipfile
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Protocol, cast
@@ -41,10 +41,11 @@ from rich.progress import (
 from rich.table import Column
 from rich.text import Text
 
+from obehy.osm_snapshot import OsmSnapshotError, validate_snapshot
+from obehy.runtime_config import ConfigurationError, load_runtime_config
+
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
 DRAHY_URL = "https://portal.cisjr.cz/pub/draha/mestske/JDF.zip"
-OSM_URL = "https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf"
-OSM_MD5_URL = OSM_URL + ".md5"
 PARQUET_FILES = {
     "source_route_metadata.parquet",
     "source_stop_metadata.parquet",
@@ -313,8 +314,10 @@ class DownloadRecord:
 @dataclass(frozen=True)
 class BuildConfig:
     output: Path
-    repo_root: Path
-    jrutil_root: Path
+    workdir: Path
+    osm_file: Path
+    jrutil_root: Path | None
+    jrutil_command: tuple[str, ...] | None
     geodata_root: Path
     keep_work: bool = False
     progress: ProgressMode = "auto"
@@ -456,32 +459,6 @@ def download_file(
         last_modified=headers.get("Last-Modified"),
         md5=md5.hexdigest(),
     )
-
-
-def _parse_md5(path: Path) -> str:
-    match = re.search(r"(?i)\b([0-9a-f]{32})\b", path.read_text(encoding="ascii"))
-    if match is None:
-        raise PipelineError("Geofabrik MD5 sidecar did not contain an MD5 digest")
-    return match.group(1).lower()
-
-
-def download_osm(
-    destination: Path,
-    sidecar: Path,
-    download: DownloadFn = download_file,
-    reporter: Reporter | None = None,
-) -> DownloadRecord:
-    last_error = ""
-    for _attempt in range(2):
-        download(OSM_MD5_URL, sidecar, "osm-md5", reporter)
-        expected_md5 = _parse_md5(sidecar)
-        record = download(OSM_URL, destination, "osm", reporter)
-        actual_md5 = record.md5 or file_digest(destination, "md5")
-        if actual_md5 == expected_md5:
-            sidecar.unlink(missing_ok=True)
-            return replace(record, md5=actual_md5)
-        last_error = f"expected {expected_md5}, got {actual_md5}"
-    raise PipelineError(f"Geofabrik OSM checksum mismatch after retry: {last_error}")
 
 
 def write_json(path: Path, value: object) -> None:
@@ -959,7 +936,7 @@ def run_command(
     )
 
 
-def _git_identity(repository: Path) -> dict[str, Any]:
+def git_identity(repository: Path) -> dict[str, Any]:
     safe = f"safe.directory={repository.resolve().as_posix()}"
     commit = subprocess.run(
         ["git", "-c", safe, "-C", str(repository), "rev-parse", "HEAD"],
@@ -993,7 +970,7 @@ def geodata_manifest(geodata_directory: Path) -> dict[str, Any]:
     if not files:
         raise PipelineError(f"Geodata directory contains no CSV files: {geodata_directory}")
     return {
-        "repository": _git_identity(geodata_directory.parent),
+        "repository": git_identity(geodata_directory.parent),
         "directory": str(geodata_directory.resolve()),
         "files": [
             {
@@ -1007,6 +984,10 @@ def geodata_manifest(geodata_directory: Path) -> dict[str, Any]:
 
 
 def _multitool_command(config: BuildConfig, arguments: Sequence[str]) -> list[str]:
+    if config.jrutil_command is not None:
+        return [*config.jrutil_command, *arguments]
+    if config.jrutil_root is None:
+        raise PipelineError("JrUtil runtime is not configured")
     project = config.jrutil_root / "jrutil-multitool" / "jrutil-multitool.fsproj"
     if not project.is_file():
         raise PipelineError(f"Root-level JrUtil multitool project not found: {project}")
@@ -1024,7 +1005,11 @@ def _multitool_command(config: BuildConfig, arguments: Sequence[str]) -> list[st
     ]
 
 
-def _multitool_build_command(config: BuildConfig) -> list[str]:
+def _multitool_build_command(config: BuildConfig) -> list[str] | None:
+    if config.jrutil_command is not None:
+        return None
+    if config.jrutil_root is None:
+        raise PipelineError("JrUtil runtime is not configured")
     project = config.jrutil_root / "jrutil-multitool" / "jrutil-multitool.fsproj"
     if not project.is_file():
         raise PipelineError(f"Root-level JrUtil multitool project not found: {project}")
@@ -1039,6 +1024,28 @@ def _multitool_build_command(config: BuildConfig) -> list[str]:
     ]
 
 
+def _jrutil_cwd(config: BuildConfig) -> Path:
+    return config.jrutil_root or config.workdir
+
+
+def _jrutil_identity(config: BuildConfig) -> dict[str, Any]:
+    if config.jrutil_root is not None:
+        return git_identity(config.jrutil_root)
+    assert config.jrutil_command is not None
+    files: list[dict[str, object]] = []
+    for argument in config.jrutil_command:
+        candidate = Path(argument)
+        if candidate.is_absolute() and candidate.is_file():
+            files.append(
+                {
+                    "path": str(candidate.resolve()),
+                    "bytes": candidate.stat().st_size,
+                    "sha256": file_digest(candidate),
+                }
+            )
+    return {"mode": "command", "command": list(config.jrutil_command), "files": files}
+
+
 def _job_text(value: JobSetting) -> str:
     return str(value)
 
@@ -1049,6 +1056,19 @@ def _stage_jobs(config: BuildConfig, stage: Literal["fix", "merge"]) -> JobSetti
 
 
 def _validate_build_config(config: BuildConfig) -> None:
+    if (config.jrutil_root is None) == (config.jrutil_command is None):
+        raise PipelineError("Exactly one JrUtil runtime mode must be configured")
+    for label, path in (
+        ("workdir", config.workdir),
+        ("osm_file", config.osm_file),
+        ("geodata_root", config.geodata_root),
+    ):
+        if not path.is_absolute():
+            raise PipelineError(f"{label} must be an absolute path: {path}")
+    if config.jrutil_root is not None and not config.jrutil_root.is_dir():
+        raise PipelineError(f"JrUtil directory does not exist: {config.jrutil_root}")
+    if not config.geodata_root.is_dir():
+        raise PipelineError(f"Geodata directory does not exist: {config.geodata_root}")
     for name, value in (
         ("jobs", config.jobs),
         ("fix_jobs", config.fix_jobs),
@@ -1201,6 +1221,11 @@ def verify_gtfs_stops(gtfs: Path, reporter: Reporter | None = None) -> None:
 
 
 def _converter_version(identity: Mapping[str, Any]) -> str:
+    if identity.get("mode") == "command":
+        files = cast(list[dict[str, object]], identity.get("files", []))
+        if files:
+            return f"command.{str(files[0]['sha256'])[:12]}"
+        return "configured-command"
     commit = cast(str, identity["commit"])
     dirty_hash = identity.get("working_tree_sha256")
     return commit if dirty_hash is None else f"{commit}+dirty.{cast(str, dirty_hash)[:12]}"
@@ -1213,6 +1238,7 @@ def build(
     reporter: Reporter | None = None,
 ) -> Path:
     _validate_build_config(config)
+    osm_manifest = validate_snapshot(config.osm_file, config.workdir)
     output = config.output.resolve()
     if output.exists():
         raise PipelineError(f"Output path must not exist: {output}")
@@ -1225,7 +1251,13 @@ def build(
     derived = publish / "derived"
     bundle = publish / "bundle"
     logs = publish / "logs"
-    work = stage / "work"
+    run_root = (
+        config.workdir.resolve()
+        / "runs"
+        / "national-jdf"
+        / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex}"
+    )
+    work = run_root / "work"
     for directory in (sources, derived, logs, work):
         directory.mkdir(parents=True)
 
@@ -1263,23 +1295,16 @@ def build(
         f"memory budget={config.memory_budget}, "
         f"ZIP compression={config.zip_compression} "
         f"(level {ZIP_COMPRESSION_LEVELS[config.zip_compression]}), "
-        f"staging={stage}, output={output}"
+        f"run={run_root}, staging={stage}, output={output}"
     )
     try:
         set_stage("download-vld")
         vld = download(VLD_URL, sources / "JDF_VLD.zip", "VLD", reporter)
         set_stage("download-drahy")
         drahy = download(DRAHY_URL, sources / "JDF_drahy.zip", "dráhy", reporter)
-        set_stage("download-osm")
-        osm = download_osm(
-            sources / "czech-republic.osm.pbf",
-            sources / "czech-republic-latest.osm.pbf.md5",
-            download,
-            reporter,
-        )
         write_json(
             sources / "sources.json",
-            {"schema_version": 1, "sources": [asdict(vld), asdict(drahy), asdict(osm)]},
+            {"schema_version": 1, "sources": [asdict(vld), asdict(drahy)]},
         )
 
         set_stage("stage-national-batches")
@@ -1296,18 +1321,20 @@ def build(
         drahy_count = sum(mapping.source == "drahy" for mapping in mappings)
 
         set_stage("provenance")
-        jrutil_identity = _git_identity(config.jrutil_root)
+        jrutil_identity = _jrutil_identity(config)
         geodata = geodata_manifest(config.geodata_root)
         fixed_root = work / "fixed"
 
         set_stage("build-jrutil")
-        command_results["build"] = command_runner(
-            _multitool_build_command(config),
-            config.jrutil_root,
-            logs / "jrutil-build.process.log",
-            reporter,
-            CommandProgress("Build JrUtil", stage="build-jrutil"),
-        )
+        build_command = _multitool_build_command(config)
+        if build_command is not None:
+            command_results["build"] = command_runner(
+                build_command,
+                _jrutil_cwd(config),
+                logs / "jrutil-build.process.log",
+                reporter,
+                CommandProgress("Build JrUtil", stage="build-jrutil"),
+            )
 
         set_stage("fix-national-jdf")
         command_results["fix"] = command_runner(
@@ -1322,13 +1349,13 @@ def build(
                     f"--memory-budget={config.memory_budget}",
                     "--international-route-policy=regional-adjacent",
                     f"--ext-geodata={config.geodata_root}",
-                    f"--cz-pbf={sources / 'czech-republic.osm.pbf'}",
+                    f"--cz-pbf={config.osm_file}",
                     f"--logfile={logs / 'fix.log'}",
                     str(combined_root),
                     str(fixed_root),
                 ],
             ),
-            config.jrutil_root,
+            _jrutil_cwd(config),
             logs / "fix.process.log",
             reporter,
             CommandProgress(
@@ -1357,7 +1384,7 @@ def build(
                     str(fixed_root),
                 ],
             ),
-            config.jrutil_root,
+            _jrutil_cwd(config),
             logs / "merge.process.log",
             reporter,
             CommandProgress(
@@ -1379,8 +1406,8 @@ def build(
         descriptor = {
             "schema_version": 1,
             "source_id": "national-jdf-vld-drahy",
-            "retrieved_at": max(vld.retrieved_at, drahy.retrieved_at, osm.retrieved_at),
-            "retrieval_method": "derived-from-https-geofabrik-and-pinned-geodata",
+            "retrieved_at": max(vld.retrieved_at, drahy.retrieved_at),
+            "retrieval_method": "derived-from-https-and-configured-snapshots",
             "source_uri": "obehy:derived:national-jdf-vld-drahy",
             "licence": "CIS JŘ public data; OSM ODbL; external geodata source-specific",
             "payload_kind": "zip",
@@ -1404,7 +1431,7 @@ def build(
                     str(bundle),
                 ],
             ),
-            config.jrutil_root,
+            _jrutil_cwd(config),
             logs / "bundle.process.log",
             reporter,
             CommandProgress("Generate GTFS + Parquet bundle", stage="jdf-to-bundle"),
@@ -1416,6 +1443,7 @@ def build(
             "schema_version": 1,
             "completed_at": utc_now(),
             "sources_manifest_sha256": file_digest(sources / "sources.json"),
+            "osm_source_key": osm_manifest["merge_key"],
             "geodata": geodata,
             "jrutil": jrutil_identity,
             "conversion": {
@@ -1464,6 +1492,8 @@ def build(
         try:
             if stage.exists():
                 shutil.rmtree(stage)
+            if not config.keep_work and run_root.exists():
+                shutil.rmtree(run_root)
         except OSError as cleanup_error:
             reporter.problem(
                 "warning",
@@ -1486,6 +1516,7 @@ def build(
                 active_stage: round(time.monotonic() - active_stage_started, 3),
             },
             "staging_directory": str(stage),
+            "run_directory": str(run_root),
             "logs_directory": str(logs),
         }
         if isinstance(error, CommandFailure):
@@ -1540,8 +1571,7 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     build_parser = subparsers.add_parser("build", help="build a national JDF conversion bundle")
     build_parser.add_argument("--output", required=True, type=Path)
-    build_parser.add_argument("--jrutil-root", type=Path)
-    build_parser.add_argument("--geodata-root", type=Path)
+    build_parser.add_argument("--config", type=Path)
     build_parser.add_argument("--keep-work", action="store_true")
     build_parser.add_argument(
         "--jobs",
@@ -1582,25 +1612,32 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    repo_root = Path(__file__).resolve().parents[2]
-    output = cast(Path, args.output)
-    config = BuildConfig(
-        output=output,
-        repo_root=repo_root,
-        jrutil_root=cast(Path | None, args.jrutil_root) or repo_root.parent / "jrutil",
-        geodata_root=cast(Path | None, args.geodata_root)
-        or repo_root.parent / "jrunify-ext-geodata" / "other",
-        keep_work=cast(bool, args.keep_work),
-        progress=cast(ProgressMode, args.progress),
-        jobs=cast(JobSetting, args.jobs),
-        fix_jobs=cast(JobSetting | None, args.fix_jobs),
-        merge_jobs=cast(JobSetting | None, args.merge_jobs),
-        memory_budget=cast(str, args.memory_budget),
-        zip_compression=cast(ZipCompression, args.zip_compression),
-    )
     try:
+        runtime = load_runtime_config(cast(Path | None, args.config))
+        config = BuildConfig(
+            output=cast(Path, args.output),
+            workdir=runtime.workdir,
+            osm_file=runtime.osm_file,
+            jrutil_root=runtime.jrutil.directory,
+            jrutil_command=runtime.jrutil.command,
+            geodata_root=runtime.jrunify_ext_geodata_dir / "other",
+            keep_work=cast(bool, args.keep_work),
+            progress=cast(ProgressMode, args.progress),
+            jobs=cast(JobSetting, args.jobs),
+            fix_jobs=cast(JobSetting | None, args.fix_jobs),
+            merge_jobs=cast(JobSetting | None, args.merge_jobs),
+            memory_budget=cast(str, args.memory_budget),
+            zip_compression=cast(ZipCompression, args.zip_compression),
+        )
         result = build(config)
-    except (OSError, PipelineError, subprocess.SubprocessError, zipfile.BadZipFile) as error:
+    except (
+        ConfigurationError,
+        OsmSnapshotError,
+        OSError,
+        PipelineError,
+        subprocess.SubprocessError,
+        zipfile.BadZipFile,
+    ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     print(f"National JDF bundle written to {result}")

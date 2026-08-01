@@ -665,6 +665,34 @@ This allows non-stop railway points to anchor delay calculations without exposin
 
 JrUtil should produce a **conversion bundle**, not only a ready-made final GTFS ZIP.
 
+National conversion commands use one mandatory machine-local TOML configuration with absolute
+paths for the heavy-work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkout, and
+exactly one JrUtil directory or executable command. They never infer sibling checkouts from the
+repository parent.
+
+OSM acquisition is a separate, explicit snapshot operation. It caches and merges the fixed
+Czechia/Austria/Bavaria/Saxony/Slovakia/Dolnośląskie/Opolskie/Śląskie Geofabrik extracts under
+the work directory and atomically replaces the single configured PBF. Its sibling manifest
+records the ordered source hashes, Osmium identity, and output identity so unchanged builds skip
+regeneration safely. There are no versioned merged copies, hard links, or replay lookup. JDF and
+CZPTT validate and record the active manifest but never download OSM during a conversion run.
+The snapshot command also creates and manifests a reusable node-only railway-location extract.
+Both merge and filter use native `osmium` (`merge --progress` and `tags-filter --progress`);
+Python does not parse or transform OSM objects. Windows can use the default WSL installation.
+
+For CZPTT coordinates, a valid and unambiguous SŽ SR70 `(CZ, primary code)` is authoritative.
+OSM can fill only SR70 gaps, in this order: exact `ref:EU:PLC`, reviewed object alias, global
+normalized exact name, operational-suffix/qualifier-stripped name, then a close fuzzy name. OSM
+never replaces, averages, or adjusts known SR70 coordinates. Disagreements retain SR70 and produce
+structured diagnostics. Neither `uic_ref` nor `railway:ref` is a Primary Location Code;
+neighboring calls may veto a name match but may not override SR70. CZPTT consumes only
+`railway=station|halt|stop` nodes and ignores ways, relations, unrelated public-transport points,
+and station geometry. Country tags rank otherwise equivalent candidates but never exclude a name
+match. A candidate is impossible only when every occurrence with usable timed-neighbor evidence
+fails the 150 km/h plus 2 km slack test; one anomalous occurrence does not veto a clear match.
+When no OSM method survives, coordinates are estimated between timed route anchors using the same
+linear/end-offset approach as the JDF stop fallback.
+
 Suggested output:
 
 ```text
@@ -691,10 +719,16 @@ conversion/
 └── manifest.json
 ```
 
-Bundle format version 1 is implemented for JDF in the standalone JrUtil fork.
+Bundle format version 1 is implemented for JDF and CZPTT in the standalone JrUtil fork.
 It uses explicit flat Parquet schemas, Snappy compression, fixed row groups,
-deterministic ordering and per-file SHA-256 metadata. Operational point/call
-sidecars remain part of the later CZPTT slice rather than empty JDF files.
+deterministic ordering and per-file SHA-256 metadata. CZPTT uses
+`operational_points`, `operational_calls`, `source_call_metadata`,
+`source_ids_coverage_metadata`, and `source_ids_coverage_trip_metadata`; typed bridge rows replace
+generated-ID lists. PA/TR identities belong to `cz_trips.source_trip_ids`. CZPTT operational
+Parquet retains the complete accepted source route, including timing-only identities with no real
+coordinate. GTFS projects an internal timing point only when SR70 or OSM supplies a real
+coordinate; unresolved timing-only calls intentionally have no GTFS/source-call projection.
+Passenger-referenced gaps alone may use deterministic dense-service estimation.
 
 Standard GTFS plus the Oběhy extension tables are the primary normalized
 representation. Parquet must not repeat fields that can be reconstructed from
@@ -762,7 +796,8 @@ Required changes:
 - preserve any available CIS StopIDs;
 - preserve source identifiers and provenance;
 - preserve train numbers;
-- include locations trains pass through without stopping;
+- include locations trains pass through without stopping when a real SR70/OSM coordinate exists,
+  while retaining unresolved timing-only source facts in operational Parquet;
 - include scheduled passage times;
 - distinguish passenger and non-passenger calls;
 - preserve any post/platform data available in the source;
