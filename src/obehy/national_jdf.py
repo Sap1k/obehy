@@ -41,11 +41,16 @@ from rich.progress import (
 from rich.table import Column
 from rich.text import Text
 
-from obehy.osm_snapshot import OsmSnapshotError, validate_snapshot
+from obehy.osm_snapshot import (
+    OsmSnapshotError,
+    validate_jdf_transit_stops,
+    validate_snapshot,
+)
 from obehy.runtime_config import ConfigurationError, load_runtime_config
 
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
 DRAHY_URL = "https://portal.cisjr.cz/pub/draha/mestske/JDF.zip"
+TRANSPORT_MODE_RULES = Path(__file__).with_name("data") / "jdf_transport_mode_rules.csv"
 PARQUET_FILES = {
     "source_route_metadata.parquet",
     "source_stop_metadata.parquet",
@@ -1239,6 +1244,7 @@ def build(
 ) -> Path:
     _validate_build_config(config)
     osm_manifest = validate_snapshot(config.osm_file, config.workdir)
+    jdf_osm_file = validate_jdf_transit_stops(config.workdir, str(osm_manifest["merge_key"]))
     output = config.output.resolve()
     if output.exists():
         raise PipelineError(f"Output path must not exist: {output}")
@@ -1323,6 +1329,9 @@ def build(
         set_stage("provenance")
         jrutil_identity = _jrutil_identity(config)
         geodata = geodata_manifest(config.geodata_root)
+        if not TRANSPORT_MODE_RULES.is_file():
+            raise PipelineError(f"Transport mode rules are missing: {TRANSPORT_MODE_RULES}")
+        transport_mode_rules_sha256 = file_digest(TRANSPORT_MODE_RULES)
         fixed_root = work / "fixed"
 
         set_stage("build-jrutil")
@@ -1349,7 +1358,7 @@ def build(
                     f"--memory-budget={config.memory_budget}",
                     "--international-route-policy=regional-adjacent",
                     f"--ext-geodata={config.geodata_root}",
-                    f"--cz-pbf={config.osm_file}",
+                    f"--cz-pbf={jdf_osm_file}",
                     f"--logfile={logs / 'fix.log'}",
                     str(combined_root),
                     str(fixed_root),
@@ -1424,6 +1433,7 @@ def build(
                 [
                     "jdf-to-bundle",
                     "--international-route-policy=regional-adjacent",
+                    f"--transport-mode-rules={TRANSPORT_MODE_RULES}",
                     f"--snapshot-descriptor={descriptor_path}",
                     f"--converter-version={_converter_version(jrutil_identity)}",
                     f"--logfile={logs / 'bundle.log'}",
@@ -1444,6 +1454,11 @@ def build(
             "completed_at": utc_now(),
             "sources_manifest_sha256": file_digest(sources / "sources.json"),
             "osm_source_key": osm_manifest["merge_key"],
+            "osm_jdf_transit_extract": {
+                "path": str(jdf_osm_file),
+                "bytes": jdf_osm_file.stat().st_size,
+                "sha256": file_digest(jdf_osm_file),
+            },
             "geodata": geodata,
             "jrutil": jrutil_identity,
             "conversion": {
@@ -1451,6 +1466,10 @@ def build(
                 "stop_merge": "name",
                 "strict": True,
                 "international_route_policy": "regional-adjacent",
+                "transport_mode_rules": {
+                    "path": "obehy/data/jdf_transport_mode_rules.csv",
+                    "sha256": transport_mode_rules_sha256,
+                },
             },
             "execution": {
                 "requested": {

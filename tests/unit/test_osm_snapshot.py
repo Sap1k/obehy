@@ -75,7 +75,7 @@ def test_build_reuses_extracts_and_active_merge(
         output.write_bytes(b"\n".join(values))
         return {"engine": "fixture"}
 
-    def railway_filter(
+    def node_filter(
         source: Path,
         destination: Path,
         *,
@@ -84,7 +84,7 @@ def test_build_reuses_extracts_and_active_merge(
         assert source == config.osm_file.resolve()
         assert source_key is not None
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(b"railway fixture")
+        destination.write_bytes(destination.name.encode())
         return destination
 
     monkeypatch.setattr(osm_snapshot, "urlopen", open_url)
@@ -94,13 +94,15 @@ def test_build_reuses_extracts_and_active_merge(
         config,
         fetch=fetch,
         merge=merge,
-        railway_filter=railway_filter,
+        railway_filter=node_filter,
+        transit_filter=node_filter,
     )
     second = build_snapshot(
         config,
         fetch=fetch,
         merge=merge,
-        railway_filter=railway_filter,
+        railway_filter=node_filter,
+        transit_filter=node_filter,
     )
 
     assert first == second == config.osm_file
@@ -116,7 +118,8 @@ def test_build_reuses_extracts_and_active_merge(
         config,
         fetch=fetch,
         merge=merge,
-        railway_filter=railway_filter,
+        railway_filter=node_filter,
+        transit_filter=node_filter,
     )
     assert pbf_downloads.count(changed_region) == 2
     assert all(
@@ -247,7 +250,7 @@ def test_native_osmium_merge_uses_progress(
     assert "native merge complete" in capsys.readouterr().err
 
 
-def test_railway_filter_is_single_pass_and_node_only(
+def test_osm_filters_are_single_pass_and_node_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -294,8 +297,32 @@ def test_railway_filter_is_single_pass_and_node_only(
     assert osm_snapshot.validate_railway_locations(tmp_path, "fixture-source") == destination
     assert destination.read_bytes() == b"filtered"
     assert len(commands) == 1
-    command = commands[0]
-    assert "tags-filter" in command
-    assert "--omit-referenced" in command
-    assert "n/railway=station,halt,stop" in command
-    assert not any("public_transport" in argument for argument in command)
+    railway_command = commands[0]
+    assert "tags-filter" in railway_command
+    assert "--omit-referenced" in railway_command
+    assert "n/railway=station,halt,stop" in railway_command
+    assert not any("public_transport" in argument for argument in railway_command)
+
+    transit_destination = osm_snapshot.jdf_transit_stops_path(tmp_path)
+    transit = osm_snapshot.filter_jdf_transit_stops(
+        source,
+        transit_destination,
+        source_key="fixture-source",
+    )
+    transit_reused = osm_snapshot.filter_jdf_transit_stops(
+        source,
+        transit_destination,
+        source_key="fixture-source",
+    )
+    assert transit == transit_reused == transit_destination
+    assert (
+        osm_snapshot.validate_jdf_transit_stops(tmp_path, "fixture-source") == transit_destination
+    )
+    assert len(commands) == 2
+    transit_command = commands[1]
+    assert "tags-filter" in transit_command
+    assert "--omit-referenced" in transit_command
+    assert "n/highway=bus_stop" in transit_command
+    assert "n/public_transport=platform,pole,station" in transit_command
+    assert "n/railway=tram_stop" in transit_command
+    assert "n/amenity=bus_station" in transit_command

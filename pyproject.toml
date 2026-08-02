@@ -34,6 +34,7 @@ packages = ["src/obehy"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/obehy/data/czptt_osm_aliases.json" = "obehy/data/czptt_osm_aliases.json"
+"src/obehy/data/jdf_transport_mode_rules.csv" = "obehy/data/jdf_transport_mode_rules.csv"
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

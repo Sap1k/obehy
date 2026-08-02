@@ -3,6 +3,70 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-08-01 — JDF geodata, international trips, and effective transport modes
+
+### Delivered
+
+- The shared OSM build now creates a cached node-only JDF stop extract using precisely the OSM node
+  tags consumed by `Osm.getCzOtherStops` (`highway=bus_stop`, public-transport platforms/poles/
+  stations, tram stops, and bus stations). National `fix-jdf` validates and reads this compact PBF
+  instead of repeatedly scanning the multi-country merged snapshot. Municipality matching is
+  unchanged and continues to use JrUtil's separate bundled Czech municipality spatial index. The
+  real extract is **8.3 MiB / 288,131 nodes / zero ways or relations**, down from the **3.37 GiB**
+  merged input; native generation took **125.5s**, reuse **0.32s**, and JrUtil read it in **24s**.
+- Removed two merged-JDF bundle hot paths introduced with per-trip international filtering: active
+  trips are indexed by route once and route decisions are indexed once, instead of scanning all
+  trips/routes for each route. A phase log now separates JDF parsing from international-policy work.
+- `regional-adjacent` now classifies individual trips instead of dropping an entire route because
+  it also contains a foreign-only or over-limit journey. Domestic and qualifying Czech/adjacent
+  trips survive, rejected and wholly foreign trips are pruned with their dependent rows, and
+  qualifying cross-border buses use extended regional type `701`. The regression is explicitly
+  keyed as route `001398` and retains its regional trip while removing its foreign-only
+  continuation. Manifests and diagnostics report the four trip dispositions.
+- Added a checked, hashed transport-mode rule file with fully guarded Ostrava and Liberec
+  corrections. Matching routes use effective tram/trolleybus modes for GTFS type and colour while
+  source and effective JDF modes are both retained in route provenance Parquet. Guard mismatches
+  remain buses and are diagnostic. Liberec `545902`/`545903` (`X2`/`X3`) are deliberately excluded
+  because they are tram-replacement buses. Extended bus mapping now reserves `202` for `D`, uses `201` for
+  nonregional international service, `701` for regional/extra-district/extra-regional and regional
+  cross-border service, and `704` for city service. Coaches (`201`/`202`) use deep PID-style
+  petrol blue `#004F71`, regional cross-border buses use dark teal `#00695C`, and ordinary buses
+  retain `#0076A3`; these avoid the CZPTT train-category palette.
+- The gapfill audit now collapses platform children, detects maximal unresolved stop-place runs and
+  termini, and reports trip/route impact and timed anchors. OSM/Nominatim matching now considers
+  foreign-language names and localized transport terms, tolerates tightly route-supported locality
+  defects, and has a conservative dominant-candidate fallback. Mapy now tries every expanded,
+  locality-qualified, and localized transit-term query rather than only the first result set.
+- Ran the new audit on `jdf-final-v2`: 57 priority stop places comprised 45 termini and 12 members
+  of long gaps. Nominatim accepted 23 and Mapy accepted 11 candidates across the initial and
+  expanded passes; after two already-checked conflicts, 32 new coordinates were merged into
+  `other/gapfill.csv`. All seven Marklowice/Zebrzydowice and all five Trenčín–Drietoma long-gap
+  stops now have accepted stop-level coordinates. The remaining 23 rows are isolated/short-run
+  ambiguities and remain in review. The Mapy credential and raw responses were not stored.
+- Production triage established that current line `001398` is absent from both downloaded CIS JŘ
+  source archives before any JrUtil filtering. The service remains published by VVO/IDOS, but its
+  omission is upstream source coverage; the `001398` fixture verifies policy behavior only and is
+  not evidence that the national JDF source contains the route.
+- The rebuilt feed exposed a 28-call estimated run on retained line `001982` between Bodenmais and
+  the Czech border. Mapy resolved all 25 distinct passenger stop places; the one ambiguous result,
+  Irlsaign, used the duplicated top-ranked, route-feasible stop at `49.20682, 13.02074`. All 25
+  coordinates are checked into `other/gapfill.csv`, and a five-batch targeted `fix-jdf` rerun
+  resolved every retained identity as `external:gapfill`. Eight additional Lohberg-area route
+  estimates occur only in trips pruned from GTFS and are intentionally outside the passenger-call
+  quality gate.
+
+### Validation evidence and limits
+
+- JrUtil Release: **108 tests passed**, formatting verification passed, and the multitool Release
+  build succeeded with existing warnings. Oběhy: **62 passed, 10 expected skips**; Ruff lint and
+  format checks pass for maintained `src`/`tests`.
+- JrUnify-Ext-GeoData: **43 tests and 8 subtests passed**, including null Nominatim details,
+  run/terminus audits, platform collapsing, route-supported candidate selection, Mapy credential
+  safety, and checked gapfill integrity.
+- The user will run the full national rebuild and MobilityData validation. The checked historical
+  snapshot predates the per-trip policy, so production confirmation of `001398`, the effective
+  Ostrava/Liberec route types, and the post-rebuild zero-long-gap gate remains a rebuild check.
+
 ## 2026-08-01 — Dense passenger estimates and municipality fallback routes
 
 ### Delivered

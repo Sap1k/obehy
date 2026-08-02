@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import io
 import json
@@ -28,6 +29,16 @@ from obehy.national_jdf import (
     run_command,
     stage_nested_jdf_batches,
 )
+
+
+def test_transport_mode_rules_exclude_liberec_replacement_buses() -> None:
+    with national_jdf.TRANSPORT_MODE_RULES.open(encoding="utf-8", newline="") as stream:
+        rules = list(csv.DictReader(stream))
+
+    liberec_routes = {row["route_id_from"] for row in rules if row["agency_id"] == "47311975"}
+    assert liberec_routes == {"545002", "545003", "545004", "545005", "545011"}
+    assert {"545902", "545903"}.isdisjoint(liberec_routes)
+
 
 WORKSPACE = Path(__file__).parents[3]
 
@@ -174,6 +185,15 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "validate_snapshot",
         valid_snapshot,
     )
+    transit_extract = tmp_path / "workdir" / "osm" / "jdf-transit-stops.osm.pbf"
+
+    def valid_transit(_workdir: Path, source_key: str) -> Path:
+        assert source_key == "fixture-osm"
+        transit_extract.parent.mkdir(parents=True, exist_ok=True)
+        transit_extract.write_bytes(b"transit-osm")
+        return transit_extract
+
+    monkeypatch.setattr(national_jdf, "validate_jdf_transit_stops", valid_transit)
     commands: list[list[str]] = []
     download_names: list[str] = []
 
@@ -290,16 +310,23 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     assert "--memory-budget=auto" in merge_command
     assert any(argument.startswith("--ext-geodata=") for argument in fix_command)
     assert any(argument.startswith("--cz-pbf=") for argument in fix_command)
+    assert f"--cz-pbf={transit_extract}" in fix_command
     assert not any(argument.startswith("--ext-geodata=") for argument in merge_command)
     assert not any(argument.startswith("--cz-pbf=") for argument in merge_command)
     assert "--international-route-policy=regional-adjacent" in fix_command
     assert "--international-route-policy=regional-adjacent" in bundle_command
+    assert any(argument.startswith("--transport-mode-rules=") for argument in bundle_command)
     assert all(
         not any(argument.startswith("--cache=") for argument in command)
         for command in multitool_commands
     )
     run_manifest = json.loads((output / "run-manifest.json").read_text(encoding="utf-8"))
     assert run_manifest["batch_counts"] == {"drahy": 1, "total": 2, "vld": 1}
+    assert run_manifest["osm_jdf_transit_extract"] == {
+        "path": str(transit_extract),
+        "bytes": len(b"transit-osm"),
+        "sha256": file_digest(transit_extract),
+    }
     assert run_manifest["batch_mapping"] == [
         {"combined_filename": "vld-1.zip", "original_path": "1.zip", "source": "vld"},
         {
@@ -310,6 +337,10 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     ]
     assert run_manifest["conversion"] == {
         "international_route_policy": "regional-adjacent",
+        "transport_mode_rules": {
+            "path": "obehy/data/jdf_transport_mode_rules.csv",
+            "sha256": national_jdf.file_digest(national_jdf.TRANSPORT_MODE_RULES),
+        },
         "stop_ids_cis": False,
         "stop_merge": "name",
         "strict": True,
@@ -374,6 +405,15 @@ def test_build_retains_staging_directory_after_failure(
         "validate_snapshot",
         valid_snapshot,
     )
+
+    def valid_transit(workdir: Path, source_key: str) -> Path:
+        assert source_key == "fixture-osm"
+        destination = workdir / "osm" / "jdf-transit-stops.osm.pbf"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"transit-osm")
+        return destination
+
+    monkeypatch.setattr(national_jdf, "validate_jdf_transit_stops", valid_transit)
     with pytest.raises(OSError, match="fixture download failure"):
         build(
             BuildConfig(

@@ -85,6 +85,9 @@ class RailwayFilterFn(Protocol):
     ) -> Path: ...
 
 
+TransitFilterFn = RailwayFilterFn
+
+
 def utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -518,6 +521,127 @@ def validate_railway_locations(workdir: Path, source_key: str) -> Path:
     return destination
 
 
+def filter_jdf_transit_stops(
+    source: Path,
+    destination: Path,
+    *,
+    source_key: str | None = None,
+) -> Path:
+    """Extract node-only public-transport stops consumed by JDF matching."""
+    source = source.resolve()
+    destination = destination.resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path = active_manifest_path(destination)
+    if source_key is not None and destination.is_file() and manifest_path.is_file():
+        try:
+            manifest = cast(
+                dict[str, Any],
+                json.loads(manifest_path.read_text(encoding="utf-8")),
+            )
+            stats = destination.stat()
+            output = cast(dict[str, object], manifest.get("output", {}))
+            if (
+                manifest.get("schema_version") == 1
+                and manifest.get("filter_schema") == "jdf-transit-stop-nodes-v1"
+                and manifest.get("source_key") == source_key
+                and output.get("bytes") == stats.st_size
+                and output.get("mtime_ns") == stats.st_mtime_ns
+            ):
+                _progress(
+                    f"JDF transit-stop filter reused: {_format_bytes(stats.st_size)}; "
+                    f"source key={source_key[:24]}"
+                )
+                return destination
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            pass
+
+    runtime = _discover_osmium()
+    temporary = destination.with_name(f"{destination.stem}.{uuid.uuid4().hex}.part.osm.pbf")
+    _progress(f"JDF transit-stop filter starting: {_format_bytes(source.stat().st_size)}")
+    started = time.monotonic()
+    try:
+        _run_osmium(
+            runtime,
+            [
+                "tags-filter",
+                "--progress",
+                "--verbose",
+                "--overwrite",
+                "--omit-referenced",
+                "--generator=Obehy JDF transit-stop filter/1",
+                "--output-format=pbf,pbf_compression=zlib",
+                "--output",
+                _osmium_path(runtime, temporary),
+                _osmium_path(runtime, source),
+                "n/highway=bus_stop",
+                "n/public_transport=platform,pole,station",
+                "n/railway=tram_stop",
+                "n/amenity=bus_station",
+            ],
+        )
+        os.replace(temporary, destination)
+        stats = destination.stat()
+        write_json(
+            manifest_path,
+            {
+                "schema_version": 1,
+                "filter_schema": "jdf-transit-stop-nodes-v1",
+                "source_key": source_key,
+                "source_file": str(source),
+                "created_at": utc_now(),
+                "output": {
+                    "file": str(destination),
+                    "bytes": stats.st_size,
+                    "mtime_ns": stats.st_mtime_ns,
+                    "sha256": file_digest(destination),
+                },
+                "osmium": runtime.identity,
+            },
+        )
+    except BaseException:
+        if temporary.exists():
+            temporary.unlink()
+        raise
+    elapsed = max(time.monotonic() - started, 0.001)
+    _progress(
+        f"JDF transit-stop filter complete: {_format_bytes(destination.stat().st_size)} "
+        f"in {elapsed:.1f}s"
+    )
+    return destination
+
+
+def jdf_transit_stops_path(workdir: Path) -> Path:
+    return workdir.resolve() / "osm" / "jdf-transit-stops.osm.pbf"
+
+
+def validate_jdf_transit_stops(workdir: Path, source_key: str) -> Path:
+    destination = jdf_transit_stops_path(workdir)
+    manifest_path = active_manifest_path(destination)
+    guidance = "Run `obehy-osm build` with the same configuration."
+    if not destination.is_file() or not manifest_path.is_file():
+        raise OsmSnapshotError(f"JDF transit-stop OSM extract is missing. {guidance}")
+    try:
+        manifest = cast(
+            dict[str, Any],
+            json.loads(manifest_path.read_text(encoding="utf-8")),
+        )
+        output = cast(dict[str, object], manifest.get("output", {}))
+        stats = destination.stat()
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
+        raise OsmSnapshotError(f"JDF transit-stop OSM manifest is invalid. {guidance}") from error
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("filter_schema") != "jdf-transit-stop-nodes-v1"
+        or manifest.get("source_key") != source_key
+        or output.get("bytes") != stats.st_size
+        or output.get("mtime_ns") != stats.st_mtime_ns
+    ):
+        raise OsmSnapshotError(
+            f"JDF transit-stop OSM extract does not match the active snapshot. {guidance}"
+        )
+    return destination
+
+
 def _merge_key(extracts: Sequence[Extract], osmium_identity: str) -> str:
     payload = {
         "merge_schema_version": MERGE_SCHEMA_VERSION,
@@ -537,6 +661,7 @@ def build_snapshot(
     merge: MergeFn = _merge_with_osmium,
     identity: IdentityFn | None = None,
     railway_filter: RailwayFilterFn = filter_railway_locations,
+    transit_filter: TransitFilterFn = filter_jdf_transit_stops,
 ) -> Path:
     _progress(f"build started; workdir={config.workdir.resolve()}")
     workdir = config.workdir.resolve()
@@ -668,6 +793,11 @@ def build_snapshot(
     railway_filter(
         output_path,
         railway_locations_path(workdir),
+        source_key=merge_key,
+    )
+    transit_filter(
+        output_path,
+        jdf_transit_stops_path(workdir),
         source_key=merge_key,
     )
     _progress(f"build complete; source key={source_key}")

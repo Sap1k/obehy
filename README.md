@@ -51,10 +51,12 @@ Dolnośląskie, Opolskie, and Śląskie. Source extracts are cached under `workd
 Their hashes, the Osmium identity, and the active output identity are recorded in the manifest
 next to the configured `osm_file`; matching inputs and output safely skip regeneration. There
 are no historical merged copies or hard-link publication. The same command uses native
-`osmium tags-filter` to create a cached node-only railway-location PBF under `workdir/osm`.
-No Python code parses or transforms OSM objects. JDF and CZPTT only consume and validate these
-artifacts; they never download, merge, or filter OSM. Downloads, cache decisions, native
-merging/filtering, hashing, and publication all report progress.
+`osmium tags-filter` to create two cached node-only PBFs under `workdir/osm`: railway locations
+for CZPTT and the bus/tram/public-transport stop tags consumed by JrUtil's JDF matcher. The JDF
+extract does not need municipality boundaries: JrUtil enriches its stop coordinates from its
+separate bundled Czech municipality index. No Python code parses or transforms OSM objects. JDF
+and CZPTT only consume and validate these artifacts; they never download, merge, or filter OSM.
+Downloads, cache decisions, native merging/filtering, hashing, and publication all report progress.
 
 ## National JDF conversion bundle
 
