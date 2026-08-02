@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import Range
@@ -35,17 +35,9 @@ class AmbiguousIdentityError(IdentityError):
         self.candidate_ids = candidate_ids
 
 
-def _aware(value: datetime) -> None:
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError("Binding and alias instants must be timezone-aware")
-
-
-def validity_range(valid_from: datetime, valid_to: datetime | None) -> Range[datetime]:
-    _aware(valid_from)
-    if valid_to is not None:
-        _aware(valid_to)
-        if valid_to <= valid_from:
-            raise ValueError("Validity end must be later than validity start")
+def validity_range(valid_from: date, valid_to: date | None) -> Range[date]:
+    if valid_to is not None and valid_to <= valid_from:
+        raise ValueError("Validity end must be later than validity start")
     return Range(valid_from, valid_to, bounds="[)")
 
 
@@ -119,10 +111,14 @@ class BindingRequest:
     entity_kind: EntityKind
     source_object_id: str
     canonical_entity_id: CanonicalId
-    valid_from: datetime
-    valid_to: datetime | None
+    valid_from: date
+    valid_to: date | None
     match_method: str
     match_confidence: float
+    location_domain: str | None = None
+    review_state: str = "accepted"
+    first_seen_snapshot_id: int | None = None
+    last_seen_snapshot_id: int | None = None
     reviewed_by: str | None = None
 
 
@@ -170,10 +166,14 @@ class SourceIdentityService:
                 source_id=request.source_id,
                 entity_kind=request.entity_kind.value,
                 source_object_id=request.source_object_id,
+                location_domain=request.location_domain,
                 canonical_entity_id=str(request.canonical_entity_id),
                 validity=validity,
                 match_method=request.match_method,
                 match_confidence=request.match_confidence,
+                review_state=request.review_state,
+                first_seen_snapshot_id=request.first_seen_snapshot_id,
+                last_seen_snapshot_id=request.last_seen_snapshot_id,
                 reviewed_by=request.reviewed_by,
             )
         )
@@ -181,14 +181,14 @@ class SourceIdentityService:
         return request.canonical_entity_id
 
     def resolve(
-        self, source_id: str, entity_kind: EntityKind, source_object_id: str, effective_at: datetime
+        self, source_id: str, entity_kind: EntityKind, source_object_id: str, effective_at: date
     ) -> CanonicalId | None:
-        _aware(effective_at)
         rows = self.session.scalars(
             select(SourceBindingRow).where(
                 SourceBindingRow.source_id == source_id,
                 SourceBindingRow.entity_kind == entity_kind.value,
                 SourceBindingRow.source_object_id == source_object_id,
+                SourceBindingRow.review_state.in_(("accepted", "manually_resolved")),
                 SourceBindingRow.validity.contains(effective_at),
             )
         ).all()
@@ -224,8 +224,9 @@ def bind_many_with_diagnostic(
                     source_id=active_request.source_id,
                     entity_kind=active_request.entity_kind.value,
                     source_object_id=active_request.source_object_id,
-                    effective_at=active_request.valid_from,
+                    effective_date=active_request.valid_from,
                     error_category="ambiguous_source_binding",
+                    review_state="ambiguous",
                     candidate_ids=list(error.candidate_ids),
                     details={"message": str(error)},
                 )
@@ -248,8 +249,8 @@ class AliasService:
         identifier_kind: str,
         observed_value: str,
         normalized_value: str,
-        valid_from: datetime,
-        valid_to: datetime | None,
+        valid_from: date,
+        valid_to: date | None,
         reason: str,
     ) -> None:
         validity = validity_range(valid_from, valid_to)
@@ -282,9 +283,8 @@ class AliasService:
         self.session.flush()
 
     def normalize(
-        self, source_id: str, identifier_kind: str, observed_value: str, effective_at: datetime
+        self, source_id: str, identifier_kind: str, observed_value: str, effective_at: date
     ) -> str:
-        _aware(effective_at)
         rows = self.session.scalars(
             select(IdentifierAliasRow).where(
                 IdentifierAliasRow.source_id == source_id,
@@ -298,6 +298,6 @@ class AliasService:
         return observed_value if not rows else rows[0].normalized_value
 
     def normalize_cis_line(
-        self, source_id: str, observed_value: str, effective_at: datetime
+        self, source_id: str, observed_value: str, effective_at: date
     ) -> CisLineId:
         return CisLineId(self.normalize(source_id, "cis_line_id", observed_value, effective_at))

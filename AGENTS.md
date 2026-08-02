@@ -8,13 +8,20 @@
 
 ## Repository state
 
-- Milestone 0 is implemented. Read `PROGRESS.md` before starting work for the current handoff,
+- Database v1 and the national conversion bundle builders are implemented. Read `PROGRESS.md`
+  before starting work for the current handoff,
   validation state, known limitations, and next intended milestone.
-- The Python project, canonical domain model, initial PostgreSQL/PostGIS schema, synthetic fixtures,
-  and Milestone 0 tests exist. Production source adapters, national imports, exports, and realtime
-  processes do not exist yet.
+- The canonical PostgreSQL/PostGIS schema, immutable build lifecycle, synthetic fixtures, national
+  JDF/CZPTT bundle builders and their validation exist. The national bundles are not yet imported
+  into the canonical database; combined canonical export, regional overlays and realtime processes
+  do not exist yet.
 - `converters/jrutil` is a pinned Git submodule. Do not edit submodule contents or advance its pointer unless the task explicitly calls for JrUtil work.
 - Keep generated data, source snapshots, build artifacts, credentials, and local environment files out of version control.
+- The configured PostgreSQL database named `obehy_test` is disposable development/test state. It
+  may be dropped, recreated, downgraded, or otherwise reset whenever implementation or validation
+  requires it, without requesting additional approval. Before any destructive database operation,
+  verify the connected database is exactly `obehy_test` and the user is `obehy`; this permission
+  does not apply to any other database or inferred production environment.
 
 ## Working conventions
 
@@ -28,6 +35,11 @@
   not use it as a speculative backlog or duplicate `BASE_PLAN.md`.
 - A progress entry must state what changed, what was actually validated (including skipped or
   unavailable checks), any remaining caveats, and the next safe handoff point.
+- Generate Alembic schema migrations from SQLAlchemy metadata with `alembic revision
+  --autogenerate`, then review the generated operations. Hand-written migration code is reserved
+  for database behavior Alembic cannot infer, such as PostgreSQL functions, triggers, extensions,
+  seed data, or a reviewed correction to generated DDL; do not hand-roll ordinary tables, columns,
+  indexes, foreign keys, or constraints.
 
 ## Validation
 

@@ -23,15 +23,13 @@ class PassengerCall:
             raise ValueError("Passenger calls reference a stop place")
         if self.boarding_point_id.kind is not EntityKind.BOARDING_POINT:
             raise ValueError("Passenger calls require a boarding point")
-        if self.scheduled_arrival is None and self.scheduled_departure is None:
-            raise ValueError("Passenger calls require an arrival or departure time")
 
 
 @dataclass(frozen=True, slots=True)
 class OperationalCall:
     sequence: int
     operational_point_id: CanonicalId
-    scheduled_passage: ServiceTime
+    scheduled_passage: ServiceTime | None
 
     def __post_init__(self) -> None:
         if self.sequence <= 0:

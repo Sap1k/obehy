@@ -2,9 +2,10 @@
 
 A Swiss-army knife for Czech public-transport data.
 
-Milestone 0 defines the project-owned canonical identity, stop/location and scheduled-trip
-contracts. It deliberately uses synthetic fixtures and does not yet publish GTFS or consume live
-sources.
+The project has production-grade national JDF and CZPTT conversion bundle builders and a database
+v1 foundation for stable canonical identity, immutable compiled schedules, source provenance and
+atomic publication. The national bundles are not yet imported into the canonical database and no
+combined public Oběhy GTFS is published yet.
 
 See [PROGRESS.md](PROGRESS.md) for the current engineering handoff and next implementation step.
 
@@ -17,7 +18,7 @@ from the default WSL distribution when no native executable is on `PATH`.
 ```powershell
 uv sync
 docker compose up -d --wait db
-$env:OBEHY_DATABASE_URL = "postgresql+psycopg://obehy:obehy-m0-local-only@localhost:45873/obehy_test"
+$env:OBEHY_DATABASE_URL = "postgresql+psycopg://obehy:password@host:45873/obehy_test"
 $env:OBEHY_TEST_DATABASE_URL = $env:OBEHY_DATABASE_URL
 uv run alembic upgrade head
 uv run pytest
@@ -26,8 +27,14 @@ uv run ruff format --check .
 uv run pyright
 ```
 
-The database is exposed on port `45873` to avoid colliding with a local PostgreSQL installation.
-The default credentials are development-only.
+The Docker database is exposed on port `45873` to avoid colliding with a local PostgreSQL
+installation. A repository-local `.env` may hold `OBEHY_DATABASE_URL` and
+`OBEHY_TEST_DATABASE_URL`; it is ignored by Git. The `obehy_test` database is disposable and the
+database-v1 baseline requires recreating any earlier Milestone 0 database.
+
+Alembic migrations are generated from ORM metadata and then reviewed. PostgreSQL extensions,
+functions, triggers and seed rows are the only hand-written migration portions. MobilityData GTFS
+Validator results are retained as advisory diagnostics and do not independently block activation.
 
 Fixture boundaries and the temporary mock CIS stop-identity assumption are documented in
 `tests/fixtures/README.md`.

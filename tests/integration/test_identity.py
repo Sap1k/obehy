@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
+from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
@@ -23,7 +23,7 @@ from obehy.persistence.models import CanonicalEntityRow, IdentityDiagnosticRow
 
 pytestmark = pytest.mark.integration
 
-NOW = datetime(2026, 7, 18, tzinfo=UTC)
+NOW = date(2026, 7, 18)
 
 
 def test_allocator_lifecycle_and_non_recycling(db_session: Session) -> None:
@@ -37,6 +37,7 @@ def test_allocator_lifecycle_and_non_recycling(db_session: Session) -> None:
         registry.redirect(target, source)
     registry.tombstone(target)
     assert registry.resolve_terminal(source) == target
+    assert str(registry.allocate(EntityKind.OPERATOR)).startswith("C")
 
 
 def test_rolled_back_allocation_leaves_a_sequence_gap(engine: Engine) -> None:
@@ -94,6 +95,26 @@ def test_binding_boundaries_idempotency_and_redirect_resolution(db_session: Sess
     assert service.resolve("national-jdf", EntityKind.STOP_PLACE, "export-stop-1", NOW) == current
 
 
+def test_unreviewed_binding_is_not_resolved(db_session: Session) -> None:
+    candidate = CanonicalRegistry(db_session).allocate(EntityKind.STOP_PLACE)
+    service = SourceIdentityService(db_session)
+    service.bind(
+        BindingRequest(
+            "national-jdf",
+            EntityKind.STOP_PLACE,
+            "unreviewed-stop",
+            candidate,
+            NOW,
+            None,
+            "candidate_match",
+            0.5,
+            review_state="ambiguous",
+        )
+    )
+
+    assert service.resolve("national-jdf", EntityKind.STOP_PLACE, "unreviewed-stop", NOW) is None
+
+
 def test_duk_alias_is_typed_time_bounded_and_non_chained(db_session: Session) -> None:
     aliases = AliasService(db_session)
     aliases.add(
@@ -112,7 +133,7 @@ def test_duk_alias_is_typed_time_bounded_and_non_chained(db_session: Session) ->
             identifier_kind="cis_line_id",
             observed_value="582588",
             normalized_value="999999",
-            valid_from=NOW + timedelta(hours=1),
+            valid_from=NOW + timedelta(days=1),
             valid_to=None,
             reason="conflict",
         )

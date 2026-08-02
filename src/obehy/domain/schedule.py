@@ -18,6 +18,11 @@ class TransitMode(StrEnum):
     RAIL = "rail"
 
 
+class LocationDomain(StrEnum):
+    SURFACE = "surface"
+    HEAVY_RAIL = "heavy_rail"
+
+
 class Direction(IntEnum):
     OUTBOUND = 0
     INBOUND = 1
@@ -115,7 +120,7 @@ def resolve_road_trip(
 class RailTripCandidate:
     canonical_trip_id: CanonicalId
     train_number: TrainNumber
-    direction: Direction
+    direction: Direction | None
     calendar: ServiceCalendar
     passenger_stop_place_ids: tuple[CanonicalId, ...]
     passenger_call_sequences: tuple[int, ...]
@@ -152,7 +157,7 @@ def resolve_train_segment(
     candidates: Iterable[RailTripCandidate],
     train_number: TrainNumber,
     service_date: date,
-    direction: Direction,
+    direction: Direction | None,
     segment_stop_place_ids: tuple[CanonicalId, ...],
 ) -> TrainSegmentMatch:
     if not segment_stop_place_ids:
@@ -161,7 +166,11 @@ def resolve_train_segment(
     for candidate in candidates:
         if (
             candidate.train_number != train_number
-            or candidate.direction != direction
+            or (
+                direction is not None
+                and candidate.direction is not None
+                and candidate.direction != direction
+            )
             or not candidate.calendar.operates_on(service_date)
         ):
             continue

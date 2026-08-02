@@ -6,6 +6,7 @@ from enum import StrEnum
 
 
 class EntityKind(StrEnum):
+    OPERATOR = "operator"
     STOP_PLACE = "stop_place"
     BOARDING_POINT = "boarding_point"
     OPERATIONAL_POINT = "operational_point"
@@ -14,6 +15,7 @@ class EntityKind(StrEnum):
 
 
 PREFIX_BY_KIND: dict[EntityKind, str] = {
+    EntityKind.OPERATOR: "C",
     EntityKind.STOP_PLACE: "S",
     EntityKind.BOARDING_POINT: "P",
     EntityKind.OPERATIONAL_POINT: "O",
@@ -21,7 +23,7 @@ PREFIX_BY_KIND: dict[EntityKind, str] = {
     EntityKind.SCHEDULED_TRIP: "T",
 }
 KIND_BY_PREFIX = {prefix: kind for kind, prefix in PREFIX_BY_KIND.items()}
-CANONICAL_ID_PATTERN = re.compile(r"^(?P<prefix>[SPORT])(?P<number>[0-9]{9})$")
+CANONICAL_ID_PATTERN = re.compile(r"^(?P<prefix>[CSPORT])(?P<number>[0-9]{9})$")
 
 
 @dataclass(frozen=True, slots=True, order=True)

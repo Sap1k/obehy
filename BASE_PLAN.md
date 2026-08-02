@@ -65,6 +65,17 @@ other IDS APIs ─────┘
 
 This should initially be a **modular monolith**, not a distributed microservice system.
 
+The database v1 storage boundary separates permanent identity from immutable compiled state:
+
+- canonical operators, locations, routes and trips own stable project IDs;
+- source snapshots, objects, bindings and identifier claims retain replayable provenance;
+- CISLineID/CISTripID and train-number relations remain dedicated indexed matching paths;
+- selected schedule attributes, calendars, calls, shapes, zones and transfers are scoped to an
+  immutable static build;
+- one transactional publication pointer activates a complete build;
+- only the active build and its two most recently activated predecessors retain compiled database
+  payloads, while build metadata and content-addressed artifacts remain available for replay.
+
 Use separate processes where operationally useful, but keep one repository, one canonical schema and one shared set of domain models.
 
 Suggested runtime processes:
@@ -449,38 +460,18 @@ Operational points must remain outside public passenger `stop_times.txt`.
 
 They should exist in the canonical model and internal sidecar data.
 
-## 7.4 Stop-place grouping for the frontend
+## 7.4 Disjoint transport domains and nearby presentation
 
-The frontend concept previously called an “uzel” should become a canonical or derived stop-place grouping, not a source-feed grouping.
+Canonical locations belong permanently to either the `surface` or `heavy_rail` domain. National
+JDF defines the surface domain and national CZPTT defines heavy rail. Objects from those domains
+must never resolve to the same canonical stop place, even when a railway station and bus stop have
+the same name and coordinates.
 
-Suggested model:
+Boarding points remain children of exactly one stop place in the same domain. Regional sources
+that contain both domains, such as PID, classify each source object before matching.
 
-```text
-stop_place
-    id
-    name
-    centroid
-    grouping_method
-
-stop_place_member
-    stop_place_id
-    boarding_point_id
-    walking_distance
-    confidence
-```
-
-Grouping evidence should be considered in this order:
-
-1. explicit parent-station relationship;
-2. shared authoritative Czech place identifier;
-3. manual mapping;
-4. compatible normalized name and close geography;
-5. topology and interchange evidence;
-6. manual review.
-
-Proximity alone must not automatically merge locations.
-
-Nearby opposite-direction platforms, rail and bus facilities, grade-separated stops and similarly named locations can be only metres apart while remaining distinct.
+The frontend may query or display independently canonicalized nearby places together, but this is
+presentation and walking-transfer behavior, not a canonical stop-knot or identity merge.
 
 ---
 
@@ -1099,7 +1090,7 @@ Run the compiler in this order:
 14. Generate missing shapes through the MOTIS route-shapes companion where possible.
 15. Validate canonical invariants.
 16. Export GTFS Schedule and project extensions.
-17. Run an official GTFS validator.
+17. Run an official GTFS validator and store its results as advisory diagnostics.
 18. Produce machine-readable build diagnostics.
 19. Atomically activate the new feed and mapping version.
 
@@ -1146,6 +1137,11 @@ If a new regional feed:
 - loses required identity fields;
 
 keep the last known good regional snapshot active.
+
+Activation is blocked by internal parseability, referential-integrity, domain, canonical-identity
+and required-mapping failures. MobilityData or another external validator does not independently
+block activation: known minor source defects such as malformed URLs may remain publishable when
+the compiler's internal invariants hold.
 
 One broken upstream source must not destroy the nationwide feed.
 
@@ -2253,6 +2249,11 @@ Build:
 - route and trip identity model;
 - trip-instance model;
 - tiny JDF, CZPTT, PID and DÚK fixtures.
+- canonical operator identity;
+- disjoint surface/heavy-rail location domains;
+- content-addressed source snapshots and artifacts;
+- immutable build-scoped schedule revisions and atomic publication;
+- build rollback and three-payload retention.
 
 Exit criteria:
 
@@ -2260,6 +2261,8 @@ Exit criteria:
 - `582588` resolves to `001588`;
 - a PID train segment resolves to one complete canonical train;
 - a source identifier cannot map ambiguously without causing failure.
+- JDF and CZPTT locations cannot bind across transport domains;
+- a changed timetable can retain one canonical trip identity across immutable builds.
 
 ---
 
@@ -2538,7 +2541,7 @@ Exit criteria:
 Build:
 
 - MapLibre nationwide map;
-- stop-place grouping;
+- nearby independently canonicalized stop places;
 - nearby departures;
 - exact posts/platforms;
 - alert display;
@@ -2774,7 +2777,6 @@ Do not decide these prematurely:
 - permanent high-resolution position retention period;
 - exact source priorities before replay benchmarking;
 - whether operational sidecars are publicly downloadable;
-- whether stop-place grouping becomes fully canonical or remains a derived layer;
 - whether train composition is projected into experimental GTFS-RT fields;
 - whether Mapy.com routing is worth the cost.
 
