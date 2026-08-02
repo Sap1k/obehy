@@ -3,6 +3,26 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-08-02 — MOTIS route-shapes architecture decision
+
+### Delivered
+
+- Replaced the planned pfaedle production workstream in `BASE_PLAN.md` with a companion CLI around
+  MOTIS `route_shapes`, initially pinned to MOTIS `v2.11.0` commit
+  `dc441d684099afbf4ce82d605f26e46504c70c28`.
+- Locked the boundary around a candidate-only, post-overlay GTFS projection and immutable generated
+  shape sidecars. Source and retained national shapes remain outside the companion, while invalid
+  or failed generated shapes leave trips shapeless without invalidating the static build.
+- Defined the CLI and bundle contracts, cache provenance, structural validation, diagnostics,
+  fixtures, reproducibility checks, upgrade review and pre-activation accuracy/performance gate.
+
+### Validation and next handoff
+
+- This is an architecture/documentation change only; no MOTIS dependency or companion executable
+  has been added. The documentation diff passes `git diff --check`.
+- The next safe shape-specific handoff is the Milestone 5 companion scaffold and smallest bus golden
+  fixture after the preceding static-overlay milestones provide the candidate projection.
+
 ## 2026-08-01 — JDF geodata, international trips, and effective transport modes
 
 ### Delivered

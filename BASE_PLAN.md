@@ -210,7 +210,7 @@ obehy/
 │   └── fiftyfivep/
 ├── converters/
 │   ├── jrutil/
-│   └── pfaedle/
+│   └── motis-route-shapes/
 ├── config/
 │   ├── sources/
 │   ├── aliases/
@@ -231,7 +231,9 @@ obehy/
     └── compose.yaml
 ```
 
-JrUtil and pfaedle can remain external repositories or Git submodules pinned to known commits. Their patches should be kept independently reviewable.
+JrUtil and the MOTIS route-shapes companion can remain external repositories or Git submodules
+pinned to known commits. Their patches should be kept independently reviewable. The initial MOTIS
+pin is release `v2.11.0`, commit `dc441d684099afbf4ce82d605f26e46504c70c28`.
 
 ---
 
@@ -1094,7 +1096,7 @@ Run the compiler in this order:
 11. Apply segment-level and field-level overlays.
 12. Resolve exact boarding points.
 13. Preserve regional shapes where authoritative.
-14. Generate missing shapes where possible.
+14. Generate missing shapes through the MOTIS route-shapes companion where possible.
 15. Validate canonical invariants.
 16. Export GTFS Schedule and project extensions.
 17. Run an official GTFS validator.
@@ -1230,40 +1232,121 @@ The static feed, source bindings, trip-sequence mappings and realtime resolver m
 
 ---
 
-# 17. pfaedle workstream
+# 17. MOTIS route-shapes companion
 
-pfaedle should run after static overlays.
+Shape generation runs after static overlays and before final canonical validation and export. It is
+an internal static-build tool, not a public Oběhy API. There is no production pfaedle dependency
+or fallback.
 
 Shape selection order:
 
 ```text
 authoritative regional/operator shape
     else existing acceptable national shape
-    else pfaedle-generated shape
+    else MOTIS-generated shape
     else no shape
 ```
 
-A trip without a shape is preferable to a build failure.
+A trip without a shape is preferable to a build failure. Source and retained national shapes are
+resolved before invoking MOTIS and must never be sent to the companion or overwritten by it.
 
-Required pfaedle work:
+## Companion boundary
 
-- support current OSM protobuf files;
-- maintain one old known-working fixture;
-- maintain one current fixture;
-- prove equivalent graph extraction;
-- separate protobuf compatibility changes from routing or matching algorithm changes;
-- pin the patched commit;
-- submit upstream independently.
+Build a thin C++ CLI in `converters/motis-route-shapes/` against the pinned MOTIS, Nigiri and OSR
+sources. It invokes MOTIS's import-time `route_shapes` implementation directly. Do not copy or fork
+the routing algorithm and do not start or query a MOTIS HTTP server.
+
+```text
+obehy-motis-shapes
+  --gtfs <candidate-projection.zip>
+  --osm <snapshot.osm.pbf>
+  --work-dir <isolated-directory>
+  --output <new-bundle-directory>
+  --threads <auto|N>
+```
+
+The compiler creates a temporary GTFS projection containing only trips that still lack a selected
+shape, their required routes and stops, ordered calls, coordinates, effective modes and one
+synthetic service day. Canonical trip IDs remain unchanged. Because precedence has already selected
+the candidates, invoke `route_shapes` in `all` mode rather than delegating missing-shape policy to
+MOTIS.
+
+Enable every supported MOTIS routing profile: bus and coach, tram and railway classes, and ferry.
+Unsupported modes, routes with fewer than two distinct positioned stops and routes over configured
+safety limits remain unshaped with diagnostics.
+
+Use the shared, checksummed multi-country OSM PBF. Cache keys and reuse decisions must cover the
+exact OSM hash, MOTIS and OSR versions, routing configuration, profile and ordered stop coordinates.
+Never enable reuse across a changed OSM snapshot. A cold-cache and warm-cache run over identical
+inputs must produce byte-identical output.
+
+The companion writes a new immutable directory containing:
+
+```text
+shapes.txt
+trip_shapes.csv
+stop_shape_offsets.csv
+diagnostics.json
+manifest.json
+```
+
+`shapes.txt` contains generated GTFS points and cumulative distances in metres.
+`trip_shapes.csv` maps canonical trip IDs to deterministic shape IDs, records the MOTIS
+class/profile and generation status, and identifies `motis_route_shapes` as provenance.
+`stop_shape_offsets.csv` records trip ID, stop sequence, shape-point index and cumulative distance.
+`diagnostics.json` records failures by mode, unsupported routes, distant stops, geometry rejections,
+aggregate routed and beelined segments, and cache statistics. `manifest.json` records input and
+output hashes, row counts, wrapper version, pinned MOTIS commit, OSM and configuration hashes,
+command identity and timings.
+
+Derive each generated `shape_id` from the routing profile and canonicalized output geometry so
+identical geometries deduplicate and repeated builds remain stable. Generated geometry can enrich a
+trip but cannot create or change canonical route or trip identity.
+
+## Validation and failure handling
+
+Accept a generated shape only when:
+
+- it contains at least two distinct points with valid coordinates;
+- every stop offset exists, is in range and is monotonic; consecutive repeated stops may share an
+  offset;
+- cumulative shape and stop distances are monotonic;
+- every call is within the configured mode-specific stop-to-shape distance; and
+- every output reference joins to exactly one candidate trip and generated shape.
+
+Preserve MOTIS beeline fallbacks as explicit low-quality diagnostics. They may be published only
+when the normal structural and distance checks pass, and version-controlled quality policy may
+reject them without invalidating the feed. A per-route exception, unsupported mode, invalid result
+or rejected shape leaves the affected trip without a shape and does not fail the static build.
+
+## Fixtures, benchmarks and upgrades
+
+Maintain deterministic golden fixtures for bus, coach, tram or rail, ferry, loops, branches, short
+turns, repeated stops, mixed shaped and unshaped input, unsupported modes, missing coordinates,
+routing failure and beeline fallback. Retain one old and one current OSM fixture and compare graph
+and routing output across MOTIS upgrades.
+
+Before Milestone 5 activation, benchmark MOTIS against frozen pfaedle baseline outputs and withheld
+authoritative Czech shapes. Require equal-or-better coverage, lower median and p95 geometric error,
+and better wall-clock or peak-memory performance without regressing the other efficiency measure.
+If this gate fails, do not restore pfaedle automatically; leave affected trips shapeless and
+investigate. Every MOTIS upgrade requires explicit fixture, output and performance review.
 
 Build diagnostics:
 
 ```text
 Trips with source shape
 Trips with retained national shape
-Trips enriched by pfaedle
+Trips enriched by MOTIS
+MOTIS shapes rejected
 Trips still lacking shape
-pfaedle failures by mode
+MOTIS failures by mode
+MOTIS routed segments
+MOTIS beelined segments
 Stops suspiciously far from shape
+MOTIS shape-cache hits
+MOTIS wall time
+MOTIS peak memory
 ```
 
 ---
@@ -1547,7 +1630,7 @@ A recent actual passage event should generally anchor the state more strongly th
 
 Initial inputs:
 
-- source or pfaedle shape;
+- selected source or MOTIS-generated shape;
 - scheduled stop times;
 - distance along shape;
 - current GPS position;
@@ -2273,9 +2356,12 @@ Exit criteria:
 
 Build:
 
-- pfaedle protobuf update;
+- pinned MOTIS route-shapes companion;
+- candidate-only post-overlay GTFS projection;
+- deterministic shape, trip-assignment and stop-offset sidecars;
 - post-overlay shape enrichment;
 - shape quality checks;
+- cache and provenance manifests;
 - automatic build scheduling;
 - atomic activation;
 - active feed manifest.
@@ -2284,6 +2370,9 @@ Exit criteria:
 
 - shape generation failure does not invalidate the feed;
 - regional shapes remain preferred;
+- source and retained national shapes are never routed or overwritten;
+- cold-cache and warm-cache output is byte-identical;
+- MOTIS meets the checked coverage, accuracy and efficiency benchmark gate;
 - active static data and mapping tables switch together.
 
 ---
@@ -2612,8 +2701,15 @@ New canonical stops:                      106
 Ambiguous stop candidates:                  3
 
 Trips with source shapes:              82,103
-Trips enriched by pfaedle:             61,420
+Trips with retained national shapes:   12,447
+Trips enriched by MOTIS:               48,973
+MOTIS shapes rejected:                     19
 Trips lacking shapes:                   1,779
+MOTIS failures by mode:                    31
+MOTIS beelined segments:                  204
+MOTIS shape-cache hits:                39,806
+MOTIS wall time:                       00:08:41
+MOTIS peak memory:                      7.2 GiB
 
 Validation errors:                           0
 Validation warnings:                       182
@@ -2706,7 +2802,8 @@ The architecture is successful when:
 
 The project should be built as a sequence of usable vertical slices.
 
-Do not begin the polished frontend, nationwide realtime fusion, pfaedle internals, arrival inference, vehicle registries and train-composition negotiations at the same time.
+Do not begin the polished frontend, nationwide realtime fusion, MOTIS route-shapes companion,
+arrival inference, vehicle registries and train-composition negotiations at the same time.
 
 Prove the identity and overlay model first.
 
