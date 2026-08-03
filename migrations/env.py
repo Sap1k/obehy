@@ -66,6 +66,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
         include_object=include_object,
     )
     with context.begin_transaction():
@@ -79,15 +80,16 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        # PostGIS may add ``tiger`` and ``topology`` to the role's search path.
-        # The application owns only public, so do not let autogenerate mistake
-        # extension-managed relations in those schemas for removed app tables.
+        # Keep application schemas out of the implicit/default namespace. They are inspected
+        # explicitly through include_schemas; including them in search_path would reflect every
+        # table twice (qualified and schema=None). PostGIS extension schemas are filtered below.
         connection.execute(text("SET search_path TO public"))
         object_filter = online_include_object(connection)
         connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            include_schemas=True,
             include_object=object_filter,
         )
         with context.begin_transaction():

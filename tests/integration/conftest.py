@@ -22,7 +22,7 @@ def database_url() -> str:
 def engine(database_url: str) -> Iterator[Engine]:
     instance = create_database_engine(database_url)
     with instance.connect() as connection:
-        connection.execute(text("SELECT 1 FROM canonical_entity LIMIT 1"))
+        connection.execute(text("SELECT 1 FROM control.static_build LIMIT 1"))
     yield instance
     instance.dispose()
 

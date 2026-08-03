@@ -18,29 +18,59 @@ The system should be designed so that additional regions and providers can be ad
 
 # 1. Core architectural decision
 
-The canonical database is the source of truth.
+This section updates the ownership model without removing the detailed static, realtime, API,
+frontend, observability and testing requirements later in this plan.
 
-GTFS Schedule, GTFS-Realtime, the map API, debugging endpoints and historical exports are all projections of the canonical model.
+The public identity registry is the source of truth for permanent public IDs, aliases, redirects,
+canonical location coordinates and identity history. JrUtil is the source of truth for each
+immutable compiled static build. Oběhy PostgreSQL stores a full finalized mirror for operations,
+realtime mapping and project APIs, but it does not compile or arbitrate static source data.
 
 Source data must never directly define permanent public identity.
+
+## Provisional vertical-slice phase
+
+Permanent identity is deliberately deferred until the static-overlay and realtime architecture has
+been proven. JrUtil initially emits opaque deterministic `v0:<kind>:<digest>` IDs from normalized
+compiler-local identity seeds. They repeat for identical inputs but are not promised to survive
+changed inputs and must be labelled `identity_contract = "provisional-v0"` in every artifact/API.
+
+Oběhy stores all public IDs as unrestricted text and resolves realtime only through mappings in the
+active static build. This allows the registry to launch later without a database migration. Once
+one PID posts-only overlay build loads and activates and one PID realtime entity rewrites end to
+end, build the registry in a separate repository, recompile with `identity_contract = "registry-v1"`,
+and make the single declared breaking public-ID transition. Provisional IDs are never imported as
+permanent registry identity.
+
+Before that transition the static flow bypasses discovery/registry mutation:
+
+```text
+Oběhy immutable snapshots -> JrUtil provisional compilation/overlays
+                          -> GTFS + serving package -> Oběhy static mirror
+```
+
+The registry-backed flow below remains the permanent target after the vertical slice is stable.
 
 ```text
 STATIC SOURCES
 
-National JDF ───────┐
-National CZPTT ─────┼─> source adapters / JrUtil
-Regional GTFS ──────┤
-Operator GTFS ──────┘
-                           |
-                           v
-                 canonical transit model
-                           |
-                 overlay and compilation
-                           |
-          +----------------+----------------+
-          |                                 |
-          v                                 v
-      GTFS.zip                    source-ID mappings
+Oběhy immutable source snapshots
+                 |
+                 v
+       JrUtil identity discovery ----> public identity registry
+                 |                              |
+                 +------ registry snapshot <---+
+                 |
+                 v
+       JrUtil static compilation
+                 |
+       +---------+-------------------+
+       |                             |
+       v                             v
+   GTFS.zip              finalized serving package
+       |                             |
+       v                             v
+     MOTIS                 Oběhy static mirror
 
 
 REALTIME SOURCES
@@ -63,29 +93,35 @@ other IDS APIs ─────┘
       GTFS-RT          project API       history
 ```
 
-This should initially be a **modular monolith**, not a distributed microservice system.
+Oběhy should initially remain a **modular monolith**. The identity registry is the single
+intentional microservice because its public contract must outlive either the compiler or operations
+application. JrUtil remains an offline compiler and MOTIS remains the connection-search engine.
 
-The database v1 storage boundary separates permanent identity from immutable compiled state:
+The production storage boundary separates permanent identity, immutable compiled state and
+operational state:
 
-- canonical operators, locations, routes and trips own stable project IDs;
-- source snapshots, objects, bindings and identifier claims retain replayable provenance;
+- the standalone registry owns stable operators, locations, routes, trips and other public IDs;
+- JrUtil bundles and serving sidecars retain replayable static provenance;
 - CISLineID/CISTripID and train-number relations remain dedicated indexed matching paths;
-- selected schedule attributes, calendars, calls, shapes, zones and transfers are scoped to an
-  immutable static build;
+- finalized schedule attributes, calendars, calls, shapes, zones, transfers and mappings are loaded
+  into Oběhy partitions scoped to an immutable static build;
 - one transactional publication pointer activates a complete build;
 - only the active build and its two most recently activated predecessors retain compiled database
   payloads, while build metadata and content-addressed artifacts remain available for replay.
 
-Use separate processes where operationally useful, but keep one repository, one canonical schema and one shared set of domain models.
+Use separate Oběhy processes where operationally useful. The registry has its own database and API;
+JrUtil and Oběhy never access its tables directly.
 
 Suggested runtime processes:
 
 ```text
-static-compiler
+snapshot-worker
+build-worker
 realtime-worker
 estimator-worker
 api
 web
+identity-registry
 ```
 
 ---
@@ -140,6 +176,12 @@ After the proof of concept:
 13. Prefer a degraded but valid feed over publishing corrupted data.
 14. Every build must be reproducible from stored input snapshots and configuration.
 15. Every selected realtime value must be explainable by its source, timestamp and confidence.
+16. GTFS is not the semantic archive: every useful JDF 1.11 fixed code, note, restriction, and
+    connection claim must survive in a typed serving relation at its original scope.
+17. Preserve each JDF code's actual closed- or open-world semantics. A useful GTFS approximation
+    may coexist with, but never replace, the exact typed fact needed by Oběhy and NeTEx.
+18. A NeTEx v2.0.0 export with zero unexplained semantic loss is the acceptance gate for the static
+    serving model. See `JDF_SEMANTICS.md`.
 
 ---
 
@@ -149,25 +191,23 @@ After the proof of concept:
 
 - **Python**
   - source downloading;
-  - feed compilation;
-  - ETL;
+  - build orchestration and finalized serving-package loading;
   - realtime connectors;
   - source arbitration;
   - estimators;
   - API.
 - **PostgreSQL + PostGIS**
-  - canonical registry;
-  - source bindings;
-  - geospatial matching;
+  - a dedicated database for the standalone public identity registry;
+  - a separate Oběhy database for finalized static mirrors and operations;
   - current realtime state;
   - historical events;
   - configuration-backed mappings.
-- **Polars and/or DuckDB**
-  - bulk CSV and Parquet transformations;
-  - diagnostics;
-  - match reports;
-  - large GTFS table processing.
+- **F#/.NET and JrUtil**
+  - high-performance national conversion;
+  - identity discovery and evidence;
+  - static overlays and GTFS/serving-package compilation.
 - **FastAPI**
+  - public identity-registry API;
   - project API;
   - feed endpoints;
   - debugging endpoints.
@@ -187,7 +227,7 @@ After the proof of concept:
 Initially use:
 
 - Docker Compose or systemd;
-- one PostgreSQL instance;
+- one PostgreSQL server is acceptable, but registry and Oběhy use separate databases;
 - local filesystem/object-style directories for raw snapshots and immutable feed versions;
 - reverse proxy for public endpoints.
 
@@ -200,7 +240,8 @@ Do not introduce Kafka, Kubernetes, Celery, Redis Streams or a dedicated stream-
 ```text
 obehy/
 ├── apps/
-│   ├── compiler/
+│   ├── build_control/
+│   ├── static_loader/
 │   ├── realtime/
 │   ├── estimator/
 │   ├── api/
@@ -242,54 +283,67 @@ obehy/
     └── compose.yaml
 ```
 
-JrUtil and the MOTIS route-shapes companion can remain external repositories or Git submodules
-pinned to known commits. Their patches should be kept independently reviewable. The initial MOTIS
-pin is release `v2.11.0`, commit `dc441d684099afbf4ce82d605f26e46504c70c28`.
+The public identity registry is a separately deployable service with its own repository or a clear
+top-level repository boundary, its own PostgreSQL database, migrations and release cycle. JrUtil
+and the MOTIS route-shapes companion can remain external repositories or Git submodules pinned to
+known commits. Their patches should be kept independently reviewable. The initial MOTIS pin is
+release `v2.11.0`, commit `dc441d684099afbf4ce82d605f26e46504c70c28`.
 
 ---
 
-# 6. Canonical identity strategy
+# 6. Public identity-registry strategy
 
 ## 6.1 Own the canonical numbering
 
-Czech national non-rail exports do not provide immutable stop IDs. IDs may change between exports, and some feeds do not provide CIS StopIDs or PostIDs at all.
-
-The project therefore needs its own permanent numbering registry.
+Czech national non-rail exports do not provide immutable stop IDs. IDs may change between exports,
+and some feeds do not provide CIS StopIDs or PostIDs at all. A standalone FastAPI/PostgreSQL
+registry therefore owns every permanent public namespace. It exposes anonymous OpenAPI reads and
+immutable CSV/Parquet snapshots; OIDC-protected mutations use viewer, operator, editor and
+administrator roles.
 
 Example prefixes:
 
 ```text
-S000000123    stop place or station
-P000000456    passenger boarding point, post or platform
-O000000789    operational or timing point
+S000000123                    surface stop place
+P000000456                    surface boarding point or post
+rail:CZ:<SR70>                railway primary location
+rail:CZ:<SR70>:<subsidiary>   railway subsidiary or platform
+C000000123                    operator
 R000000123    canonical route
 T000000456    scheduled trip
 V000000789    vehicle
 A000000123    canonical alert, if persistent alert identity is required
 ```
 
-The exact format is not important. Required properties:
+Country-scoped SR70 primary/subsidiary identity is the railway location ID because it is unique and
+available in accepted CZPTT data. Surface and railway identities never share a sequence or merge.
+Allocated entity kinds use independent sequences. Required properties:
 
 - opaque;
-- project-owned;
+- registry-owned;
 - stable;
 - never recycled;
 - not derived from mutable source IDs;
 - redirects supported after merges;
 - tombstones retained after deletion.
 
-Generated IDs should have an unmistakable project prefix if they are exposed outside the database.
+The registry also owns canonical names, coordinates, parent/intermodal relationships, revisions and
+audit history. Display values selected by a particular static overlay may differ from the registry's
+canonical search metadata.
+
+Pinned SR70 coordinates are authoritative by default. A reviewed override is allowed only when it
+retains the original value, evidence, reason, author and timestamp in a new immutable snapshot.
 
 ## 6.2 Source bindings
 
-Every source identifier is a time-bounded binding to a canonical entity.
+Every source identifier is a time-bounded registry binding to a public entity.
 
 ```text
 source_binding
     source_id
     entity_type
     source_object_id
-    canonical_entity_id
+    public_entity_id
     valid_from
     valid_to
     match_method
@@ -376,9 +430,9 @@ static rows for different calendars or timetable variants. Resolve it using the 
 operating date and, when still necessary, scheduled time or call context. If two active candidates
 remain plausible, quarantine the realtime claim rather than selecting the first row.
 
-## 6.5 Canonical redirects
+## 6.5 Registry redirects
 
-If two canonical entities are later proven to be the same:
+If two public entities are later proven to be the same:
 
 ```text
 S000004321 -> S000003012
@@ -389,6 +443,18 @@ The losing ID becomes a redirect.
 Historical records remain unchanged and resolvable.
 
 Do not bulk-renumber old history unless absolutely necessary.
+
+## 6.6 Batch reconciliation and snapshots
+
+JrUtil proposes matches and evidence; the registry alone commits bindings or allocates IDs. A batch
+is idempotent and pins a base registry snapshot. It contains source/snapshot identity, entity
+kind/domain, source object and validity, normalized facts, ordered candidates/evidence and the
+requested bind/allocate/quarantine action.
+
+The registry atomically returns accepted mappings, allocations, quarantines and the new snapshot
+digest. Optimistic snapshot conflicts require rediscovery. IDs allocated for a later failed static
+build remain allocated and are never recycled. Merges create redirects; retirement creates a
+tombstone; no operation erases earlier snapshots.
 
 ---
 
@@ -436,10 +502,10 @@ Each stop place should have an **unspecified boarding point** fallback where the
 Example:
 
 ```text
-S000003012  Ústí nad Labem, hl.n.
-P000008921  unspecified boarding point
-P000008922  track 1
-P000008923  track 2
+rail:CZ:<SR70>                Ústí nad Labem, hl.n.
+rail:CZ:<SR70>:unspecified    unspecified boarding point
+rail:CZ:<SR70>:1              track/platform 1
+rail:CZ:<SR70>:2              track/platform 2
 ```
 
 Static trips without a known platform use the unspecified child.
@@ -456,9 +522,10 @@ A location used for vehicle progress and timing, but not shown as a passenger st
 - a non-passenger CZPTT location;
 - potentially a bus timing checkpoint.
 
-Operational points must remain outside public passenger `stop_times.txt`.
-
-They should exist in the canonical model and internal sidecar data.
+Operational points must remain outside public passenger `stop_times.txt`. A railway primary
+location keeps its country-scoped SR70 identity whether a particular call is passenger-facing or
+operational-only; passenger exposure is a call/build property, not a second identity. Operational
+facts remain in JrUtil sidecars and the Oběhy finalized mirror.
 
 ## 7.4 Disjoint transport domains and nearby presentation
 
@@ -477,20 +544,24 @@ presentation and walking-transfer behavior, not a canonical stop-knot or identit
 
 # 8. Reconciling mutable national stops
 
-Every new national export needs continuity matching against the canonical registry.
+Every new national export needs continuity matching through JrUtil discovery and an immutable
+registry reconciliation batch.
 
 ## Matching order
 
-1. Existing manual binding
-2. Stable identifier such as CIS StopID, PostID or ASW ID
-3. Existing source continuity that is still trustworthy
-4. Strong structural match against the previous export
-5. Review candidate
-6. Allocate a new canonical ID
+1. Existing reviewed/manual registry binding
+2. Stable identifier such as PostID or ASW ID when genuinely supplied
+3. One unique normalized `(full stop name, actual JDF district code, country)` continuation
+4. Review candidate when that tuple collides or conflicts
+5. Allocate a new surface ID when no prior candidate exists
 
 ## Structural matching signals
 
-Use a weighted combination of:
+JrUtil must first extend the JDF bundle to preserve the actual JDF district code (`BM`, `KV`,
+`CV`, `TP`, and so on). The existing Parquet field called `district` contains a stop-name component
+and is not suitable for this identity rule. Generated `jdf:stop:*` values are provenance only.
+
+Retain the following structural signals as ordered review evidence:
 
 - normalized stop name;
 - municipality;
@@ -505,16 +576,17 @@ Use a weighted combination of:
 - known boarding points;
 - distance from prior coordinates.
 
-Do not use only name and coordinates.
+Version 1 does not let those signals override a conflicting name/district-code/country tuple
+automatically. They support quarantine review and future measured matcher revisions.
 
 ## Suggested confidence policy
 
 ```text
 1.00    explicit manual mapping
 0.99    stable authoritative identifier
-0.95    strong structural continuation
-0.85    probable continuation requiring review
-<0.85   create a new entity or quarantine
+0.95    unique exact normalized JDF tuple continuation
+0.85    structural review candidate, never auto-bound in v1
+<0.85   allocate only when no plausible prior candidate exists; otherwise quarantine
 ```
 
 Actual thresholds should be tuned using real exports.
@@ -656,7 +728,43 @@ This allows non-stop railway points to anchor delay calculations without exposin
 
 # 11. JrUtil workstream
 
-JrUtil should produce a **conversion bundle**, not only a ready-made final GTFS ZIP.
+JrUtil owns the complete production static pipeline. Existing JDF and CZPTT conversion bundles
+remain its normalized, lossless intermediate contracts; they are inputs to a new high-performance
+identity-discovery and overlay compiler which produces the ready-made nationwide GTFS and a typed
+Oběhy serving package.
+
+## Static compiler commands and boundary
+
+During the provisional vertical slice:
+
+```text
+jrutil-multitool static-compile <build-spec.json> --identity-mode provisional-v0 <output-root>
+```
+
+After registry launch:
+
+```text
+jrutil-multitool static-discover <build-spec.json> <proposal-output>
+jrutil-multitool static-compile <build-spec.json> <registry-snapshot> <output-root>
+```
+
+Oběhy downloads and hashes every static source, then passes immutable local snapshots and a
+secret-free build specification. `static-discover` emits deterministic identity proposals and
+evidence. Oběhy submits those proposals to the registry. `static-compile` consumes the returned
+immutable snapshot and performs no network or registry mutations.
+
+The build specification pins its schema, source manifests, overlay-policy digest, nullable registry
+base, identity contract, JrUtil identity, resource limits and deterministic options. The output contains `gtfs.zip`,
+extensions, sorted serving relations, source/public mappings, trip/call coverage mappings,
+operational/provenance relations, validations, diagnostics and a canonical manifest.
+
+National-sized relations are scanned once per stage. The compiler may not materialize or emit a
+second 17-million-row JDF call relation. Use JrUtil's resource-aware worker planning, route/trip
+partitioning, streaming output, one final sort and digest-keyed stage caches. Record stage duration,
+CPU, I/O, peak memory, cache reuse and row counts. After a controlled national baseline exists,
+unexplained performance regressions above 15 percent fail the build gate.
+
+## National conversion bundles
 
 National conversion commands use one mandatory machine-local TOML configuration with absolute
 paths for the heavy-work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkout, and
@@ -733,7 +841,7 @@ source_route_metadata
     source_agency_id, source_agency_distinction, valid_from, valid_to
 
 source_stop_metadata
-    gtfs_stop_id, town, district, nearby_place, country,
+    gtfs_stop_id, town, district, district_code, nearby_place, country,
     coordinates_missing
 
 source_call_metadata
@@ -776,9 +884,9 @@ JDF `Udaje`, text-bearing or otherwise unhandled `Caskody`, `Mistenky` and
 Calendar-only `Caskody` are omitted because their complete effect is already
 represented by GTFS calendars. The `§`/`A`/`B`/`C` travel-exclusion codes retain
 their original `Zaslinky` route-stop or `Zasspoje` trip-call scope rather than
-being expanded over every trip. Bundle Parquet is an immutable import format;
-the importer resolves it into indexed PostgreSQL source-claim relations before
-runtime queries.
+being expanded over every trip. Bundle Parquet is an immutable compiler input;
+JrUtil resolves it into final GTFS/serving relations. Oběhy bulk-loads those finalized relations
+and never performs runtime static arbitration.
 
 Required changes:
 
@@ -794,6 +902,7 @@ Required changes:
 - include scheduled passage times;
 - distinguish passenger and non-passenger calls;
 - preserve any post/platform data available in the source;
+- preserve the actual JDF district code separately from stop-name components;
 - emit deterministic, testable conversion sidecars.
 
 ## JrUtil testing
@@ -814,7 +923,8 @@ Do not block project delivery on upstream acceptance. Pin the project to a known
 
 Generic GTFS merging is not sufficient for this project.
 
-The required behaviour is a deterministic **GTFS compiler** operating on canonical entities.
+The required behaviour is a deterministic JrUtil **GTFS compiler** operating on registry-owned
+public entities.
 
 Regional and operator feeds should overlay:
 
@@ -870,6 +980,24 @@ pid:
 The policy must be explicit, declarative and testable.
 
 Do not implement an implicit “PID wins everything” rule.
+
+Oběhy stores the versioned policy and exports it in the build specification. For every source,
+mode, coverage scope and capability, configure an integer priority and one of:
+
+```text
+disabled       ignore this capability
+fill_missing   use it only when no selected value exists
+preferred      beat lower-priority eligible claims
+authoritative  must win inside proven coverage or produce a blocking conflict
+```
+
+Capabilities include schedules/calendars, names/coordinates, posts/platforms, route display,
+shapes, accessibility, zones/fares, notices, restrictions and connections. Equal-priority
+conflicts are quarantined. Permission to add unmatched stops, routes and trips is configured
+independently per source.
+
+The first overlay fixture is deliberately a PID bus slice contributing exact posts only. National
+times, names, colours and every disabled capability must remain selected from the national baseline.
 
 ## 12.3 Entity-specific deduplication
 
@@ -1074,25 +1202,24 @@ the rest of the national timetable.
 
 Run the compiler in this order:
 
-1. Download each source.
-2. Store the raw source by checksum.
-3. Record source metadata and retrieval time.
-4. Validate source packaging and basic schema.
-5. Convert JDF and CZPTT through JrUtil.
-6. Reconcile source entities against the canonical registry.
-7. Build complete national canonical routes, trips and calls.
-8. Import regional and operator static feeds.
-9. Match regional trips to canonical trips.
-10. Apply source aliases.
-11. Apply segment-level and field-level overlays.
-12. Resolve exact boarding points.
-13. Preserve regional shapes where authoritative.
-14. Generate missing shapes through the MOTIS route-shapes companion where possible.
-15. Validate canonical invariants.
-16. Export GTFS Schedule and project extensions.
-17. Run an official GTFS validator and store its results as advisory diagnostics.
-18. Produce machine-readable build diagnostics.
-19. Atomically activate the new feed and mapping version.
+1. Oběhy downloads each source and stores the raw bytes by checksum.
+2. Oběhy records source metadata, licence, retrieval time and required/optional status.
+3. Oběhy exports a versioned immutable build specification.
+4. JrUtil validates packaging/schemas and converts JDF/CZPTT to their existing bundles.
+5. JrUtil parses regional/operator GTFS and emits identity proposals/evidence.
+6. Oběhy commits the proposal batch through the public registry.
+7. JrUtil pins the returned registry snapshot and builds complete national routes/trips/calls.
+8. JrUtil matches regional trips and their inclusive coverage sequences.
+9. JrUtil applies aliases plus configured field/call/segment capabilities.
+10. JrUtil resolves exact boarding points and preserves complete trains outside overlay coverage.
+11. JrUtil preserves source shapes and may invoke the separate route-shapes companion for eligible
+    missing shapes.
+12. JrUtil validates public-identity, domain and schedule invariants.
+13. JrUtil writes GTFS Schedule, project extensions, sorted serving relations and diagnostics.
+14. Run the official GTFS validator and a representative MOTIS import sanity check.
+15. Automatically activate the immutable artifact only when all configured gates pass.
+16. In the later mirror milestone, Oběhy bulk-loads the finalized serving package and switches its
+    static/mapping pointer without recompiling it.
 
 ## Raw source storage
 
@@ -1117,15 +1244,20 @@ conversion version
 ```text
 data/builds/2026-07-18T150000Z-4b913fa/
 ├── gtfs.zip
-├── build.json
-├── validation.json
-├── source-manifest.json
-├── source-bindings.parquet
-├── operational-calls.parquet
-└── diagnostics/
+├── extensions/
+├── serving/
+│   ├── finalized static relations
+│   ├── source-public mappings
+│   ├── trip-call coverage mappings
+│   └── operational and provenance relations
+├── manifest.json
+├── validation/
+└── diagnostics.json
 ```
 
-The active build should be selected by one atomic database update or symlink swap.
+The active artifact is selected by one atomic pointer. After Oběhy static-mirror and managed MOTIS
+milestones exist, that pointer also selects the matching PostgreSQL partitions, realtime mapping
+version and MOTIS upstream.
 
 ## Last-known-good behaviour
 
@@ -1136,12 +1268,12 @@ If a new regional feed:
 - contains ambiguous trip mappings;
 - loses required identity fields;
 
-keep the last known good regional snapshot active.
+use the last-known-good regional snapshot only when that source explicitly enables fallback and the
+snapshot is within its configured maximum age. Otherwise omit the optional overlay and diagnose it.
 
-Activation is blocked by internal parseability, referential-integrity, domain, canonical-identity
-and required-mapping failures. MobilityData or another external validator does not independently
-block activation: known minor source defects such as malformed URLs may remain publishable when
-the compiler's internal invariants hold.
+Activation is blocked by manifest/hash/schema, referential-integrity, domain, public-identity,
+required-mapping, configured count/drift and official GTFS validation errors. Warnings remain
+advisory unless a versioned gate explicitly promotes them.
 
 One broken upstream source must not destroy the nationwide feed.
 
@@ -1156,7 +1288,7 @@ Example projections:
 ```text
 route_id = R000000123
 trip_id  = T000000456
-stop_id  = S000000123 or P000000456
+stop_id  = S000000123, P000000456, rail:CZ:<SR70> or rail:CZ:<SR70>:<subsidiary>
 ```
 
 Canonical IDs can be used directly if their format is safe for public export.
@@ -1225,6 +1357,62 @@ Every static build gets a permanent `feed_version`.
 The realtime feed must identify the matching static feed version.
 
 The static feed, source bindings, trip-sequence mappings and realtime resolver must activate together.
+
+---
+
+# 16A. Oběhy finalized static mirror
+
+Oběhy needs the complete finalized GTFS mirror plus typed extensions and sidecars to publish correct
+GTFS-RT, expose non-standard facts and perform connector-specific mappings. This is intentionally
+more than a compact crosswalk, but it is not a second compiler.
+
+JrUtil sorts serving relations by their final database keys. The Oběhy loader:
+
+1. creates fresh per-build partitions or isolated staging tables;
+2. streams finalized relations through parallel COPY;
+3. creates indexes after bulk loading;
+4. checks counts, references and mappings set-wise;
+5. attaches the complete build and switches one active pointer;
+6. retains the active build and configured predecessors for rollback.
+
+The loader never performs source identity matching, trip collapse, overlay precedence or source
+claim arbitration. Runtime requests query indexed PostgreSQL relations, not compiler Parquet.
+
+The PostgreSQL compiler/importer and its source-fact/reconciliation schema have been removed.
+Database v1 uses `control` and `static` schemas. It stores opaque text IDs, content-addressed
+artifacts, source/config/build/job metadata, complete digest contracts, per-build LIST partitions,
+finalized schedules and runtime mappings. It contains no canonical allocation, redirects,
+tombstones, registry bindings, identity diagnostics or compiler source facts.
+
+The executable serving-package v1 contract is `src/obehy/serving.py`: 33 sorted typed Parquet
+relations with fixed Arrow schema/nullability, metadata, counts, hashes and aggregate digest. The
+loader stages and COPYs every relation, validates location/call/coverage/segment invariants set-wise,
+attaches the complete partition set atomically and derives indexed PostGIS shape geometry. A single
+publication pointer selects static data and all realtime mappings; the active build and two recently
+activated predecessors retain payload for rollback.
+
+Source mappings explicitly separate identifier authority and namespace from future realtime
+observation provenance. Thus a `pid-vehiclepositions` observation may resolve a key owned by
+`pid-gtfs` in namespace `gtfs_trip_id`. Entity, trip, call and coverage mappings carry namespaces;
+trip mappings additionally retain optional exact source route, direction, start/end locations,
+scheduled end, block/run/duty IDs and call-pattern digest. Resolver context can eliminate a known
+contradiction but never fuzzy-match or treat missing context as evidence.
+
+The typed semantic subset is not optional. `service_feature_assignment` preserves route/trip/call
+features such as reservations, bicycle and luggage carriage, vehicle accessibility, on-request and
+conditional operation, including original JDF code, note link, and provenance. `location_feature`
+preserves stop accessibility/facilities and CLO/MHD/rail/line/metro/ship/airport/P+R hints.
+`service_note` and its assignments preserve `Udaje`, `Caskody`, and `Mistenky` verbatim and typed;
+`connection_claim` preserves `m`/`M`, all supplied specificity, any future specification-note parse
+provenance, and unresolved claims; restrictions retain their original scope. See
+`JDF_SEMANTICS.md` for the field-level contract and known JrUtil gaps.
+
+Only uniquely resolved connection claims become `transfer` rows. A route or wait time without an
+identifiable target trip remains valuable source information, but must not be exposed as a routable
+trip-to-trip transfer or strengthened during NeTEx export.
+
+Realtime, history, alerts, compositions and vehicle state are intentionally absent from database
+v1 and receive vertical-slice migrations when implemented.
 
 ---
 
@@ -2238,145 +2426,156 @@ Operational points never leak into passenger stop_times.
 
 # 35. Delivery roadmap
 
-## Milestone 0 — Domain contracts and fixtures
+The current execution order overrides the historical milestone numbering where they differ:
 
-Build:
+1. freeze provisional JrUtil compilation and serving contracts;
+2. prove the PID posts-only overlay;
+3. load and activate it through Oběhy database v1;
+4. rewrite one PID realtime entity through active-build mappings;
+5. implement the permanent registry in its separate repository and perform the declared ID break;
+6. continue expanded overlays, DÚK, rail fusion, estimation and product work.
 
-- canonical ID allocator;
-- source binding model;
-- manual aliases;
-- stop place / boarding point / operational point model;
-- route and trip identity model;
-- trip-instance model;
-- tiny JDF, CZPTT, PID and DÚK fixtures.
-- canonical operator identity;
-- disjoint surface/heavy-rail location domains;
-- content-addressed source snapshots and artifacts;
-- immutable build-scoped schedule revisions and atomic publication;
-- build rollback and three-payload retention.
+## Milestone 0 — Updated architecture and versioned contracts
+
+Document and freeze:
+
+- registry entity, binding, reconciliation and snapshot contracts;
+- JrUtil build-spec, proposal, compiler-output and serving-package contracts;
+- overlay capability matrix and ambiguity behavior;
+- Oběhy snapshot/build-worker and finalized-loader boundaries;
+- tiny JDF, CZPTT, PID and DÚK fixtures;
+- the disposition of the superseded database compiler.
 
 Exit criteria:
 
-- two different JDF export IDs resolve to one stable canonical stop;
-- `582588` resolves to `001588`;
-- a PID train segment resolves to one complete canonical train;
-- a source identifier cannot map ambiguously without causing failure.
-- JDF and CZPTT locations cannot bind across transport domains;
-- a changed timetable can retain one canonical trip identity across immutable builds.
+- another implementer can build each subsystem without deciding ownership or wire boundaries;
+- all still-valid realtime and product requirements remain in this plan;
+- no current instruction recommends another full PostgreSQL static compilation.
 
 ---
 
-## Milestone 1 — National conversion and registry
+## Milestone 1 — Public identity registry v1 (deferred)
 
 Build:
 
-- raw-source downloader;
-- source checksum storage;
-- JrUtil conversion bundle;
-- IDS zones;
-- friendly line numbers;
-- operational pass-through points;
-- canonical stop continuity matcher;
-- canonical route/trip import.
+- standalone FastAPI service and separate PostgreSQL database;
+- typed non-recycling public IDs and country-scoped railway SR70 composites;
+- bindings, aliases, redirects, tombstones, revisions and coordinate history;
+- idempotent batch reconciliation with optimistic snapshot checking;
+- anonymous REST plus immutable CSV/Parquet snapshots;
+- OIDC mutation boundary and minimal CLI/API review workflow.
 
 Exit criteria:
 
-- a second national export imports without wholesale ID churn;
-- operational train points are preserved internally;
-- all entities contain provenance.
+- two changed JDF exports retain the same surface IDs through the exact tuple rule;
+- railway primary/subsidiary IDs are deterministic;
+- collisions are quarantined and reviewable;
+- IDs allocated for a failed consumer build are not reused.
+
+Start this milestone only after the Milestone 3 overlay loads/activates through database v1 and the
+Milestone 6 PID connector rewrites one entity using `provisional-v0` mappings.
 
 ---
 
-## Milestone 2 — First valid nationwide GTFS
+## Milestone 2 — JrUtil national static compiler
 
 Build:
 
-- GTFS exporter;
-- stable canonical IDs;
-- stop-place and boarding-point hierarchy;
-- unspecified boarding-point fallback;
-- Czech extension files;
-- validation;
-- immutable build directory;
-- build diagnostics.
+- actual JDF district-code preservation;
+- provisional-v0 JDF/CZPTT compilation first;
+- `static-discover`, proposal output and registry-snapshot input when Milestone 1 begins;
+- opaque public IDs under the manifest's selected identity contract;
+- GTFS plus typed serving package, manifests and diagnostics;
+- bounded streaming/parallel performance telemetry.
 
 Exit criteria:
 
-- the database and generated files can be deleted;
-- one command reconstructs the nationwide feed from stored snapshots;
-- the output validates;
-- feed versioning works.
+- one command reconstructs the provisional feed from Oběhy snapshots; registry-v1 later adds the
+  immutable registry snapshot;
+- no Oběhy canonical database is required to compile it;
+- output validates and remains deterministic;
+- national production-volume resource use is measured.
 
 This is the first publishable static artifact.
 
 ---
 
-## Milestone 3 — Small PID static overlay
+## Milestone 3 — PID posts-only static overlay
 
 Use a deliberately small PID slice.
 
 Build:
 
-- PID stop and post matching;
-- route and trip bindings;
-- field precedence;
-- segment coverage;
-- one road trip overlay;
-- one partial train overlay.
+- PID stop/post and bus-trip matching;
+- versioned capability matrix;
+- exact post assignment for covered calls;
+- posts enabled while names, colours and times are disabled;
+- source substitution and ambiguity reports.
 
 Exit criteria:
 
-- the final feed contains one canonical trip, not duplicate national and PID trips;
-- PID passenger-facing data is used inside coverage;
-- the full national train continues outside coverage;
-- national metadata survives where PID lacks it;
+- the final feed contains one public trip, not duplicate national and PID trips;
 - exact post information is preserved;
+- national names, colours and times remain selected;
 - a machine-readable substitution report is generated.
 
 ---
 
-## Milestone 4 — Complete PID static overlay
+## Milestone 4 — Full national benchmark and static publication
 
 Build:
 
-- complete PID import;
-- hard match thresholds;
-- ambiguity quarantine;
-- last-known-good fallback;
-- full stop/post overlay;
-- complete diagnostics.
+- production-volume JDF/CZPTT compilation;
+- complete manifest/count reconciliation;
+- bounded-memory and controlled performance baseline;
+- official GTFS validation and deterministic replay;
+- manual MOTIS import with representative journey checks;
+- automatic artifact activation gates.
 
 Exit criteria:
 
-- ambiguous trip matches block activation;
-- PID trips are correctly overlaid;
-- source IDs map back to canonical IDs;
-- unexpected count changes require explicit acceptance.
+- one pre-registry nationwide GTFS exists with labelled provisional IDs and the selective PID overlay;
+- required ambiguity/count/drift failures block activation;
+- unexplained later performance regressions above 15 percent fail the gate.
 
 ---
 
-## Milestone 5 — Shapes and static production pipeline
+## Milestone 5 — Oběhy build control and finalized static mirror
 
 Build:
 
-- pinned MOTIS route-shapes companion;
-- candidate-only post-overlay GTFS projection;
-- deterministic shape, trip-assignment and stop-offset sidecars;
-- post-overlay shape enrichment;
-- shape quality checks;
-- cache and provenance manifests;
-- automatic build scheduling;
-- atomic activation;
-- active feed manifest.
+- source/config/job models and immutable build-spec export;
+- PostgreSQL-backed job queue and local pinned JrUtil worker;
+- progress, cancellation, retry and diagnostic APIs;
+- parallel bulk loader for sorted finalized serving relations;
+- per-build partitions, post-load indexes and set validation;
+- atomic static/mapping activation and rollback retention.
 
 Exit criteria:
 
-- shape generation failure does not invalidate the feed;
-- regional shapes remain preferred;
-- source and retained national shapes are never routed or overwritten;
-- cold-cache and warm-cache output is byte-identical;
-- MOTIS meets the checked coverage, accuracy and efficiency benchmark gate;
-- active static data and mapping tables switch together.
+- Oběhy supervises builds and serves the full GTFS/extension mirror without static reconciliation;
+- a failed load leaves no attached partial build;
+- active static data and mapping tables switch together and can roll back.
+
+---
+
+## Milestone 5A — Expanded static overlays and shape enrichment
+
+Build:
+
+- complete configured PID static coverage;
+- partial-train inclusive coverage and full-journey preservation;
+- hard ambiguity and last-known-good gates;
+- pinned MOTIS route-shapes companion for eligible post-overlay gaps;
+- deterministic shape, assignment, offset, cache and provenance sidecars.
+
+Exit criteria:
+
+- a regional partial train remains one complete national public trip;
+- ambiguous required mappings block activation;
+- regional/national source shapes remain preferred and are never overwritten;
+- shape-generation failure degrades only affected trips;
+- cold/warm identical inputs produce byte-identical static output.
 
 ---
 
@@ -2390,14 +2589,14 @@ Build:
 - current trip-state storage;
 - GTFS-RT output;
 - PID alerts;
-- minimal map.
+- realtime debugging and feed-health APIs.
 
 Exit criteria:
 
 - PID realtime entities resolve against the project static feed;
 - unmatched entities are visible in diagnostics;
 - partial PID train updates apply to full canonical trains;
-- the map shows project-owned IDs only.
+- emitted entities use IDs from the active static build only and identify its feed version.
 
 ---
 
@@ -2536,7 +2735,7 @@ Exit criteria:
 
 ---
 
-## Milestone 13 — Full frontend
+## Milestone 13 — Public/admin frontend and managed MOTIS
 
 Build:
 
@@ -2549,12 +2748,16 @@ Build:
 - train compositions;
 - historical trip view;
 - stale/conflicting data presentation.
+- OIDC administration for sources, overlays, builds, registry reviews and connectors;
+- Oběhy connection-search proxy;
+- blue-green MOTIS loading, health checks, activation and rollback.
 
 Exit criteria:
 
 - removing or disabling a connector changes coverage but requires no frontend code change;
 - source-feed grouping is no longer visible to users;
-- nearby relevant stops appear together without being falsely merged.
+- nearby relevant stops appear together without being falsely merged;
+- the active GTFS, mappings, realtime resolver and MOTIS instance always name the same build.
 
 ---
 
@@ -2592,45 +2795,33 @@ Source conformance checks:
 
 Start with these tickets in this order.
 
-1. Create repository and Python project structure.
-2. Define canonical ID types and allocator.
-3. Define source registry schema.
-4. Define source binding and alias schema.
-5. Define stop place, boarding point and operational point entities.
-6. Define scheduled trip and trip-instance entities.
-7. Define passenger and operational trip calls.
-8. Create tiny synthetic JDF, CZPTT, PID and DÚK fixtures.
-9. Build raw-source snapshot downloader with checksums.
-10. Containerize and pin JrUtil.
-11. Add JrUtil golden tests.
-12. Add IDS zone extraction.
-13. Add friendly line number extraction.
-14. Add CZPTT pass-through operational points.
-15. Import one tiny national conversion into PostgreSQL.
-16. Implement canonical stop allocation.
-17. Implement second-export stop continuity matching.
-18. Export one deterministic GTFS sample.
-19. Add GTFS validation.
-20. Compile a complete national baseline.
-21. Import one tiny PID static slice.
-22. Match exactly one PID bus trip.
-23. Match exactly one partial PID train.
-24. Overlay one exact stop post.
-25. Generate source-substitution diagnostics.
-26. Decode PID GTFS-RT.
-27. Rewrite one PID realtime trip to a canonical trip ID.
-28. Display one canonical moving vehicle on a basic map.
-29. Implement the DÚK `582588 -> 001588` alias.
-30. Match and display one DÚK vehicle.
+1. Add actual JDF district codes to the JrUtil bundle contract.
+2. Implement JrUtil provisional-v0 compilation over tiny JDF/CZPTT fixtures.
+3. Emit the frozen GTFS, serving relations, mappings and manifest contract from JrUtil.
+4. Add a tiny PID bus overlay with posts as its only enabled capability.
+5. Prove national names, colours and times remain selected.
+6. Load, activate and roll back that package through the implemented Oběhy database v1 loader.
+7. Add the pinned JrUtil worker and its progress/cancellation API around the implemented job model.
+8. Compile, validate, MOTIS-check and benchmark the complete provisional national feed.
+9. Decode PID GTFS-RT into immutable claims in a new realtime migration.
+10. Rewrite one PID realtime trip through the active serving mappings.
+11. Publish one valid project GTFS-RT entity and debugging explanation.
+12. Create the separate registry repository and freeze its reconciliation/snapshot schemas.
+13. Implement typed IDs, bindings, aliases, redirects, revisions and immutable snapshots there.
+14. Add JrUtil `static-discover`, compile the first registry-v1 build and perform the ID transition.
+15. Add complete PID and partial-train static coverage.
+16. Implement the DÚK `582588 -> 001588` alias and one DÚK position.
+17. Fuse one train capability-by-capability across PID/DÚK/SŽ evidence.
+18. Build the public/admin React application and managed MOTIS lifecycle after RT foundations.
 
 The first end-to-end success should be:
 
 ```text
 one national trip
- -> overlaid by one regional trip
- -> exported with a stable canonical trip ID
+ -> overlaid by one regional post claim
+ -> exported by JrUtil with a stable registry-owned trip ID
  -> regional realtime rewritten to that ID
- -> displayed as one moving vehicle
+ -> exposed as one fused trip/vehicle through Oběhy
 ```
 
 After that works, nationwide expansion becomes controlled repetition rather than architecture discovery.
@@ -2643,20 +2834,26 @@ After that works, nationwide expansion becomes controlled repetition rather than
 sources:
   national-jdf:
     type: jdf
-    static_priority: 10
     coverage: nationwide-road
     required: true
 
   national-czptt:
     type: czptt
-    static_priority: 10
     coverage: nationwide-rail
     required: true
 
   pid:
     type: gtfs
-    static_priority: 100
     coverage: pid
+    allow_new:
+      stops: false
+      routes: false
+      trips: false
+    static:
+      posts: { mode: authoritative, priority: 100 }
+      schedules: { mode: disabled, priority: 0 }
+      stop_names: { mode: disabled, priority: 0 }
+      route_display: { mode: disabled, priority: 0 }
     realtime:
       vehicle_positions_priority: 100
       trip_updates_priority: 100
@@ -2678,7 +2875,8 @@ sources:
       passage_event_priority: 100
 ```
 
-Priorities are capability-specific defaults, not unconditional truth.
+Priorities and modes are capability-specific, not one source-wide ranking. The first PID slice
+enables posts only; later policy revisions may explicitly enable additional capabilities.
 
 ---
 
@@ -2770,7 +2968,6 @@ This kind of endpoint will be essential while tuning the fusion logic.
 
 Do not decide these prematurely:
 
-- exact canonical ID prefix format;
 - whether every canonical registry table uses integer or UUID primary keys internally;
 - websocket versus polling;
 - advanced scaling architecture;

@@ -44,6 +44,7 @@ def _config(tmp_path: Path) -> RuntimeConfig:
     return RuntimeConfig(
         source=tmp_path / "config.toml",
         workdir=tmp_path / "work",
+        artifact_root=tmp_path / "artifacts",
         osm_file=tmp_path / "active" / "region.osm.pbf",
         jrunify_ext_geodata_dir=tmp_path / "geodata",
         jrutil=JrUtilRuntime(directory=tmp_path / "jrutil", command=None),

@@ -3,6 +3,247 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-08-04 — Shared publication retention hardened
+
+### Delivered
+
+- Build activation now supports multiple named publications sharing one static build. Moving one
+  pointer no longer retires or permits pruning that build while another publication still uses it.
+
+### Validation evidence and limits
+
+- The full suite passes 73 tests with one expected opt-in live-national skip. The five-test
+  PostgreSQL lifecycle suite covers shared activation, independent pointer movement, retention and
+  final retirement; Ruff format/lint and `git diff --check` pass. Publication changes remain
+  transactional within one database.
+
+### Next handoff
+
+- Continue with the PID static mapping emission and realtime vertical slice described below.
+
+## 2026-08-04 — Namespaced contextual realtime mappings
+
+### Delivered
+
+- Namespaced every source entity/trip/call identifier and added optional source route, direction,
+  endpoints, scheduled end, block/run/duty IDs and call-pattern context to trip mappings. The
+  resolver now supports namespaced entity and call lookup and rejects supplied contradictory
+  context, allowing PID regional GTFS identifiers to remain the primary path when CIS keys are
+  absent.
+
+### Validation evidence and limits
+
+- The full suite passes 72 tests with one expected opt-in live-national skip. Ruff format/lint,
+  strict Pyright, and `git diff --check` pass. The regenerated baseline completes a
+  downgrade/re-upgrade against the configured remote disposable `obehy_test` database and the
+  final `alembic check` reports no new operations.
+- Contextual matching remains exact and deliberately non-fuzzy. JrUtil still needs to emit these
+  namespaced mapping fields, and realtime claim tables will separately record observation source,
+  supplied identifiers, chosen mapping path, and rejection diagnostics.
+
+### Next handoff
+
+- Emit the namespaced PID GTFS entity/trip/call mappings from JrUtil, then implement the PID
+  vehicle-position vertical slice using `pid-vehiclepositions` as observation provenance and
+  `pid-gtfs` as identifier authority.
+
+## 2026-08-03 — JDF 1.11 semantic sidecars and database shape frozen
+
+### Delivered
+
+- Documented the current JrUtil loss/approximation boundary against the official JDF 1.11
+  `Pevnykod`, `Caskody`, and `Navaznosti` definitions in `JDF_SEMANTICS.md`. JrUtil itself was not
+  changed. Its bicycle allowed/forbidden projection remains explicitly correct; pickup/drop-off
+  `phone_before` remains a useful GTFS approximation for order/conditional service, but neither is
+  treated as a substitute for typed source semantics.
+- Extended serving-package/database v1 to 33 relations. `service_feature_assignment` preserves
+  route/trip/call reservation, accessibility, refreshments, luggage, bicycles, order, condition,
+  request, and boarding semantics with source code/note/provenance. `location_feature` preserves
+  WC/accessibility/request-stop and CLO/MHD/rail/line/metro/ship/airport/P+R facts.
+- Extended connection claims with source-trip/public-line/destination fields and explicit
+  `none`/`structured`/`spec_note` derivation. Future parsing of the specification-defined note forms
+  belongs in JrUtil; Oběhy retains and resolves claims but never parses or guesses. Only uniquely
+  resolved claims become routable transfers.
+- Added typed notes/assignments, scoped restrictions, complete CZPTT operational relations,
+  district/coordinate detail, ordered zones, and enriched source coverage to the executable
+  serving schema and deterministic fixture.
+- Pinned a packaged machine-readable NeTEx v2.0.0 mapping ledger. Its canonical digest is mandatory
+  in the serving manifest, and tests require the ledger to cover every field in each typed semantic
+  relation.
+- Regenerated the sole Alembic database-v1 baseline from SQLAlchemy metadata, with hand-written DDL
+  limited to `control`/`static` schemas and PostGIS setup.
+
+### Validation evidence and limits
+
+- The full suite passes 72 tests with one expected opt-in live-national skip, including four
+  focused PostgreSQL load/activation/failure/rollback/retention tests. Ruff format/lint,
+  strict Pyright, and `git diff --check` pass.
+- The regenerated baseline completes downgrade/upgrade/downgrade/re-upgrade against the configured
+  remote disposable `obehy_test` database; the final `alembic check` reports no new operations.
+- The mapping ledger is a coverage and design contract, not yet a PostgreSQL-to-NeTEx exporter or
+  proof against the official XSD. JrUtil does not yet emit the 33-relation package, preserve all
+  fixed codes, or parse `Navaznosti` note forms. Those remain explicit blockers for the lossless
+  NeTEx gate.
+
+### Next handoff
+
+- Extend JrUtil from `JDF_SEMANTICS.md`, beginning with typed fixed-code/note/connection emission;
+  then implement the reference NeTEx exporter and round-trip fixture before production package
+  emission is accepted.
+
+## 2026-08-03 — PostgreSQL compiler removed; serving database v1 established
+
+### Delivered
+
+- Removed the national PostgreSQL compiler/importer, its slice and bundle-reader tools, source-fact
+  and reconciliation schema, canonical allocator/identity services, CLI entries, migrations and
+  compiler tests. National JDF/CZPTT acquisition and conversion-bundle builders remain unchanged.
+- Replaced the disposable migration history with an Alembic-autogenerated database-v1 baseline in
+  explicit `control` and `static` schemas. Control relations cover content-addressed artifacts,
+  immutable source/config snapshots and build specs, queued jobs/attempts/events, complete build
+  digests, validation/diagnostics, publication and retention. Registry-owned identity is absent.
+- Added 33 LIST-partitioned finalized schedule, typed JDF semantic, operational, provenance and
+  runtime-mapping relations.
+  IDs are unrestricted text and support labelled provisional `v0:` values plus later railway and
+  registry formats without a schema change.
+- Froze the executable serving-package v1 contract as typed sorted Parquet. Validation checks the
+  canonical manifest, Arrow schema/nullability and metadata, path safety, hashes, sizes, counts,
+  strict key ordering and aggregate digest before database work.
+- Added transactional staging/COPY, set-wise passenger/operational-call, location, coverage and
+  route-segment validation, complete partition attachment, PostGIS shape derivation, atomic
+  activation/rollback, failed-load cleanup, three-build retention, exact aliases and dated
+  source/CIS/train resolvers. Ambiguity raises rather than choosing a row.
+- Reordered the roadmap around a provisional PID overlay/realtime proof. The permanent registry is
+  now explicitly a separate-repository milestone after that proof and creates one declared ID break.
+
+### Validation evidence and limits
+
+- The baseline completed a downgrade-to-base/re-upgrade cycle against the `.env` database verified
+  as `obehy_test`/`obehy`; `alembic check` reports no new operations. Four focused PostgreSQL tests
+  pass for load/activate/resolution, failed-load cleanup, job retry/events, rollback and retention.
+- The full suite passes **70 tests with 1 expected opt-in live-national skip**. Ruff formatting and
+  lint pass for maintained source/tests/migrations, and strict Pyright reports no errors or warnings.
+- The fixture is generated directly from the frozen Python contract because JrUtil does not yet emit
+  serving-package v1. COPY is bounded and streaming but currently one relation at a time; parallel
+  national loading and its performance baseline require the first JrUtil production-sized package.
+
+### Next handoff
+
+- Implement JrUtil provisional-v0 compilation and serving-package v1 emission, then prove the PID
+  posts-only overlay against this validator/loader. Do not add registry tables or static arbitration
+  back to Oběhy PostgreSQL.
+
+## 2026-08-03 — Static architecture redirected to JrUtil and a public ID registry
+
+### Decision
+
+- Production static conversion and overlays move to JrUtil. Oběhy owns immutable source
+  acquisition, build supervision, the finalized serving mirror and all operations/realtime work;
+  MOTIS owns connection search.
+- A separately deployed FastAPI/PostgreSQL registry owns every public canonical namespace,
+  immutable catalog snapshots and canonical location coordinates. Surface IDs are project-owned;
+  railway locations use country-scoped SR70 composites. Surface and rail identities remain
+  permanently separate.
+- The in-database national compiler is now a prototype, not the production path. Its controlled
+  100-route fixture remains useful evidence, but the interrupted full import was killed and rolled
+  back with no build, publication, staging table or active backend left behind.
+- The current database schema is also a prototype boundary, not the production serving/operations
+  schema. Its identity-owned tables, ten-character ID assumption, source-fact compiler relations,
+  incomplete build-digest contract and missing realtime/operations model must be reworked while
+  the obsolete PostgreSQL importer is removed. This happens before loading production JrUtil
+  serving packages, not as a later cleanup after static overlays are operational.
+
+### Next handoff
+
+- Remove the prototype PostgreSQL importer and separate the registry-owned, finalized-static and
+  operational schema responsibilities before loading any production JrUtil serving package. Do
+  not resume the full PostgreSQL baseline import.
+
+## 2026-08-03 — Baseline compiler throughput and continuity checkpoint
+
+### Delivered
+
+- Replaced the single stop-time loader with four byte-range COPY streams into isolated unlogged
+  staging (configurable with `--copy-workers`, bounded to 1–8). The loader verifies physical CSV
+  row boundaries before splitting and falls back to one safe range when quoted embedded newlines
+  make physical splitting unsafe.
+- Reworked canonical call validation from per-row application triggers to one transition-table
+  validator per inserted set. The append-only call fact keeps its primary key, validates its build,
+  trip, location, boarding point and provenance in bulk, and is deleted explicitly with its build.
+  No-op binding continuity updates are skipped, and complete-trip overlap ambiguity is checked once
+  per incoming set rather than maintained through a per-row GiST exclusion index.
+- Added JDF stop continuity using the normalized full GTFS stop name, current metadata `district`
+  value and country, with unique prior-candidate matching and blocking ambiguity diagnostics. Exact
+  generated `jdf:stop:*` values remain provenance only and are not treated as permanent IDs.
+- Canonical calls now retain GTFS stop headsign and shape distance where supplied; stop descriptions,
+  URLs and accessibility are also compiled. This supports an Oběhy-ID national GTFS/GTFS-RT export;
+  immutable source artifacts remain the byte-lossless replay boundary.
+
+### Validation evidence and limits
+
+- A referentially closed **100-route / 100-PA** fixture contains 45,065 JDF trips and 1,061,546 JDF
+  calls plus 114 CZPTT GTFS segments and 2,073 CZPTT operational calls. It compiles to 1,063,586
+  canonical calls. Four-stream COPY takes **1.14–1.35s**; total import fell from **190.3s to
+  112.0s**. Binding continuity fell from 35.2s to 0.15s and trip binding from 17.7s to 8.6s. The
+  canonical call insert remains the dominant phase at 83–88s and is the next performance target.
+- The focused importer suite passes 16 tests. The full suite passes **98 tests with 1 expected
+  live-national skip**; strict Pyright and formatting checks pass for all changed files, and Alembic
+  metadata is clean. Repository-wide Ruff still reports 16 existing issues only in the untouched
+  `converters/jrunify-ext-geodata` files.
+- The current JrUtil JDF bundle drops the actual JDF district code (`BM`, `KV`, `CV`, `TP`, …).
+  Its `source_stop_metadata.parquet` field named `district` contains the second stop-name component
+  instead. The implemented continuity key therefore remains a known fallback until JrUtil preserves
+  an explicit district-code column; do not represent it as the intended final identity rule.
+- The formerly planned full database import was superseded by the newer registry/JrUtil architecture
+  decision above. These timings remain prototype evidence only.
+
+## 2026-08-02 — National baseline importer, fixture-first checkpoint
+
+### Delivered
+
+- Added strict JDF v1/CZPTT v1 bundle readers with complete inventory, size, SHA-256, row-count,
+  GTFS header and Parquet schema/metadata verification. Machine-local configuration now requires
+  an artifact root, and snapshot/build artifact keys are normalized beneath it.
+- Added `obehy-static-import base` and the typed source/canonical relations needed for national
+  compilation and later overlays: complete-trip bindings, rail route segments, CZPTT operational
+  calls/coverage and compact JDF notices, connections, restrictions and zone claims. Boarding
+  points inherit their stop-place domain, and a heavy-rail stop place may be used by both passenger
+  and non-passenger calls.
+- Kept the storage boundary deliberately lean. The immutable bundles remain the lossless archive;
+  the **17M JDF calls are stored once** as canonical call revisions rather than repeated in JDF
+  source-call and call-projection tables. GTFS CSV uses native PostgreSQL COPY, with staging indexes
+  built after heap loading. Upstream diagnostics are bulk-COPYed instead of inserted through the
+  ORM one row at a time.
+- Negative CZPTT operational times are not shifted or repaired. Any affected PA and every generated
+  GTFS segment belonging to it are removed before reconciliation and reported as a non-blocking
+  upstream rejection pending a JrUtil fix.
+- Added a deterministic `obehy-baseline-slice` developer tool that derives referentially closed,
+  strictly manifested bundles with distinct source identities from the national artifacts.
+
+### Validation and next handoff
+
+- A strict **2-JDF-route / 5-valid-PA** fixture imported end to end as ready build `92` without
+  activation: 618 JDF trips/8,001 calls plus 5 CZPTT PAs/60 operational calls compiled into
+  **623 trips, 8,061 calls and 7 rail route segments**. Peak traced Python memory was 16.8 MB;
+  validation, staging and canonical compilation took 0.196s, 0.336s and 3.280s respectively.
+  Replay reused build 92 and allocated nothing. Only the 60 CZPTT operational source calls exist;
+  the 8,001 JDF calls have no duplicate source copy. Six JDF notices were retained.
+- An overlapping 3-route/6-PA fixture B then compiled as ready build `131` with 1,004 trips. All
+  **623** A-build trip identities survived unchanged, exact binding validity widened in place,
+  `last_seen_snapshot_id` advanced, and no duplicate source-trip binding was created. A different
+  canonical target for an overlapping accepted source trip remains a blocking ambiguity.
+- Focused PostgreSQL tests pass for multi-segment PA collapse, separate non-passenger arrival and
+  departure, exact rail platforms, shared passenger/pass-through locations, and complete-PA
+  rejection for negative time data. The full suite passes **97 tests with 1 expected live-national
+  skip** against a nonempty baseline database. Ruff, formatting, strict Pyright and `alembic check`
+  pass; the migration completed downgrade/re-upgrade cycles cleanly.
+- Three national attempts rolled back atomically and left no partial build. They exposed and fixed
+  quoted-null CSV handling, boarding-point domain lookup and the shared rail-location constraint.
+  The latest attempt spent 893.5s reaching location compilation; its single COPY stream generally
+  used only 30–50 Mbit/s on a 1 Gbit link despite occasional higher bursts.
+- This checkpoint's proposed next database-import step was later completed as a controlled fixture
+  benchmark and then superseded by the registry/JrUtil architecture decision above.
+
 ## 2026-08-02 — Database v1 foundation
 
 ### Delivered

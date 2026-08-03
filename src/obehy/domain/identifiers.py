@@ -2,48 +2,22 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import StrEnum
-
-
-class EntityKind(StrEnum):
-    OPERATOR = "operator"
-    STOP_PLACE = "stop_place"
-    BOARDING_POINT = "boarding_point"
-    OPERATIONAL_POINT = "operational_point"
-    ROUTE = "route"
-    SCHEDULED_TRIP = "scheduled_trip"
-
-
-PREFIX_BY_KIND: dict[EntityKind, str] = {
-    EntityKind.OPERATOR: "C",
-    EntityKind.STOP_PLACE: "S",
-    EntityKind.BOARDING_POINT: "P",
-    EntityKind.OPERATIONAL_POINT: "O",
-    EntityKind.ROUTE: "R",
-    EntityKind.SCHEDULED_TRIP: "T",
-}
-KIND_BY_PREFIX = {prefix: kind for kind, prefix in PREFIX_BY_KIND.items()}
-CANONICAL_ID_PATTERN = re.compile(r"^(?P<prefix>[CSPORT])(?P<number>[0-9]{9})$")
 
 
 @dataclass(frozen=True, slots=True, order=True)
-class CanonicalId:
+class PublicId:
+    """An opaque serving identifier owned by the active static build.
+
+    Oběhy deliberately does not interpret prefixes or impose a length limit. During the
+    provisional phase JrUtil emits ``v0:...`` values; the later registry may emit compact
+    surface IDs or country-scoped railway IDs without a database migration.
+    """
+
     value: str
 
     def __post_init__(self) -> None:
-        match = CANONICAL_ID_PATTERN.fullmatch(self.value)
-        if match is None or int(match.group("number")) == 0:
-            raise ValueError(f"Invalid canonical ID: {self.value!r}")
-
-    @property
-    def kind(self) -> EntityKind:
-        return KIND_BY_PREFIX[self.value[0]]
-
-    @classmethod
-    def from_number(cls, kind: EntityKind, number: int) -> CanonicalId:
-        if not 1 <= number <= 999_999_999:
-            raise ValueError("Canonical ID number must be between 1 and 999999999")
-        return cls(f"{PREFIX_BY_KIND[kind]}{number:09d}")
+        if not self.value or "\x00" in self.value:
+            raise ValueError("Public IDs must be non-empty text without NUL characters")
 
     def __str__(self) -> str:
         return self.value

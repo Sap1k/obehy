@@ -1,363 +1,263 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
+from pathlib import Path
+from typing import Any
 
 import pytest
-from geoalchemy2.elements import WKTElement
-from sqlalchemy import func, inspect, select
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from obehy.domain.identifiers import CisLineId, CisTripId, EntityKind
-from obehy.domain.locations import PassengerCall
-from obehy.domain.schedule import LocationDomain, ServiceCalendar, ServiceTime, TransitMode
-from obehy.identity.services import AmbiguousIdentityError, CanonicalRegistry
 from obehy.persistence.builds import BuildService
+from obehy.persistence.jobs import BuildJobService
 from obehy.persistence.models import (
-    OperatorRevisionRow,
-    OperatorRow,
-    ScheduledTripRow,
-    ServiceExceptionRow,
-    ShapePointRow,
-    ShapeRow,
-    SourceObjectRow,
+    BuildJobEventRow,
+    BuildSpecRow,
+    LocationRow,
     StaticBuildRow,
-    TripCallRevisionRow,
-    TripRevisionRow,
+    TripCallRow,
 )
-from obehy.persistence.services import (
-    LocationService,
-    ScheduleService,
-    TripResolver,
-    find_route_by_cis_line,
-)
-from obehy.persistence.sources import SourceSnapshotService
+from obehy.persistence.resolver import StaticMappingResolver
+from obehy.serving import ServingPackageError, ServingPackageLoader, validate_serving_package
+
+from ..serving_fixture import fixture_rows, write_serving_package
 
 pytestmark = pytest.mark.integration
-HASH = "b" * 64
 
 
-def build(session: Session, version: str) -> int:
-    return BuildService(session).create(
-        version=version,
-        config_sha256=HASH,
-        compiler_version="database-v1-test",
-    )
-
-
-def operator_revision(session: Session, build_id: int, suffix: str) -> str:
-    operator_id = CanonicalRegistry(session).allocate(EntityKind.OPERATOR)
-    session.add(OperatorRow(id=str(operator_id)))
-    session.flush()
+def _create_build(
+    session: Session,
+    root: Path,
+    rows: dict[str, list[dict[str, Any]]] | None = None,
+) -> int:
+    manifest = write_serving_package(root, rows)
+    package = validate_serving_package(root)
     session.add(
-        OperatorRevisionRow(
-            build_id=build_id,
-            operator_id=str(operator_id),
-            name=f"Operator {suffix}",
-            url="not a valid URL but intentionally retained",
-            timezone="Europe/Prague",
-            extensions={"fixture:v1": {"suffix": suffix}},
+        BuildSpecRow(
+            sha256=manifest["build_spec_sha256"],
+            schema_version=1,
+            document={"schema_version": 1, "fixture": True},
         )
     )
     session.flush()
-    return str(operator_id)
-
-
-def test_snapshot_deduplication_artifacts_and_source_objects(db_session: Session) -> None:
-    snapshots = SourceSnapshotService(db_session)
-    first = snapshots.create_or_get(
-        source_id="national-jdf",
-        content_sha256="c" * 64,
-        retrieved_at=datetime(2026, 8, 2, tzinfo=UTC),
-        artifact_key="raw/national-jdf/c/bundle",
-        manifest={"schema_version": 1},
+    return BuildService(session).create(
+        feed_version=manifest["feed_version"],
+        identity_contract=manifest["identity_contract"],
+        build_spec_sha256=manifest["build_spec_sha256"],
+        build_key_sha256="4" * 64,
+        manifest_sha256=package.manifest_sha256,
+        source_set_sha256=manifest["source_set_sha256"],
+        overlay_policy_sha256=manifest["overlay_policy_sha256"],
+        compiler_sha256=manifest["compiler_sha256"],
+        compiler_identity=manifest["compiler_identity"],
+        compiler_options_sha256=manifest["compiler_options_sha256"],
+        registry_snapshot_sha256=None,
+        gtfs_sha256=manifest["gtfs_sha256"],
+        serving_sha256=manifest["serving_sha256"],
+        netex_mapping_version=manifest["netex_mapping_version"],
+        netex_target_schema=manifest["netex_target_schema"],
+        netex_extension_version=manifest["netex_extension_version"],
+        netex_mapping_sha256=manifest["netex_mapping_sha256"],
     )
-    assert first == snapshots.create_or_get(
-        source_id="national-jdf",
-        content_sha256="c" * 64,
-        retrieved_at=datetime(2026, 8, 3, tzinfo=UTC),
-        artifact_key="ignored/by/content/deduplication",
-    )
-    snapshots.add_artifact(
-        first,
-        logical_role="gtfs",
-        storage_key="raw/national-jdf/c/gtfs.zip",
-        content_sha256="d" * 64,
-        size_bytes=123,
-        media_type="application/zip",
-    )
-    db_session.add(
-        SourceObjectRow(
-            snapshot_id=first,
-            entity_kind="stop_place",
-            source_object_id="stop-1",
-            location_domain=LocationDomain.SURFACE.value,
-            record_locator="stops.txt#stop-1",
-        )
-    )
-    db_session.flush()
 
 
-def test_hot_identity_indexes_exist(db_session: Session) -> None:
-    inspector = inspect(db_session.connection())
-    road = {item["name"] for item in inspector.get_indexes("canonical_road_trip_key")}
-    rail = {item["name"] for item in inspector.get_indexes("canonical_rail_trip_key")}
-    assert "ix_road_trip_cis_pair" in road
-    assert "ix_rail_trip_train_number" in rail
-
-
-def test_mobilitydata_is_advisory_and_ready_payload_is_immutable(db_session: Session) -> None:
-    service = BuildService(db_session)
-    build_id = build(db_session, "immutable-build")
-    operator_id = operator_revision(db_session, build_id, "immutable")
-    service.add_validation(
-        build_id,
-        validator="mobilitydata",
-        passed=False,
-        report={"errors": 99},
-    )
-    service.mark_ready(build_id, output_artifact_key="builds/immutable/gtfs.zip")
-    row = db_session.get(OperatorRevisionRow, {"build_id": build_id, "operator_id": operator_id})
-    assert row is not None
-    with pytest.raises(DBAPIError, match="immutable"), db_session.begin_nested():
-        row.name = "forbidden mutation"
-        db_session.flush()
-
-
-def test_ready_payload_cannot_be_moved_to_building_build(db_session: Session) -> None:
-    service = BuildService(db_session)
-    ready_build_id = build(db_session, "immutable-source-build")
-    operator_id = operator_revision(db_session, ready_build_id, "source")
-    service.mark_ready(ready_build_id, output_artifact_key="builds/source/gtfs.zip")
-    building_build_id = build(db_session, "immutable-target-build")
-    row = db_session.get(
-        OperatorRevisionRow,
-        {"build_id": ready_build_id, "operator_id": operator_id},
-    )
-    assert row is not None
-
-    with pytest.raises(DBAPIError, match="immutable"), db_session.begin_nested():
-        row.build_id = building_build_id
-        db_session.flush()
-
-
-def test_ready_calendar_exception_cannot_be_moved_to_building_build(
-    db_session: Session,
-) -> None:
-    lifecycle = BuildService(db_session)
-    ready_build_id = build(db_session, "immutable-calendar-source")
-    service_date = date(2026, 7, 18)
-    ready_calendar_id = ScheduleService(db_session, ready_build_id).create_calendar(
-        ServiceCalendar(
-            service_date,
-            service_date,
-            frozenset(),
-            added_dates=frozenset({service_date}),
-        )
-    )
-    lifecycle.mark_ready(ready_build_id, output_artifact_key="builds/calendar-source/gtfs.zip")
-    building_build_id = build(db_session, "immutable-calendar-target")
-    building_calendar_id = ScheduleService(db_session, building_build_id).create_calendar(
-        ServiceCalendar(service_date, service_date, frozenset())
-    )
-    row = db_session.get(
-        ServiceExceptionRow,
-        {"calendar_id": ready_calendar_id, "service_date": service_date},
-    )
-    assert row is not None
-
-    with pytest.raises(DBAPIError, match="immutable"), db_session.begin_nested():
-        row.calendar_id = building_calendar_id
-        db_session.flush()
-
-
-def test_overlapping_cis_route_keys_are_ambiguous(db_session: Session) -> None:
-    build_id = build(db_session, "ambiguous-route-key")
-    schedules = ScheduleService(db_session, build_id)
-    operator_id = schedules.create_operator("Route operator")
-    line_id = CisLineId("001588")
-    for name in ("first", "second"):
-        schedules.create_road_route(
-            line_id,
-            TransitMode.BUS,
-            operator_id,
-            date(2026, 7, 1),
-            None,
-            name,
-        )
-
-    with pytest.raises(AmbiguousIdentityError, match="multiple canonical routes"):
-        find_route_by_cis_line(db_session, line_id, date(2026, 7, 18))
-
-
-def test_activation_and_last_three_payload_retention(db_session: Session) -> None:
-    service = BuildService(db_session)
-    builds: list[int] = []
-    operator_ids: list[str] = []
-    for number in range(4):
-        build_id = build(db_session, f"retention-{number}")
-        operator_ids.append(operator_revision(db_session, build_id, str(number)))
-        service.mark_ready(build_id, output_artifact_key=f"builds/{number}/gtfs.zip")
-        service.activate(build_id)
-        builds.append(build_id)
-    assert service.prune_after_activation() == (builds[0],)
-    assert service.active_build_id() == builds[-1]
-    assert db_session.get(StaticBuildRow, builds[0]).state == "pruned"  # type: ignore[union-attr]
+def test_load_activate_and_resolve_serving_fixture(db_session: Session, tmp_path: Path) -> None:
+    build_id = _create_build(db_session, tmp_path)
+    package = validate_serving_package(tmp_path)
+    counts = ServingPackageLoader(db_session).load(build_id, package)
+    assert counts["trip_call"] == 2
     assert (
         db_session.scalar(
-            select(func.count())
-            .select_from(OperatorRevisionRow)
-            .where(OperatorRevisionRow.build_id == builds[0])
+            select(func.count()).select_from(LocationRow).where(LocationRow.build_id == build_id)
         )
-        == 0
+        == 3
     )
-    for build_id, operator_id in zip(builds[1:], operator_ids[1:], strict=True):
-        assert (
-            db_session.get(OperatorRevisionRow, {"build_id": build_id, "operator_id": operator_id})
-            is not None
-        )
-
-
-def test_shape_points_round_trip_in_source_order(db_session: Session) -> None:
-    build_id = build(db_session, "shape-roundtrip")
-    db_session.add(
-        ShapeRow(
-            build_id=build_id,
-            shape_id="pid:shape:1",
-            generation_method="source",
-            extensions={"pid:v1": {"source_shape_id": "1"}},
-        )
-    )
-    db_session.flush()
-    db_session.add_all(
-        [
-            ShapePointRow(
-                build_id=build_id,
-                shape_id="pid:shape:1",
-                sequence=sequence,
-                position=WKTElement(f"POINT({14.0 + sequence} 50)", srid=4326),
-                distance_traveled=None if sequence == 0 else 1000.0,
-            )
-            for sequence in (0, 1)
-        ]
-    )
-    db_session.flush()
-    points = db_session.scalars(
-        select(ShapePointRow)
-        .where(ShapePointRow.build_id == build_id, ShapePointRow.shape_id == "pid:shape:1")
-        .order_by(ShapePointRow.sequence)
-    ).all()
-    assert [point.sequence for point in points] == [0, 1]
-    assert points[1].distance_traveled == 1000.0
-
-
-def test_trip_identity_survives_build_revisions_and_untimed_calls(db_session: Session) -> None:
-    lifecycle = BuildService(db_session)
-    first_build = build(db_session, "trip-lineage-1")
-    first_schedule = ScheduleService(db_session, first_build)
-    operator_id = first_schedule.create_operator("Stable operator")
-    route_id = first_schedule.create_road_route(
-        CisLineId("001588"),
-        TransitMode.BUS,
-        operator_id,
-        date(2026, 7, 1),
-        None,
-        "1588",
-    )
-    calendar_id = first_schedule.create_calendar(
-        ServiceCalendar(date(2026, 7, 1), date(2026, 7, 31), frozenset(range(7)))
-    )
-    trip_id = first_schedule.create_road_trip(
-        route_id=route_id,
-        direction=None,
-        calendar_id=calendar_id,
-        cis_line_id=CisLineId("001588"),
-        cis_trip_id=CisTripId(7),
-        valid_from=date(2026, 7, 1),
-        valid_to=None,
-    )
-    location_id, fallback_id = LocationService(db_session, first_build).create_stop_place(
-        "Surface stop", domain=LocationDomain.SURFACE
-    )
-    LocationService(db_session, first_build).add_passenger_call(
-        trip_id,
-        PassengerCall(10, location_id, fallback_id, ServiceTime(25 * 3600), None, True, True),
-    )
-    lifecycle.mark_ready(first_build, output_artifact_key="builds/lineage-1/gtfs.zip")
-    lifecycle.activate(first_build)
-
-    second_build = build(db_session, "trip-lineage-2")
-    second_schedule = ScheduleService(db_session, second_build)
-    second_schedule.revise_operator(operator_id, name="Stable operator", timezone="Europe/Prague")
-    second_schedule.revise_route(
-        route_id,
-        operator_id=operator_id,
-        mode=TransitMode.BUS,
-        gtfs_route_type=3,
-        short_name="1588",
-    )
-    second_calendar = second_schedule.create_calendar(
-        ServiceCalendar(date(2026, 7, 1), date(2026, 8, 31), frozenset(range(7)))
-    )
-    second_schedule.add_trip_revision(
-        trip_id,
-        route_id=route_id,
-        calendar_id=second_calendar,
-        direction=None,
-        headsign="Changed timetable",
-    )
-    LocationService(db_session, second_build).revise_stop_place(location_id, name="Surface stop")
-    db_session.add(
-        TripCallRevisionRow(
-            build_id=second_build,
-            trip_id=str(trip_id),
-            sequence=10,
-            location_id=str(location_id),
-            passenger_service=True,
-            scheduled_boarding_point_id=str(fallback_id),
-            scheduled_arrival=None,
-            scheduled_departure=None,
-            scheduled_passage=None,
-            pickup_type=0,
-            dropoff_type=0,
-            timepoint=False,
-            extensions={},
-        )
-    )
-    db_session.flush()
-    assert db_session.scalar(select(func.count()).select_from(ScheduledTripRow)) == 1
     assert (
         db_session.scalar(
-            select(func.count())
-            .select_from(TripRevisionRow)
-            .where(TripRevisionRow.trip_id == str(trip_id))
+            select(func.count()).select_from(TripCallRow).where(TripCallRow.build_id == build_id)
         )
         == 2
     )
-    assert (
-        TripResolver(db_session, second_build)
-        .resolve_road(CisLineId("001588"), CisTripId(7), date(2026, 8, 1))
-        .canonical_trip_id
-        == trip_id
+    BuildService(db_session).activate(build_id)
+    assert BuildService(db_session).active_build_id() == build_id
+    resolver = StaticMappingResolver(db_session)
+    assert resolver.source_trip(
+        "pid-gtfs",
+        "gtfs_trip_id",
+        "pid-trip-1",
+        date(2026, 6, 1),
+        scheduled_start=3660,
+        source_route_id="L1",
+        source_start_location_id="U1Z1P",
     )
-
-
-def test_unversioned_extension_namespace_is_rejected(db_session: Session) -> None:
-    build_id = build(db_session, "bad-extension")
-    operator_id = CanonicalRegistry(db_session).allocate(EntityKind.OPERATOR)
-    db_session.add(OperatorRow(id=str(operator_id)))
-    db_session.flush()
-    with (
-        pytest.raises(DBAPIError, match="schema-versioned namespaces"),
-        db_session.begin_nested(),
-    ):
-        db_session.add(
-            OperatorRevisionRow(
-                build_id=build_id,
-                operator_id=str(operator_id),
-                name="Invalid extension",
-                timezone="Europe/Prague",
-                extensions={"pid": {}},
-            )
+    assert resolver.source_entity("pid-gtfs", "gtfs_stop_id", "boarding_point", "U1Z1P")
+    assert resolver.source_call(
+        "pid-gtfs",
+        "gtfs_trip_id",
+        "pid-trip-1",
+        "gtfs_stop_sequence",
+        "1",
+        date(2026, 6, 1),
+        scheduled_start=3660,
+    )
+    assert (
+        resolver.source_trip(
+            "pid-gtfs",
+            "vendor_trip_id",
+            "pid-trip-1",
+            date(2026, 6, 1),
+            scheduled_start=3660,
         )
+        is None
+    )
+    assert (
+        resolver.source_trip(
+            "pid-gtfs",
+            "gtfs_trip_id",
+            "pid-trip-1",
+            date(2026, 6, 1),
+            scheduled_start=3660,
+            source_route_id="wrong-route",
+        )
+        is None
+    )
+    assert resolver.apply_alias("duk", "cis_line", "582588", date(2026, 6, 1)) == "001588"
+    assert resolver.road_trip("001588", 1, date(2026, 6, 1))
+    assert resolver.rail_trip(123, date(2026, 6, 1))
+    row = db_session.get(StaticBuildRow, build_id)
+    assert row is not None and row.state == "active" and row.partitions_attached
+
+
+def test_job_queue_records_attempts_progress_and_retry(db_session: Session) -> None:
+    db_session.add(
+        BuildSpecRow(
+            sha256="9" * 64,
+            schema_version=1,
+            document={"schema_version": 1},
+        )
+    )
+    db_session.flush()
+    service = BuildJobService(db_session)
+    job_id = service.enqueue("9" * 64, priority=10)
+    assert service.claim("worker-1") == (job_id, 1)
+    assert not service.heartbeat(job_id, 1, {"phase": "compile", "percent": 50})
+    service.finish(job_id, 1, succeeded=False, exit_code=1, error={"message": "failed"})
+    service.retry(job_id)
+    assert service.claim("worker-2") == (job_id, 2)
+    service.finish(job_id, 2, succeeded=True, exit_code=0)
+    event_count = db_session.scalar(
+        select(func.count()).select_from(BuildJobEventRow).where(BuildJobEventRow.job_id == job_id)
+    )
+    assert event_count == 7
+
+
+def test_invalid_setwise_payload_leaves_no_partition_and_marks_build_failed(
+    db_session: Session, tmp_path: Path
+) -> None:
+    rows = fixture_rows()
+    rows["trip_call"][0]["boarding_point_id"] = None
+    build_id = _create_build(db_session, tmp_path, rows)
+    package = validate_serving_package(tmp_path)
+    with pytest.raises(ServingPackageError, match="trip call shape"):
+        ServingPackageLoader(db_session).load(build_id, package)
+    row = db_session.get(StaticBuildRow, build_id)
+    assert row is not None and row.state == "failed" and not row.partitions_attached
+    assert db_session.scalar(select(func.to_regclass(f"static.trip_call_b{build_id}"))) is None
+
+
+def test_activation_rollback_and_retention_are_one_build_pointer(db_session: Session) -> None:
+    spec_digest = "7" * 64
+    db_session.add(
+        BuildSpecRow(
+            sha256=spec_digest,
+            schema_version=1,
+            document={"schema_version": 1, "retention_fixture": True},
+        )
+    )
+    builds: list[StaticBuildRow] = []
+    for number in range(4):
+        marker = format(number + 10, "064x")
+        row = StaticBuildRow(
+            feed_version=f"retention-{number}",
+            state="ready",
+            identity_contract="provisional-v0",
+            build_spec_sha256=spec_digest,
+            build_key_sha256=marker,
+            manifest_sha256=marker,
+            source_set_sha256=marker,
+            overlay_policy_sha256=marker,
+            compiler_sha256=marker,
+            compiler_identity={"fixture": number},
+            compiler_options_sha256=marker,
+            registry_snapshot_sha256=None,
+            gtfs_sha256=marker,
+            serving_sha256=marker,
+            netex_mapping_version="1",
+            netex_target_schema="v2.0.0",
+            netex_extension_version="1",
+            netex_mapping_sha256=marker,
+            partitions_attached=True,
+        )
+        db_session.add(row)
         db_session.flush()
+        builds.append(row)
+        BuildService(db_session).activate(row.id)
+    lifecycle = BuildService(db_session)
+    lifecycle.activate(builds[2].id)
+    assert lifecycle.active_build_id() == builds[2].id
+    lifecycle.activate(builds[3].id)
+    pruned = lifecycle.prune_after_activation(retain=3)
+    assert pruned == (builds[0].id,)
+    assert builds[0].state == "pruned"
+    assert builds[3].state == "active"
+
+
+def test_switching_one_publication_preserves_a_shared_build(db_session: Session) -> None:
+    spec_digest = "6" * 64
+    db_session.add(
+        BuildSpecRow(
+            sha256=spec_digest,
+            schema_version=1,
+            document={"schema_version": 1, "shared_publication_fixture": True},
+        )
+    )
+    db_session.flush()
+    builds: list[StaticBuildRow] = []
+    for number in range(2):
+        marker = format(number + 20, "064x")
+        row = StaticBuildRow(
+            feed_version=f"shared-publication-{number}",
+            state="ready",
+            identity_contract="provisional-v0",
+            build_spec_sha256=spec_digest,
+            build_key_sha256=marker,
+            manifest_sha256=marker,
+            source_set_sha256=marker,
+            overlay_policy_sha256=marker,
+            compiler_sha256=marker,
+            compiler_identity={"fixture": number},
+            compiler_options_sha256=marker,
+            registry_snapshot_sha256=None,
+            gtfs_sha256=marker,
+            serving_sha256=marker,
+            netex_mapping_version="1",
+            netex_target_schema="v2.0.0",
+            netex_extension_version="1",
+            netex_mapping_sha256=marker,
+            partitions_attached=True,
+        )
+        db_session.add(row)
+        db_session.flush()
+        builds.append(row)
+
+    lifecycle = BuildService(db_session)
+    lifecycle.activate(builds[0].id, publication="public")
+    lifecycle.activate(builds[0].id, publication="preview")
+    lifecycle.activate(builds[1].id, publication="public")
+
+    assert lifecycle.active_build_id("preview") == builds[0].id
+    assert builds[0].state == "active"
+    assert builds[0].id not in lifecycle.prune_after_activation(retain=1)
+
+    lifecycle.activate(builds[1].id, publication="preview")
+    assert builds[0].state == "retired"
