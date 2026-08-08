@@ -13,3 +13,4 @@ data/
 !src/obehy/data/czptt_osm_aliases.json
 dist/
 build/
+work/

@@ -1,0 +1,125 @@
+{
+  "extension_namespace": "https://obehy.cz/ns/cz-jdf/1",
+  "extension_version": "1",
+  "mapping_version": "1",
+  "relations": {
+    "connection_claim": {
+      "source_fields": [
+        "connection_id", "direction", "origin_trip_id", "origin_sequence",
+        "target_source_route_id", "target_source_trip_id", "target_source_stop_id",
+        "target_source_post_id", "target_source_end_stop_id", "target_source_end_post_id",
+        "wait_minutes", "note", "target_public_line", "target_destination_text",
+        "target_derivation", "resolution_status", "target_route_id", "target_trip_id",
+        "target_location_id", "source_id", "source_snapshot_sha256", "source_object_id"
+      ],
+      "standard_target": "ServiceJourneyInterchange or InterchangeRule when resolution permits",
+      "extension_target": "cz-jdf:ConnectionClaim",
+      "rule": "Never strengthen pattern or unresolved claims into a journey-specific interchange"
+    },
+    "location": {
+      "source_fields": [
+        "municipality_name", "district_name", "district_code", "nearby_place",
+        "country_code", "coordinate_precision"
+      ],
+      "standard_target": "StopPlace/Name, Locale and Location",
+      "extension_target": "cz-jdf:AdministrativeAndCoordinatePrecision"
+    },
+    "location_feature": {
+      "source_fields": [
+        "feature_id", "location_id", "kind", "source_code", "source_id",
+        "source_snapshot_sha256", "source_object_id"
+      ],
+      "kind_targets": {
+        "accessibility_terminal": "StopPlace/AccessibilityAssessment plus cz-jdf exact semantics",
+        "accessible_toilet": "SiteFacilitySet/SanitaryFacility",
+        "airport_nearby": "cz-jdf:NearbyInterchangeMode",
+        "border_control_only": "cz-jdf:BorderControlOnly",
+        "line_interchange": "cz-jdf:NearbyInterchangeMode",
+        "metro_interchange": "cz-jdf:NearbyInterchangeMode",
+        "park_and_ride": "Parking/parkingType",
+        "rail_interchange": "cz-jdf:NearbyInterchangeMode",
+        "refreshments": "SiteFacilitySet/RefreshmentFacility",
+        "request_stop": "cz-jdf:RequestStop",
+        "ship_terminal": "cz-jdf:NearbyInterchangeMode",
+        "toilet": "SiteFacilitySet/SanitaryFacility",
+        "urban_transport_interchange": "cz-jdf:NearbyInterchangeMode",
+        "visually_impaired_accessible": "AccessibilityAssessment",
+        "wheelchair_accessible": "AccessibilityAssessment/MobilityImpairedAccess"
+      },
+      "extension_target": "cz-jdf:SourceFixedCode"
+    },
+    "operational_call": {
+      "source_fields": [
+        "source_id", "source_journey_id", "sequence", "source_location_id",
+        "passenger_service", "scheduled_arrival", "scheduled_departure",
+        "scheduled_passage", "subsidiary_code", "subsidiary_name", "active_line_code"
+      ],
+      "standard_target": "PointInJourneyPattern plus TimetabledPassingTime",
+      "extension_target": "cz-jdf:CzpttOperationalCall"
+    },
+    "operational_journey": {
+      "source_fields": [
+        "source_id", "source_journey_id", "source_snapshot_sha256", "domain", "mode"
+      ],
+      "standard_target": "ServiceJourney and JourneyPattern",
+      "extension_target": "cz-jdf:CzpttJourneyIdentity"
+    },
+    "operational_location": {
+      "source_fields": [
+        "source_id", "source_location_id", "source_snapshot_sha256", "country_code",
+        "primary_code", "name", "longitude", "latitude", "coordinate_source",
+        "coordinate_source_object_id", "coordinate_match_method"
+      ],
+      "standard_target": "ScheduledStopPoint or TimingPoint",
+      "extension_target": "cz-jdf:CzpttLocationEvidence"
+    },
+    "service_feature_assignment": {
+      "source_fields": [
+        "feature_id", "scope", "kind", "route_id", "trip_id", "call_sequence",
+        "source_code", "note_id", "source_id", "source_snapshot_sha256", "source_object_id"
+      ],
+      "kind_targets": {
+        "bicycle_transport": "ServiceFacilitySet/CycleCarriageFacility",
+        "boarding_only": "StopUse/ForBoarding",
+        "conditional": "cz-jdf:ConditionalOperation",
+        "diversion": "cz-jdf:Diversion",
+        "exit_only": "StopUse/ForAlighting",
+        "integrated_transport": "cz-jdf:IntegratedTransportMembership",
+        "luggage_transport": "ServiceFacilitySet/LuggageCarriageFacility",
+        "not_stopping": "PointInJourneyPattern/ForAlighting=false and ForBoarding=false",
+        "on_request": "BookingArrangements plus cz-jdf exact scope and instructions",
+        "partly_wheelchair_accessible_vehicle": "AccessibilityAssessment plus cz-jdf assistance requirement",
+        "refreshments_on_vehicle": "ServiceFacilitySet/RefreshmentFacility",
+        "request_stop": "StopUse/RequestStop",
+        "reservation_available": "BookingArrangements",
+        "reservation_required": "BookingArrangements plus cz-jdf requirement",
+        "self_service_ticketing": "cz-jdf:SelfServiceTicketing",
+        "wheelchair_accessible_vehicle": "AccessibilityAssessment/MobilityImpairedAccess"
+      },
+      "extension_target": "cz-jdf:SourceFixedCode"
+    },
+    "service_note": {
+      "source_fields": [
+        "note_id", "kind", "label", "text", "valid_from", "valid_to",
+        "service_note_type", "source_id", "source_snapshot_sha256", "source_object_id"
+      ],
+      "standard_target": "Notice",
+      "extension_target": "cz-jdf:NoticeSourceSemantics"
+    },
+    "service_note_assignment": {
+      "source_fields": ["assignment_id", "note_id", "scope", "route_id", "trip_id"],
+      "standard_target": "NoticeAssignment",
+      "extension_target": "cz-jdf:NoticeAssignmentScope"
+    },
+    "travel_restriction_assignment": {
+      "source_fields": [
+        "assignment_id", "scope", "route_id", "trip_id", "source_route_stop_id",
+        "call_sequence", "group_code", "source_id", "source_snapshot_sha256",
+        "source_object_id"
+      ],
+      "standard_target": "RoutingConstraintZone where representable",
+      "extension_target": "cz-jdf:TravelRestrictionAssignment"
+    }
+  },
+  "target_schema": "v2.0.0"
+}

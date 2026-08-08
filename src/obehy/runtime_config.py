@@ -23,6 +23,7 @@ class JrUtilRuntime:
 class RuntimeConfig:
     source: Path
     workdir: Path
+    artifact_root: Path
     osm_file: Path
     jrunify_ext_geodata_dir: Path
     jrutil: JrUtilRuntime
@@ -89,9 +90,16 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
             )
         command = tuple(cast(list[str], command_parts))
 
+    workdir = _absolute_path(paths, "workdir", source)
+    artifact_root = (
+        _absolute_path(paths, "artifact_root", source)
+        if paths.get("artifact_root") is not None
+        else workdir
+    )
     return RuntimeConfig(
         source=source,
-        workdir=_absolute_path(paths, "workdir", source),
+        workdir=workdir,
+        artifact_root=artifact_root,
         osm_file=_absolute_path(paths, "osm_file", source),
         jrunify_ext_geodata_dir=_absolute_path(paths, "jrunify_ext_geodata_dir", source),
         jrutil=JrUtilRuntime(directory=directory, command=command),

@@ -2,6 +2,7 @@ schema_version = 1
 
 [paths]
 workdir = "D:/obehy-work"
+artifact_root = "D:/obehy-data/artifacts"
 osm_file = "D:/obehy-data/osm/obehy-region.osm.pbf"
 jrunify_ext_geodata_dir = "D:/src/jrunify-ext-geodata"
 

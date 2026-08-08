@@ -1,10 +1,15 @@
 # Oběhy
 
-A Swiss-army knife for Czech public-transport data.
+A Swiss-army knife for Czech public-transport operations and realtime data.
 
-Milestone 0 defines the project-owned canonical identity, stop/location and scheduled-trip
-contracts. It deliberately uses synthetic fixtures and does not yet publish GTFS or consume live
-sources.
+Oběhy orchestrates immutable static snapshots, stores the finalized serving mirror and owns the
+operational/realtime platform. JrUtil compiles the unified nationwide GTFS and static overlays. A
+future standalone public registry will own permanent IDs. Until the first static-overlay and PID
+realtime vertical slices are stable, JrUtil emits explicitly provisional `v0:` IDs. PostgreSQL is
+never the static compiler.
+
+See [STATIC_PIPELINE.md](STATIC_PIPELINE.md) and [IDENTITY_REGISTRY.md](IDENTITY_REGISTRY.md) for
+the executable boundaries. The former PostgreSQL national compiler/importer has been removed.
 
 See [PROGRESS.md](PROGRESS.md) for the current engineering handoff and next implementation step.
 
@@ -17,7 +22,7 @@ from the default WSL distribution when no native executable is on `PATH`.
 ```powershell
 uv sync
 docker compose up -d --wait db
-$env:OBEHY_DATABASE_URL = "postgresql+psycopg://obehy:obehy-m0-local-only@localhost:45873/obehy_test"
+$env:OBEHY_DATABASE_URL = "postgresql+psycopg://obehy:password@host:45873/obehy_test"
 $env:OBEHY_TEST_DATABASE_URL = $env:OBEHY_DATABASE_URL
 uv run alembic upgrade head
 uv run pytest
@@ -26,8 +31,14 @@ uv run ruff format --check .
 uv run pyright
 ```
 
-The database is exposed on port `45873` to avoid colliding with a local PostgreSQL installation.
-The default credentials are development-only.
+The Compose database is exposed on port `45873` to avoid colliding with a local PostgreSQL
+installation. A repository-local `.env` may instead point at another development server and hold `OBEHY_DATABASE_URL` and
+`OBEHY_TEST_DATABASE_URL`; it is ignored by Git. The `obehy_test` database is disposable and the
+database-v1 baseline requires recreating any earlier Milestone 0 database.
+
+Alembic migrations are generated from ORM metadata and then reviewed. PostgreSQL extensions,
+functions, triggers and seed rows are the only hand-written migration portions. MobilityData GTFS
+Validator results are retained as advisory diagnostics and do not independently block activation.
 
 Fixture boundaries and the temporary mock CIS stop-identity assumption are documented in
 `tests/fixtures/README.md`.
@@ -116,3 +127,31 @@ such points as normal stops. Synthesized fallback route labels use municipalitie
 station/facility names; `SR70_Nazev20.csv` remains a checksummed provenance input but does not
 affect conversion output. See [NATIONAL_CZPTT.md](NATIONAL_CZPTT.md) for source snapshots, GVD year
 selection, bundle schemas, line changes, platform handling, IDS zones, and diagnostics.
+
+## Finalized static serving database
+
+JrUtil will write one manifested build containing GTFS, extensions, diagnostics, validations, and
+33 sorted typed Parquet relations under `serving/`. `obehy.serving.validate_serving_package` verifies
+the complete manifest, hashes, Arrow schemas, metadata, row counts, ordering, and aggregate digest
+before database work begins.
+
+`JDF_SEMANTICS.md` records the current JrUtil preservation gaps and the typed sidecar contract for
+JDF 1.11 fixed codes, notes, connection claims, restrictions, and stop facilities. Until JrUtil
+emits that contract and the NeTEx gate passes, GTFS plus the current conversion sidecars must not be
+described as a lossless semantic export.
+
+The loader streams the relations into isolated per-build tables, validates passenger/operational
+calls, location hierarchy, coverage endpoints and route segments set-wise, then attaches every
+`static` partition atomically. `control.publication` selects the matching static data, source
+mappings, GTFS artifact, and realtime resolver version with one build ID. The active build and two
+predecessors are retained for rollback.
+
+Source-native mappings include explicit identifier namespaces and optional route, direction,
+endpoint, timing, block/run/duty, and call-pattern context. This allows realtime APIs to reference
+their regional GTFS identifiers even when CISLineID/CISTripID is absent, while preserving the API
+that observed the claim separately from the static feed that owns the identifier.
+
+Database v1 contains only the `control` and `static` schemas. Realtime claims and history receive
+their own migrations when the PID realtime vertical slice is implemented. Database bytes are
+disposable development state; immutable source and build artifacts remain on the configured
+filesystem/object-style store.

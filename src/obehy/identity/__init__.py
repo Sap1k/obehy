@@ -1,1 +1,0 @@
-"""Canonical identity application services."""
