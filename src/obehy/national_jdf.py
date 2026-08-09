@@ -46,6 +46,7 @@ from obehy.osm_snapshot import (
     validate_jdf_transit_stops,
     validate_snapshot,
 )
+from obehy.pipeline_support import file_digest, utc_now, write_json
 from obehy.runtime_config import ConfigurationError, load_runtime_config
 
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
@@ -365,6 +366,9 @@ class CommandResult:
     execution_plan: dict[str, object] | None
     failed_batch: str | None
     maximum_in_flight: int
+    resource_usage: tuple[dict[str, object], ...]
+    scheduler_samples: tuple[dict[str, object], ...] = ()
+    maximum_workers_observed: int = 0
 
 
 class CommandFailure(PipelineError):
@@ -403,18 +407,6 @@ CommandFn = Callable[
     [Sequence[str], Path, Path, Reporter | None, CommandProgress | None],
     CommandResult | None,
 ]
-
-
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-def file_digest(path: Path, algorithm: str = "sha256") -> str:
-    digest = hashlib.new(algorithm)
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def download_file(
@@ -463,15 +455,6 @@ def download_file(
         etag=headers.get("ETag"),
         last_modified=headers.get("Last-Modified"),
         md5=md5.hexdigest(),
-    )
-
-
-def write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-        encoding="utf-8",
-        newline="\n",
     )
 
 
@@ -776,14 +759,37 @@ def run_command(
     in_flight: set[str] = set()
     maximum_in_flight = 0
     execution_plan: dict[str, object] | None = None
+    resource_usage_events: list[dict[str, object]] = []
+    scheduler_samples: list[dict[str, object]] = []
+    maximum_workers_observed = 0
+    latest_scheduler_sample: dict[str, object] | None = None
     structured_progress_events = False
     structured_batch_events = False
     current_phase: str | None = None
 
     def progress_detail() -> str:
         details: list[str] = []
-        if execution_plan is not None:
-            details.append(f"{execution_plan.get('resolved_workers', '?')} workers")
+        if latest_scheduler_sample is not None:
+            active = latest_scheduler_sample.get("active_workers", "?")
+            target = latest_scheduler_sample.get("target_workers", "?")
+            cpu = float(cast(float, latest_scheduler_sample.get("normalized_cpu_percent", 0.0)))
+            budget = (
+                int(cast(int, execution_plan.get("memory_budget_bytes", 0)))
+                if execution_plan
+                else 0
+            )
+            private = int(cast(int, latest_scheduler_sample.get("private_bytes", 0)))
+            memory = (private / budget * 100.0) if budget else 0.0
+            backlog = latest_scheduler_sample.get("completed_backlog", 0)
+            details.append(
+                f"{active}/{target} workers • CPU {cpu:.0f}% • "
+                f"memory {memory:.0f}% • backlog {backlog}"
+            )
+        elif execution_plan is not None:
+            fallback = execution_plan.get("resolved_workers", "?")
+            initial = execution_plan.get("initial_workers", fallback)
+            maximum = execution_plan.get("maximum_workers", fallback)
+            details.append(f"{initial}/{maximum} workers")
         if in_flight:
             details.append(f"{len(in_flight)} active")
         if current_phase:
@@ -840,6 +846,17 @@ def run_command(
                         state = event.get("state")
                         if state == "completed":
                             current_phase = f"{current_phase} done"
+                        if reporter is not None and task is not None:
+                            reporter.update(task, completed=completed, detail=progress_detail())
+                    elif event_name == "resource_usage":
+                        resource_usage_events.append(event)
+                    elif event_name == "scheduler_sample":
+                        scheduler_samples.append(event)
+                        latest_scheduler_sample = event
+                        maximum_workers_observed = max(
+                            maximum_workers_observed,
+                            int(cast(int, event.get("maximum_active_workers", 0))),
+                        )
                         if reporter is not None and task is not None:
                             reporter.update(task, completed=completed, detail=progress_detail())
                     elif event_name == "batch_started":
@@ -938,6 +955,9 @@ def run_command(
         execution_plan=execution_plan,
         failed_batch=failed_batch,
         maximum_in_flight=maximum_in_flight,
+        resource_usage=tuple(resource_usage_events),
+        scheduler_samples=tuple(scheduler_samples),
+        maximum_workers_observed=maximum_workers_observed,
     )
 
 
@@ -1290,6 +1310,9 @@ def build(
             "total": result.total,
             "maximum_in_flight": result.maximum_in_flight,
             "execution_plan": result.execution_plan,
+            "resource_usage": list(result.resource_usage),
+            "scheduler_samples": list(result.scheduler_samples),
+            "maximum_workers_observed": result.maximum_workers_observed,
         }
 
     owned_reporter = reporter is None

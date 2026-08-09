@@ -303,6 +303,7 @@ def test_flatten_rejects_monthly_object_without_gzip_magic(tmp_path: Path) -> No
     )
     with pytest.raises(PipelineError, match="gzip magic"):
         national_czptt.flatten_messages(sources, [record], tmp_path / "messages.zip")
+    assert list(tmp_path.glob(".czptt-messages-*")) == []
 
 
 def test_flatten_rejects_conflicting_full_pa_identity(tmp_path: Path) -> None:
@@ -325,6 +326,7 @@ def test_flatten_rejects_conflicting_full_pa_identity(tmp_path: Path) -> None:
     )
     with pytest.raises(PipelineError, match="Conflicting"):
         national_czptt.flatten_messages(sources, [record], tmp_path / "messages.zip")
+    assert list(tmp_path.glob(".czptt-messages-*")) == []
 
 
 def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(

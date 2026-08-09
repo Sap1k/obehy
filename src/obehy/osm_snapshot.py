@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 from urllib.request import Request, urlopen
 
+from obehy.pipeline_support import write_json
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
 GEOFABRIK_BASE = "https://download.geofabrik.de/europe"
@@ -130,16 +131,6 @@ def file_digest(
         elapsed = max(time.monotonic() - started, 0.001)
         _progress(f"{progress_label}: complete ({_format_bytes(completed)} in {elapsed:.1f}s)")
     return digest.hexdigest()
-
-
-def write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".part")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, path)
 
 
 def _fetch_bytes(url: str) -> bytes:

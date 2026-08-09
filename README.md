@@ -90,8 +90,10 @@ written to stderr.
 
 Use `--jobs=auto|N` to configure both parallel JrUtil stages, with `--fix-jobs` and
 `--merge-jobs` as optional stage overrides. `--memory-budget=auto|SIZE` controls the
-memory-derived worker cap; the requested and resolved worker plans are shown in progress
-and recorded in `run-manifest.json`. Merged JDF packaging defaults to deterministic balanced
+adaptive admission budget. Auto aggressively oversubscribes logical CPUs but derives its memory
+ceiling from current process use and actually available RAM, with explicit operating-system
+headroom; numeric values are hard ceilings. Live worker/CPU/memory/backlog samples and observed
+peak concurrency are shown in progress and recorded in `run-manifest.json`. Merged JDF packaging defaults to deterministic balanced
 Deflate (`--zip-compression=balanced`); `fast` and `small` select levels 1 and 9.
 
 The builder writes fixed work batches as uncompressed ZIPs to reduce temporary file count.

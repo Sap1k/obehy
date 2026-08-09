@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import uuid
 import zipfile
@@ -44,6 +45,7 @@ from obehy.osm_snapshot import (
     validate_railway_locations,
     validate_snapshot,
 )
+from obehy.pipeline_support import atomic_output_path
 from obehy.runtime_config import ConfigurationError, load_runtime_config
 
 DEFAULT_SOURCE_BASE_URL = "https://portal.cisjr.cz/pub/draha/celostatni/szdc"
@@ -432,7 +434,9 @@ def _snapshot_kadr(destination: Path) -> Path:
 
 def _validate_object(path: Path, kind: str) -> None:
     if kind == "annual_zip":
-        if path.read_bytes()[:4] != b"PK\x03\x04":
+        with path.open("rb") as stream:
+            magic = stream.read(4)
+        if magic != b"PK\x03\x04":
             raise PipelineError(f"Annual CZPTT object lacks ZIP magic: {path}")
         try:
             with zipfile.ZipFile(path) as archive:
@@ -441,8 +445,11 @@ def _validate_object(path: Path, kind: str) -> None:
                     raise PipelineError(f"Corrupt annual CZPTT ZIP member: {bad}")
         except zipfile.BadZipFile as error:
             raise PipelineError(f"Malformed annual CZPTT ZIP: {path}") from error
-    elif path.read_bytes()[:2] != b"\x1f\x8b":
-        raise PipelineError(f"Monthly CZPTT object lacks gzip magic: {path}")
+    else:
+        with path.open("rb") as stream:
+            magic = stream.read(2)
+        if magic != b"\x1f\x8b":
+            raise PipelineError(f"Monthly CZPTT object lacks gzip magic: {path}")
 
 
 def _validate_source_manifest(sources: Path) -> list[SourceRecord]:
@@ -512,6 +519,15 @@ class _Message:
     payload: bytes
 
 
+@dataclass(frozen=True)
+class _SpooledMessage:
+    source_path: str
+    root_type: str
+    identity: str
+    payload_path: Path
+    sha256: str
+
+
 def _message(payload: bytes, source_path: str) -> _Message:
     try:
         root = ElementTree.fromstring(payload)
@@ -542,60 +558,90 @@ def _message(payload: bytes, source_path: str) -> _Message:
 
 
 def flatten_messages(sources: Path, records: Sequence[SourceRecord], destination: Path) -> int:
-    messages: list[_Message] = []
-    for record in sorted(records, key=lambda value: value.relative_path):
-        path = sources / record.relative_path
-        _validate_object(path, record.kind)
-        if record.kind == "annual_zip":
-            with zipfile.ZipFile(path) as archive:
-                for info in sorted(archive.infolist(), key=lambda value: value.filename):
-                    if not info.is_dir() and info.filename.casefold().endswith(".xml"):
-                        source_path = f"{record.relative_path}//{info.filename}"
-                        messages.append(_message(archive.read(info), source_path))
-        else:
-            try:
-                payload = gzip.decompress(path.read_bytes())
-            except (OSError, EOFError) as error:
-                raise PipelineError(f"Malformed CZPTT gzip: {record.relative_path}") from error
-            messages.append(_message(payload, record.relative_path))
-
-    annual = [value for value in messages if value.source_path.startswith("annual/")]
-    changes = [value for value in messages if not value.source_path.startswith("annual/")]
-    changes.sort(
-        key=lambda value: (
-            PurePosixPath(value.source_path).parts[:2],
-            0 if value.root_type == "CZCanceledPTTMessage" else 1,
-            value.source_path,
-        )
-    )
-    ordered = annual + changes
-    seen_payloads: set[str] = set()
-    timetable_identities: dict[str, str] = {}
-    deduplicated: list[_Message] = []
-    for value in ordered:
-        digest = hashlib.sha256(value.payload).hexdigest()
-        if digest in seen_payloads:
-            continue
-        seen_payloads.add(digest)
-        if value.root_type == "CZPTTCISMessage":
-            previous = timetable_identities.setdefault(value.identity, digest)
-            if previous != digest:
-                raise PipelineError(
-                    f"Conflicting CZPTT timetable messages share identity {value.identity}"
-                )
-        deduplicated.append(value)
-
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(
-        destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
-    ) as archive:
-        for index, value in enumerate(deduplicated):
-            info = zipfile.ZipInfo(f"{index:09d}.xml", date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o100644 << 16
-            info.create_system = 3
-            archive.writestr(info, value.payload)
-    return len(deduplicated)
+    spool = Path(tempfile.mkdtemp(prefix=".czptt-messages-", dir=destination.parent))
+    messages: list[_SpooledMessage] = []
+
+    def spool_message(source: Any, source_path: str) -> None:
+        payload_path = spool / f"{len(messages):09d}.xml"
+        digest = hashlib.sha256()
+        with payload_path.open("wb") as output:
+            while chunk := source.read(1024 * 1024):
+                output.write(chunk)
+                digest.update(chunk)
+        parsed = _message(payload_path.read_bytes(), source_path)
+        messages.append(
+            _SpooledMessage(
+                source_path=parsed.source_path,
+                root_type=parsed.root_type,
+                identity=parsed.identity,
+                payload_path=payload_path,
+                sha256=digest.hexdigest(),
+            )
+        )
+
+    try:
+        for record in sorted(records, key=lambda value: value.relative_path):
+            path = sources / record.relative_path
+            _validate_object(path, record.kind)
+            if record.kind == "annual_zip":
+                with zipfile.ZipFile(path) as archive:
+                    for info in sorted(archive.infolist(), key=lambda value: value.filename):
+                        if not info.is_dir() and info.filename.casefold().endswith(".xml"):
+                            with archive.open(info) as source:
+                                spool_message(source, f"{record.relative_path}//{info.filename}")
+            else:
+                try:
+                    with gzip.open(path, "rb") as source:
+                        spool_message(source, record.relative_path)
+                except (OSError, EOFError) as error:
+                    raise PipelineError(f"Malformed CZPTT gzip: {record.relative_path}") from error
+
+        annual = [value for value in messages if value.source_path.startswith("annual/")]
+        changes = [value for value in messages if not value.source_path.startswith("annual/")]
+        changes.sort(
+            key=lambda value: (
+                PurePosixPath(value.source_path).parts[:2],
+                0 if value.root_type == "CZCanceledPTTMessage" else 1,
+                value.source_path,
+            )
+        )
+        ordered = annual + changes
+        seen_payloads: set[str] = set()
+        timetable_identities: dict[str, str] = {}
+        deduplicated: list[_SpooledMessage] = []
+        for value in ordered:
+            if value.sha256 in seen_payloads:
+                continue
+            seen_payloads.add(value.sha256)
+            if value.root_type == "CZPTTCISMessage":
+                previous = timetable_identities.setdefault(value.identity, value.sha256)
+                if previous != value.sha256:
+                    raise PipelineError(
+                        f"Conflicting CZPTT timetable messages share identity {value.identity}"
+                    )
+            deduplicated.append(value)
+
+        with (
+            atomic_output_path(destination) as temporary_destination,
+            zipfile.ZipFile(
+                temporary_destination,
+                "w",
+                compression=zipfile.ZIP_DEFLATED,
+                compresslevel=9,
+            ) as archive,
+        ):
+            for index, value in enumerate(deduplicated):
+                info = zipfile.ZipInfo(f"{index:09d}.xml", date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                info.create_system = 3
+                # writestr preserves the existing deterministic ZIP encoding;
+                # only the largest individual XML payload is resident here.
+                archive.writestr(info, value.payload_path.read_bytes())
+        return len(deduplicated)
+    finally:
+        shutil.rmtree(spool, ignore_errors=True)
 
 
 def _multitool_dll(root: Path) -> Path:
@@ -898,6 +944,22 @@ def build(
     reporter = reporter or BuildReporter(config.progress)
     timetable_year = resolve_timetable_year(config.timetable_year)
     active_stage = "initialization"
+    command_results: dict[str, Any] = {}
+
+    def command_manifest(result: Any) -> dict[str, object] | None:
+        if result is None:
+            return None
+        return {
+            "elapsed_seconds": result.elapsed_seconds,
+            "completed": result.completed,
+            "total": result.total,
+            "maximum_in_flight": result.maximum_in_flight,
+            "execution_plan": result.execution_plan,
+            "resource_usage": list(result.resource_usage),
+            "scheduler_samples": list(getattr(result, "scheduler_samples", ())),
+            "maximum_workers_observed": getattr(result, "maximum_workers_observed", 0),
+        }
+
     try:
         reporter.note(
             f"CZPTT GVD {timetable_year}; operational points={config.operational_points}; "
@@ -1026,7 +1088,7 @@ def build(
 
         active_stage = "build-jrutil"
         if config.jrutil_root is not None:
-            command_runner(
+            command_results["build_jrutil"] = command_runner(
                 _build_command(config.jrutil_root),
                 config.jrutil_root,
                 logs / "jrutil-build.process.log",
@@ -1041,7 +1103,7 @@ def build(
         converter_config = replace(config, osm_file=filtered_osm)
         active_stage = "convert"
         bundle = publish / "bundle"
-        command_runner(
+        command_results["convert"] = command_runner(
             _converter_command(converter_config, derived / "messages.zip", catalog, bundle),
             _jrutil_cwd(config),
             logs / "jrutil-czptt.process.log",
@@ -1070,6 +1132,12 @@ def build(
             "messages_sha256": file_digest(derived / "messages.zip"),
             "sr70_sha256": file_digest(sr70_destination),
             "sr70_name20_sha256": file_digest(sr70_name20_destination),
+            "execution": {
+                "commands": {
+                    name: command_manifest(result)
+                    for name, result in sorted(command_results.items())
+                }
+            },
         }
         write_json(publish / "run-manifest.json", run_manifest)
         if config.keep_work:

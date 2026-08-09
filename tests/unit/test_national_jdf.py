@@ -212,7 +212,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         log: Path,
         _reporter: object = None,
         _progress: object = None,
-    ) -> None:
+    ) -> national_jdf.CommandResult | None:
         command = list(command)
         commands.append(command)
         log.parent.mkdir(parents=True, exist_ok=True)
@@ -232,6 +232,23 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             merged = Path(arguments[-2])
             merged.mkdir(parents=True)
             (merged / "VerzeJDF.txt").write_text('"1.11";\r\n', encoding="cp1250")
+            return national_jdf.CommandResult(
+                elapsed_seconds=1.5,
+                completed=2,
+                total=2,
+                execution_plan={"resolved_workers": 2},
+                failed_batch=None,
+                maximum_in_flight=2,
+                resource_usage=(
+                    {
+                        "event": "resource_usage",
+                        "stage": "merge-jdf",
+                        "phase": "write-merged-jdf",
+                        "peak_working_set_bytes": 123456,
+                        "spill_bytes": 654321,
+                    },
+                ),
+            )
         elif operation == "jdf-to-bundle":
             bundle = Path(arguments[-1])
             (bundle / "gtfs-intermediate").mkdir(parents=True)
@@ -351,6 +368,15 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "memory_budget": "auto",
         "merge_jobs": "auto",
     }
+    assert run_manifest["execution"]["commands"]["merge"]["resource_usage"] == [
+        {
+            "event": "resource_usage",
+            "stage": "merge-jdf",
+            "phase": "write-merged-jdf",
+            "peak_working_set_bytes": 123456,
+            "spill_bytes": 654321,
+        }
+    ]
     assert run_manifest["merged_jdf"]["compression"] == "balanced"
     assert run_manifest["merged_jdf"]["compression_level"] == 6
     assert run_manifest["jrutil"] == {
@@ -649,6 +675,25 @@ def test_run_command_counts_structured_completions_and_worker_plan(tmp_path: Pat
         },
         {
             "schema_version": 1,
+            "event": "resource_usage",
+            "stage": "fix-jdf",
+            "phase": "write-outputs",
+            "peak_working_set_bytes": 123456,
+            "spill_bytes": 654321,
+        },
+        {
+            "schema_version": 1,
+            "event": "scheduler_sample",
+            "stage": "fix-jdf",
+            "target_workers": 24,
+            "active_workers": 18,
+            "maximum_active_workers": 21,
+            "completed_backlog": 3,
+            "private_bytes": 5 * 1024**3,
+            "normalized_cpu_percent": 87.5,
+        },
+        {
+            "schema_version": 1,
             "event": "batch_completed",
             "stage": "fix-jdf",
             "batch": "a.zip",
@@ -675,9 +720,22 @@ def test_run_command_counts_structured_completions_and_worker_plan(tmp_path: Pat
     assert result.maximum_in_flight == 2
     assert result.execution_plan is not None
     assert result.execution_plan["resolved_workers"] == 10
+    assert result.resource_usage == (
+        {
+            "schema_version": 1,
+            "event": "resource_usage",
+            "stage": "fix-jdf",
+            "phase": "write-outputs",
+            "peak_working_set_bytes": 123456,
+            "spill_bytes": 654321,
+        },
+    )
+    assert result.scheduler_samples == (events[6],)
+    assert result.maximum_workers_observed == 21
     assert reporter.completed == 2
     assert any("10 workers" in note for note in reporter.notes)
     assert any("write outputs" in detail and "last: b.zip" in detail for detail in reporter.details)
+    assert any("18/24 workers" in detail and "CPU 88%" in detail for detail in reporter.details)
     assert not any("Reading OSM stops" in detail for detail in reporter.details)
 
 

@@ -3,6 +3,155 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-08-09 — Bounded-memory primitives extended across JDF and CZPTT
+
+### Delivered
+
+- Standalone JrUtil now shares one ordered scheduler core between count-only and byte-weighted
+  admission. Automatic budgets combine the current process footprint with genuinely available RAM,
+  reserve 25% of effective memory (bounded to 1–4 GiB) for the system, and keep the result currently
+  being consumed charged against the admission bound. `fix-jdf` uses uncompressed input-size
+  estimates, streams ordered result commits, selects its representative trip without grouping every
+  call, and writes ZIP batches through a cleanup-safe atomic file helper.
+- Direct `jdf-to-gtfs` streams `stop_times.txt` through the same preparation model as JDF bundles
+  while retaining global trip grouping for interleaved source rows; the existing materializing
+  library API remains available and fixture output is byte-identical.
+- CZPTT source flattening spools one XML payload at a time, retains only metadata between messages,
+  preserves deterministic ZIP bytes, reads only magic prefixes during validation, and removes its
+  spool after success or failure.
+- `czptt-to-bundle` uses an opt-in spill-backed merger for timetable XML and cancellation calendar
+  overlays, while library callers remain memory-backed. Parquet sidecars use count-known replayable
+  rows instead of a second row-dictionary array, and CLI bundle activation is atomic.
+- Oběhy hashing, deterministic JSON and atomic-path handling now live in a neutral support module;
+  existing `national_jdf` imports remain compatible. CZPTT run manifests retain command execution
+  plans and resource samples, and JrUtil emits resource snapshots for fix, bundle and conversion
+  boundaries as well as merge.
+
+### Validation evidence and limits
+
+- The complete standalone JrUtil test project passes **152 tests** with `dotnet test
+  jrutil.tests/jrutil.tests.fsproj --no-restore`; the multitool builds successfully. Added fixtures
+  compare memory/spill CZPTT Parquet bytes and materialized/streaming JDF GTFS bytes exactly.
+- All Oběhy unit tests pass (**71 tests**); Ruff format/lint and strict Pyright report no issues.
+  No integration, live-source, full-national, or `OBEHY_RUN_NATIONAL_JDF_SMOKE` execution was
+  performed.
+- The CZPTT merger and Parquet output copies are bounded, but `CzPttToGtfs.ConversionResult` still
+  materializes complete GTFS and operational-call arrays. A fully externally sorted relation store
+  and the new 25% CZPTT/fix performance gates therefore remain unvalidated follow-up work.
+
+### Next handoff
+
+- Profile only the capped frozen CZPTT and JDF corpora. If the remaining conversion arrays dominate,
+  split `CzPttToGtfs` preparation from its compatibility result and spill stop-time/operational-call
+  relations before considering lower concurrency. Keep `converters/jrutil` pinned until a separate
+  review and release decision.
+
+## 2026-08-09 — JDF merge peak memory reduced with spill-backed call storage
+
+### Delivered
+
+- Standalone JrUtil `merge-jdf` now streams the dominant `Zasspoje.txt` relation through an
+  output-ready temporary spool instead of retaining every mapped trip-stop record. Route deletion,
+  cutting and splitting preserve the previous dictionary order and serialized bytes; the spill is
+  removed when the merger is disposed after success or failure.
+- Merge parsing retains the requested worker ceiling but uses a byte-weighted ordered admission
+  window instead of the former fixed 256 MiB worker estimate. Repeated mapped attribute arrays are
+  interned and several per-batch cached sequences and immutable maps were replaced with single-pass
+  dictionaries.
+- JrUtil emits additive phase-boundary `resource_usage` progress events for working set, private
+  bytes, managed heap, fragmentation and spill size. The Oběhy runner retains those samples in each
+  command's `run-manifest.json` entry.
+
+### Validation evidence and limits
+
+- `dotnet test jrutil.tests\jrutil.tests.fsproj --no-restore -c Release` passes all 140 tests;
+  focused spill coverage compares memory and disk paths across interleaved rows, route splitting,
+  a chunk larger than 1 MiB and cleanup. The existing NU1510, FS3581, FS3511 and constructor-style
+  warnings remain. A whole-solution build was not used because the unrelated `rtview` project
+  requires the unavailable `sassc` executable.
+- `pytest tests/unit/test_national_jdf.py -q` passes all 21 tests. Focused Ruff and strict Pyright
+  checks pass for the changed Python files.
+- A frozen local corpus selected 1,024 retained fixed ZIPs (512 VLD and 512 dráhy, 487,670,363 input
+  bytes) across size strata and the largest batches. Three 12-worker measurements reduced median
+  peak working set from 4,042,887,168 bytes to 705,835,008 bytes (**82.5%**) while median runtime
+  improved from 48.54 seconds to 44.78 seconds. The optimized spill peaked at 460,548,068 bytes.
+- Every merged JDF file, the deterministic merged ZIP, one-worker versus 12-worker output, and all
+  downstream GTFS/extension/Parquet bundle files were byte-identical to the saved baseline on that
+  corpus.
+- No full national feed, live download or `OBEHY_RUN_NATIONAL_JDF_SMOKE` execution was performed.
+  The requested <=5 GiB national target therefore remains an unverified deployment target rather
+  than claimed validation evidence.
+
+### Next handoff
+
+- Review and commit the standalone JrUtil and Oběhy telemetry changes. Keep the pinned
+  `converters/jrutil` submodule unchanged until a separate release decision; a future user-run
+  national build can confirm the real-feed peak from the recorded resource samples.
+
+## 2026-08-09 — Default JDF stop reconciliation added to JrUtil
+
+### Delivered
+
+- JrUtil's default name-based JDF merge now reconciles equivalent stop names using canonicalized
+  Czech abbreviations, aligned name-component suffixes and guarded fuzzy matching within 75 metres.
+  It chooses the fullest deterministic CIS name, unions stop attributes and remaps stop posts and
+  timetable references to the surviving stop. The explicit `--by-id` behavior is unchanged.
+- Candidate discovery uses exact/suffix dictionaries, a projected spatial grid and a rare-token
+  posting index. Ambiguous matches remain separate and are logged; merge totals and instrumented
+  comparison counts are emitted at the end of `merge-jdf`.
+- Regression coverage includes the Ústí nad Labem and Dolní Jiřetín examples, distance and locality
+  guards, fuzzy and ambiguous cases, strongest-tier match precedence, input-order independence,
+  `--by-id`, and dispersed/dense scale fixtures.
+- A user-run national merge exposed a precedence defect: one exact candidate plus a weaker suffix
+  candidate was treated as ambiguous, and every recurrence created another exact duplicate. Match
+  selection now discards weaker tiers before deciding uniqueness (`Exact` before `Suffix` before
+  `Fuzzy`), preventing that duplicate snowball.
+- Canonical-name ranking now penalizes redundant adjacent components, so matching selects the clean
+  `Chomutov,žel.st.` alias over `Chomutov,Chomutov,žel.st.` without rewriting source fixups.
+
+### Validation evidence and limits
+
+- `dotnet test .\jrutil-sln.sln --no-restore` passes all 133 tests. The only output is the existing
+  NU1510 dependency warning and FS3581 indexed-property warning; no entity-level conversion errors
+  were logged.
+- `pytest tests/unit/test_national_jdf.py -q` passes all 21 mocked pipeline tests, and
+  `git diff --check` passes in the JrUtil checkout.
+- The user ran a national merge and supplied the precedence-failure diagnostics above. Per request,
+  Codex did not run any national/live batch, and the corrected merge has not yet received a fresh
+  full-feed or MobilityData validation pass.
+
+### Next handoff
+
+- Run the national JDF build, review accepted/ambiguous reconciliation diagnostics and validate the
+  regenerated GTFS. The pinned JrUtil submodule remains unchanged until separately advanced.
+
+## 2026-08-09 — JrUtil GTFS metadata and CZPTT trip output hardened
+
+### Delivered
+
+- The active standalone JrUtil checkout now emits Oběhy publisher metadata, contact email,
+  service bounds and deterministic source-derived `feed_version` values for both JDF and CZPTT.
+- CZPTT mapped route long names are right-trimmed, and journeys with fewer than two selected GTFS
+  calls are rejected before any GTFS or extension rows can reference them.
+- The repeated-name headsign notices were investigated and retained: the affected journeys end at
+  a distinct SR70 point/platform whose passenger-facing name also occurs earlier in the trip.
+  Regression coverage documents this valid case.
+- JDF bundles now include `gtfs-intermediate/feed_info.txt`; deterministic inventories, hashes and
+  manifest expectations were refreshed. The pinned JrUtil submodule pointer was not advanced.
+
+### Validation evidence and limits
+
+- `dotnet test .\jrutil-sln.sln --no-restore` passes all 120 tests in the standalone JrUtil
+  checkout. The only output is the existing NU1510 dependency warning and FS3581 indexed-property
+  warning; no entity-level conversion errors were logged.
+- A national feed regeneration and MobilityData validator run were intentionally not performed;
+  they require a separate explicit request. The interrupted generated artifact was removed.
+
+### Next handoff
+
+- Review and commit the standalone JrUtil changes. If desired, explicitly request a national feed
+  rebuild and validator pass before separately advancing the pinned JrUtil submodule pointer.
+
 ## 2026-08-04 — Shared publication retention hardened
 
 ### Delivered
@@ -1039,3 +1188,38 @@ After pinning the reviewed standalone fork commit, add a Python reader for bundl
 validate its Parquet schemas independently, and import one tiny JDF bundle into PostgreSQL. Then
 begin real two-export stop-continuity diagnostics. Keep CZPTT operational semantics as a separate
 follow-up slice.
+
+## 2026-08-09 — Aggressive adaptive JDF parallelism
+
+- The standalone JrUtil checkout now treats automatic jobs as an adaptive ceiling of eight times
+  logical processors, bounded to 32–256, with an initial target of twice logical processors.
+  Explicit numeric job counts are no longer reduced to the processor count.
+- `fix-jdf` and merge parsing use continuously replenished ordered execution with live private-byte,
+  CPU, and reorder-backlog control. The controller grows below 80%, reduces above 85%, pauses at
+  95%, and resumes below 80%; one oversized input can always make progress.
+- The merge CLI performs deterministic parallel remapping and serialization of `TripStop` rows after
+  serial attribute interning. It uses bounded per-partition memory buffers within each ordered batch,
+  then appends them to the output-ready spool in original order. This replaced temporary segment-file
+  fan-out, which was a measured throughput regression. The spool is removed on every disposal path.
+- Progress schema v1 now includes additive `scheduler_sample` events. National JDF and CZPTT command
+  manifests retain those samples and observed maximum concurrency, and progress displays active and
+  target workers, CPU, memory-budget percentage, and backlog.
+- The standalone JrUtil test suite passed: **149 passed**. The multitool build succeeded. Oběhy unit
+  tests passed: **71 passed**. Ruff and strict Pyright passed. A 24-worker merger regression compared all emitted JDF
+  files byte-for-byte against the memory-backed path, including interleaved trip stops and route
+  splitting.
+- A capped frozen corpus of 128 ZIPs (178,924,866 compressed bytes) was used to diagnose the startup
+  and throughput regressions without running the national feed. The eager all-ZIP central-directory
+  preflight caused the initial period with no visible work; unconditional idle force-admission then
+  allowed completed ordered backlog to retain about 2.1 GiB of managed objects. Both were removed.
+  Temporary-file fan-out and effectively serial trip-stop serialization were the dominant steady-state
+  cost, so trip-stop serialization now runs in bounded parallel memory buffers. Release server GC,
+  concurrent GC, tiered compilation, and tiered PGO are enabled for the single-use multitool process.
+- On that capped corpus, the final uninstrumented Release adaptive run took **7.524 seconds**, versus
+  **9.86 seconds** at a fixed 12 workers and 14.46 seconds for the instrumented regressed implementation.
+  This diagnostic run was about 24% faster than fixed 12 and 48% faster than the regression. Peak
+  working set was **1,099,714,560 bytes**; the preceding instrumented run sampled normalized CPU up to
+  **62%**. All 19 merged output files were byte-identical to the fixed-12 Release output by SHA-256.
+  These are diagnostic single-run measurements, not the full warm-up-plus-three benchmark matrix.
+- No national feed, live download, or national smoke integration test was run. National memory and
+  throughput remain unverified. The pinned `converters/jrutil` submodule pointer remains unchanged.
