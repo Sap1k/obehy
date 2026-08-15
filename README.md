@@ -62,9 +62,11 @@ Dolnośląskie, Opolskie, and Śląskie. Source extracts are cached under `workd
 Their hashes, the Osmium identity, and the active output identity are recorded in the manifest
 next to the configured `osm_file`; matching inputs and output safely skip regeneration. There
 are no historical merged copies or hard-link publication. The same command uses native
-`osmium tags-filter` to create two cached node-only PBFs under `workdir/osm`: railway locations
-for CZPTT and the bus/tram/public-transport stop tags consumed by JrUtil's JDF matcher. The JDF
-extract does not need municipality boundaries: JrUtil enriches its stop coordinates from its
+`osmium tags-filter` to create a node-only railway-location PBF for CZPTT and a versioned
+`jdf-transit-geometry.osm.pbf` for JDF. The latter contains stop/platform nodes, referenced nodes
+for bus-usable road ways, and tram ways, including access and direction tags; it intentionally
+excludes metro, funicular, ferry, and general railway geometry. The JDF extract does not need
+municipality boundaries: JrUtil enriches its stop coordinates from its
 separate bundled Czech municipality index. No Python code parses or transforms OSM objects. JDF
 and CZPTT only consume and validate these artifacts; they never download, merge, or filter OSM.
 Downloads, cache decisions, native merging/filtering, hashing, and publication all report progress.
@@ -91,13 +93,54 @@ written to stderr.
 Use `--jobs=auto|N` to configure both parallel JrUtil stages, with `--fix-jobs` and
 `--merge-jobs` as optional stage overrides. `--memory-budget=auto|SIZE` controls the
 adaptive admission budget. Auto aggressively oversubscribes logical CPUs but derives its memory
-ceiling from current process use and actually available RAM, with explicit operating-system
-headroom; numeric values are hard ceilings. Live worker/CPU/memory/backlog samples and observed
+ceiling from current process use, available RAM, and a bounded evictable-memory allowance on hosts
+with at most 20 GiB, with explicit operating-system headroom; numeric values are hard ceilings.
+The fix-stage snapshot is taken after the persistent stop index is loaded. Live
+worker/CPU/memory/backlog samples and observed
 peak concurrency are shown in progress and recorded in `run-manifest.json`. Merged JDF packaging defaults to deterministic balanced
 Deflate (`--zip-compression=balanced`); `fast` and `small` select levels 1 and 9.
 
 The builder writes fixed work batches as uncompressed ZIPs to reduce temporary file count.
 The builder does not enable JrUtil's experimental persistent cache.
+
+Estimated posts remain default-off for national builds. Pass `--estimated-posts` to construct the
+Osmium demand clip and enable conservative directed road/tram routing; add
+`--diagnostic-post-labels` independently to expose `O1`/`O-N`/`?` only through GTFS
+`platform_code`. Authored identities and labels remain unchanged. A decision is one physical
+candidate, a predefined compact side group represented by a real medoid, or the parent centroid;
+coordinates are never averaged. `JrutilPostCandidateEvidence.txt` and
+`JrutilRoutingDemands.txt` survive deterministic JDF round trips and merge. Parquet schema v7 adds
+candidate evidence, side groups and distinct pattern/candidate score relations. The complete
+rollback is the default build or JrUtil's explicit `--no-estimated-posts`.
+
+For tuning, JrUtil can capture a versioned, policy-neutral evidence directory once, replay JSON
+policies and deterministic grids without OSM/A*, and generate a final bundle from the selected
+evidence/policy pair. The national command accepts `--post-inference-policy=policy.json` for a live
+build, `--post-inference-evidence=DIR` for an evidence-backed replay, and
+`--capture-post-inference-evidence` to publish an evidence-v2 pack and run manifest without writing
+a bundle. Oběhy supplies JrUtil's internal `--post-inference-evidence-only` switch for that capture.
+Capture is policy-neutral and cannot be combined with a policy or evidence reuse.
+
+Evidence-backed publication is the score-free replay path: Oběhy passes
+`--no-post-inference-scores`, so the selected policy produces the final GTFS and assignments without
+materializing diagnostic score rows (the stable score relation remains present with zero rows).
+Diagnostic GTFS platform labels use final assignments and remain compatible with that score-free
+path. `--post-review-stops=FILE` and the standalone review commands retain score rows for tuning and
+inspection. Evidence reuse validates the merged-JDF identity and bypasses graph construction and A*.
+
+JrUtil verifies the exact relation set, hashes, sizes, Parquet schemas and row counts, capture
+ceilings, router and capture-tool versions, schema fingerprints, and the pack ID repeated in every
+relation. It also validates canonical ordering, memberships, foreign keys, contiguous variants,
+sentinels, numeric ranges, movement-family/block identity, and complete attachment coverage before
+atomically publishing the evidence directory. Oběhy trusts that successful command boundary and reads
+only the published manifest to record the evidence lock; it does not decode the national Parquet pack
+a second time or reproduce policy decisions. The run manifest records capture estimates,
+atomic-output headroom, current and peak spill bytes, the requested worker ceiling, and a
+policy-independent lock containing the manifest hash, pack/tool/JDF/PBF identities, routing and
+capture versions/ceilings, and every relation's hash, row count, byte count, and schema fingerprint.
+Replay carries the same lock forward from its input pack. The capture disk preflight uses canonical
+deduplicated route-pattern contexts, not raw timetable-call count, and charges one temporary evidence
+pack plus a fixed reserve; activation is a same-volume directory rename rather than a second full copy.
 
 ## National CZPTT conversion bundle
 

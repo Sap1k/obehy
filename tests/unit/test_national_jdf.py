@@ -40,6 +40,91 @@ def test_transport_mode_rules_exclude_liberec_replacement_buses() -> None:
     assert {"545902", "545903"}.isdisjoint(liberec_routes)
 
 
+def test_post_evidence_manifest_is_read_for_lock_without_parquet_rescan(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    manifest = {
+        "pack_id": "pack",
+        "capture_tool_version": "fixture-tool",
+        "merged_jdf_sha256": "0" * 64,
+        "routing_pbf_sha256": "1" * 64,
+        "osm_snapshot": None,
+        "router_evidence_version": "packed-directed-v3",
+        "variant_enumeration_version": "directed-thread-top3-v1",
+        "capture_ceilings": {
+            "routed_excess_metres": 1000.0,
+            "maximum_corridor_variants": 3,
+        },
+        "maximum_search_states": 100_000,
+        "maximum_search_distance_metres": 30_000.0,
+        "files": [{"path": "route_point_evidence.parquet", "rows": 35_540_192}],
+    }
+    manifest_path = evidence / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    loaded = national_jdf._read_post_inference_evidence_manifest(  # pyright: ignore[reportPrivateUsage]
+        evidence
+    )
+    lock = national_jdf._post_inference_evidence_lock(  # pyright: ignore[reportPrivateUsage]
+        loaded, file_digest(manifest_path)
+    )
+
+    assert lock["pack_id"] == "pack"
+    assert lock["files"] == manifest["files"]
+
+
+def test_capture_only_rejects_post_inference_policy(tmp_path: Path) -> None:
+    geodata = tmp_path / "geodata"
+    geodata.mkdir()
+    policy = tmp_path / "policy.json"
+    policy.write_text("{}", encoding="utf-8")
+    config = BuildConfig(
+        output=tmp_path / "output",
+        workdir=tmp_path / "work",
+        osm_file=tmp_path / "cz.osm.pbf",
+        jrutil_root=None,
+        jrutil_command=("jrutil",),
+        geodata_root=geodata,
+        post_inference_policy=policy,
+        capture_post_inference_evidence=True,
+    )
+
+    with pytest.raises(PipelineError, match=r"capture-only.*policy"):
+        build(config)
+
+
+@pytest.mark.parametrize(
+    ("diagnostic_post_labels", "with_review_output", "include_scores"),
+    [(False, False, False), (True, False, False), (False, True, True)],
+)
+def test_evidence_replay_only_omits_scores_without_review_output(
+    tmp_path: Path,
+    diagnostic_post_labels: bool,
+    with_review_output: bool,
+    include_scores: bool,
+) -> None:
+    config = BuildConfig(
+        output=tmp_path / "output",
+        workdir=tmp_path / "work",
+        osm_file=tmp_path / "cz.osm.pbf",
+        jrutil_root=None,
+        jrutil_command=("jrutil",),
+        geodata_root=tmp_path / "geodata",
+        diagnostic_post_labels=diagnostic_post_labels,
+        post_review_stops=tmp_path / "review-stops.txt" if with_review_output else None,
+        post_inference_evidence=tmp_path / "evidence",
+    )
+
+    assert (
+        national_jdf._include_post_inference_scores(  # pyright: ignore[reportPrivateUsage]
+            config
+        )
+        is include_scores
+    )
+
+
 WORKSPACE = Path(__file__).parents[3]
 
 
@@ -156,8 +241,14 @@ def test_stage_nested_batches_rejects_malformed_inner_archive(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize("keep_work", [False, True])
+@pytest.mark.parametrize("estimated_posts", [False, True])
+@pytest.mark.parametrize("evidence_backed", [False, True])
 def test_build_orchestrates_fix_merge_and_bundle_atomically(
-    tmp_path: Path, keep_work: bool, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    keep_work: bool,
+    estimated_posts: bool,
+    evidence_backed: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output = tmp_path / "national"
     jrutil_root = tmp_path / "jrutil"
@@ -167,6 +258,39 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     geodata_root = tmp_path / "jrunify-ext-geodata" / "other"
     geodata_root.mkdir(parents=True)
     (geodata_root / "fixture.csv").write_text("Town,Stop,49.0,14.0,CZ\n", encoding="utf-8")
+    review_stops = tmp_path / "review-stops.txt"
+    review_stops.write_text("7050\n7064\n", encoding="utf-8")
+    evidence = tmp_path / "post-inference-evidence"
+    if evidence_backed:
+        evidence.mkdir()
+        (evidence / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "evidence_format": "post-inference-evidence-v2",
+                    "schema_version": 2,
+                    "router_evidence_version": "packed-directed-v3",
+                    "variant_enumeration_version": "directed-thread-top3-v1",
+                    "capture_tool_version": "fixture-tool",
+                    "pack_id": "fixture-pack",
+                    "merged_jdf_sha256": "0" * 64,
+                    "routing_pbf_sha256": "1" * 64,
+                    "osm_snapshot": None,
+                    "capture_ceilings": {
+                        "routed_excess_metres": 1000.0,
+                        "maximum_corridor_variants": 3,
+                    },
+                    "maximum_search_states": 100_000,
+                    "maximum_search_distance_metres": 30_000.0,
+                    "observation_count": 1,
+                    "route_point_count": 1,
+                    "context_count": 1,
+                    "corridor_variant_count": 1,
+                    "route_point_evidence_count": 1,
+                    "files": [{"path": "contexts.parquet", "bytes": 4, "rows": 1}],
+                }
+            ),
+            encoding="utf-8",
+        )
 
     def fake_git_identity(_repository: Path) -> dict[str, object]:
         return {
@@ -185,7 +309,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "validate_snapshot",
         valid_snapshot,
     )
-    transit_extract = tmp_path / "workdir" / "osm" / "jdf-transit-stops.osm.pbf"
+    transit_extract = tmp_path / "workdir" / "osm" / "jdf-transit-geometry.osm.pbf"
 
     def valid_transit(_workdir: Path, source_key: str) -> Path:
         assert source_key == "fixture-osm"
@@ -193,7 +317,17 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         transit_extract.write_bytes(b"transit-osm")
         return transit_extract
 
-    monkeypatch.setattr(national_jdf, "validate_jdf_transit_stops", valid_transit)
+    monkeypatch.setattr(national_jdf, "validate_jdf_post_candidates", valid_transit)
+    routing_extract = tmp_path / "workdir" / "osm" / "jdf-transit-routing-demand.osm.pbf"
+
+    def prepare_routing(_workdir: Path, demands: Path, source_key: str) -> Path:
+        assert source_key == "fixture-osm"
+        assert demands.name == "JrutilRoutingDemands.txt"
+        routing_extract.parent.mkdir(parents=True, exist_ok=True)
+        routing_extract.write_bytes(b"routing-osm")
+        return routing_extract
+
+    monkeypatch.setattr(national_jdf, "prepare_jdf_demand_routing", prepare_routing)
     commands: list[list[str]] = []
     download_names: list[str] = []
 
@@ -232,6 +366,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             merged = Path(arguments[-2])
             merged.mkdir(parents=True)
             (merged / "VerzeJDF.txt").write_text('"1.11";\r\n', encoding="cp1250")
+            (merged / "JrutilRoutingDemands.txt").write_text("", encoding="cp1250")
             return national_jdf.CommandResult(
                 elapsed_seconds=1.5,
                 completed=2,
@@ -277,6 +412,21 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             )
             payloads.extend(bundle / name for name in national_jdf.PARQUET_FILES)
             manifest = {
+                "bundle_format": "obehy-jrutil-jdf",
+                "bundle_version": 1,
+                "conversion": {
+                    "estimated_posts": {
+                        "candidate_bearing_stops": 0,
+                        "authored_posts_positioned": 0,
+                        "single_internal_posts": 0,
+                        "composite_internal_posts": 0,
+                        "single_candidate_skips": 0,
+                        "weak_or_unresolved_contexts": 0,
+                        "two_call_same_stop_blocks": 0,
+                        "distinct_pair_choices": 0,
+                        "unresolved_block_edges": 0,
+                    }
+                },
                 "files": [
                     {
                         "path": path.relative_to(bundle).as_posix(),
@@ -284,7 +434,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
                         "sha256": file_digest(path),
                     }
                     for path in payloads
-                ]
+                ],
             }
             national_jdf.write_json(bundle / "manifest.json", manifest)
         else:
@@ -300,6 +450,9 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             geodata_root=geodata_root,
             progress="off",
             keep_work=keep_work,
+            estimated_posts=estimated_posts,
+            post_review_stops=review_stops if estimated_posts else None,
+            post_inference_evidence=evidence if evidence_backed else None,
         ),
         fake_download,
         fake_command,
@@ -325,14 +478,25 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     assert "--jobs=auto" in merge_command
     assert "--memory-budget=auto" in fix_command
     assert "--memory-budget=auto" in merge_command
+    assert "--jobs=auto" in bundle_command
+    assert "--memory-budget=auto" in bundle_command
+    assert "--progress-events" in bundle_command
     assert any(argument.startswith("--ext-geodata=") for argument in fix_command)
     assert any(argument.startswith("--cz-pbf=") for argument in fix_command)
     assert f"--cz-pbf={transit_extract}" in fix_command
+    assert ("--no-estimated-posts" in fix_command) is not (estimated_posts or evidence_backed)
     assert not any(argument.startswith("--ext-geodata=") for argument in merge_command)
     assert not any(argument.startswith("--cz-pbf=") for argument in merge_command)
     assert "--international-route-policy=regional-adjacent" in fix_command
     assert "--international-route-policy=regional-adjacent" in bundle_command
     assert any(argument.startswith("--transport-mode-rules=") for argument in bundle_command)
+    has_routing_pbf = any(argument.startswith("--routing-osm-pbf=") for argument in bundle_command)
+    assert has_routing_pbf is (estimated_posts and not evidence_backed)
+    assert ("--no-estimated-posts" in bundle_command) is not (estimated_posts or evidence_backed)
+    assert ("--no-post-inference-scores" in bundle_command) is (
+        evidence_backed and not estimated_posts
+    )
+    assert (f"--post-review-stops={review_stops}" in bundle_command) is estimated_posts
     assert all(
         not any(argument.startswith("--cache=") for argument in command)
         for command in multitool_commands
@@ -361,6 +525,12 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "stop_ids_cis": False,
         "stop_merge": "name",
         "strict": True,
+        "diagnostic_post_labels": False,
+        "estimated_posts": estimated_posts or evidence_backed,
+        "post_inference_policy": None,
+        "post_inference_evidence": str(evidence) if evidence_backed else None,
+        "include_post_inference_scores": not (evidence_backed and not estimated_posts),
+        "capture_post_inference_evidence": False,
     }
     assert run_manifest["execution"]["requested"] == {
         "fix_jobs": "auto",
@@ -434,12 +604,12 @@ def test_build_retains_staging_directory_after_failure(
 
     def valid_transit(workdir: Path, source_key: str) -> Path:
         assert source_key == "fixture-osm"
-        destination = workdir / "osm" / "jdf-transit-stops.osm.pbf"
+        destination = workdir / "osm" / "jdf-transit-geometry.osm.pbf"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(b"transit-osm")
         return destination
 
-    monkeypatch.setattr(national_jdf, "validate_jdf_transit_stops", valid_transit)
+    monkeypatch.setattr(national_jdf, "validate_jdf_post_candidates", valid_transit)
     with pytest.raises(OSError, match="fixture download failure"):
         build(
             BuildConfig(
@@ -683,6 +853,27 @@ def test_run_command_counts_structured_completions_and_worker_plan(tmp_path: Pat
         },
         {
             "schema_version": 1,
+            "event": "capture_metrics",
+            "stage": "fix-jdf",
+            "estimated_evidence_bytes": 1000,
+            "atomic_output_headroom_bytes": 2000,
+            "current_spill_bytes": 0,
+            "peak_spill_bytes": 750,
+            "maximum_workers": 4,
+        },
+        {
+            "schema_version": 1,
+            "event": "work_progress",
+            "stage": "fix-jdf",
+            "phase": "routing-contexts",
+            "state": "running",
+            "completed": 125,
+            "total": 500,
+            "unit": "contexts",
+            "detail": "searches=42",
+        },
+        {
+            "schema_version": 1,
             "event": "scheduler_sample",
             "stage": "fix-jdf",
             "target_workers": 24,
@@ -730,12 +921,17 @@ def test_run_command_counts_structured_completions_and_worker_plan(tmp_path: Pat
             "spill_bytes": 654321,
         },
     )
-    assert result.scheduler_samples == (events[6],)
+    assert result.capture_metrics == events[6]
+    assert result.scheduler_samples == (events[8],)
     assert result.maximum_workers_observed == 21
     assert reporter.completed == 2
     assert any("10 workers" in note for note in reporter.notes)
     assert any("write outputs" in detail and "last: b.zip" in detail for detail in reporter.details)
     assert any("18/24 workers" in detail and "CPU 88%" in detail for detail in reporter.details)
+    assert any(
+        "routing contexts: 125/500 contexts" in detail and "searches=42" in detail
+        for detail in reporter.details
+    )
     assert not any("Reading OSM stops" in detail for detail in reporter.details)
 
 

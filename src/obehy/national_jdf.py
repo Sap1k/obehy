@@ -43,7 +43,8 @@ from rich.text import Text
 
 from obehy.osm_snapshot import (
     OsmSnapshotError,
-    validate_jdf_transit_stops,
+    prepare_jdf_demand_routing,
+    validate_jdf_post_candidates,
     validate_snapshot,
 )
 from obehy.pipeline_support import file_digest, utc_now, write_json
@@ -60,6 +61,11 @@ PARQUET_FILES = {
     "source_notice_metadata.parquet",
     "source_transfer_metadata.parquet",
     "source_travel_restriction_metadata.parquet",
+    "derived_post_locations.parquet",
+    "derived_post_assignments.parquet",
+    "post_candidate_evidence.parquet",
+    "post_side_groups.parquet",
+    "derived_post_scores.parquet",
 }
 
 
@@ -332,6 +338,12 @@ class BuildConfig:
     merge_jobs: JobSetting | None = None
     memory_budget: str = "auto"
     zip_compression: ZipCompression = "balanced"
+    diagnostic_post_labels: bool = False
+    estimated_posts: bool = False
+    post_review_stops: Path | None = None
+    post_inference_policy: Path | None = None
+    post_inference_evidence: Path | None = None
+    capture_post_inference_evidence: bool = False
 
 
 DownloadFn = Callable[[str, Path, str, Reporter | None], DownloadRecord]
@@ -367,6 +379,7 @@ class CommandResult:
     failed_batch: str | None
     maximum_in_flight: int
     resource_usage: tuple[dict[str, object], ...]
+    capture_metrics: dict[str, object] | None = None
     scheduler_samples: tuple[dict[str, object], ...] = ()
     maximum_workers_observed: int = 0
 
@@ -760,6 +773,7 @@ def run_command(
     maximum_in_flight = 0
     execution_plan: dict[str, object] | None = None
     resource_usage_events: list[dict[str, object]] = []
+    capture_metrics: dict[str, object] | None = None
     scheduler_samples: list[dict[str, object]] = []
     maximum_workers_observed = 0
     latest_scheduler_sample: dict[str, object] | None = None
@@ -850,6 +864,8 @@ def run_command(
                             reporter.update(task, completed=completed, detail=progress_detail())
                     elif event_name == "resource_usage":
                         resource_usage_events.append(event)
+                    elif event_name == "capture_metrics":
+                        capture_metrics = event
                     elif event_name == "scheduler_sample":
                         scheduler_samples.append(event)
                         latest_scheduler_sample = event
@@ -857,6 +873,26 @@ def run_command(
                             maximum_workers_observed,
                             int(cast(int, event.get("maximum_active_workers", 0))),
                         )
+                        if reporter is not None and task is not None:
+                            reporter.update(task, completed=completed, detail=progress_detail())
+                    elif event_name == "work_progress":
+                        phase_name = str(event.get("phase", "running")).replace("-", " ")
+                        work_completed = int(cast(int, event.get("completed", 0)))
+                        work_total = event.get("total")
+                        work_unit = str(event.get("unit", "items"))
+                        state = str(event.get("state", "running"))
+                        if work_total is None:
+                            current_phase = f"{phase_name}: {work_completed} {work_unit}"
+                        else:
+                            current_phase = (
+                                f"{phase_name}: {work_completed}/{int(cast(int, work_total))} "
+                                f"{work_unit}"
+                            )
+                        if state == "completed":
+                            current_phase += " done"
+                        detail = event.get("detail")
+                        if detail:
+                            current_phase += f" ({detail})"
                         if reporter is not None and task is not None:
                             reporter.update(task, completed=completed, detail=progress_detail())
                     elif event_name == "batch_started":
@@ -956,6 +992,7 @@ def run_command(
         failed_batch=failed_batch,
         maximum_in_flight=maximum_in_flight,
         resource_usage=tuple(resource_usage_events),
+        capture_metrics=capture_metrics,
         scheduler_samples=tuple(scheduler_samples),
         maximum_workers_observed=maximum_workers_observed,
     )
@@ -1112,6 +1149,41 @@ def _validate_build_config(config: BuildConfig) -> None:
         raise PipelineError("memory_budget must be 'auto' or a size such as 10GiB")
     if config.zip_compression not in ZIP_COMPRESSION_LEVELS:
         raise PipelineError("zip_compression must be one of: " + ", ".join(ZIP_COMPRESSION_LEVELS))
+    inferred_posts = (
+        config.estimated_posts
+        or config.post_inference_evidence is not None
+        or config.capture_post_inference_evidence
+    )
+    if config.capture_post_inference_evidence and config.post_inference_evidence is not None:
+        raise PipelineError("capture and evidence-backed post inference are mutually exclusive")
+    if config.capture_post_inference_evidence and config.post_inference_policy is not None:
+        raise PipelineError("capture-only post inference cannot be combined with a policy")
+    if config.post_inference_policy is not None and not config.post_inference_policy.is_file():
+        raise PipelineError(f"Post-inference policy does not exist: {config.post_inference_policy}")
+    if config.post_inference_evidence is not None and not config.post_inference_evidence.is_dir():
+        raise PipelineError(
+            f"Post-inference evidence directory does not exist: {config.post_inference_evidence}"
+        )
+    if config.post_review_stops is not None:
+        if not inferred_posts:
+            raise PipelineError("post_review_stops requires estimated_posts")
+        if not config.post_review_stops.is_file():
+            raise PipelineError(f"Post review stop file does not exist: {config.post_review_stops}")
+
+
+def _include_post_inference_scores(config: BuildConfig) -> bool:
+    """Return whether JrUtil should include the diagnostic post-score relation.
+
+    A final evidence-backed publication has no consumer for score rows unless
+    it is producing post-review output. Diagnostic GTFS platform labels depend
+    only on final assignments and remain compatible with the publication-only
+    replay path.
+    """
+    return (
+        config.post_inference_evidence is None
+        or config.capture_post_inference_evidence
+        or config.post_review_stops is not None
+    )
 
 
 def _verify_fixed_batches(fixed_root: Path, expected: set[str]) -> None:
@@ -1147,6 +1219,24 @@ def _verify_bundle(bundle: Path, reporter: Reporter | None = None) -> dict[str, 
     manifest_path = bundle / "manifest.json"
     diagnostics_path = bundle / "diagnostics.json"
     manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
+    conversion = cast(dict[str, object], manifest.get("conversion", {}))
+    estimated_posts = cast(dict[str, object], conversion.get("estimated_posts", {}))
+    if (
+        manifest.get("bundle_format") != "obehy-jrutil-jdf"
+        or manifest.get("bundle_version") != 1
+        or not {
+            "candidate_bearing_stops",
+            "authored_posts_positioned",
+            "single_internal_posts",
+            "composite_internal_posts",
+            "single_candidate_skips",
+            "weak_or_unresolved_contexts",
+            "two_call_same_stop_blocks",
+            "distinct_pair_choices",
+            "unresolved_block_edges",
+        }.issubset(estimated_posts)
+    ):
+        raise PipelineError("Bundle manifest is missing the estimated-post schema-v4 contract")
     declared_paths: set[str] = set()
     entries = cast(list[dict[str, Any]], manifest.get("files", []))
     task = reporter.start("Validate bundle", total=len(entries)) if reporter else None
@@ -1181,6 +1271,38 @@ def _verify_bundle(bundle: Path, reporter: Reporter | None = None) -> dict[str, 
     if reporter is not None and task is not None:
         reporter.finish(task, f"{len(entries)} payloads")
     return manifest
+
+
+def _read_post_inference_evidence_manifest(evidence: Path) -> dict[str, Any]:
+    """Read JrUtil's already-validated evidence identity for the run lock."""
+    manifest_path = evidence / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise PipelineError(f"Cannot read JrUtil evidence manifest: {manifest_path}") from error
+    if not isinstance(manifest, dict):
+        raise PipelineError(f"JrUtil evidence manifest is not an object: {manifest_path}")
+    return cast(dict[str, Any], manifest)
+
+
+def _post_inference_evidence_lock(
+    manifest: Mapping[str, Any], manifest_sha256: str
+) -> dict[str, object]:
+    """Return the immutable capture identity needed to reproduce or audit replay."""
+    return {
+        "manifest_sha256": manifest_sha256,
+        "pack_id": manifest["pack_id"],
+        "capture_tool_version": manifest["capture_tool_version"],
+        "merged_jdf_sha256": manifest["merged_jdf_sha256"],
+        "routing_pbf_sha256": manifest["routing_pbf_sha256"],
+        "osm_snapshot": manifest["osm_snapshot"],
+        "router_evidence_version": manifest["router_evidence_version"],
+        "variant_enumeration_version": manifest["variant_enumeration_version"],
+        "capture_ceilings": manifest["capture_ceilings"],
+        "maximum_search_states": manifest["maximum_search_states"],
+        "maximum_search_distance_metres": manifest["maximum_search_distance_metres"],
+        "files": manifest["files"],
+    }
 
 
 def verify_gtfs_stops(gtfs: Path, reporter: Reporter | None = None) -> None:
@@ -1263,8 +1385,14 @@ def build(
     reporter: Reporter | None = None,
 ) -> Path:
     _validate_build_config(config)
+    include_post_inference_scores = _include_post_inference_scores(config)
+    inferred_posts = (
+        config.estimated_posts
+        or config.post_inference_evidence is not None
+        or config.capture_post_inference_evidence
+    )
     osm_manifest = validate_snapshot(config.osm_file, config.workdir)
-    jdf_osm_file = validate_jdf_transit_stops(config.workdir, str(osm_manifest["merge_key"]))
+    jdf_osm_file = validate_jdf_post_candidates(config.workdir, str(osm_manifest["merge_key"]))
     output = config.output.resolve()
     if output.exists():
         raise PipelineError(f"Output path must not exist: {output}")
@@ -1311,6 +1439,7 @@ def build(
             "maximum_in_flight": result.maximum_in_flight,
             "execution_plan": result.execution_plan,
             "resource_usage": list(result.resource_usage),
+            "capture_metrics": result.capture_metrics,
             "scheduler_samples": list(result.scheduler_samples),
             "maximum_workers_observed": result.maximum_workers_observed,
         }
@@ -1380,6 +1509,7 @@ def build(
                     f"--jobs={_job_text(_stage_jobs(config, 'fix'))}",
                     f"--memory-budget={config.memory_budget}",
                     "--international-route-policy=regional-adjacent",
+                    *([] if inferred_posts else ["--no-estimated-posts"]),
                     f"--ext-geodata={config.geodata_root}",
                     f"--cz-pbf={jdf_osm_file}",
                     f"--logfile={logs / 'fix.log'}",
@@ -1426,6 +1556,14 @@ def build(
                 stage="merge-jdf",
             ),
         )
+        routing_osm_file: Path | None = None
+        if inferred_posts and config.post_inference_evidence is None:
+            set_stage("prepare-routing-osm")
+            routing_osm_file = prepare_jdf_demand_routing(
+                config.workdir,
+                merged_directory / "JrutilRoutingDemands.txt",
+                str(osm_manifest["merge_key"]),
+            )
         set_stage("package-merged-jdf")
         merged_zip = derived / "merged-jdf.zip"
         zip_level = ZIP_COMPRESSION_LEVELS[config.zip_compression]
@@ -1455,10 +1593,43 @@ def build(
                 config,
                 [
                     "jdf-to-bundle",
+                    "--progress-events",
+                    f"--jobs={_job_text(config.jobs)}",
+                    f"--memory-budget={config.memory_budget}",
                     "--international-route-policy=regional-adjacent",
                     f"--transport-mode-rules={TRANSPORT_MODE_RULES}",
                     f"--snapshot-descriptor={descriptor_path}",
                     f"--converter-version={_converter_version(jrutil_identity)}",
+                    *(
+                        [f"--post-inference-evidence={config.post_inference_evidence}"]
+                        if config.post_inference_evidence is not None
+                        else (
+                            [f"--routing-osm-pbf={routing_osm_file}"]
+                            if routing_osm_file is not None
+                            else ["--no-estimated-posts"]
+                        )
+                    ),
+                    *(
+                        [f"--post-inference-policy={config.post_inference_policy}"]
+                        if config.post_inference_policy is not None
+                        else []
+                    ),
+                    *([] if include_post_inference_scores else ["--no-post-inference-scores"]),
+                    *(
+                        [
+                            "--capture-post-inference-evidence="
+                            f"{publish / 'post-inference-evidence-v2'}",
+                            "--post-inference-evidence-only",
+                        ]
+                        if config.capture_post_inference_evidence
+                        else []
+                    ),
+                    *(["--diagnostic-post-labels"] if config.diagnostic_post_labels else []),
+                    *(
+                        [f"--post-review-stops={config.post_review_stops}"]
+                        if config.post_review_stops is not None
+                        else []
+                    ),
                     f"--logfile={logs / 'bundle.log'}",
                     str(merged_zip),
                     str(bundle),
@@ -1469,8 +1640,39 @@ def build(
             reporter,
             CommandProgress("Generate GTFS + Parquet bundle", stage="jdf-to-bundle"),
         )
-        set_stage("validate-bundle")
-        bundle_manifest = _verify_bundle(bundle, reporter)
+        set_stage(
+            "record-evidence" if config.capture_post_inference_evidence else "validate-bundle"
+        )
+        evidence_manifest = (
+            _read_post_inference_evidence_manifest(publish / "post-inference-evidence-v2")
+            if config.capture_post_inference_evidence
+            else None
+        )
+        input_evidence_manifest = (
+            _read_post_inference_evidence_manifest(config.post_inference_evidence)
+            if config.post_inference_evidence is not None
+            else None
+        )
+        bundle_manifest = (
+            None if evidence_manifest is not None else _verify_bundle(bundle, reporter)
+        )
+        locked_evidence_manifest = evidence_manifest or input_evidence_manifest
+        locked_evidence_path = (
+            publish / "post-inference-evidence-v2"
+            if evidence_manifest is not None
+            else config.post_inference_evidence
+        )
+        locked_evidence_manifest_sha256 = (
+            file_digest(locked_evidence_path / "manifest.json")
+            if locked_evidence_path is not None
+            else None
+        )
+        bundle_command = command_results.get("bundle")
+        capture_metrics = (
+            bundle_command.capture_metrics
+            if config.capture_post_inference_evidence and bundle_command is not None
+            else None
+        )
         set_stage("write-run-manifest")
         run_manifest = {
             "schema_version": 1,
@@ -1482,6 +1684,18 @@ def build(
                 "bytes": jdf_osm_file.stat().st_size,
                 "sha256": file_digest(jdf_osm_file),
             },
+            "osm_jdf_routing_extract": (
+                {
+                    "path": str(routing_osm_file),
+                    "bytes": routing_osm_file.stat().st_size,
+                    "sha256": file_digest(routing_osm_file),
+                    "manifest": str(
+                        routing_osm_file.with_suffix(routing_osm_file.suffix + ".manifest.json")
+                    ),
+                }
+                if routing_osm_file is not None
+                else None
+            ),
             "geodata": geodata,
             "jrutil": jrutil_identity,
             "conversion": {
@@ -1493,6 +1707,16 @@ def build(
                     "path": "obehy/data/jdf_transport_mode_rules.csv",
                     "sha256": transport_mode_rules_sha256,
                 },
+                "diagnostic_post_labels": config.diagnostic_post_labels,
+                "estimated_posts": inferred_posts,
+                "post_inference_policy": (
+                    str(config.post_inference_policy) if config.post_inference_policy else None
+                ),
+                "post_inference_evidence": (
+                    str(config.post_inference_evidence) if config.post_inference_evidence else None
+                ),
+                "include_post_inference_scores": include_post_inference_scores,
+                "capture_post_inference_evidence": config.capture_post_inference_evidence,
             },
             "execution": {
                 "requested": {
@@ -1523,8 +1747,47 @@ def build(
                 "compression": config.zip_compression,
                 "compression_level": zip_level,
             },
-            "bundle_manifest_sha256": file_digest(bundle / "manifest.json"),
-            "bundle_file_count": len(cast(list[object], bundle_manifest["files"])),
+            "bundle_manifest_sha256": (
+                None if bundle_manifest is None else file_digest(bundle / "manifest.json")
+            ),
+            "bundle_file_count": (
+                0 if bundle_manifest is None else len(cast(list[object], bundle_manifest["files"]))
+            ),
+            "post_inference_evidence_manifest_sha256": (locked_evidence_manifest_sha256),
+            "post_inference_evidence": (
+                {
+                    "evidence_format": locked_evidence_manifest["evidence_format"],
+                    "schema_version": locked_evidence_manifest["schema_version"],
+                    "router_evidence_version": locked_evidence_manifest["router_evidence_version"],
+                    "variant_enumeration_version": locked_evidence_manifest[
+                        "variant_enumeration_version"
+                    ],
+                    "capture_tool_version": locked_evidence_manifest["capture_tool_version"],
+                    "pack_id": locked_evidence_manifest["pack_id"],
+                    "observation_count": locked_evidence_manifest["observation_count"],
+                    "route_point_count": locked_evidence_manifest["route_point_count"],
+                    "context_count": locked_evidence_manifest["context_count"],
+                    "corridor_variant_count": locked_evidence_manifest["corridor_variant_count"],
+                    "route_point_evidence_count": locked_evidence_manifest[
+                        "route_point_evidence_count"
+                    ],
+                    "bytes": sum(
+                        cast(int, entry["bytes"])
+                        for entry in cast(list[dict[str, Any]], locked_evidence_manifest["files"])
+                    ),
+                    "capture_metrics": capture_metrics,
+                }
+                if locked_evidence_manifest is not None
+                else None
+            ),
+            "post_inference_evidence_lock": (
+                _post_inference_evidence_lock(
+                    locked_evidence_manifest, locked_evidence_manifest_sha256
+                )
+                if locked_evidence_manifest is not None
+                and locked_evidence_manifest_sha256 is not None
+                else None
+            ),
         }
         write_json(publish / "run-manifest.json", run_manifest)
         set_stage("activation")
@@ -1649,6 +1912,36 @@ def _parser() -> argparse.ArgumentParser:
         default="auto",
         help="terminal progress mode (default: auto)",
     )
+    build_parser.add_argument(
+        "--estimated-posts",
+        action="store_true",
+        help="enable conservative inference and build the demand-clipped routing input",
+    )
+    build_parser.add_argument(
+        "--post-inference-policy",
+        type=Path,
+        help="policy-v2 JSON used by live or evidence-backed post inference",
+    )
+    build_parser.add_argument(
+        "--post-inference-evidence",
+        type=Path,
+        help="build the final bundle from an existing evidence-v2 directory without routing",
+    )
+    build_parser.add_argument(
+        "--capture-post-inference-evidence",
+        action="store_true",
+        help="publish a national evidence-v2 pack and run manifest instead of a bundle",
+    )
+    build_parser.add_argument(
+        "--diagnostic-post-labels",
+        action="store_true",
+        help="emit inferred O*/O-direction/? values only in GTFS platform_code",
+    )
+    build_parser.add_argument(
+        "--post-review-stops",
+        type=Path,
+        help="stop IDs or exact names for compact routed-inference review GeoJSON",
+    )
     return parser
 
 
@@ -1670,6 +1963,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             merge_jobs=cast(JobSetting | None, args.merge_jobs),
             memory_budget=cast(str, args.memory_budget),
             zip_compression=cast(ZipCompression, args.zip_compression),
+            diagnostic_post_labels=cast(bool, args.diagnostic_post_labels),
+            estimated_posts=cast(bool, args.estimated_posts),
+            post_review_stops=cast(Path | None, args.post_review_stops),
+            post_inference_policy=cast(Path | None, args.post_inference_policy),
+            post_inference_evidence=cast(Path | None, args.post_inference_evidence),
+            capture_post_inference_evidence=cast(bool, args.capture_post_inference_evidence),
         )
         result = build(config)
     except (

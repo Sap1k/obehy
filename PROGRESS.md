@@ -3,6 +3,45 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-08-15 — Post-estimator implementation handoff
+
+### Current capabilities
+
+- Candidate/evidence capture is separate from routed policy evaluation. `fix-jdf` can preserve
+  candidates and routing demands from the candidate PBF; bundle conversion can use a demand-clipped
+  road/tram PBF for directed inference. National builds remain rollback-by-default, with estimated
+  posts explicitly opt-in.
+- Evidence-v2 packs are policy-neutral and replayable. JrUtil validates the manifest, relation
+  identities, hashes, schemas, counts, ordering, keys, coverage, sentinels, and capture provenance
+  before publication. Oběhy records the resulting evidence lock from the manifest and does not
+  perform a second national Parquet semantic scan. A captured pack can drive policy and grid replay
+  without rebuilding the OSM graph or running A*.
+- The evaluator preserves authored identities and same-stop context and resolves an inferred result
+  deterministically as a physical candidate, a predefined side group represented by a real medoid, or
+  the parent centroid; coordinates are not averaged. Diagnostic score relations, labels, and review
+  output are optional. Evidence-backed publication and diagnostic GTFS labels use the score-free
+  path; review reports explicitly retain score rows.
+- Score-free evaluation now performs one joined, stop-major traversal of contexts, corridor variants,
+  and route-point evidence. It evaluates and emits each stop from a bounded buffer and skips decoding
+  diagnostic-only columns. Review replay keeps its separate diagnostic pass without changing score
+  semantics.
+
+### Reviewer validation
+
+- The frozen national score-free replay processed **35,990,519 attachment rows in 7m 43s** and
+  completed the bundle in **13m 04s**, compared with the saved baseline's approximately **43m 33s**
+  activation interval: about a **3.3x wall-clock speedup**. The run reported an **8.03 GiB peak
+  working set** and zero spill under the 10 GiB budget.
+- All **26 bundle payloads** matched the baseline by path, byte count, row count, and SHA-256 after
+  recalculating the new files' hashes. `manifest.json` was byte-identical as well, including the empty
+  stable score relation and the complete estimated-post counters.
+- The final tree passes **202/202 JrUtil tests**, the Release test and multitool builds, **83 Oběhy
+  tests** with six environment-gated skips, targeted Ruff lint/format checks, and strict Pyright with
+  zero errors. The retained national evidence pack separately passed bounded validation at 1,987,433
+  contexts and 35,990,519 attachment rows with a measured 0.95 GiB validator peak working set.
+- JrUtil and Oběhy are consolidated into one post-estimator commit in each repository. Push JrUtil
+  first, then the parent commit that advances its submodule pointer.
+
 ## 2026-08-09 — Bounded-memory primitives extended across JDF and CZPTT
 
 ### Delivered

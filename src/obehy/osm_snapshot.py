@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -18,6 +20,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 from urllib.request import Request, urlopen
+
+from shapely import MultiPolygon, Polygon, box, union_all
+from shapely.geometry import mapping
 
 from obehy.pipeline_support import write_json
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
@@ -512,13 +517,16 @@ def validate_railway_locations(workdir: Path, source_key: str) -> Path:
     return destination
 
 
-def filter_jdf_transit_stops(
+def _filter_jdf_osm(
     source: Path,
     destination: Path,
     *,
+    filter_schema: str,
+    generator: str,
+    filters: Sequence[str],
+    omit_referenced: bool,
     source_key: str | None = None,
 ) -> Path:
-    """Extract node-only public-transport stops consumed by JDF matching."""
     source = source.resolve()
     destination = destination.resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -533,13 +541,13 @@ def filter_jdf_transit_stops(
             output = cast(dict[str, object], manifest.get("output", {}))
             if (
                 manifest.get("schema_version") == 1
-                and manifest.get("filter_schema") == "jdf-transit-stop-nodes-v1"
+                and manifest.get("filter_schema") == filter_schema
                 and manifest.get("source_key") == source_key
                 and output.get("bytes") == stats.st_size
                 and output.get("mtime_ns") == stats.st_mtime_ns
             ):
                 _progress(
-                    f"JDF transit-stop filter reused: {_format_bytes(stats.st_size)}; "
+                    f"{filter_schema} reused: {_format_bytes(stats.st_size)}; "
                     f"source key={source_key[:24]}"
                 )
                 return destination
@@ -548,35 +556,30 @@ def filter_jdf_transit_stops(
 
     runtime = _discover_osmium()
     temporary = destination.with_name(f"{destination.stem}.{uuid.uuid4().hex}.part.osm.pbf")
-    _progress(f"JDF transit-stop filter starting: {_format_bytes(source.stat().st_size)}")
+    _progress(f"{filter_schema} starting: {_format_bytes(source.stat().st_size)}")
     started = time.monotonic()
     try:
-        _run_osmium(
-            runtime,
-            [
-                "tags-filter",
-                "--progress",
-                "--verbose",
-                "--overwrite",
-                "--omit-referenced",
-                "--generator=Obehy JDF transit-stop filter/1",
-                "--output-format=pbf,pbf_compression=zlib",
-                "--output",
-                _osmium_path(runtime, temporary),
-                _osmium_path(runtime, source),
-                "n/highway=bus_stop",
-                "n/public_transport=platform,pole,station",
-                "n/railway=tram_stop",
-                "n/amenity=bus_station",
-            ],
-        )
+        arguments = [
+            "tags-filter",
+            "--progress",
+            "--verbose",
+            "--overwrite",
+            f"--generator={generator}",
+            "--output-format=pbf,pbf_compression=zlib",
+            "--output",
+            _osmium_path(runtime, temporary),
+        ]
+        if omit_referenced:
+            arguments.append("--omit-referenced")
+        arguments.extend([_osmium_path(runtime, source), *filters])
+        _run_osmium(runtime, arguments)
         os.replace(temporary, destination)
         stats = destination.stat()
         write_json(
             manifest_path,
             {
                 "schema_version": 1,
-                "filter_schema": "jdf-transit-stop-nodes-v1",
+                "filter_schema": filter_schema,
                 "source_key": source_key,
                 "source_file": str(source),
                 "created_at": utc_now(),
@@ -595,22 +598,81 @@ def filter_jdf_transit_stops(
         raise
     elapsed = max(time.monotonic() - started, 0.001)
     _progress(
-        f"JDF transit-stop filter complete: {_format_bytes(destination.stat().st_size)} "
-        f"in {elapsed:.1f}s"
+        f"{filter_schema} complete: {_format_bytes(destination.stat().st_size)} in {elapsed:.1f}s"
     )
     return destination
 
 
+JDF_POST_CANDIDATE_FILTERS = (
+    "n/highway=bus_stop",
+    "n/public_transport=platform,pole,station",
+    "n/railway=tram_stop",
+    "n/amenity=bus_station",
+)
+
+JDF_ROUTING_BASE_FILTERS = (
+    "w/highway=motorway,trunk,primary,secondary,tertiary,unclassified,residential,living_street,service,road,busway",
+    "w/railway=tram",
+    "w/construction",
+    "n/barrier=*",
+    "r/type=restriction",
+)
+
+
+def filter_jdf_post_candidates(
+    source: Path, destination: Path, *, source_key: str | None = None
+) -> Path:
+    """Extract only physical stop/platform observations used by ``fix-jdf``."""
+    return _filter_jdf_osm(
+        source,
+        destination,
+        filter_schema="jdf-post-candidates-v1",
+        generator="Obehy JDF post candidate filter/1",
+        filters=JDF_POST_CANDIDATE_FILTERS,
+        omit_referenced=True,
+        source_key=source_key,
+    )
+
+
+def filter_jdf_transit_routing_base(
+    source: Path, destination: Path, *, source_key: str | None = None
+) -> Path:
+    """Extract the auditable road/tram topology later clipped to routing demand."""
+    return _filter_jdf_osm(
+        source,
+        destination,
+        filter_schema="jdf-transit-routing-base-v1",
+        generator="Obehy JDF transit routing base filter/1",
+        filters=JDF_ROUTING_BASE_FILTERS,
+        omit_referenced=False,
+        source_key=source_key,
+    )
+
+
+# Compatibility name for callers predating the candidate/routing split.
+filter_jdf_transit_stops = filter_jdf_post_candidates
+
+
+def jdf_post_candidates_path(workdir: Path) -> Path:
+    return workdir.resolve() / "osm" / "jdf-post-candidates.osm.pbf"
+
+
+def jdf_transit_routing_base_path(workdir: Path) -> Path:
+    return workdir.resolve() / "osm" / "jdf-transit-routing-base.osm.pbf"
+
+
 def jdf_transit_stops_path(workdir: Path) -> Path:
-    return workdir.resolve() / "osm" / "jdf-transit-stops.osm.pbf"
+    """Compatibility alias for the small candidate-node extract."""
+    return jdf_post_candidates_path(workdir)
 
 
-def validate_jdf_transit_stops(workdir: Path, source_key: str) -> Path:
-    destination = jdf_transit_stops_path(workdir)
+def _validate_jdf_filter(
+    destination: Path, source_key: str, filter_schema: str, label: str
+) -> Path:
     manifest_path = active_manifest_path(destination)
     guidance = "Run `obehy-osm build` with the same configuration."
     if not destination.is_file() or not manifest_path.is_file():
-        raise OsmSnapshotError(f"JDF transit-stop OSM extract is missing. {guidance}")
+        raise OsmSnapshotError(f"{label} OSM extract is missing. {guidance}")
     try:
         manifest = cast(
             dict[str, Any],
@@ -619,17 +681,221 @@ def validate_jdf_transit_stops(workdir: Path, source_key: str) -> Path:
         output = cast(dict[str, object], manifest.get("output", {}))
         stats = destination.stat()
     except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
-        raise OsmSnapshotError(f"JDF transit-stop OSM manifest is invalid. {guidance}") from error
+        raise OsmSnapshotError(f"{label} OSM manifest is invalid. {guidance}") from error
     if (
         manifest.get("schema_version") != 1
-        or manifest.get("filter_schema") != "jdf-transit-stop-nodes-v1"
+        or manifest.get("filter_schema") != filter_schema
         or manifest.get("source_key") != source_key
         or output.get("bytes") != stats.st_size
         or output.get("mtime_ns") != stats.st_mtime_ns
     ):
         raise OsmSnapshotError(
-            f"JDF transit-stop OSM extract does not match the active snapshot. {guidance}"
+            f"{label} OSM extract does not match the active snapshot. {guidance}"
         )
+    return destination
+
+
+def validate_jdf_post_candidates(workdir: Path, source_key: str) -> Path:
+    return _validate_jdf_filter(
+        jdf_post_candidates_path(workdir),
+        source_key,
+        "jdf-post-candidates-v1",
+        "JDF post-candidate",
+    )
+
+
+def validate_jdf_transit_routing_base(workdir: Path, source_key: str) -> Path:
+    return _validate_jdf_filter(
+        jdf_transit_routing_base_path(workdir),
+        source_key,
+        "jdf-transit-routing-base-v1",
+        "JDF transit-routing base",
+    )
+
+
+validate_jdf_transit_stops = validate_jdf_post_candidates
+
+
+ROUTING_ENVELOPE_POLICY = "jdf-routing-envelope-v2"
+
+
+def _routing_demand_rows(
+    path: Path,
+) -> list[tuple[str, float | None, float | None, float | None, float | None]]:
+    rows: list[tuple[str, float | None, float | None, float | None, float | None]] = []
+    with path.open("r", encoding="cp1250", newline="") as stream:
+        for raw_line in stream:
+            line = raw_line.rstrip("\r\n")
+            if line.endswith(";"):
+                line = line[:-1]
+            if not line:
+                continue
+            fields = next(csv.reader([line]))
+            if len(fields) != 9:
+                raise OsmSnapshotError(
+                    f"Invalid JrutilRoutingDemands row with {len(fields)} fields: {path}"
+                )
+
+            def optional_float(value: str) -> float | None:
+                return float(value) if value else None
+
+            rows.append(
+                (
+                    fields[8],
+                    optional_float(fields[4]),
+                    optional_float(fields[5]),
+                    optional_float(fields[6]),
+                    optional_float(fields[7]),
+                )
+            )
+    return rows
+
+
+def _routing_envelope_geojson(demands: Path) -> dict[str, object]:
+    rectangles: set[tuple[float, float, float, float]] = set()
+    for (
+        search_class,
+        previous_lat,
+        previous_lon,
+        next_lat,
+        next_lon,
+    ) in _routing_demand_rows(demands):
+        points = [
+            (lat, lon)
+            for lat, lon in ((previous_lat, previous_lon), (next_lat, next_lon))
+            if lat is not None and lon is not None
+        ]
+        if not points:
+            continue
+        distance = 0.0
+        if len(points) == 2:
+            mean_lat = math.radians((points[0][0] + points[1][0]) / 2.0)
+            dy = (points[1][0] - points[0][0]) * 111_320.0
+            dx = (points[1][1] - points[0][1]) * 111_320.0 * math.cos(mean_lat)
+            distance = math.hypot(dx, dy)
+        base_halo = 2_500.0 if search_class == "terminal" else 1_000.0
+        halo = min(5_000.0, base_halo + distance * 0.25)
+        min_lat = min(value[0] for value in points)
+        max_lat = max(value[0] for value in points)
+        min_lon = min(value[1] for value in points)
+        max_lon = max(value[1] for value in points)
+        mean_lat = math.radians((min_lat + max_lat) / 2.0)
+        lat_delta = halo / 111_320.0
+        lon_delta = halo / max(20_000.0, 111_320.0 * abs(math.cos(mean_lat)))
+        rectangles.add(
+            (
+                round(min_lon - lon_delta, 7),
+                round(min_lat - lat_delta, 7),
+                round(max_lon + lon_delta, 7),
+                round(max_lat + lat_delta, 7),
+            )
+        )
+    if not rectangles:
+        raise OsmSnapshotError(f"JDF routing demand relation has no usable coordinates: {demands}")
+    unioned = union_all(
+        [
+            box(min_lon, min_lat, max_lon, max_lat)
+            for min_lon, min_lat, max_lon, max_lat in sorted(rectangles)
+        ],
+        grid_size=0.0000001,
+    ).normalize()
+    if unioned.geom_type == "Polygon":
+        unioned = MultiPolygon([cast(Polygon, unioned)])
+    if unioned.geom_type != "MultiPolygon":
+        raise OsmSnapshotError(
+            f"JDF routing demand envelope produced unsupported geometry {unioned.geom_type}"
+        )
+    # ``osmium extract --polygon`` accepts GeoJSON polygon features, not a bare
+    # geometry object. Union the overlapping rectangles first so Osmium tests
+    # each input object against a compact extraction boundary.
+    return {
+        "type": "Feature",
+        "properties": {},
+        "geometry": mapping(unioned),
+    }
+
+
+def jdf_transit_routing_demand_path(workdir: Path) -> Path:
+    return workdir.resolve() / "osm" / "jdf-transit-routing-demand.osm.pbf"
+
+
+def prepare_jdf_demand_routing(
+    workdir: Path,
+    demands: Path,
+    source_key: str,
+) -> Path:
+    """Clip the cached routing base to deterministic national conversion demand."""
+    base = validate_jdf_transit_routing_base(workdir, source_key)
+    demands = demands.resolve()
+    if not demands.is_file():
+        raise OsmSnapshotError(f"JDF routing demand relation is missing: {demands}")
+    demand_hash = file_digest(demands)
+    destination = jdf_transit_routing_demand_path(workdir)
+    manifest_path = active_manifest_path(destination)
+    if destination.is_file() and manifest_path.is_file():
+        try:
+            manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
+            output = cast(dict[str, object], manifest.get("output", {}))
+            stats = destination.stat()
+            if (
+                manifest.get("schema_version") == 1
+                and manifest.get("filter_schema") == ROUTING_ENVELOPE_POLICY
+                and manifest.get("source_key") == source_key
+                and manifest.get("routing_demand_sha256") == demand_hash
+                and output.get("bytes") == stats.st_size
+                and output.get("mtime_ns") == stats.st_mtime_ns
+            ):
+                return destination
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            pass
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    envelope_path = destination.with_suffix(".geojson")
+    write_json(envelope_path, _routing_envelope_geojson(demands))
+    runtime = _discover_osmium()
+    temporary = destination.with_name(f"{destination.stem}.{uuid.uuid4().hex}.part.osm.pbf")
+    try:
+        _run_osmium(
+            runtime,
+            [
+                "extract",
+                "--progress",
+                "--verbose",
+                "--overwrite",
+                "--strategy=complete_ways",
+                "--generator=Obehy JDF routing demand clip/1",
+                f"--polygon={_osmium_path(runtime, envelope_path)}",
+                "--output-format=pbf,pbf_compression=zlib",
+                "--output",
+                _osmium_path(runtime, temporary),
+                _osmium_path(runtime, base),
+            ],
+        )
+        os.replace(temporary, destination)
+        stats = destination.stat()
+        write_json(
+            manifest_path,
+            {
+                "schema_version": 1,
+                "filter_schema": ROUTING_ENVELOPE_POLICY,
+                "source_key": source_key,
+                "routing_demand_sha256": demand_hash,
+                "routing_base_sha256": file_digest(base),
+                "envelope_geojson_sha256": file_digest(envelope_path),
+                "created_at": utc_now(),
+                "output": {
+                    "file": str(destination),
+                    "bytes": stats.st_size,
+                    "mtime_ns": stats.st_mtime_ns,
+                    "sha256": file_digest(destination),
+                },
+                "osmium": runtime.identity,
+            },
+        )
+    except BaseException:
+        if temporary.exists():
+            temporary.unlink()
+        raise
     return destination
 
 
@@ -652,7 +918,8 @@ def build_snapshot(
     merge: MergeFn = _merge_with_osmium,
     identity: IdentityFn | None = None,
     railway_filter: RailwayFilterFn = filter_railway_locations,
-    transit_filter: TransitFilterFn = filter_jdf_transit_stops,
+    transit_filter: TransitFilterFn = filter_jdf_post_candidates,
+    routing_filter: TransitFilterFn | None = None,
 ) -> Path:
     _progress(f"build started; workdir={config.workdir.resolve()}")
     workdir = config.workdir.resolve()
@@ -788,9 +1055,20 @@ def build_snapshot(
     )
     transit_filter(
         output_path,
-        jdf_transit_stops_path(workdir),
+        jdf_post_candidates_path(workdir),
         source_key=merge_key,
     )
+    # Tests and embedding callers may supply a single legacy custom filter. The
+    # production default always emits both purpose-built inputs.
+    effective_routing_filter = routing_filter
+    if effective_routing_filter is None and transit_filter is filter_jdf_post_candidates:
+        effective_routing_filter = filter_jdf_transit_routing_base
+    if effective_routing_filter is not None:
+        effective_routing_filter(
+            output_path,
+            jdf_transit_routing_base_path(workdir),
+            source_key=merge_key,
+        )
     _progress(f"build complete; source key={source_key}")
     return output_path
 
