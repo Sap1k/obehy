@@ -25,6 +25,9 @@ authoritative roadmap and architecture document.
   and route-point evidence. It evaluates and emits each stop from a bounded buffer and skips decoding
   diagnostic-only columns. Review replay keeps its separate diagnostic pass without changing score
   semantics.
+- JrUtil's compiled no-file default is the selected
+  `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe` policy. Explicit policy files
+  remain supported for live conversion and evidence replay.
 
 ### Reviewer validation
 
@@ -35,12 +38,12 @@ authoritative roadmap and architecture document.
 - All **26 bundle payloads** matched the baseline by path, byte count, row count, and SHA-256 after
   recalculating the new files' hashes. `manifest.json` was byte-identical as well, including the empty
   stable score relation and the complete estimated-post counters.
-- The final tree passes **202/202 JrUtil tests**, the Release test and multitool builds, **83 Oběhy
+- The final tree passes **203/203 JrUtil tests**, the Release test and multitool builds, **83 Oběhy
   tests** with six environment-gated skips, targeted Ruff lint/format checks, and strict Pyright with
   zero errors. The retained national evidence pack separately passed bounded validation at 1,987,433
   contexts and 35,990,519 attachment rows with a measured 0.95 GiB validator peak working set.
-- JrUtil and Oběhy are consolidated into one post-estimator commit in each repository. Push JrUtil
-  first, then the parent commit that advances its submodule pointer.
+- JrUtil and Oběhy keep the post estimator on their matching `feature/post-estimator` branches. Push
+  JrUtil first, then the parent commit that advances its submodule pointer.
 
 ## 2026-08-09 — Bounded-memory primitives extended across JDF and CZPTT
 

@@ -119,7 +119,9 @@ evidence/policy pair. The national command accepts `--post-inference-policy=poli
 build, `--post-inference-evidence=DIR` for an evidence-backed replay, and
 `--capture-post-inference-evidence` to publish an evidence-v2 pack and run manifest without writing
 a bundle. Oběhy supplies JrUtil's internal `--post-inference-evidence-only` switch for that capture.
-Capture is policy-neutral and cannot be combined with a policy or evidence reuse.
+Capture is policy-neutral and cannot be combined with a policy or evidence reuse. When no policy
+file is supplied, JrUtil uses the selected
+`conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe` policy as its compiled default.
 
 Evidence-backed publication is the score-free replay path: Oběhy passes
 `--no-post-inference-scores`, so the selected policy produces the final GTFS and assignments without
