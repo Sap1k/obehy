@@ -3,6 +3,17 @@
 This file is the concise engineering handoff for completed work. `BASE_PLAN.md` remains the
 authoritative roadmap and architecture document.
 
+## 2026-08-16 — Post-estimator parent-centroid radius
+
+- JrUtil evidence capture now excludes candidate observations farther than 300 m from a precise
+  parent-stop centroid. The cutoff is inclusive, and stops without a precise centroid do not enter
+  post estimation; raw candidate-source evidence remains unchanged.
+- Added capture regression coverage for near and distant candidates and for a stop downgraded to
+  an estimated-only parent location. The focused regression and the **29-test** JrUtil bundle class
+  passed. Existing compiler/package warnings remain.
+- The `converters/jrutil` working tree contains the implementation; its pinned parent submodule
+  pointer remains unchanged pending separate review and commit.
+
 ## 2026-08-15 — Post-estimator implementation handoff
 
 ### Current capabilities
