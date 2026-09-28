@@ -1555,7 +1555,7 @@ def build(
                     f"--snapshot-descriptor={descriptor_path}",
                     f"--converter-version={_converter_version(jrutil_identity)}",
                     *(
-                        [f"--post-inference-evidence={config.post_inference_evidence}"]
+                        [f"--post-inference-evidence={config.post_inference_evidence.resolve()}"]
                         if config.post_inference_evidence is not None
                         else (
                             [f"--routing-osm-pbf={routing_osm_file}"]
@@ -1564,7 +1564,7 @@ def build(
                         )
                     ),
                     *(
-                        [f"--post-inference-policy={config.post_inference_policy}"]
+                        [f"--post-inference-policy={config.post_inference_policy.resolve()}"]
                         if config.post_inference_policy is not None
                         else []
                     ),
@@ -1580,7 +1580,7 @@ def build(
                     ),
                     *(["--diagnostic-post-labels"] if config.diagnostic_post_labels else []),
                     *(
-                        [f"--post-review-stops={config.post_review_stops}"]
+                        [f"--post-review-stops={config.post_review_stops.resolve()}"]
                         if config.post_review_stops is not None
                         else []
                     ),

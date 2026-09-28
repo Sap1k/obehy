@@ -258,7 +258,8 @@ def build(
                 output=czptt_output,
                 workdir=runtime.workdir,
                 osm_file=runtime.osm_file,
-                geodata_root=geodata,
+                # CZPTT reads rail/SR70.csv from the snapshot root, not from other/.
+                geodata_root=runtime.jrunify_ext_geodata_dir,
                 jrutil_root=runtime.jrutil.directory,
                 jrutil_command=runtime.jrutil.command,
                 timetable_year=options.gvd_year,

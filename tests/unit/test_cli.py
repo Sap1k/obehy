@@ -162,6 +162,7 @@ def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None
     )
     assert jdf_config.estimated_posts is True
     assert jdf_config.build_jrutil is False
+    assert czptt_config.geodata_root == runtime.jrunify_ext_geodata_dir
     assert czptt_config.timetable_year == 2027
     assert czptt_config.build_jrutil is False
     assert czptt_config.memory_budget == "auto"
