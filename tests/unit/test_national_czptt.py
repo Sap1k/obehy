@@ -564,14 +564,14 @@ def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(
     )
     assert result == output.resolve()
     converter = next(command for command in commands if "czptt-to-bundle" in command)
-    assert "--operational-points=gtfs" in converter
+    assert "--operational-points=sidecar" in converter
     assert "--jobs=auto" in converter
     assert "--memory-budget=auto" in converter
     assert any(argument.startswith("--sr70-name20=") for argument in converter)
     assert (output / "bundle" / "gtfs.zip").is_file()
     assert (output / "sources" / "sr70" / "SR70_Nazev20.csv").is_file()
     manifest = json.loads((output / "run-manifest.json").read_text(encoding="utf-8"))
-    assert manifest["operational_points"] == "gtfs"
+    assert manifest["operational_points"] == "sidecar"
     assert manifest["jrutil"]["git"]["commit"] == "abc123"
     assert manifest["sr70_sha256"] == national_czptt.file_digest(
         output / "sources" / "sr70" / "SR70.csv"

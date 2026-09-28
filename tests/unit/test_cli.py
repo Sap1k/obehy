@@ -56,7 +56,7 @@ def _package(path: Path, *, publishable: bool = True) -> None:
 
 def _dependencies(
     runtime: RuntimeConfig, *, overlay_publishable: bool = True, fail_czptt: bool = False
-) -> tuple[Any, Any, Any, Any, list[Any]]:
+) -> tuple[Any, Any, Any, Any, Any, list[Any]]:
     seen: list[Any] = []
 
     def jdf_builder(config: Any, **_kwargs: object) -> Path:
@@ -102,7 +102,14 @@ def _dependencies(
         if "regional-gtfs-overlay" in command:
             _package(Path(command[-1]), publishable=overlay_publishable)
 
-    return jdf_builder, czptt_builder, downloader, runner, seen
+    def filtered_builder(bundle: Path, destination: Path, **kwargs: object) -> Path:
+        seen.append(("filtered-jdf", bundle, kwargs))
+        destination.mkdir(parents=True)
+        (destination / "gtfs.zip").write_bytes(b"fixture")
+        (destination / "filter-report.json").write_text("{}\n", encoding="utf-8")
+        return destination
+
+    return jdf_builder, czptt_builder, downloader, filtered_builder, runner, seen
 
 
 @pytest.fixture(autouse=True)
@@ -116,21 +123,39 @@ def _preflight(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    jdf, czptt, downloader, runner, seen = _dependencies(runtime)
+    jdf, czptt, downloader, filtered, runner, seen = _dependencies(runtime)
 
     result = cli.build(
         cli.BuildOptions(runtime, 2027, estimated_posts=True, progress="off"),
         jdf_builder=jdf,
         czptt_builder=czptt,
         downloader=downloader,
+        filtered_jdf_builder=filtered,
         command_runner=runner,
     )
 
-    assert {path.name for path in result.root.iterdir()} == {"jdf", "czptt", "release.json"}
+    assert {path.name for path in result.root.iterdir()} == {
+        "jdf",
+        "czptt",
+        "jdf-filtered",
+        "release.json",
+    }
     current = json.loads((runtime.artifact_root / "current.json").read_text(encoding="utf-8"))
     assert current["run_id"] == result.run_id
     assert Path(current["jdf"]) == result.jdf
     assert Path(current["czptt"]) == result.czptt
+    assert result.jdf_filtered is not None
+    assert Path(current["jdf_filtered"]) == result.jdf_filtered / "gtfs.zip"
+    filtered_calls = [
+        cast(tuple[str, Path, dict[str, object]], value)
+        for value in seen
+        if isinstance(value, tuple) and value[0] == "filtered-jdf"
+    ]
+    assert len(filtered_calls) == 1
+    assert (
+        filtered_calls[0][1]
+        == tmp_path / "work" / "runs" / "production" / result.run_id / "national-jdf" / "bundle"
+    )
     jdf_config = next(value for value in seen if isinstance(value, cli.national_jdf.BuildConfig))
     czptt_config = next(
         value for value in seen if isinstance(value, cli.national_czptt.BuildConfig)
@@ -140,6 +165,7 @@ def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None
     assert czptt_config.timetable_year == 2027
     assert czptt_config.build_jrutil is False
     assert czptt_config.memory_budget == "auto"
+    assert czptt_config.operational_points == "sidecar"
     build_count = 0
     for value in seen:
         if isinstance(value, list) and "build" in value:
@@ -163,7 +189,7 @@ def test_failure_preserves_previous_current(
     runtime.artifact_root.mkdir()
     previous = {"schema_version": 1, "run_id": "previous"}
     (runtime.artifact_root / "current.json").write_text(json.dumps(previous), encoding="utf-8")
-    jdf, czptt, downloader, runner, _seen = _dependencies(
+    jdf, czptt, downloader, filtered, runner, _seen = _dependencies(
         runtime, overlay_publishable=overlay_publishable, fail_czptt=fail_czptt
     )
 
@@ -173,6 +199,7 @@ def test_failure_preserves_previous_current(
             jdf_builder=jdf,
             czptt_builder=czptt,
             downloader=downloader,
+            filtered_jdf_builder=filtered,
             command_runner=runner,
         )
 
@@ -184,7 +211,7 @@ def test_existing_build_lock_rejects_concurrent_publication(tmp_path: Path) -> N
     runtime = _runtime(tmp_path)
     runtime.artifact_root.mkdir()
     (runtime.artifact_root / ".production-build.lock").write_text("busy", encoding="utf-8")
-    jdf, czptt, downloader, runner, _seen = _dependencies(runtime)
+    jdf, czptt, downloader, filtered, runner, _seen = _dependencies(runtime)
 
     with pytest.raises(PipelineError, match="Another production build"):
         cli.build(
@@ -192,6 +219,7 @@ def test_existing_build_lock_rejects_concurrent_publication(tmp_path: Path) -> N
             jdf_builder=jdf,
             czptt_builder=czptt,
             downloader=downloader,
+            filtered_jdf_builder=filtered,
             command_runner=runner,
         )
 
@@ -216,3 +244,28 @@ def test_production_overlay_policies_enable_all_nonblocking_coverage_gates() -> 
         "pid-gtfs",
         "ids-jmk-gtfs",
     }
+
+
+def test_filtered_jdf_can_be_skipped(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    jdf, czptt, downloader, filtered, runner, seen = _dependencies(runtime)
+
+    result = cli.build(
+        cli.BuildOptions(
+            runtime, 2027, progress="off", filtered_jdf=False, czptt_operational_points="gtfs"
+        ),
+        jdf_builder=jdf,
+        czptt_builder=czptt,
+        downloader=downloader,
+        filtered_jdf_builder=filtered,
+        command_runner=runner,
+    )
+
+    assert result.jdf_filtered is None
+    assert not (result.root / "jdf-filtered").exists()
+    current = json.loads((runtime.artifact_root / "current.json").read_text(encoding="utf-8"))
+    assert "jdf_filtered" not in current
+    czptt_config = next(
+        value for value in seen if isinstance(value, cli.national_czptt.BuildConfig)
+    )
+    assert czptt_config.operational_points == "gtfs"

@@ -10,7 +10,7 @@ uv run obehy-national-czptt build `
   --config C:\src\obehy\config\obehy.local.toml `
   --output C:\data\obehy-national-czptt `
   --timetable-year auto `
-  --operational-points gtfs
+  --operational-points sidecar
 ```
 
 The output path must not exist. `auto` changes to GVD year `Y` at midnight in
@@ -47,7 +47,8 @@ malformed/unsupported XML.
 
 ## Operational timing points
 
-`--operational-points gtfs` is the default. It publishes non-passenger locations between the
+`--operational-points sidecar` is the default (also in `obehy build`); see below.
+`--operational-points gtfs` publishes non-passenger locations between the
 first and last activity-`0001` call as ordinary GTFS stops with exact source times,
 `pickup_type=1`, `drop_off_type=1`, and `timepoint=1`, but only when the location has a real SR70
 or OSM coordinate. A purely timing/operational identity is never route-estimated. If it has no

@@ -70,7 +70,15 @@ soft planning and phase reclamation only; no process or .NET heap hard limit is 
 Measurements and remaining limitations are recorded in `PROGRESS.md`.
 
 Prepared OSM is the default. `--refresh-osm` updates it before source downloads. The command writes
-the two consumer packages to `artifact_root/releases/<run-id>/jdf` and `czptt`, then switches
+the two consumer packages to `artifact_root/releases/<run-id>/jdf` and `czptt`. It also writes a
+filtered JDF GTFS to `jdf-filtered/gtfs.zip`, following
+[gtfs-processor](https://github.com/0xaa55h/gtfs-processor): it is the pre-overlay national JDF
+without the lines portal.radekpapez.cz lists for FlixBus, PMDP, DPMO, PID, IDS JMK and IDZK, and
+without the line-number prefixes in `src/obehy/data/filtered-jdf/rules-v1.json`. It also drops
+calls at stops without coordinates. Customs stops (JDF fixed code `$`) are made non-boardable
+earlier, by JrUtil, in every JDF output. Use
+`--skip-filtered-jdf` to omit it, or `--line-filter-snapshot PATH` to replay a saved portal
+snapshot. The command then switches
 `artifact_root/current.json`. Failed runs leave the previous pointer unchanged and retain their
 logs, source descriptors, detailed diagnostics and failure report under
 `workdir/runs/production/<run-id>`.
@@ -203,9 +211,9 @@ converter then tries the next match method. Missing passenger locations are esti
 locally densest real-coordinate service occurrence. Pure timing points are never estimated: when
 they have no SR70/OSM coordinate, they remain in operational Parquet but are omitted from GTFS.
 
-Internal timing points with real coordinates are included as non-boardable/non-alightable GTFS
-rows by default. Use `--operational-points sidecar` for compatibility with consumers that display
-such points as normal stops. Synthesized fallback route labels use municipalities rather than
+By default, internal timing points appear only in the operational Parquet sidecars. Use
+`--operational-points gtfs` (or `obehy build --czptt-operational-points gtfs`) to also emit those
+with real coordinates as non-boardable/non-alightable GTFS rows. Synthesized fallback route labels use municipalities rather than
 station/facility names; `SR70_Nazev20.csv` remains a checksummed provenance input but does not
 affect conversion output. See [NATIONAL_CZPTT.md](NATIONAL_CZPTT.md) for source snapshots, GVD year
 selection, bundle schemas, line changes, platform handling, IDS zones, and diagnostics.

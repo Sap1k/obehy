@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal, cast
 from urllib.request import Request, urlopen
 
-from obehy import national_czptt, national_jdf, osm_snapshot
+from obehy import filtered_jdf, national_czptt, national_jdf, osm_snapshot
 from obehy.national_jdf import BuildReporter, CommandProgress, PipelineError
 from obehy.pipeline_support import file_digest, utc_now, write_json
 from obehy.production_package import (
@@ -48,6 +48,9 @@ class BuildOptions:
     estimated_posts: bool = False
     post_inference_policy: Path | None = None
     refresh_osm: bool = False
+    czptt_operational_points: national_czptt.OperationalPointMode = "sidecar"
+    filtered_jdf: bool = True
+    line_filter_snapshot: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,7 @@ class Release:
     root: Path
     jdf: Path
     czptt: Path
+    jdf_filtered: Path | None = None
 
 
 def _runtime_command(runtime: RuntimeConfig) -> list[str]:
@@ -133,6 +137,7 @@ def build(
     jdf_builder: Callable[..., Path] = national_jdf.build,
     czptt_builder: Callable[..., Path] = national_czptt.build,
     downloader: Callable[..., Path] = _download_gtfs,
+    filtered_jdf_builder: Callable[..., Path] = filtered_jdf.build_filtered_jdf,
     command_runner: national_jdf.CommandFn = national_jdf.run_command,
 ) -> Release:
     runtime = options.runtime
@@ -204,6 +209,18 @@ def build(
         )
         completed("national-jdf")
 
+        if options.filtered_jdf:
+            filtered_work = run_root / "filtered-jdf"
+            filtered_work.mkdir()
+            filtered_jdf_builder(
+                jdf_output / "bundle",
+                partial_release / "jdf-filtered",
+                reference=datetime.now(UTC).date(),
+                work=filtered_work,
+                line_snapshot=options.line_filter_snapshot,
+            )
+            completed("filtered-jdf")
+
         pid = sources / "pid-gtfs.zip"
         jmk = sources / "ids-jmk-gtfs.zip"
         pid_descriptor = downloader(PID_URL, "pid-gtfs", pid, require_api=False)
@@ -245,6 +262,7 @@ def build(
                 jrutil_root=runtime.jrutil.directory,
                 jrutil_command=runtime.jrutil.command,
                 timetable_year=options.gvd_year,
+                operational_points=options.czptt_operational_points,
                 jobs=options.jobs,
                 memory_budget=options.memory_budget,
                 keep_work=options.keep_work,
@@ -276,6 +294,14 @@ def build(
             }
         completed("enrichment-and-validation")
 
+        outputs: dict[str, object] = {}
+        if options.filtered_jdf:
+            report = partial_release / "jdf-filtered" / "filter-report.json"
+            outputs["jdf_filtered"] = {
+                "gtfs_sha256": file_digest(partial_release / "jdf-filtered" / "gtfs.zip"),
+                "filter_report_sha256": file_digest(report),
+            }
+
         write_json(
             partial_release / "release.json",
             {
@@ -293,6 +319,8 @@ def build(
                         else None
                     ),
                     "refresh_osm": options.refresh_osm,
+                    "czptt_operational_points": options.czptt_operational_points,
+                    "filtered_jdf": options.filtered_jdf,
                 },
                 "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
                 "sources": {
@@ -300,6 +328,7 @@ def build(
                     "ids-jmk-gtfs": json.loads(jmk_descriptor.read_text(encoding="utf-8")),
                 },
                 "packages": manifests,
+                "outputs": outputs,
                 "stages": stages,
             },
         )
@@ -311,11 +340,14 @@ def build(
             "jdf": str((release / "jdf").resolve()),
             "czptt": str((release / "czptt").resolve()),
         }
+        filtered = release / "jdf-filtered" if options.filtered_jdf else None
+        if filtered is not None:
+            current["jdf_filtered"] = str((filtered / "gtfs.zip").resolve())
         write_json(runtime.artifact_root / "current.json", current)
         if not options.keep_work:
             shutil.rmtree(jdf_output, ignore_errors=True)
             shutil.rmtree(czptt_output, ignore_errors=True)
-        return Release(run_id, release, release / "jdf", release / "czptt")
+        return Release(run_id, release, release / "jdf", release / "czptt", filtered)
     except Exception as error:
         write_json(
             run_root / "failure.json",
@@ -367,7 +399,7 @@ def _memory_budget(value: str) -> str:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="obehy")
     commands = parser.add_subparsers(dest="command", required=True)
-    command = commands.add_parser("build", help="build and publish the two production feeds")
+    command = commands.add_parser("build", help="build and publish the production feeds")
     command.add_argument("--config", type=Path)
     command.add_argument("--gvd-year", type=_year, default="auto")
     command.add_argument("--jobs", type=_jobs, default="auto")
@@ -377,6 +409,15 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--estimated-posts", action="store_true")
     command.add_argument("--post-inference-policy", type=Path)
     command.add_argument("--refresh-osm", action="store_true")
+    command.add_argument(
+        "--czptt-operational-points", choices=("sidecar", "gtfs"), default="sidecar"
+    )
+    command.add_argument("--skip-filtered-jdf", action="store_true")
+    command.add_argument(
+        "--line-filter-snapshot",
+        type=Path,
+        help="replay a saved line-snapshot.json instead of querying the line portal",
+    )
     return parser
 
 
@@ -397,6 +438,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 estimated_posts=cast(bool, args.estimated_posts),
                 post_inference_policy=cast(Path | None, args.post_inference_policy),
                 refresh_osm=cast(bool, args.refresh_osm),
+                czptt_operational_points=cast(
+                    national_czptt.OperationalPointMode, args.czptt_operational_points
+                ),
+                filtered_jdf=not cast(bool, args.skip_filtered_jdf),
+                line_filter_snapshot=cast(Path | None, args.line_filter_snapshot),
             )
         )
     except (
@@ -411,6 +457,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     print(f"JDF package: {result.jdf}")
     print(f"CZPTT package: {result.czptt}")
+    if result.jdf_filtered is not None:
+        print(f"Filtered JDF GTFS: {result.jdf_filtered / 'gtfs.zip'}")
     release_metadata = json.loads((result.root / "release.json").read_text(encoding="utf-8"))
     for source_id, source in sorted(release_metadata["sources"].items()):
         print(f"{source_id}: retrieved {source['retrieved_at']}, sha256 {source['payload_sha256']}")

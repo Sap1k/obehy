@@ -93,7 +93,7 @@ class BuildConfig:
     jrutil_root: Path | None
     jrutil_command: tuple[str, ...] | None
     timetable_year: int | Literal["auto"] = "auto"
-    operational_points: OperationalPointMode = "gtfs"
+    operational_points: OperationalPointMode = "sidecar"
     source_base_url: str = DEFAULT_SOURCE_BASE_URL
     source_snapshot: Path | None = None
     sr70: Path | None = None
@@ -1212,7 +1212,9 @@ def _parser() -> argparse.ArgumentParser:
     build_parser.add_argument("--output", required=True, type=Path)
     build_parser.add_argument("--config", type=Path)
     build_parser.add_argument("--timetable-year", type=_parse_year, default="auto")
-    build_parser.add_argument("--operational-points", choices=("gtfs", "sidecar"), default="gtfs")
+    build_parser.add_argument(
+        "--operational-points", choices=("gtfs", "sidecar"), default="sidecar"
+    )
     build_parser.add_argument("--source-base-url", default=DEFAULT_SOURCE_BASE_URL)
     build_parser.add_argument("--source-snapshot", type=Path)
     build_parser.add_argument("--sr70", type=Path)
