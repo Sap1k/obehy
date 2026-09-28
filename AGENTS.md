@@ -2,56 +2,52 @@
 
 ## Project identity
 
-- The app and public-facing project name is **Oběhy**.
-- Use the diacritic in prose and user-facing text. Use the ASCII form `obehy` for repository names, package names, paths, identifiers, and commands where portability matters.
-- `BASE_PLAN.md` is the authoritative implementation plan. Keep architectural and roadmap changes consistent with it.
+- The app and public-facing project name is **Oběhy**. Use the diacritic in prose and user-facing
+  text; use ASCII `obehy` for repositories, packages, paths, identifiers and commands.
+- `BASE_PLAN.md` is the long-term architecture document. It is partly out of date; do not rewrite
+  it as a side effect of other work.
 
-## Repository state
+## Current focus: static feed readiness
 
-- Database v1, the finalized serving-package validator/loader, and the national conversion bundle
-  builders are implemented. Read `PROGRESS.md`
-  before starting work for the current handoff, validation state, known limitations, and next
-  intended milestone.
-- The PostgreSQL national compiler/importer has been removed. Do not recreate PostgreSQL source
-  reconciliation. Production static compilation/overlays belong to JrUtil and Oběhy loads only
-  JrUtil's finalized serving package.
-- JrUtil uses explicitly provisional `v0:` IDs until one PID static-overlay build and one PID
-  realtime entity work end to end. The permanent registry is then built in a separate repository;
-  its launch is the sole planned public-ID break.
-- Combined JrUtil static compilation, regional overlays, realtime processes, API, frontend and the
-  public identity-registry service do not exist yet.
-- `converters/jrutil` is a pinned Git submodule. Do not edit submodule contents or advance its pointer unless the task explicitly calls for JrUtil work.
-- Keep generated data, source snapshots, build artifacts, credentials, and local environment files out of version control.
-- The configured PostgreSQL database named `obehy_test` is disposable development/test state. It
-  may be dropped, recreated, downgraded, or otherwise reset whenever implementation or validation
-  requires it, without requesting additional approval. Before any destructive database operation,
-  verify the connected database is exactly `obehy_test` and the user is `obehy`; this permission
-  does not apply to any other database or inferred production environment.
+- Read `PROGRESS.md` first. Its **Next steps** section is the working backlog: stop coordinates,
+  the fixed JDF stop-ID registry, post-estimator speed and the `obehy build` outputs.
+- Production static compilation and overlays belong to JrUtil. Oběhy acquires sources, supervises
+  `obehy build`, and publishes/loads JrUtil output. Do not recreate PostgreSQL source
+  reconciliation.
+- JrUtil work happens in the standalone checkout `E:/Git/obehy/jrutil`. `converters/jrutil` is a
+  pinned submodule: do not edit it or advance its pointer unless the task explicitly asks.
+- Stable JDF stop IDs come from the versioned stop-ID registry file applied by JrUtil. The separate
+  public identity-registry service in `IDENTITY_REGISTRY.md` remains a later milestone.
+- Keep generated data, source snapshots, build artifacts, credentials and local environment files
+  out of version control.
 
 ## Working conventions
 
-- Follow the vertical-slice order in `BASE_PLAN.md`; preserve opaque public IDs, provenance,
-  deterministic builds, active-build mapping isolation, and strict handling of ambiguous matches.
-- Prefer small, focused changes. Do not introduce infrastructure or abstractions before the milestone that needs them.
-- Preserve Czech text as UTF-8 and retain diacritics in public-facing names.
-- Add or update the closest relevant tests and fixtures with behavior changes. Use small deterministic fixtures for data-conversion and matching work.
-- Never silently guess an identity match. Quarantine ambiguity and expose it in diagnostics.
-- Update `PROGRESS.md` whenever work materially changes repository capabilities, decisions, known
-  limitations, validation results, or the recommended next step. Keep it factual and concise; do
-  not use it as a speculative backlog or duplicate `BASE_PLAN.md`.
-- A progress entry must state what changed, what was actually validated (including skipped or
-  unavailable checks), any remaining caveats, and the next safe handoff point.
-- Generate Alembic schema migrations from SQLAlchemy metadata with `alembic revision
-  --autogenerate`, then review the generated operations. Hand-written migration code is reserved
-  for database behavior Alembic cannot infer, such as PostgreSQL functions, triggers, extensions,
-  seed data, or a reviewed correction to generated DDL; do not hand-roll ordinary tables, columns,
-  indexes, foreign keys, or constraints.
+- Prefer small, focused changes; no infrastructure before the step that needs it.
+- Preserve Czech text as UTF-8 with diacritics in public-facing names.
+- Never silently guess an identity or coordinate match. Quarantine ambiguity and expose it in
+  diagnostics.
+- Add or update the closest tests with behavior changes, using small deterministic fixtures.
+- Keep `PROGRESS.md` short. When work changes a capability, limitation, validation result or next
+  step, update the matching status/next-step line and add at most a few lines to **Recent log**
+  stating what changed, what was validated (including skipped checks) and what remains.
+
+## Database
+
+- The PostgreSQL database `obehy_test` is disposable and may be reset without approval. Before any
+  destructive operation, verify the database is exactly `obehy_test` and the user is `obehy`.
+- Generate Alembic migrations with `alembic revision --autogenerate` and review them. Hand-written
+  migration code is only for behavior Alembic cannot infer (functions, triggers, extensions, seed
+  data).
 
 ## Validation
 
-- Run the narrowest relevant checks first, then broader checks when practical.
-- For documentation-only changes, inspect the rendered structure and review `git diff --check` plus `git diff`.
-- For JrUtil changes explicitly requested inside the submodule, run the relevant .NET tests from `converters/jrutil` and report the exact command and result.
-- If a planned command or project structure has not been bootstrapped yet, say so instead of inventing a passing check.
-- When validating native fixtures with JrUtil, inspect its log output as well as the process exit
-  code: current conversion commands may log an entity-level error while returning exit code zero.
+- Run the narrowest relevant checks first, then broader ones when practical:
+  `uv run pytest tests/unit -q`, `uv run ruff check src tests`, `uv run ruff format --check src
+  tests`, `uv run pyright`.
+- JrUtil: `dotnet test jrutil.tests/jrutil.tests.fsproj -c Release --no-restore` in the standalone
+  checkout; report the exact command and result.
+- Inspect JrUtil log output as well as the exit code: conversion commands may log entity-level
+  errors while returning zero.
+- For documentation-only changes, review `git diff --check` and `git diff`.
+- If a check cannot run, say so instead of claiming it passed.
