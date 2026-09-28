@@ -1,0 +1,275 @@
+{
+ "schema_version": 3,
+ "policy": {
+  "schema_version": 2,
+  "policy_id": "conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe",
+  "consolidation": {
+   "maximum_diameter_metres": 2,
+   "maximum_chainage_difference_metres": 20,
+   "maximum_heading_difference_degrees": 30,
+   "opposite_side_tolerance_metres": 2,
+   "distinguished_context_minimum_count": 2,
+   "distinguished_context_minimum_score": 0.55,
+   "distinguished_context_minimum_margin": 0.15
+  },
+  "geometry_weights": {
+   "alignment": 0.4,
+   "side": 0.25,
+   "proximity": 0.2,
+   "routed_excess": 0.15
+  },
+  "hard_gates": {
+   "centreline_neutral_tolerance_metres": 2,
+   "maximum_corridor_distance_metres": 100,
+   "maximum_routed_excess_metres": 500
+  },
+  "spatial_isolation": {
+   "minimum_separation_metres": 12,
+   "maximum_adjustment": 0.05
+  },
+  "resolution": {
+   "minimum_plausible_score": 0.9,
+   "minimum_physical_score": 0.98,
+   "minimum_physical_margin": 0.02,
+   "material_routed_advantage": 0.05
+  },
+  "consensus": {
+   "minimum_contexts": 1,
+   "minimum_winning_share": 0.67,
+   "minimum_per_context_score": 0.9,
+   "minimum_per_context_lead": 0.02
+  },
+  "established_post": {
+   "minimum_supporting_contexts": 3,
+   "minimum_runner_up_ratio": 2,
+   "maximum_geometry_disadvantage": 0.15,
+   "maximum_popularity_adjustment": 0.1,
+   "per_context_adjustment": 0.02
+  },
+  "alternative_corridors": {
+   "absolute_tie_metres": 0,
+   "relative_tie_fraction": 0.02,
+   "maximum_variants": 3
+  },
+  "modality": {
+   "source_support_per_weight": 0.01,
+   "maximum_source_support_adjustment": 0.05,
+   "explicit_support_adjustment": 0.05,
+   "estimated_support_adjustment": 0.03,
+   "conflict_adjustment": -0.05,
+   "maximum_combined_supporting_adjustment": 0.1
+  },
+  "side_groups": {
+   "maximum_ordinary_groups": 2,
+   "maximum_compactness_metres": 75,
+   "additional_group_minimum_contexts": 2
+  },
+  "authored_resolution": {
+   "minimum_physical_score": 0.75,
+   "minimum_physical_margin": 0.2,
+   "require_unanimous_contexts": true
+  },
+  "same_stop_pairs": {
+   "enabled": true,
+   "minimum_individual_score": 0.7,
+   "minimum_individual_margin": 0.15
+  }
+ },
+ "scorer": {
+  "kind": "learned",
+  "model": {
+   "format": "post-scorer-two-stage-v1",
+   "stage1": {
+    "format": "post-scorer-conditional-logit-v1",
+    "features": [
+     "side",
+     "alignment",
+     "proximity",
+     "corridor_distance",
+     "routed_fit",
+     "routed_excess_metres_capped",
+     "excess_minus_context_min",
+     "eligible",
+     "has_local_ref",
+     "is_bay",
+     "post_support",
+     "post_support_deficit",
+     "is_tram",
+     "is_trolleybus",
+     "anchor_previous_missing",
+     "anchor_next_missing",
+     "service_edge_count"
+    ],
+    "mean": [
+     0.5161411739565425,
+     0.8888383986148211,
+     0.7889304560400043,
+     7.094737000466475,
+     0.747470809048905,
+     176.1714789859491,
+     80.43267915776285,
+     0.48801857194199183,
+     0.6306446756223835,
+     0.2992540140455168,
+     1.1499718312595313,
+     0.13706763411720138,
+     0.02158551155404027,
+     0.013982379967168848,
+     0.1252901865936222,
+     0.1215893968975532,
+     2.688422161999398
+    ],
+    "scale": [
+     0.49004972694166277,
+     0.28815957079285315,
+     0.23282364668113242,
+     4.879263206528485,
+     0.37624815862460886,
+     304.10153801576513,
+     193.7091558394556,
+     0.4998564247678435,
+     0.4826302608949445,
+     0.457931271178506,
+     0.372579885108116,
+     0.40288411464641116,
+     0.1453257624958172,
+     0.11741751580417022,
+     0.3310476638445853,
+     0.3268109781810313,
+     7.180306111326794
+    ],
+    "weights": [
+     0.562305993418654,
+     0.18718628835864867,
+     -0.11179026267866718,
+     -0.185146669190887,
+     1.4266591699309896,
+     1.6583094107884122,
+     -0.4022704105035468,
+     0.7298486246585462,
+     0.2786772258783182,
+     -0.11774842860592774,
+     0.2501872762553364,
+     0.1650858128075866,
+     0.2158316362629399,
+     0.01257733637713294,
+     0.13075771467484004,
+     0.016253989699698795,
+     -0.0022932459083181644
+    ],
+    "null_utility": -2.2196763980164045,
+    "threshold": 0.5
+   },
+   "stage2": {
+    "format": "post-scorer-conditional-logit-v1",
+    "features": [
+     "side",
+     "alignment",
+     "proximity",
+     "corridor_distance",
+     "routed_fit",
+     "routed_excess_metres_capped",
+     "excess_minus_context_min",
+     "eligible",
+     "has_local_ref",
+     "is_bay",
+     "post_support",
+     "post_support_deficit",
+     "is_tram",
+     "is_trolleybus",
+     "anchor_previous_missing",
+     "anchor_next_missing",
+     "service_edge_count",
+     "reverse_mass",
+     "has_reverse",
+     "same_movement_mass",
+     "has_same_movement",
+     "same_next_mass",
+     "same_previous_mass"
+    ],
+    "mean": [
+     0.5161411739565425,
+     0.8888383986148211,
+     0.7889304560400043,
+     7.094737000466475,
+     0.747470809048905,
+     176.1714789859491,
+     80.43267915776285,
+     0.48801857194199183,
+     0.6306446756223835,
+     0.2992540140455168,
+     1.1499718312595313,
+     0.13706763411720138,
+     0.02158551155404027,
+     0.013982379967168848,
+     0.1252901865936222,
+     0.1215893968975532,
+     2.688422161999398,
+     0.29918812325736815,
+     0.8459072762770639,
+     0.33625381835604823,
+     0.9591601829996794,
+     0.3239871815413404,
+     0.3231598815347676
+    ],
+    "scale": [
+     0.4900497269416627,
+     0.2881595707928531,
+     0.23282364668113242,
+     4.879263206528484,
+     0.3762481586246088,
+     304.10153801576513,
+     193.7091558394556,
+     0.4998564247678435,
+     0.4826302608949445,
+     0.457931271178506,
+     0.372579885108116,
+     0.40288411464641116,
+     0.1453257624958172,
+     0.11741751580417022,
+     0.3310476638445853,
+     0.3268109781810313,
+     7.180306111326794,
+     0.36013843840813253,
+     0.36103761053189876,
+     0.3630629493263493,
+     0.19791898935600108,
+     0.3621878790649008,
+     0.3627335846244512
+    ],
+    "weights": [
+     0.13339022847802545,
+     0.1713007279045584,
+     0.008076085903519369,
+     -0.1368658401724678,
+     1.0948650722566395,
+     1.2993984807615626,
+     -0.44672172353223094,
+     0.39483790092451676,
+     0.20233914461113559,
+     -0.0023411136095206992,
+     0.262667549358875,
+     0.17976368658981418,
+     0.23781350686704344,
+     0.0064843987743955665,
+     0.34073354197275724,
+     0.3029627091948892,
+     0.0013028108457831238,
+     -0.5614711315028849,
+     0.24791508688243657,
+     -0.4174263324685861,
+     -0.12249616409348986,
+     0.5749632456979069,
+     0.3916562863467201
+    ],
+    "null_utility": -2.0972524020285443,
+    "threshold": 0.5
+   },
+   "thresholds": {
+    "simple": 0.6,
+    "complex": 0.58,
+    "area": 0.67
+   }
+  }
+ }
+}

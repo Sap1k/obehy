@@ -36,14 +36,15 @@ heap hard limit is configured; memory figures are telemetry.
   inventory convergence during live acquisition, and inconsistent-time correction (R10).
 - **Post estimator:** opt-in (`--estimated-posts`). The default policy is
   `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe`. Evidence-v2 packs can be
-  replayed, but only for a byte-identical merged JDF.
+  replayed, but only for a byte-identical merged JDF. A learned scorer (policy v3,
+  `src/obehy/data/post-inference/learned-v1.json`) is available via `--post-inference-policy`.
 - **Serving:** JrUtil production packages (`jrutil-production`/serving-v2) with GTFS, extensions,
   diagnostics and typed Parquet relations. The database v1 loader in Oběhy is incompatible with
   serving-v2 by design.
 
 ### Last validation evidence
 
-- JrUtil Release suite: 278 tests (2026-09-28); focused CZPTT suite 68.
+- JrUtil Release suite: 293 tests (2026-09-28); focused CZPTT suite 68.
 - Oběhy: focused CZPTT pipeline 17 tests; CLI/JDF/CZPTT focused set 52 (2026-09-19).
 - Default JDF conversion: 179.4 s, 2.88 GB peak private memory, package valid (2026-09-15).
 - National finalizer replay with overlays: 4.07 GiB peak, package valid (2026-09-19).
@@ -124,6 +125,34 @@ Work order: §4 → §1 → §2 → §3.
   `src/obehy/data/filtered-jdf/rules-v1.json`). Not yet run inside a complete live `obehy build`.
 
 ## Recent log
+
+- **2026-09-28** — Post estimator: learned scorer for terminals where bays lost to a
+  lower-penalty street post (Most/Litvínov, nádraží).
+  - Model: two-stage conditional logit (`jrutil/scripts/post-scorer`) trained on PID + IDS JMK
+    GTFS posts (about 140k labelled contexts), traffic-weighted. OSM `route_ref` is not used.
+  - Results on held-out stops (weighted precision / share of contexts placed):
+    PID 0.885 / 78% vs policy 0.846 / 20%; JMK 0.839 / 74% vs 0.787 / 19%.
+  - JrUtil port: policy schema v3 embeds the model (`JdfPostScorer.fs`, new `Area`
+    resolution) via `repo/src/obehy/data/post-inference/learned-v1.json`. Python/F# parity:
+    0 decision differences in 261k Ústecký contexts. Also: region-restricted capture,
+    `jdf-export-post-features`, OSM `local_ref` in evidence tags.
+  - Fixes found on the way:
+    - overlay transfer conflicts merged or quarantined;
+    - growth-gated memory reclaim;
+    - `route_stop` published at the stop place, not a post (national estimated-posts
+      builds crashed on it);
+    - `obehy build` now passes absolute policy/evidence paths and gives CZPTT the geodata
+      root (`SR70.csv` was not found).
+  - National run with `learned-v1.json`: JDF bundle (57 min, post evaluation 13 min), overlay
+    (16 min) and package validation passed. CZPTT stopped on the SR70 path before the fix;
+    CZPTT was not rerun.
+  - Validation: JrUtil Release 293 passed; post-scorer 26; Oběhy unit 96, ruff clean.
+    Pyright: 4 errors, all in `test_national_czptt.py`, also present without these changes.
+  - Remaining:
+    - make `learned-v1.json` the default;
+    - noisy JMK bus-station labels;
+    - posts off the evidence router's corridor are never chosen (e.g. the highway post at
+      Teplice, Zámecká zahrada).
 
 - **2026-09-28** — Docs refocused on static-feed readiness; old PROGRESS entries left to git
   history.
