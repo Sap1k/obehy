@@ -50,6 +50,37 @@ paths for the work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkou
 JrUtil checkout or an executable command. Every national command accepts `--config PATH`;
 there is no sibling-checkout or parent-directory fallback.
 
+## Production feed pair
+
+The main CLI freezes the current national and regional inputs, builds JDF and CZPTT sequentially,
+applies PID and IDS JMK to JDF in one overlay pass, validates both JrUtil production packages, and
+publishes the pair atomically:
+
+```powershell
+uv run obehy build
+uv run obehy build --estimated-posts
+uv run obehy build --refresh-osm
+```
+
+National release acceptance is pending. JDF calls now use disk-backed storage and typed output
+sinks, while the regional finalizer releases completed compiler, source-call, provenance and
+validation phases instead of retaining them together. A replay of the previously failing national
+overlay finalizer peaked at 4,373,061,632 private bytes, down from 14,130,675,712 bytes. This is
+soft planning and phase reclamation only; no process or .NET heap hard limit is configured.
+Measurements and remaining limitations are recorded in `PROGRESS.md`.
+
+Prepared OSM is the default. `--refresh-osm` updates it before source downloads. The command writes
+the two consumer packages to `artifact_root/releases/<run-id>/jdf` and `czptt`, then switches
+`artifact_root/current.json`. Failed runs leave the previous pointer unchanged and retain their
+logs, source descriptors, detailed diagnostics and failure report under
+`workdir/runs/production/<run-id>`.
+
+The production PID + IDS JMK policy preserves the calibrated matching behavior and reports all
+coverage metrics, with explicit zero floors for this milestone. Both regional snapshots are
+required. The internal enrichment boundary currently passes packages through unchanged; future
+shape generation belongs there, after regional shapes have been selected and before final package
+validation.
+
 Build the regional OSM snapshot explicitly:
 
 ```powershell
@@ -94,11 +125,15 @@ Use `--jobs=auto|N` to configure both parallel JrUtil stages, with `--fix-jobs` 
 `--merge-jobs` as optional stage overrides. `--memory-budget=auto|SIZE` controls the
 adaptive admission budget. Auto aggressively oversubscribes logical CPUs but derives its memory
 ceiling from current process use, available RAM, and a bounded evictable-memory allowance on hosts
-with at most 20 GiB, with explicit operating-system headroom; numeric values are hard ceilings.
+with at most 20 GiB, with explicit operating-system headroom. Numeric values bound scheduler
+admission; they are not process or .NET heap hard limits.
 The fix-stage snapshot is taken after the persistent stop index is loaded. Live
 worker/CPU/memory/backlog samples and observed
 peak concurrency are shown in progress and recorded in `run-manifest.json`. Merged JDF packaging defaults to deterministic balanced
 Deflate (`--zip-compression=balanced`); `fast` and `small` select levels 1 and 9.
+
+The top-level `obehy build` forwards the same jobs and memory-budget settings to JDF, the regional
+overlay, and CZPTT. The budget is a soft admission/spill target, not a hard .NET heap limit.
 
 The builder writes fixed work batches as uncompressed ZIPs to reduce temporary file count.
 The builder does not enable JrUtil's experimental persistent cache.

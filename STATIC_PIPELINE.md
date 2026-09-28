@@ -3,6 +3,27 @@
 `BASE_PLAN.md` is authoritative. This document fixes the executable boundary between Oběhy,
 JrUtil, the serving database, and the future public identity registry.
 
+## Current two-package production command
+
+`obehy build` is the current production entry point. It validates the configured OSM/geodata,
+builds the national JDF package, freezes PID and IDS JMK GTFS snapshots, applies both overlays in
+one JrUtil invocation, and builds CZPTT using the same resolved GVD year. It publishes exactly two
+`jrutil-production` packages under one immutable release and atomically updates `current.json` only
+after JrUtil validation and publication-eligibility checks pass.
+
+Source snapshots, orchestration manifests, process logs and detailed diagnostics remain outside the
+closed package trees. The serving-v2 database importer is intentionally deferred; the existing
+serving-v1 loader continues to reject the new package contract. A no-op enrichment boundary sits
+between compilation and final validation so MOTIS shape generation can be inserted there later.
+
+Live release acceptance is still pending. The previously failing national overlay finalizer now
+peaks at 4,373,061,632 private bytes on the retained production staging, down from
+14,130,675,712 bytes. JDF uses native typed sinks and disk-backed calls; overlay finalization now
+sequences its largest writers, discards completed relation state and reclaims dead Parquet buffers.
+Memory budgets remain soft admission/spill targets, with no process or .NET heap hard limit.
+Complete migration of CZPTT/overlay and content validation remains unfinished. See `PROGRESS.md`
+for measured results and the actual verification state.
+
 ## Ownership and current build protocol
 
 1. Oběhy downloads each configured static source, stores it immutably by SHA-256, and exports a

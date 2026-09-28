@@ -353,6 +353,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         log.write_text("fixture command\n", encoding="utf-8")
         if command[1] == "build":
             return
+        if "validate-package" in command:
+            return
         arguments = command[command.index("--") + 1 :]
         operation = arguments[0]
         if operation == "fix-jdf":
@@ -386,35 +388,31 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             )
         elif operation == "jdf-to-bundle":
             bundle = Path(arguments[-1])
-            (bundle / "gtfs-intermediate").mkdir(parents=True)
-            (bundle / "gtfs-intermediate" / "trips.txt").write_text(
-                "route_id,service_id,trip_id\nr,s,t\n", encoding="utf-8"
-            )
-            (bundle / "gtfs-intermediate" / "stops.txt").write_text(
-                "stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station\n"
-                "s,Stop,50,14,0,p\n"
-                "p,Station,50,14,1,\n",
-                encoding="utf-8",
-            )
-            (bundle / "gtfs-intermediate" / "stop_times.txt").write_text(
-                "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
-                "t,08:00:00,08:00:00,s,1\n",
-                encoding="utf-8",
-            )
-            for name in national_jdf.PARQUET_FILES:
-                (bundle / name).write_bytes(b"PAR1")
+            bundle.mkdir(parents=True)
+            with zipfile.ZipFile(bundle / "gtfs.zip", "w") as gtfs:
+                gtfs.writestr("trips.txt", "route_id,service_id,trip_id\nr,s,t\n")
+                gtfs.writestr(
+                    "stops.txt",
+                    "stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station\n"
+                    "s,Stop,50,14,0,p\n"
+                    "p,Station,50,14,1,\n",
+                )
+                gtfs.writestr(
+                    "stop_times.txt",
+                    "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+                    "t,08:00:00,08:00:00,s,1\n",
+                )
+            (bundle / "extensions").mkdir()
+            (bundle / "serving").mkdir()
             diagnostics: dict[str, object] = {"schema_version": 1, "diagnostics": []}
             national_jdf.write_json(bundle / "diagnostics.json", diagnostics)
-            payloads = [bundle / "diagnostics.json"]
-            payloads.extend(
-                (bundle / "gtfs-intermediate" / name)
-                for name in ("trips.txt", "stops.txt", "stop_times.txt")
-            )
-            payloads.extend(bundle / name for name in national_jdf.PARQUET_FILES)
-            manifest = {
-                "bundle_format": "obehy-jrutil-jdf",
+            manifest: dict[str, object] = {
+                "bundle_format": "jrutil-production",
                 "bundle_version": 1,
-                "conversion": {
+                "serving_schema_version": 2,
+                "contract_valid": True,
+                "publication_eligible": True,
+                "compiler": {
                     "estimated_posts": {
                         "candidate_bearing_stops": 0,
                         "authored_posts_positioned": 0,
@@ -425,16 +423,9 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
                         "two_call_same_stop_blocks": 0,
                         "distinct_pair_choices": 0,
                         "unresolved_block_edges": 0,
-                    }
+                    },
                 },
-                "files": [
-                    {
-                        "path": path.relative_to(bundle).as_posix(),
-                        "bytes": path.stat().st_size,
-                        "sha256": file_digest(path),
-                    }
-                    for path in payloads
-                ],
+                "files": [],
             }
             national_jdf.write_json(bundle / "manifest.json", manifest)
         else:
@@ -468,11 +459,11 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     assert commands[0][1] == "build"
     multitool_commands = [command for command in commands if "--" in command]
     operations = [command[command.index("--") + 1] for command in multitool_commands]
-    assert operations == ["fix-jdf", "merge-jdf", "jdf-to-bundle"]
+    assert operations == ["fix-jdf", "merge-jdf", "jdf-to-bundle", "validate-package"]
     assert all("--strict" in command for command in multitool_commands[:2])
     assert all("--by-id" not in command for command in multitool_commands)
     assert all("--stop-ids-cis" not in command for command in multitool_commands)
-    fix_command, merge_command, bundle_command = multitool_commands
+    fix_command, merge_command, bundle_command = multitool_commands[:3]
     assert "--batch-output=zip" in fix_command
     assert "--jobs=auto" in fix_command
     assert "--jobs=auto" in merge_command

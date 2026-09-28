@@ -48,25 +48,12 @@ from obehy.osm_snapshot import (
     validate_snapshot,
 )
 from obehy.pipeline_support import file_digest, utc_now, write_json
+from obehy.production_package import ProductionPackageError, extracted_gtfs, read_manifest
 from obehy.runtime_config import ConfigurationError, load_runtime_config
 
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
 DRAHY_URL = "https://portal.cisjr.cz/pub/draha/mestske/JDF.zip"
 TRANSPORT_MODE_RULES = Path(__file__).with_name("data") / "jdf_transport_mode_rules.csv"
-PARQUET_FILES = {
-    "source_route_metadata.parquet",
-    "source_stop_metadata.parquet",
-    "source_call_metadata.parquet",
-    "source_route_stop_zone_metadata.parquet",
-    "source_notice_metadata.parquet",
-    "source_transfer_metadata.parquet",
-    "source_travel_restriction_metadata.parquet",
-    "derived_post_locations.parquet",
-    "derived_post_assignments.parquet",
-    "post_candidate_evidence.parquet",
-    "post_side_groups.parquet",
-    "derived_post_scores.parquet",
-}
 
 
 class PipelineError(RuntimeError):
@@ -344,6 +331,7 @@ class BuildConfig:
     post_inference_policy: Path | None = None
     post_inference_evidence: Path | None = None
     capture_post_inference_evidence: bool = False
+    build_jrutil: bool = True
 
 
 DownloadFn = Callable[[str, Path, str, Reporter | None], DownloadRecord]
@@ -1216,60 +1204,26 @@ def _verify_fixed_batches(fixed_root: Path, expected: set[str]) -> None:
 
 
 def _verify_bundle(bundle: Path, reporter: Reporter | None = None) -> dict[str, Any]:
-    manifest_path = bundle / "manifest.json"
-    diagnostics_path = bundle / "diagnostics.json"
-    manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
-    conversion = cast(dict[str, object], manifest.get("conversion", {}))
+    manifest = read_manifest(bundle)
+    conversion = cast(dict[str, object], manifest.get("compiler", {}))
     estimated_posts = cast(dict[str, object], conversion.get("estimated_posts", {}))
-    if (
-        manifest.get("bundle_format") != "obehy-jrutil-jdf"
-        or manifest.get("bundle_version") != 1
-        or not {
-            "candidate_bearing_stops",
-            "authored_posts_positioned",
-            "single_internal_posts",
-            "composite_internal_posts",
-            "single_candidate_skips",
-            "weak_or_unresolved_contexts",
-            "two_call_same_stop_blocks",
-            "distinct_pair_choices",
-            "unresolved_block_edges",
-        }.issubset(estimated_posts)
-    ):
+    if estimated_posts and not {
+        "candidate_bearing_stops",
+        "authored_posts_positioned",
+        "single_internal_posts",
+        "composite_internal_posts",
+        "single_candidate_skips",
+        "weak_or_unresolved_contexts",
+        "two_call_same_stop_blocks",
+        "distinct_pair_choices",
+        "unresolved_block_edges",
+    }.issubset(estimated_posts):
         raise PipelineError("Bundle manifest is missing the estimated-post schema-v4 contract")
-    declared_paths: set[str] = set()
-    entries = cast(list[dict[str, Any]], manifest.get("files", []))
-    task = reporter.start("Validate bundle", total=len(entries)) if reporter else None
-    for raw_entry in entries:
-        relative = cast(str, raw_entry["path"])
-        declared_paths.add(relative)
-        payload = bundle / Path(relative)
-        if not payload.is_file():
-            raise PipelineError(f"Bundle manifest payload is missing: {relative}")
-        if (
-            payload.stat().st_size != raw_entry["bytes"]
-            or file_digest(payload) != raw_entry["sha256"]
-        ):
-            raise PipelineError(f"Bundle manifest does not match payload: {relative}")
-        if reporter is not None and task is not None:
-            reporter.update(task, advance=1, detail=relative)
-    missing_parquet = PARQUET_FILES - declared_paths
-    if missing_parquet:
-        raise PipelineError(f"Bundle is missing required Parquet files: {sorted(missing_parquet)}")
-    diagnostics = cast(dict[str, Any], json.loads(diagnostics_path.read_text(encoding="utf-8")))
-    errors = [
-        item
-        for item in cast(list[dict[str, Any]], diagnostics["diagnostics"])
-        if item["severity"] == "error"
-    ]
-    if errors:
-        raise PipelineError(f"Bundle contains {len(errors)} error-severity diagnostics")
-    trips = bundle / "gtfs-intermediate" / "trips.txt"
-    if not trips.is_file() or len(trips.read_text(encoding="utf-8-sig").splitlines()) < 2:
-        raise PipelineError("Bundle GTFS contains no trips")
-    verify_gtfs_stops(bundle / "gtfs-intermediate", reporter)
-    if reporter is not None and task is not None:
-        reporter.finish(task, f"{len(entries)} payloads")
+    with extracted_gtfs(bundle) as gtfs:
+        trips = gtfs / "trips.txt"
+        if not trips.is_file() or len(trips.read_text(encoding="utf-8-sig").splitlines()) < 2:
+            raise PipelineError("Bundle GTFS contains no trips")
+        verify_gtfs_stops(gtfs, reporter)
     return manifest
 
 
@@ -1488,7 +1442,7 @@ def build(
 
         set_stage("build-jrutil")
         build_command = _multitool_build_command(config)
-        if build_command is not None:
+        if config.build_jrutil and build_command is not None:
             command_results["build"] = command_runner(
                 build_command,
                 _jrutil_cwd(config),
@@ -1630,6 +1584,7 @@ def build(
                         if config.post_review_stops is not None
                         else []
                     ),
+                    f"--diagnostics-out={publish / 'diagnostics-detail'}",
                     f"--logfile={logs / 'bundle.log'}",
                     str(merged_zip),
                     str(bundle),
@@ -1656,6 +1611,14 @@ def build(
         bundle_manifest = (
             None if evidence_manifest is not None else _verify_bundle(bundle, reporter)
         )
+        if bundle_manifest is not None:
+            command_results["validate_package"] = command_runner(
+                _multitool_command(config, ["validate-package", str(bundle)]),
+                _jrutil_cwd(config),
+                logs / "validate-package.process.log",
+                reporter,
+                CommandProgress("Validate production package", stage="validate-package"),
+            )
         locked_evidence_manifest = evidence_manifest or input_evidence_manifest
         locked_evidence_path = (
             publish / "post-inference-evidence-v2"
@@ -1976,6 +1939,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         OsmSnapshotError,
         OSError,
         PipelineError,
+        ProductionPackageError,
         subprocess.SubprocessError,
         zipfile.BadZipFile,
     ) as error:

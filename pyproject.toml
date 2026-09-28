@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
+obehy = "obehy.cli:main"
 obehy-national-jdf = "obehy.national_jdf:main"
 obehy-national-czptt = "obehy.national_czptt:main"
 obehy-osm = "obehy.osm_snapshot:main"
@@ -39,6 +40,7 @@ packages = ["src/obehy"]
 "src/obehy/data/czptt_osm_aliases.json" = "obehy/data/czptt_osm_aliases.json"
 "src/obehy/data/jdf_transport_mode_rules.csv" = "obehy/data/jdf_transport_mode_rules.csv"
 "src/obehy/data/netex_mapping_v1.json" = "obehy/data/netex_mapping_v1.json"
+"src/obehy/data/regional-gtfs-overlay" = "obehy/data/regional-gtfs-overlay"
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

@@ -35,13 +35,15 @@ snapshot; its `SR70_Nazev20.csv` companion is resolved from the same directory u
 selected with `--sr70-name20`. A missing pair fails rather than mixing editions.
 `--jobs auto` means eight download workers.
 
-Discovery freezes the object paths before downloads begin. Monthly HTTP directory listings are
-read concurrently and no per-object metadata requests are made. The downloaded bytes and their
-SHA-256 hashes form the authoritative snapshot. Downloads stream through eight persistent HTTP
-connections with bounded in-flight work and file-count progress. The build fails if a discovered
-object disappears or cannot be downloaded completely, has the wrong ZIP/gzip magic, contains a
-corrupt ZIP member, or decompresses to malformed/unsupported XML. Objects appearing after the
-freeze are ignored and reported.
+Discovery reads monthly HTTP directory listings concurrently and makes no per-object metadata
+requests. The downloaded bytes and their SHA-256 hashes form the authoritative snapshot. Downloads
+stream through eight persistent HTTP connections with bounded in-flight work and file-count
+progress. After each download pass, the build rechecks the inventory and downloads newly listed
+objects. It stops when a recheck is stable, with at most five download passes total. The final
+inventory and all downloaded objects are recorded in the snapshot. The build fails if the listing
+still grows after the fifth pass, or if a discovered object disappears, cannot be downloaded
+completely, has the wrong ZIP/gzip magic, contains a corrupt ZIP member, or decompresses to
+malformed/unsupported XML.
 
 ## Operational timing points
 
@@ -145,8 +147,11 @@ manifest.json
 ```
 
 `derived/messages.zip` uses fixed entry names, timestamps, permissions, ordering, and Deflate
-settings. Annual messages precede changes; within each change directory cancellations precede
-additions. Exact duplicate payloads are removed. Conflicting timetables with the same complete
+settings. Annual messages precede changes; changes are ordered by their source
+`CZPTTCreation`/`CZPTTCancelation` timestamp, with additions before cancellations only when the
+timestamps are equal. This ensures that a cancellation published later in the same month is
+applied after its timetable instead of accidentally resurrecting the timetable. Exact duplicate
+payloads are removed. Conflicting timetables with the same complete
 object-type/company/core/variant/year PA identity fail the build.
 
 `gtfs-intermediate/` contains standard GTFS only. `extensions/` contains the three Oběhy Czech
@@ -198,6 +203,9 @@ CZPTT Parquet schema v1 retains only source facts and typed projection bridges:
 - `operational_calls`: source PA/sequence/location, passenger flag, source arrival/departure
   seconds, subsidiary evidence, and active line code;
 - `source_call_metadata`: typed GTFS trip/stop-sequence to source PA/sequence projection;
+- `source_note_metadata`: lossless central, non-central, and note-calendar values, resolution state,
+  validity bounds, and generated-trip projection;
+- `source_feature_metadata`: typed trip/call features linked to their source note where applicable;
 - `source_ids_coverage_metadata`: normalized accepted `CZIPTS`/`CZCalendarIPTS` source facts;
 - `source_ids_coverage_trip_metadata`: typed coverage-to-overlapping-GTFS-trip projection.
 
@@ -205,6 +213,42 @@ PA/TR identities live in `cz_trips.source_trip_ids`; there is no trip mirror Par
 pipe-delimited generated-trip list. Split boundaries produce multiple projection rows and
 sidecar-only calls produce none. All Parquets use deterministic ordering, Snappy compression,
 65,536-row groups, and embedded `czptt-v1`/schema/source metadata.
+
+The production package schema is unchanged: the finalizer maps the two note/feature bridges into
+the existing `service_note`, `service_note_assignment`, and `service_feature_assignment`
+relations. Central note codes `17` and `34` retain wheelchair capability plus their recommended or
+required booking distinction. Codes `22` and `26`–`29` retain positive bicycle carriage,
+carry-on/storage, and reservation distinctions; code `36` is explicit bicycle prohibition.
+Activity `0030` remains standard GTFS request-stop pickup/drop-off type `3` and also becomes a
+call-scoped `on_request` feature. Embark-only and disembark-only restrictions still take precedence
+on the forbidden side of the call.
+
+Train-equipment note semantics are not projected onto generated rail-replacement (`NAD`) trips;
+the raw notes remain attached to their CZPTT source and explicit call activities such as `0030`
+still apply. Because the pinned MOTIS/Nigiri importer ignores trip specificity for non-stay-seated
+transfers and otherwise applies
+its configured default transfer time, each boundary is emitted as a deduplicated stop-pair
+`transfer_type=2` row with a zero minimum time. This explicitly overrides that default without
+adding time. The stop-scoped rule remains bounded by the synthetic `BUS` boarding point, which is
+served only by replacement transport. Such a transfer is emitted only when both public endpoints
+have the same country and primary location code. If removing an operational boundary point leaves
+rail and NAD trips at different public stations, both trips remain available but no walking
+transfer is invented; the omitted cross-station link is recorded in diagnostics.
+
+GTFS-only split edges without source timing first inherit a timed counterpart at the same primary
+location and otherwise use sequence-linear interpolation only when bracketed by known PA times.
+Inferred edges carry `timepoint=0`; `operational_calls` retains the original nullable source times.
+A generated journey whose edge remains untimed is omitted and diagnosed. Public agency display
+names omit catalog qualifiers beginning with a spaced dash (` - `), without changing agency IDs or
+hyphenated legal names.
+
+GTFS trip flags are deliberately conservative. Wheelchair capability is emitted as
+`wheelchair_accessible=1`, positive bicycle carriage as `bikes_allowed=1`, and code `36` as
+`bikes_allowed=2` only when the corresponding note covers the complete generated trip on every
+active service date. Partial, calendar-limited, unresolved, or contradictory positive/negative
+bicycle claims remain unknown and are retained in the semantic relations and diagnostics. Missing
+accessibility never becomes `wheelchair_accessible=2`; code `17` is not presented as a separate
+low-floor guarantee because its source meaning also permits a lift-equipped vehicle.
 
 Every KADR IDS entry remains represented as coverage metadata. Entries whose catalog note
 explicitly identifies a fare band (for example `PID pásmo P`) additionally produce catalog-resolved

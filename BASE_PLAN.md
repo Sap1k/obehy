@@ -761,10 +761,31 @@ operational/provenance relations, validations, diagnostics and a canonical manif
 National-sized relations are scanned once per stage. The compiler may not materialize or emit a
 second 17-million-row JDF call relation. Use JrUtil's resource-aware worker planning, route/trip
 partitioning, streaming output, one final sort and digest-keyed stage caches. Record stage duration,
-CPU, I/O, peak memory, cache reuse and row counts. After a controlled national baseline exists,
-unexplained performance regressions above 15 percent fail the build gate.
+CPU, I/O, peak memory, cache reuse and row counts. The user stopped further runtime optimization
+after the current changes on 2026-09-15; do not continue tuning to reach the earlier 120-second
+target without a new request. The hard ceiling is less than 4,000,000,000 bytes of aggregate
+private memory across active build processes throughout the complete production build, including
+fixing, merging, inference, CZPTT, overlay and validation. Worker requests cannot override memory
+admission. Measure one warm-up and three frozen national runs; small fixtures do not establish
+acceptance. Neither the earlier v1-relative runtime gate nor the two-minute target requires further
+optimization under the current instruction.
+
+JDF, CZPTT and regional overlays must converge on one typed compilation path and production writer.
+Retain accepted conversion and matching algorithms, replace national call/exception arrays with
+bounded storage and compact shared schedules, and emit GTFS and serving relations from native
+facts. Remove legacy staging conversion and reconstructed CSV compiler views after equivalence
+checks pass. Sorting, compression and validation share the execution budget and report their real
+phase, completed work, private memory and waiting at least once per second. Database migration,
+shape generation and further matching research remain outside this work.
 
 ## National conversion bundles
+
+The implemented production entry point is `obehy build`. It emits one immutable release containing
+the PID + IDS JMK overlaid JDF package and the CZPTT package, validates both against JrUtil's closed
+production contract, and switches a single filesystem pointer only after the pair succeeds. This is
+the application-building baseline while serving-v2 database import remains deferred. Shape
+generation retains its planned position after overlay selection and before final validation through
+an explicit no-op enrichment stage.
 
 National conversion commands use one mandatory machine-local TOML configuration with absolute
 paths for the heavy-work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkout, and
@@ -1406,6 +1427,18 @@ preserves stop accessibility/facilities and CLO/MHD/rail/line/metro/ship/airport
 `connection_claim` preserves `m`/`M`, all supplied specificity, any future specification-note parse
 provenance, and unresolved claims; restrictions retain their original scope. See
 `JDF_SEMANTICS.md` for the field-level contract and known JrUtil gaps.
+
+CZPTT uses the same relations without a schema fork. Central/non-central/calendar timetable notes
+remain lossless notes; codes `17`/`34` become wheelchair-capable vehicle features, codes
+`22`/`26`–`29` become positive bicycle features, and code `36` is authoritative bicycle
+prohibition. Only whole-generated-trip, all-active-date claims enter standard GTFS trip flags;
+partial, calendar-limited, unresolved, and contradictory claims remain semantic facts and
+diagnostics. Activity `0030` is both a call-scoped `on_request` feature and standard GTFS
+pickup/drop-off type `3`, subject to embark-only/disembark-only restrictions.
+Generated rail-replacement trips do not inherit train-equipment note features. Their boundaries
+use stop-pair `transfer_type=2` rows with `min_transfer_time=0` between the synthetic NAD `BUS`
+boarding point and the rail boarding point. This overrides MOTIS's configured default transfer
+time; the synthetic NAD-only stop bounds the rule after MOTIS/Nigiri discards trip specificity.
 
 Only uniquely resolved connection claims become `transfer` rows. A route or wait time without an
 identifiable target trip remains valuable source information, but must not be exposed as a routable
