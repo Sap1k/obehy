@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal, cast
 from urllib.request import Request, urlopen
 
-from obehy import filtered_jdf, national_czptt, national_jdf, osm_snapshot
+from obehy import filtered_jdf, gvd, national_czptt, national_jdf, osm_snapshot
 from obehy.national_jdf import BuildReporter, CommandProgress, PipelineError
 from obehy.pipeline_support import file_digest, utc_now, write_json
 from obehy.production_package import (
@@ -189,6 +189,7 @@ def build(
         completed("build-jrutil")
 
         jdf_output = run_root / "national-jdf"
+        reference_date = gvd.prague_today()
         jdf_builder(
             national_jdf.BuildConfig(
                 output=jdf_output,
@@ -204,6 +205,8 @@ def build(
                 estimated_posts=options.estimated_posts,
                 post_inference_policy=options.post_inference_policy,
                 build_jrutil=False,
+                gvd_year=options.gvd_year,
+                reference_date=reference_date,
             ),
             reporter=reporter,
         )
@@ -215,7 +218,7 @@ def build(
             filtered_jdf_builder(
                 jdf_output / "bundle",
                 partial_release / "jdf-filtered",
-                reference=datetime.now(UTC).date(),
+                reference=reference_date,
                 work=filtered_work,
                 line_snapshot=options.line_filter_snapshot,
             )
@@ -427,7 +430,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         runtime = load_runtime_config(cast(Path | None, args.config))
         requested_year = cast(int | Literal["auto"], args.gvd_year)
-        gvd_year = national_czptt.resolve_timetable_year(requested_year)
+        gvd_year = gvd.resolve_timetable_year(requested_year)
         result = build(
             BuildOptions(
                 runtime=runtime,

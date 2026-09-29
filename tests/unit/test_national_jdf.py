@@ -8,6 +8,7 @@ import sys
 import zipfile
 from collections.abc import Sequence
 from dataclasses import asdict
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -444,6 +445,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             estimated_posts=estimated_posts,
             post_review_stops=review_stops if estimated_posts else None,
             post_inference_evidence=evidence if evidence_backed else None,
+            gvd_year=2026,
+            reference_date=date(2026, 9, 29),
         ),
         fake_download,
         fake_command,
@@ -467,6 +470,9 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     assert "--batch-output=zip" in fix_command
     assert "--jobs=auto" in fix_command
     assert "--jobs=auto" in merge_command
+    assert "--gvd-year=2026" in merge_command
+    assert "--gvd-year=2026" in bundle_command
+    assert "--reference-date=2026-09-29" in merge_command
     assert "--memory-budget=auto" in fix_command
     assert "--memory-budget=auto" in merge_command
     assert "--jobs=auto" in bundle_command
@@ -508,6 +514,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         },
     ]
     assert run_manifest["conversion"] == {
+        "gvd_year": 2026,
+        "reference_date": "2026-09-29",
         "international_route_policy": "regional-adjacent",
         "transport_mode_rules": {
             "path": "obehy/data/jdf_transport_mode_rules.csv",

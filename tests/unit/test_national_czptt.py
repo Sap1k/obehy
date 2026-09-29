@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from obehy import national_czptt
+from obehy import gvd, national_czptt
 from obehy.national_czptt import BuildConfig, PipelineError, RemoteObject, SourceRecord
 
 
@@ -128,16 +128,9 @@ def _source_snapshot(root: Path) -> Path:
 
 def test_gvd_year_changes_on_second_sunday_of_december() -> None:
     prague = ZoneInfo("Europe/Prague")
-    assert (
-        national_czptt.automatic_timetable_year(datetime(2025, 12, 13, 23, 59, tzinfo=prague))
-        == 2025
-    )
-    assert (
-        national_czptt.automatic_timetable_year(datetime(2025, 12, 14, 0, 0, tzinfo=prague)) == 2026
-    )
-    assert (
-        national_czptt.automatic_timetable_year(datetime(2026, 7, 23, 12, 0, tzinfo=prague)) == 2026
-    )
+    assert gvd.automatic_timetable_year(datetime(2025, 12, 13, 23, 59, tzinfo=prague)) == 2025
+    assert gvd.automatic_timetable_year(datetime(2025, 12, 14, 0, 0, tzinfo=prague)) == 2026
+    assert gvd.automatic_timetable_year(datetime(2026, 7, 23, 12, 0, tzinfo=prague)) == 2026
 
 
 def test_discovery_includes_change_months_from_both_calendar_years(

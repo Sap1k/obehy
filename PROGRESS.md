@@ -126,6 +126,21 @@ Work order: §4 → §1 → §2 → §3.
 
 ## Recent log
 
+- **2026-09-29** — JDF output: one route per line, detour routes, GVD-bounded validity.
+  - `merge-jdf` requires `--gvd-year`/`--reference-date`. It drops expired and next-GVD
+    versions and clamps the rest to the GVD, so bogus "forever" international validity ends
+    at the cutover. `jdf-to-bundle --gvd-year` records `service_horizon`, and the overlay
+    rejects a base from another GVD. `obehy build` passes both values.
+  - Merged versions collapse to `jdf:route:<line>`, plus `jdf:route:<line>:detour` for
+    výluka timetables with amber text (`ffd23f`, or `7a3500` on light colours). Other
+    semantics get a hashed suffix. Serving `route.timetable_kind` is `regular`/`detour`.
+    Route-stop keys carry the version. The overlay attaches source trips to the regular route
+    and keeps detour colours.
+  - Validated: JrUtil 304/304, Python unit tests, and a subset run (36 dráhy + 4
+    international VLD batches, PID GTFS cut to 8 tram lines). Unmatched PID trips on those
+    lines fell from 3,488 to 1,307, and additions now land on the CIS routes. The full
+    feed was not run.
+
 - **2026-09-29** — JdfMerger: open-ended detour versions no longer suppress later versions.
   - CIS publishes PID tram detours open-ended (same end as regular versions). An older detour
     used to delete every later regular version: 255 removals on 181 lines, including trams 12,

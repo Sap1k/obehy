@@ -19,7 +19,7 @@ import zipfile
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Protocol, cast
 from urllib.request import Request, urlopen
@@ -41,6 +41,7 @@ from rich.progress import (
 from rich.table import Column
 from rich.text import Text
 
+from obehy.gvd import prague_today, resolve_timetable_year
 from obehy.osm_snapshot import (
     OsmSnapshotError,
     prepare_jdf_demand_routing,
@@ -332,6 +333,10 @@ class BuildConfig:
     post_inference_evidence: Path | None = None
     capture_post_inference_evidence: bool = False
     build_jrutil: bool = True
+    # Timetables expired before reference_date or outside GVD gvd_year are dropped;
+    # None resolves to today in Europe/Prague and its GVD.
+    gvd_year: int | None = None
+    reference_date: date | None = None
 
 
 DownloadFn = Callable[[str, Path, str, Reporter | None], DownloadRecord]
@@ -1340,6 +1345,8 @@ def build(
 ) -> Path:
     _validate_build_config(config)
     include_post_inference_scores = _include_post_inference_scores(config)
+    reference_date = config.reference_date or prague_today()
+    gvd_year = config.gvd_year or resolve_timetable_year("auto")
     inferred_posts = (
         config.estimated_posts
         or config.post_inference_evidence is not None
@@ -1492,6 +1499,8 @@ def build(
                 [
                     "merge-jdf",
                     "--strict",
+                    f"--gvd-year={gvd_year}",
+                    f"--reference-date={reference_date.isoformat()}",
                     "--progress-events",
                     f"--jobs={_job_text(_stage_jobs(config, 'merge'))}",
                     f"--memory-budget={config.memory_budget}",
@@ -1554,6 +1563,7 @@ def build(
                     f"--transport-mode-rules={TRANSPORT_MODE_RULES}",
                     f"--snapshot-descriptor={descriptor_path}",
                     f"--converter-version={_converter_version(jrutil_identity)}",
+                    f"--gvd-year={gvd_year}",
                     *(
                         [f"--post-inference-evidence={config.post_inference_evidence.resolve()}"]
                         if config.post_inference_evidence is not None
@@ -1662,6 +1672,8 @@ def build(
             "geodata": geodata,
             "jrutil": jrutil_identity,
             "conversion": {
+                "gvd_year": gvd_year,
+                "reference_date": reference_date.isoformat(),
                 "stop_ids_cis": False,
                 "stop_merge": "name",
                 "strict": True,

@@ -20,7 +20,7 @@ import uuid
 import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
@@ -29,6 +29,7 @@ from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
+from obehy.gvd import resolve_timetable_year
 from obehy.national_jdf import (
     BuildReporter,
     CommandFn,
@@ -120,23 +121,6 @@ class _HrefParser(HTMLParser):
 
 def _jobs(value: JobSetting) -> int:
     return 8 if value == "auto" else value
-
-
-def _second_sunday(year: int) -> date:
-    value = date(year, 12, 1)
-    return value + timedelta(days=(6 - value.weekday()) % 7 + 7)
-
-
-def automatic_timetable_year(now: datetime | None = None) -> int:
-    """Return the GVD year active in Europe/Prague at *now*."""
-    prague = ZoneInfo("Europe/Prague")
-    local = (now or datetime.now(prague)).astimezone(prague)
-    boundary = _second_sunday(local.year)
-    return local.year + 1 if local.date() >= boundary else local.year
-
-
-def resolve_timetable_year(value: int | Literal["auto"], now: datetime | None = None) -> int:
-    return automatic_timetable_year(now) if value == "auto" else value
 
 
 def _read_url(url: str, *, data: bytes | None = None, headers: Mapping[str, str] = {}) -> bytes:
