@@ -517,19 +517,21 @@ def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(
             return
         bundle = Path(command[-1])
         bundle.mkdir(parents=True)
+        # Fixed entry timestamps: the test compares two builds byte for byte.
         with zipfile.ZipFile(bundle / "gtfs.zip", "w") as gtfs:
-            gtfs.writestr("stops.txt", "stop_id,stop_name\n")
-            gtfs.writestr("routes.txt", "route_id\n")
-            gtfs.writestr("trips.txt", "trip_id\n")
-            gtfs.writestr("stop_times.txt", "trip_id,stop_sequence\n")
-            gtfs.writestr("transfers.txt", "from_trip_id,to_trip_id,transfer_type\n")
-        extensions = bundle / "extensions"
-        extensions.mkdir()
+            for name, content in (
+                ("stops.txt", "stop_id,stop_name\n"),
+                ("routes.txt", "route_id\n"),
+                ("trips.txt", "trip_id\n"),
+                ("stop_times.txt", "trip_id,stop_sequence\n"),
+                ("transfers.txt", "from_trip_id,to_trip_id,transfer_type\n"),
+            ):
+                gtfs.writestr(zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0)), content)
         (bundle / "serving").mkdir()
         (bundle / "diagnostics.json").write_text("{}\n", encoding="utf-8")
         (bundle / "manifest.json").write_text(
-            '{"bundle_format":"jrutil-production","bundle_version":1,'
-            '"serving_schema_version":2,"contract_valid":true,'
+            '{"bundle_format":"jrutil-production","bundle_version":2,'
+            '"serving_schema_version":3,"contract_valid":true,'
             '"publication_eligible":true,"files":[]}\n',
             encoding="utf-8",
         )

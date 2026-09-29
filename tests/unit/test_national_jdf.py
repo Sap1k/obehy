@@ -398,14 +398,13 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
                     "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
                     "t,08:00:00,08:00:00,s,1\n",
                 )
-            (bundle / "extensions").mkdir()
             (bundle / "serving").mkdir()
             diagnostics: dict[str, object] = {"schema_version": 1, "diagnostics": []}
             national_jdf.write_json(bundle / "diagnostics.json", diagnostics)
             manifest: dict[str, object] = {
                 "bundle_format": "jrutil-production",
-                "bundle_version": 1,
-                "serving_schema_version": 2,
+                "bundle_version": 2,
+                "serving_schema_version": 3,
                 "contract_valid": True,
                 "publication_eligible": True,
                 "compiler": {

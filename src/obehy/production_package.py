@@ -29,8 +29,8 @@ def read_manifest(package: Path, *, require_publication: bool = False) -> dict[s
     manifest = cast(dict[str, Any], value)
     if (
         manifest.get("bundle_format") != "jrutil-production"
-        or manifest.get("bundle_version") != 1
-        or manifest.get("serving_schema_version") != 2
+        or manifest.get("bundle_version") != 2
+        or manifest.get("serving_schema_version") != 3
         or manifest.get("contract_valid") is not True
     ):
         raise ProductionPackageError("Unsupported or contract-invalid JrUtil production package")
@@ -39,8 +39,8 @@ def read_manifest(package: Path, *, require_publication: bool = False) -> dict[s
     for required in ("gtfs.zip", "diagnostics.json"):
         if not (package / required).is_file():
             raise ProductionPackageError(f"Production package is missing {required}")
-    if not (package / "extensions").is_dir() or not (package / "serving").is_dir():
-        raise ProductionPackageError("Production package lacks extensions/ or serving/")
+    if not (package / "serving").is_dir():
+        raise ProductionPackageError("Production package lacks serving/")
     return manifest
 
 

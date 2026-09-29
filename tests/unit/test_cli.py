@@ -36,15 +36,14 @@ def _package(path: Path, *, publishable: bool = True) -> None:
     path.mkdir(parents=True)
     with zipfile.ZipFile(path / "gtfs.zip", "w") as archive:
         archive.writestr("agency.txt", "agency_id,agency_name\na,Agency\n")
-    (path / "extensions").mkdir()
     (path / "serving").mkdir()
     (path / "diagnostics.json").write_text("{}\n", encoding="utf-8")
     (path / "manifest.json").write_text(
         json.dumps(
             {
                 "bundle_format": "jrutil-production",
-                "bundle_version": 1,
-                "serving_schema_version": 2,
+                "bundle_version": 2,
+                "serving_schema_version": 3,
                 "contract_valid": True,
                 "publication_eligible": publishable,
                 "feed_version": "fixture",
