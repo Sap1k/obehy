@@ -298,7 +298,7 @@ class _HttpSourceDownloader:
             connection.close()
 
 
-def _snapshot_kadr(destination: Path) -> Path:
+def snapshot_kadr(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     responses: dict[str, bytes] = {}
     for operation in KADR_OPERATIONS:
@@ -991,7 +991,7 @@ def build(
 
                         if attempt == 1:
                             active_stage = "snapshot-kadr"
-                            catalog = _snapshot_kadr(sources / "kadr")
+                            catalog = snapshot_kadr(sources / "kadr")
 
                         active_stage = "recheck-source"
                         rediscovery_task = reporter.start(

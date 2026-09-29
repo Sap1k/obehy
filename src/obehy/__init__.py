@@ -1,1 +1,1 @@
-"""Oběhy public-transport build control, static serving, and realtime platform."""
+"""Oběhy: Czech public-transport static feed builds and publication."""

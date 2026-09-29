@@ -173,11 +173,11 @@ def _live_inventory_fixture(
     downloads: list[str] = []
     source_roots: list[Path] = []
     discovery_calls = iter(inventories)
-    monkeypatch.setattr(
-        national_czptt,
-        "discover_remote_inventory",
-        lambda _base, _year: next(discovery_calls),
-    )
+
+    def discover(_base: str, _year: int) -> list[RemoteObject]:
+        return next(discovery_calls)
+
+    monkeypatch.setattr(national_czptt, "discover_remote_inventory", discover)
 
     class FakeDownloader:
         def __init__(self, sources: Path) -> None:
@@ -212,7 +212,7 @@ def _live_inventory_fixture(
         catalog.write_text("{}\n", encoding="utf-8")
         return catalog
 
-    monkeypatch.setattr(national_czptt, "_snapshot_kadr", snapshot_kadr)
+    monkeypatch.setattr(national_czptt, "snapshot_kadr", snapshot_kadr)
 
     def stop_after_acquisition(*_args: object) -> int:
         raise RuntimeError("acquisition complete")
@@ -314,7 +314,7 @@ def test_kadr_snapshot_preserves_central_note_catalog(
         ).encode()
 
     monkeypatch.setattr(national_czptt, "_read_url", soap_response)
-    catalog_path = national_czptt._snapshot_kadr(tmp_path / "kadr")
+    catalog_path = national_czptt.snapshot_kadr(tmp_path / "kadr")
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
 
     assert operations == list(national_czptt.KADR_OPERATIONS)

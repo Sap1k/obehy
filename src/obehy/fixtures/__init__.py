@@ -1,1 +1,0 @@
-"""Normalized fixture projection support."""

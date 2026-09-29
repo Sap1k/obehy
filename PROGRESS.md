@@ -39,8 +39,8 @@ heap hard limit is configured; memory figures are telemetry.
   replayed, but only for a byte-identical merged JDF. A learned scorer (policy v3,
   `src/obehy/data/post-inference/learned-v1.json`) is available via `--post-inference-policy`.
 - **Serving:** JrUtil production packages (`jrutil-production`/serving-v2) with GTFS, extensions,
-  diagnostics and typed Parquet relations. The database v1 loader in Oběhy is incompatible with
-  serving-v2 by design.
+  diagnostics and typed Parquet relations. The serving-v1 database loader was removed; the
+  serving-v2 importer is not written yet.
 
 ### Last validation evidence
 

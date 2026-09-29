@@ -21,11 +21,8 @@ from obehy.national_jdf import (
     DownloadRecord,
     PipelineError,
     build,
-    combine_batches,
     deterministic_zip,
-    discover_jdf_batches,
     download_file,
-    extract_zip_safely,
     file_digest,
     run_command,
     stage_nested_jdf_batches,
@@ -149,25 +146,23 @@ def _download_record(name: str, url: str, destination: Path) -> DownloadRecord:
     )
 
 
-def test_safe_extract_rejects_parent_traversal(tmp_path: Path) -> None:
+def test_stage_batches_rejects_parent_traversal(tmp_path: Path) -> None:
     archive = tmp_path / "unsafe.zip"
-    archive.write_bytes(_zip_bytes({"../outside.txt": b"bad"}))
+    archive.write_bytes(_zip_bytes({"../outside.zip": b"bad"}))
 
     with pytest.raises(PipelineError, match="Unsafe ZIP entry"):
-        extract_zip_safely(archive, tmp_path / "output")
+        stage_nested_jdf_batches((("vld", archive),), tmp_path / "output")
 
-    assert not (tmp_path / "outside.txt").exists()
+    assert not (tmp_path / "outside.zip").exists()
 
 
-def test_discover_batches_rejects_duplicate_line_local_archive_names(tmp_path: Path) -> None:
+def test_stage_batches_rejects_duplicate_line_local_archive_names(tmp_path: Path) -> None:
     payload = _zip_bytes({"VerzeJDF.txt": b'"1.11";\r\n'})
-    (tmp_path / "a").mkdir()
-    (tmp_path / "b").mkdir()
-    (tmp_path / "a" / "1.zip").write_bytes(payload)
-    (tmp_path / "b" / "1.ZIP").write_bytes(payload)
+    archive = tmp_path / "nested.zip"
+    archive.write_bytes(_zip_bytes({"a/1.zip": payload, "b/1.ZIP": payload}))
 
     with pytest.raises(PipelineError, match="Duplicate JDF batch basename"):
-        discover_jdf_batches(tmp_path)
+        stage_nested_jdf_batches((("vld", archive),), tmp_path / "output")
 
 
 def test_deterministic_zip_is_byte_identical(tmp_path: Path) -> None:
@@ -630,26 +625,6 @@ def test_build_retains_staging_directory_after_failure(
     failure = json.loads((retained[0] / "publish" / "logs" / "failure.json").read_text())
     assert failure["stage"] == "download-vld"
     assert failure["message"] == "fixture download failure"
-
-
-def test_combine_batches_prefixes_identical_names_and_moves_files(tmp_path: Path) -> None:
-    vld = tmp_path / "vld"
-    drahy = tmp_path / "drahy"
-    vld.mkdir()
-    drahy.mkdir()
-    (vld / "1.zip").write_bytes(b"vld")
-    (drahy / "1.zip").write_bytes(b"drahy")
-
-    mappings = combine_batches(
-        (("vld", vld, [vld / "1.zip"]), ("drahy", drahy, [drahy / "1.zip"])),
-        tmp_path / "combined",
-    )
-
-    assert [item.combined_filename for item in mappings] == ["vld-1.zip", "drahy-1.zip"]
-    assert (tmp_path / "combined" / "vld-1.zip").read_bytes() == b"vld"
-    assert (tmp_path / "combined" / "drahy-1.zip").read_bytes() == b"drahy"
-    assert not (vld / "1.zip").exists()
-    assert not (drahy / "1.zip").exists()
 
 
 def test_download_record_json_shape_is_stable(tmp_path: Path) -> None:

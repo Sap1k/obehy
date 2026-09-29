@@ -305,20 +305,20 @@ def test_osm_filters_are_single_pass_and_node_only(
     assert "n/railway=station,halt,stop" in railway_command
     assert not any("public_transport" in argument for argument in railway_command)
 
-    transit_destination = osm_snapshot.jdf_transit_stops_path(tmp_path)
-    transit = osm_snapshot.filter_jdf_transit_stops(
+    transit_destination = osm_snapshot.jdf_post_candidates_path(tmp_path)
+    transit = osm_snapshot.filter_jdf_post_candidates(
         source,
         transit_destination,
         source_key="fixture-source",
     )
-    transit_reused = osm_snapshot.filter_jdf_transit_stops(
+    transit_reused = osm_snapshot.filter_jdf_post_candidates(
         source,
         transit_destination,
         source_key="fixture-source",
     )
     assert transit == transit_reused == transit_destination
     assert (
-        osm_snapshot.validate_jdf_transit_stops(tmp_path, "fixture-source") == transit_destination
+        osm_snapshot.validate_jdf_post_candidates(tmp_path, "fixture-source") == transit_destination
     )
     assert len(commands) == 2
     transit_command = commands[1]

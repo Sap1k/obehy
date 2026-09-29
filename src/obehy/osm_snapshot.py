@@ -649,21 +649,12 @@ def filter_jdf_transit_routing_base(
     )
 
 
-# Compatibility name for callers predating the candidate/routing split.
-filter_jdf_transit_stops = filter_jdf_post_candidates
-
-
 def jdf_post_candidates_path(workdir: Path) -> Path:
     return workdir.resolve() / "osm" / "jdf-post-candidates.osm.pbf"
 
 
 def jdf_transit_routing_base_path(workdir: Path) -> Path:
     return workdir.resolve() / "osm" / "jdf-transit-routing-base.osm.pbf"
-
-
-def jdf_transit_stops_path(workdir: Path) -> Path:
-    """Compatibility alias for the small candidate-node extract."""
-    return jdf_post_candidates_path(workdir)
 
 
 def _validate_jdf_filter(
@@ -711,9 +702,6 @@ def validate_jdf_transit_routing_base(workdir: Path, source_key: str) -> Path:
         "jdf-transit-routing-base-v1",
         "JDF transit-routing base",
     )
-
-
-validate_jdf_transit_stops = validate_jdf_post_candidates
 
 
 ROUTING_ENVELOPE_POLICY = "jdf-routing-envelope-v2"

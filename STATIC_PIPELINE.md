@@ -12,8 +12,8 @@ one JrUtil invocation, and builds CZPTT using the same resolved GVD year. It pub
 after JrUtil validation and publication-eligibility checks pass.
 
 Source snapshots, orchestration manifests, process logs and detailed diagnostics remain outside the
-closed package trees. The serving-v2 database importer is intentionally deferred; the existing
-serving-v1 loader continues to reject the new package contract. A no-op enrichment boundary sits
+closed package trees. The serving-v2 database importer is intentionally deferred; the serving-v1
+loader has been removed. A no-op enrichment boundary sits
 between compilation and final validation so MOTIS shape generation can be inserted there later.
 
 Live release acceptance is still pending. The previously failing national overlay finalizer now

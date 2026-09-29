@@ -34,11 +34,8 @@
 
 ## Database
 
-- The PostgreSQL database `obehy_test` is disposable and may be reset without approval. Before any
-  destructive operation, verify the database is exactly `obehy_test` and the user is `obehy`.
-- Generate Alembic migrations with `alembic revision --autogenerate` and review them. Hand-written
-  migration code is only for behavior Alembic cannot infer (functions, triggers, extensions, seed
-  data).
+- There is currently no database code. The serving-v1 loader, ORM models and Alembic migration
+  were removed; the serving-v2 importer will reintroduce PostgreSQL when it is built.
 
 ## Validation
 

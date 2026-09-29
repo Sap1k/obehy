@@ -1,18 +1,12 @@
 [project]
 name = "obehy"
 version = "0.1.0"
-description = "Czech public-transport build control, static serving, and realtime platform"
+description = "Czech public-transport static feed builds and publication"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "alembic>=1.16,<2",
-  "geoalchemy2>=0.18,<1",
-  "psycopg[binary]>=3.2,<4",
-  "pyarrow>=21,<22",
   "rich>=14,<15",
   "shapely>=2.1,<3",
-  "sqlalchemy>=2.0.41,<3",
-  "xmlschema>=4,<5",
 ]
 
 [project.scripts]
@@ -39,18 +33,13 @@ packages = ["src/obehy"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/obehy/data/czptt_osm_aliases.json" = "obehy/data/czptt_osm_aliases.json"
 "src/obehy/data/jdf_transport_mode_rules.csv" = "obehy/data/jdf_transport_mode_rules.csv"
-"src/obehy/data/netex_mapping_v1.json" = "obehy/data/netex_mapping_v1.json"
+"src/obehy/data/post-inference" = "obehy/data/post-inference"
 "src/obehy/data/filtered-jdf" = "obehy/data/filtered-jdf"
 "src/obehy/data/regional-gtfs-overlay" = "obehy/data/regional-gtfs-overlay"
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
-markers = [
-  "integration: requires the PostgreSQL/PostGIS test database",
-  "national_jdf_live: downloads and converts the complete live national JDF inputs",
-  "national_czptt_live: downloads and converts the complete current GVD",
-]
 
 [tool.ruff]
 target-version = "py313"
