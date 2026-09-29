@@ -126,6 +126,16 @@ Work order: §4 → §1 → §2 → §3.
 
 ## Recent log
 
+- **2026-09-29** — JdfMerger: open-ended detour versions no longer suppress later versions.
+  - CIS publishes PID tram detours open-ended (same end as regular versions). An older detour
+    used to delete every later regular version: 255 removals on 181 lines, including trams 12,
+    13, 18, 19 and 24, so about 40 % of the unmatched PID overlay trips were projected instead
+    of matched. Bounded detours keep their priority.
+  - Validated: new JdfMerger unit tests (fail before the fix), and a merge-jdf run on 36 dráhy
+    batches, where every affected line chain ends on its current version. A PID overlay
+    re-run is still needed (it requires a full base bundle). The rest of the PID gap is a CIS
+    data gap: temporary lines 32/40/X*/XS*, P1/P2, and diversions missing from the CIS export.
+
 - **2026-09-28** — Post estimator: learned scorer for terminals where bays lost to a
   lower-penalty street post (Most/Litvínov, nádraží).
   - Model: two-stage conditional logit (`jrutil/scripts/post-scorer`) trained on PID + IDS JMK

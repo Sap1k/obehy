@@ -50,4 +50,7 @@
 - Inspect JrUtil log output as well as the exit code: conversion commands may log entity-level
   errors while returning zero.
 - For documentation-only changes, review `git diff --check` and `git diff`.
+- Never run the full national feed (full `obehy build`, full `fix-jdf`/`merge-jdf`/bundle/overlay
+  over all batches) for testing. Verify on a bounded subset of batches, lines or a region, and only
+  where a real-data check is actually required.
 - If a check cannot run, say so instead of claiming it passed.
