@@ -227,7 +227,9 @@ def _release_record(
             "memory_budget": options.memory_budget,
             "estimated_posts": options.estimated_posts,
             "post_inference_policy": (
-                str(options.post_inference_policy) if options.post_inference_policy else None
+                str(options.post_inference_policy or national_jdf.DEFAULT_POST_INFERENCE_POLICY)
+                if options.estimated_posts
+                else None
             ),
             "refresh_osm": options.refresh_osm,
             "czptt_operational_points": options.czptt_operational_points,

@@ -60,6 +60,9 @@ from obehy.runtime_config import ConfigurationError, load_runtime_config
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
 DRAHY_URL = "https://portal.cisjr.cz/pub/draha/mestske/JDF.zip"
 TRANSPORT_MODE_RULES = Path(__file__).with_name("data") / "jdf_transport_mode_rules.csv"
+DEFAULT_POST_INFERENCE_POLICY = (
+    Path(__file__).with_name("data") / "post-inference" / "learned-v1.json"
+)
 
 
 @dataclass(frozen=True)
@@ -306,6 +309,21 @@ def _validate_build_config(config: BuildConfig) -> None:
             raise PipelineError(f"Post review stop file does not exist: {config.post_review_stops}")
 
 
+def effective_post_inference_policy(config: BuildConfig) -> Path | None:
+    """Return the policy JrUtil should infer posts with.
+
+    Estimated posts default to the learned scorer. Capture-only runs take no
+    policy, because they record evidence without deciding assignments.
+    """
+    if config.capture_post_inference_evidence:
+        return None
+    if config.post_inference_policy is not None:
+        return config.post_inference_policy
+    if config.estimated_posts or config.post_inference_evidence is not None:
+        return DEFAULT_POST_INFERENCE_POLICY
+    return None
+
+
 def _include_post_inference_scores(config: BuildConfig) -> bool:
     """Return whether JrUtil should include the diagnostic post-score relation.
 
@@ -501,8 +519,8 @@ def _bundle_arguments(
             )
         ),
         *(
-            [f"--post-inference-policy={config.post_inference_policy.resolve()}"]
-            if config.post_inference_policy is not None
+            [f"--post-inference-policy={policy.resolve()}"]
+            if (policy := effective_post_inference_policy(config)) is not None
             else []
         ),
         *([] if include_post_inference_scores else ["--no-post-inference-scores"]),
@@ -719,7 +737,7 @@ def _conversion_manifest(config: BuildConfig, plan: _Plan) -> dict[str, object]:
         "diagnostic_post_labels": config.diagnostic_post_labels,
         "estimated_posts": plan.inferred_posts,
         "post_inference_policy": (
-            str(config.post_inference_policy) if config.post_inference_policy else None
+            str(policy) if (policy := effective_post_inference_policy(config)) is not None else None
         ),
         "post_inference_evidence": (
             str(config.post_inference_evidence) if config.post_inference_evidence else None

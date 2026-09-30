@@ -34,10 +34,12 @@ heap hard limit is configured; memory figures are telemetry.
 - **CZPTT:** SR70 coordinates are authoritative; OSM fills gaps. The build handles NAD (rail
   replacement), notes, accessibility, bicycles, request stops, same-month cancellation ordering,
   inventory convergence during live acquisition, and inconsistent-time correction (R10).
-- **Post estimator:** opt-in (`--estimated-posts`). The default policy is
-  `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe`. Evidence-v2 packs can be
-  replayed, but only for a byte-identical merged JDF. A learned scorer (policy v3,
-  `src/obehy/data/post-inference/learned-v1.json`) is available via `--post-inference-policy`.
+- **Post estimator:** opt-in (`--estimated-posts`). Oběhy passes the learned scorer (policy v3,
+  `src/obehy/data/post-inference/learned-v1.json`) unless `--post-inference-policy` names
+  another; capture-only runs take no policy. JrUtil's own default is still the heuristic
+  `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe`, which feature export uses
+  as the training baseline. Evidence-v2 packs can be replayed, but only for a byte-identical
+  merged JDF.
 - **Serving:** JrUtil production packages (`jrutil-production` bundle v2, serving schema v3):
   standard GTFS, bounded diagnostics and typed Parquet relations, with no `extensions/`, no sort
   keys and trip/route-level provenance only. The serving-v1 database loader was removed; the
@@ -189,7 +191,7 @@ Work order: §4 → §1 → §2 → §3.
   - Validation: JrUtil Release 293 passed; post-scorer 26; Oběhy unit 96, ruff clean.
     Pyright: 4 errors, all in `test_national_czptt.py`, also present without these changes.
   - Remaining:
-    - make `learned-v1.json` the default;
+    - ~~make `learned-v1.json` the default~~ (done 2026-09-30);
     - noisy JMK bus-station labels;
     - posts off the evidence router's corridor are never chosen (e.g. the highway post at
       Teplice, Zámecká zahrada).

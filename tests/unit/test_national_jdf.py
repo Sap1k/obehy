@@ -7,7 +7,7 @@ import json
 import sys
 import zipfile
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import date
 from pathlib import Path
 
@@ -85,6 +85,26 @@ def test_capture_only_rejects_post_inference_policy(tmp_path: Path) -> None:
 
     with pytest.raises(PipelineError, match=r"capture-only.*policy"):
         build(config)
+
+
+def test_estimated_posts_default_to_learned_policy_except_capture(tmp_path: Path) -> None:
+    base = BuildConfig(
+        output=tmp_path / "output",
+        workdir=tmp_path / "work",
+        osm_file=tmp_path / "cz.osm.pbf",
+        jrutil_root=None,
+        jrutil_command=("jrutil",),
+        geodata_root=tmp_path / "geodata",
+    )
+
+    assert national_jdf.DEFAULT_POST_INFERENCE_POLICY.is_file()
+    assert national_jdf.effective_post_inference_policy(base) is None
+    estimated = replace(base, estimated_posts=True)
+    assert national_jdf.effective_post_inference_policy(estimated) == (
+        national_jdf.DEFAULT_POST_INFERENCE_POLICY
+    )
+    captured = replace(estimated, capture_post_inference_evidence=True)
+    assert national_jdf.effective_post_inference_policy(captured) is None
 
 
 @pytest.mark.parametrize(
@@ -478,6 +498,10 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     has_routing_pbf = any(argument.startswith("--routing-osm-pbf=") for argument in bundle_command)
     assert has_routing_pbf is (estimated_posts and not evidence_backed)
     assert ("--no-estimated-posts" in bundle_command) is not (estimated_posts or evidence_backed)
+    default_policy = national_jdf.DEFAULT_POST_INFERENCE_POLICY
+    assert (f"--post-inference-policy={default_policy.resolve()}" in bundle_command) is (
+        estimated_posts or evidence_backed
+    )
     assert ("--no-post-inference-scores" in bundle_command) is (
         evidence_backed and not estimated_posts
     )
@@ -513,7 +537,9 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "strict": True,
         "diagnostic_post_labels": False,
         "estimated_posts": estimated_posts or evidence_backed,
-        "post_inference_policy": None,
+        "post_inference_policy": (
+            str(default_policy) if estimated_posts or evidence_backed else None
+        ),
         "post_inference_evidence": str(evidence) if evidence_backed else None,
         "include_post_inference_scores": not (evidence_backed and not estimated_posts),
         "capture_post_inference_evidence": False,
