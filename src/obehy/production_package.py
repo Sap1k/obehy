@@ -11,7 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
 
-from obehy.pipeline_support import file_digest
+from obehy.pipeline.files import file_digest
 
 
 class ProductionPackageError(RuntimeError):

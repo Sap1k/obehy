@@ -10,9 +10,9 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import zipfile
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from html.parser import HTMLParser
@@ -20,10 +20,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-from obehy.national_jdf import PipelineError, deterministic_zip, verify_gtfs_stops
-from obehy.pipeline_support import file_digest, utc_now, write_json
+from obehy.national_jdf import verify_gtfs_stops
+from obehy.pipeline.download import read_url
+from obehy.pipeline.errors import PipelineError
+from obehy.pipeline.files import deterministic_zip, file_digest, utc_now, write_json
+from obehy.production_package import ProductionPackageError, extracted_gtfs
 
 PORTAL_URL = "https://portal.radekpapez.cz/"
 RULES = Path(__file__).with_name("data") / "filtered-jdf" / "rules-v1.json"
@@ -144,16 +146,7 @@ def _form(
 
 
 def _post(url: str, body: bytes) -> bytes:
-    request = Request(
-        url,
-        data=body,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "Obehy/0.1 production-feed-builder",
-        },
-    )
-    with urlopen(request, timeout=120) as response:
-        return cast(bytes, response.read())
+    return read_url(url, data=body, headers={"Content-Type": "application/x-www-form-urlencoded"})
 
 
 def fetch_line_snapshot(
@@ -392,6 +385,15 @@ def filter_gtfs(
     }
 
 
+@contextmanager
+def _package_gtfs(package: Path) -> Generator[Path]:
+    try:
+        with extracted_gtfs(package) as source:
+            yield source
+    except ProductionPackageError as error:
+        raise PipelineError(str(error)) from error
+
+
 def build_filtered_jdf(
     bundle: Path,
     destination: Path,
@@ -410,15 +412,11 @@ def build_filtered_jdf(
     removed_lines = snapshot_lines(line_snapshot)
     destination.mkdir(parents=True, exist_ok=False)
     archive = bundle / "gtfs.zip"
-    with TemporaryDirectory(prefix="obehy-filtered-jdf-", dir=work) as temporary:
-        root = Path(temporary)
-        source = root / "source"
-        with zipfile.ZipFile(archive) as gtfs:
-            for name in gtfs.namelist():
-                if Path(name).name != name or not name:
-                    raise PipelineError(f"Unexpected GTFS member in {archive}: {name!r}")
-            gtfs.extractall(source)
-        filtered = root / "filtered"
+    with (
+        TemporaryDirectory(prefix="obehy-filtered-jdf-", dir=work) as temporary,
+        _package_gtfs(bundle) as source,
+    ):
+        filtered = Path(temporary) / "filtered"
         report = filter_gtfs(
             source,
             filtered,

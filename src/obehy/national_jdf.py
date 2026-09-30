@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import os
 import re
@@ -12,34 +11,12 @@ import shutil
 import stat
 import subprocess
 import sys
-import time
-import traceback
-import uuid
 import zipfile
-from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal, Protocol, cast
-from urllib.request import Request, urlopen
-
-from rich.console import Console, RenderableType
-from rich.filesize import decimal
-from rich.progress import (
-    BarColumn,
-    Progress,
-    ProgressColumn,
-    SpinnerColumn,
-    Task,
-    TaskID,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
-from rich.table import Column
-from rich.text import Text
+from typing import Any, Literal, cast
 
 from obehy.gvd import prague_today, resolve_timetable_year
 from obehy.osm_snapshot import (
@@ -48,267 +25,41 @@ from obehy.osm_snapshot import (
     validate_jdf_post_candidates,
     validate_snapshot,
 )
-from obehy.pipeline_support import file_digest, utc_now, write_json
+from obehy.pipeline import jrutil
+from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget
+from obehy.pipeline.download import DownloadFn, DownloadRecord, download_file
+from obehy.pipeline.errors import PipelineError
+from obehy.pipeline.files import (
+    ZIP_COMPRESSION_LEVELS,
+    ArtifactIdentity,
+    ZipCompression,
+    deterministic_zip,
+    file_digest,
+    utc_now,
+    write_json,
+)
+from obehy.pipeline.process import (
+    CommandFn,
+    CommandResult,
+    command_manifest,
+    failure_record,
+    report_failure,
+    run_command,
+)
+from obehy.pipeline.reporting import (
+    BuildReporter,
+    CommandProgress,
+    ProgressMode,
+    Reporter,
+    StageClock,
+)
+from obehy.pipeline.staging import create as create_staging
 from obehy.production_package import ProductionPackageError, extracted_gtfs, read_manifest
 from obehy.runtime_config import ConfigurationError, load_runtime_config
 
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
 DRAHY_URL = "https://portal.cisjr.cz/pub/draha/mestske/JDF.zip"
 TRANSPORT_MODE_RULES = Path(__file__).with_name("data") / "jdf_transport_mode_rules.csv"
-
-
-class PipelineError(RuntimeError):
-    """A reproducible pipeline validation or execution failure."""
-
-
-ProgressMode = Literal["auto", "rich", "plain", "off"]
-JobSetting = Literal["auto"] | int
-ZipCompression = Literal["fast", "balanced", "small"]
-ZIP_COMPRESSION_LEVELS: dict[ZipCompression, int] = {
-    "fast": 1,
-    "balanced": 6,
-    "small": 9,
-}
-
-
-class Reporter(Protocol):
-    def stage(self, label: str) -> None: ...
-
-    def start(self, label: str, *, total: int | None = None, unit: str = "") -> int: ...
-
-    def update(
-        self,
-        task: int,
-        *,
-        advance: int = 0,
-        completed: int | None = None,
-        total: int | None = None,
-        detail: str | None = None,
-    ) -> None: ...
-
-    def finish(self, task: int, detail: str = "done") -> None: ...
-
-    def problem(self, severity: str, message: str) -> None: ...
-
-    def note(self, message: str) -> None: ...
-
-    def snapshot(self) -> dict[str, object]: ...
-
-    def close(self) -> None: ...
-
-
-@dataclass
-class _TaskState:
-    label: str
-    total: int | None
-    completed: int
-    unit: str
-    detail: str
-    started: float
-    last_plain_update: float
-    last_plain_percent: int
-
-
-class _MetricColumn(ProgressColumn):
-    def render(self, task: Task) -> Text:
-        if task.fields.get("unit") == "bytes":
-            amount = decimal(int(task.completed))
-            speed = f"{decimal(int(task.speed))}/s" if task.speed else "--/s"
-            return Text(f"{amount} {speed}")
-        total = f"/{int(task.total)}" if task.total is not None else ""
-        speed = f" {task.speed:.1f}/s" if task.speed else ""
-        return Text(f"{int(task.completed)}{total}{speed}")
-
-
-class _LifecycleSpinnerColumn(SpinnerColumn):
-    def render(self, task: Task) -> Text:
-        if task.fields.get("lifecycle_finished"):
-            return Text("✓", style="green")
-        return cast(Text, super().render(task))
-
-
-class _LifecycleBarColumn(ProgressColumn):
-    def __init__(self) -> None:
-        super().__init__()
-        self._bar = BarColumn(bar_width=24)
-
-    def render(self, task: Task) -> RenderableType:
-        if task.fields.get("lifecycle_finished"):
-            return Text("")
-        return self._bar.render(task)
-
-
-class BuildReporter:
-    def __init__(self, mode: ProgressMode = "auto") -> None:
-        self.console = Console(stderr=True)
-        if mode == "auto":
-            mode = "rich" if self.console.is_terminal else "plain"
-        self.mode = mode
-        self.tasks: dict[int, _TaskState] = {}
-        self._next_id = 1
-        self._stage = "pipeline"
-        self._problems: dict[tuple[str, str], int] = {}
-        self._suppressed: dict[tuple[str, str], int] = {}
-        self._progress: Progress | None = None
-        self._rich_tasks: dict[int, TaskID] = {}
-        if mode == "rich":
-            self._progress = Progress(
-                _LifecycleSpinnerColumn(),
-                TextColumn(
-                    "[bold]{task.description}",
-                    table_column=Column(no_wrap=True),
-                ),
-                _LifecycleBarColumn(),
-                TaskProgressColumn(),
-                _MetricColumn(),
-                TextColumn(
-                    "{task.fields[detail]}",
-                    table_column=Column(ratio=1, no_wrap=True, overflow="ellipsis"),
-                ),
-                TimeElapsedColumn(),
-                TimeRemainingColumn(),
-                console=self.console,
-                transient=False,
-            )
-            self._progress.start()
-
-    def stage(self, label: str) -> None:
-        self._stage = label
-
-    def start(self, label: str, *, total: int | None = None, unit: str = "") -> int:
-        task_id = self._next_id
-        self._next_id += 1
-        now = time.monotonic()
-        self.tasks[task_id] = _TaskState(label, total, 0, unit, "starting", now, now, -1)
-        if self._progress is not None:
-            self._rich_tasks[task_id] = self._progress.add_task(
-                label,
-                total=total,
-                detail="starting",
-                unit=unit,
-                lifecycle_finished=False,
-            )
-        elif self.mode == "plain":
-            self.note(f"START {label}")
-        return task_id
-
-    def update(
-        self,
-        task: int,
-        *,
-        advance: int = 0,
-        completed: int | None = None,
-        total: int | None = None,
-        detail: str | None = None,
-    ) -> None:
-        state = self.tasks[task]
-        if total is not None:
-            state.total = total
-        state.completed = completed if completed is not None else state.completed + advance
-        if detail is not None:
-            state.detail = detail
-        if self._progress is not None:
-            self._progress.update(
-                self._rich_tasks[task],
-                completed=state.completed,
-                total=state.total,
-                detail=state.detail,
-            )
-        elif self.mode == "plain":
-            now = time.monotonic()
-            task_total = state.total
-            percent = int(state.completed * 100 / task_total) if task_total else -1
-            if now - state.last_plain_update >= 30 or percent >= state.last_plain_percent + 10:
-                state.last_plain_update = now
-                state.last_plain_percent = percent
-                count = (
-                    f"{state.completed}/{state.total}"
-                    if state.total is not None
-                    else str(state.completed)
-                )
-                transfer = ""
-                if state.unit == "bytes":
-                    elapsed = max(now - state.started, 0.001)
-                    speed = state.completed / elapsed
-                    eta = (
-                        f", ETA {(state.total - state.completed) / speed:.0f}s"
-                        if state.total is not None and speed > 0
-                        else ""
-                    )
-                    transfer = f", {speed / 1_000_000:.1f} MB/s{eta}"
-                self.note(
-                    f"PROGRESS {state.label}: {count} {state.unit}{transfer} "
-                    f"{state.detail}".rstrip()
-                )
-
-    def finish(self, task: int, detail: str = "done") -> None:
-        state = self.tasks[task]
-        self.update(task, completed=state.completed, detail=detail)
-        if self._progress is not None:
-            rich_task = self._rich_tasks[task]
-            self._progress.update(rich_task, lifecycle_finished=True)
-            self._progress.stop_task(rich_task)
-        elif self.mode == "plain":
-            elapsed = time.monotonic() - state.started
-            self.note(f"DONE {state.label} ({elapsed:.1f}s): {detail}")
-
-    def problem(self, severity: str, message: str) -> None:
-        severity = "error" if severity.lower().startswith("err") else "warning"
-        key = (self._stage, severity)
-        self._problems[key] = self._problems.get(key, 0) + 1
-        if self._problems[key] <= 20:
-            style = "bold red" if severity == "error" else "yellow"
-            self.console.print(f"{severity.upper()}: {message}", style=style)
-        else:
-            self._suppressed[key] = self._suppressed.get(key, 0) + 1
-
-    def note(self, message: str) -> None:
-        self.console.print(f"[{utc_now()}] {message}")
-
-    def snapshot(self) -> dict[str, object]:
-        return {
-            "tasks": [asdict(state) for state in self.tasks.values()],
-            "problems": {
-                f"{stage}:{severity}": count for (stage, severity), count in self._problems.items()
-            },
-            "suppressed_problems": {
-                f"{stage}:{severity}": count
-                for (stage, severity), count in self._suppressed.items()
-            },
-        }
-
-    def close(self) -> None:
-        if self._progress is not None:
-            self._progress.stop()
-            self._progress = None
-        for (stage, severity), count in self._suppressed.items():
-            if count:
-                self.console.print(
-                    f"{count} additional {severity} messages from {stage} were retained in logs",
-                    style="yellow" if severity == "warning" else "bold red",
-                )
-
-
-class _Response(Protocol):
-    headers: Mapping[str, str]
-
-    def read(self, size: int = -1) -> bytes: ...
-
-    def __enter__(self) -> _Response: ...
-
-    def __exit__(self, *args: object) -> None: ...
-
-
-@dataclass(frozen=True)
-class DownloadRecord:
-    name: str
-    url: str
-    retrieved_at: str
-    bytes: int
-    sha256: str
-    etag: str | None
-    last_modified: str | None
-    md5: str | None = None
 
 
 @dataclass(frozen=True)
@@ -339,129 +90,11 @@ class BuildConfig:
     reference_date: date | None = None
 
 
-DownloadFn = Callable[[str, Path, str, Reporter | None], DownloadRecord]
-
-
-@dataclass(frozen=True)
-class CommandProgress:
-    label: str
-    total: int | None = None
-    event: str | None = None
-    stage: str | None = None
-
-
 @dataclass(frozen=True)
 class BatchMapping:
     source: str
     original_path: str
     combined_filename: str
-
-
-@dataclass(frozen=True)
-class ArtifactIdentity:
-    bytes: int
-    sha256: str
-
-
-@dataclass(frozen=True)
-class CommandResult:
-    elapsed_seconds: float
-    completed: int
-    total: int | None
-    execution_plan: dict[str, object] | None
-    failed_batch: str | None
-    maximum_in_flight: int
-    resource_usage: tuple[dict[str, object], ...]
-    capture_metrics: dict[str, object] | None = None
-    scheduler_samples: tuple[dict[str, object], ...] = ()
-    maximum_workers_observed: int = 0
-
-
-class CommandFailure(PipelineError):
-    def __init__(
-        self,
-        *,
-        command: Sequence[str],
-        cwd: Path,
-        log_path: Path,
-        returncode: int,
-        elapsed: float,
-        tail: Sequence[str],
-        last_batch: str | None,
-        completed: int = 0,
-        in_flight: Sequence[str] = (),
-        execution_plan: Mapping[str, object] | None = None,
-    ) -> None:
-        self.command = list(command)
-        self.cwd = cwd
-        self.log_path = log_path
-        self.returncode = returncode
-        self.elapsed = elapsed
-        self.tail = list(tail)
-        self.last_batch = last_batch
-        self.completed = completed
-        self.in_flight = list(in_flight)
-        self.execution_plan = dict(execution_plan) if execution_plan is not None else None
-        unsigned = returncode & 0xFFFFFFFF
-        super().__init__(
-            f"Command failed with exit code {returncode} (0x{unsigned:08X}) after "
-            f"{elapsed:.1f}s; see {log_path}"
-        )
-
-
-CommandFn = Callable[
-    [Sequence[str], Path, Path, Reporter | None, CommandProgress | None],
-    CommandResult | None,
-]
-
-
-def download_file(
-    url: str,
-    destination: Path,
-    name: str,
-    reporter: Reporter | None = None,
-) -> DownloadRecord:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(destination.name + ".part")
-    retrieved_at = utc_now()
-    task: int | None = None
-    sha256 = hashlib.sha256()
-    md5 = hashlib.md5()
-    downloaded = 0
-    try:
-        request = Request(url, headers={"User-Agent": "Obehy/0.1 national-JDF builder"})
-        response_context = cast(_Response, urlopen(request, timeout=120))
-        with response_context as response, temporary.open("wb") as output:
-            length_text = response.headers.get("Content-Length")
-            total = int(length_text) if length_text and length_text.isdigit() else None
-            if reporter is not None:
-                task = reporter.start(f"Download {name}", total=total, unit="bytes")
-            while chunk := response.read(1024 * 1024):
-                output.write(chunk)
-                sha256.update(chunk)
-                md5.update(chunk)
-                downloaded += len(chunk)
-                if reporter is not None and task is not None:
-                    reporter.update(task, completed=downloaded)
-            headers = response.headers
-        os.replace(temporary, destination)
-        if reporter is not None and task is not None:
-            reporter.finish(task, f"{downloaded:,} bytes")
-    except Exception:
-        # Deliberately keep the .part file: failed builds retain their entire
-        # staging directory for diagnosis and possible resumability work.
-        raise
-
-    return DownloadRecord(
-        name=name,
-        url=url,
-        retrieved_at=retrieved_at,
-        bytes=downloaded,
-        sha256=sha256.hexdigest(),
-        etag=headers.get("ETag"),
-        last_modified=headers.get("Last-Modified"),
-        md5=md5.hexdigest(),
-    )
 
 
 def _validated_zip_entries(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
@@ -584,341 +217,12 @@ def stage_nested_jdf_batches(
     return mappings
 
 
-def deterministic_zip(
-    source_directory: Path,
-    destination: Path,
-    reporter: Reporter | None = None,
-    compression_level: int = 6,
-) -> ArtifactIdentity:
-    if not 0 <= compression_level <= 9:
-        raise ValueError("ZIP compression level must be between 0 and 9")
-    files = sorted(
-        (path for path in source_directory.rglob("*") if path.is_file()),
-        key=lambda path: path.relative_to(source_directory).as_posix(),
-    )
-    if not files:
-        raise PipelineError(f"Cannot package empty directory: {source_directory}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    total_bytes = sum(path.stat().st_size for path in files)
-    task = (
-        reporter.start("Package merged JDF", total=total_bytes, unit="bytes") if reporter else None
-    )
-    with zipfile.ZipFile(
-        destination,
-        "w",
-        compression=zipfile.ZIP_DEFLATED,
-        compresslevel=compression_level,
-    ) as archive:
-        for path in files:
-            relative = path.relative_to(source_directory).as_posix()
-            size = path.stat().st_size
-            info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.compress_level = compression_level
-            info.external_attr = 0o100644 << 16
-            info.file_size = size
-            with (
-                path.open("rb") as source,
-                archive.open(
-                    info,
-                    "w",
-                    force_zip64=size >= zipfile.ZIP64_LIMIT,
-                ) as output,
-            ):
-                while chunk := source.read(1024 * 1024):
-                    output.write(chunk)
-                    if reporter is not None and task is not None:
-                        reporter.update(task, advance=len(chunk), detail=relative)
-    if reporter is not None and task is not None:
-        reporter.finish(task, f"{len(files)} files, {destination.stat().st_size:,} bytes")
-    return ArtifactIdentity(bytes=destination.stat().st_size, sha256=file_digest(destination))
-
-
-_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-_LOG_SEVERITY = re.compile(r"\[(?:[^\]]*\s)?(?P<severity>WRN|ERR)\]")
-_JRUTIL_PROGRESS_PREFIX = "JRUTIL_PROGRESS "
-
-
-def run_command(
-    command: Sequence[str],
-    cwd: Path,
-    log_path: Path,
-    reporter: Reporter | None = None,
-    progress: CommandProgress | None = None,
-) -> CommandResult:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    started = time.monotonic()
-    if reporter is not None and progress is not None:
-        reporter.stage(progress.label)
-    task = reporter.start(progress.label, total=progress.total) if reporter and progress else None
-    tail: deque[str] = deque(maxlen=60)
-    last_batch: str | None = None
-    failed_batch: str | None = None
-    completed = 0
-    in_flight: set[str] = set()
-    maximum_in_flight = 0
-    execution_plan: dict[str, object] | None = None
-    resource_usage_events: list[dict[str, object]] = []
-    capture_metrics: dict[str, object] | None = None
-    scheduler_samples: list[dict[str, object]] = []
-    maximum_workers_observed = 0
-    latest_scheduler_sample: dict[str, object] | None = None
-    structured_progress_events = False
-    structured_batch_events = False
-    current_phase: str | None = None
-
-    def progress_detail() -> str:
-        details: list[str] = []
-        if latest_scheduler_sample is not None:
-            active = latest_scheduler_sample.get("active_workers", "?")
-            target = latest_scheduler_sample.get("target_workers", "?")
-            cpu = float(cast(float, latest_scheduler_sample.get("normalized_cpu_percent", 0.0)))
-            budget = (
-                int(cast(int, execution_plan.get("memory_budget_bytes", 0)))
-                if execution_plan
-                else 0
-            )
-            private = int(cast(int, latest_scheduler_sample.get("private_bytes", 0)))
-            memory = (private / budget * 100.0) if budget else 0.0
-            backlog = latest_scheduler_sample.get("completed_backlog", 0)
-            details.append(
-                f"{active}/{target} workers • CPU {cpu:.0f}% • "
-                f"memory {memory:.0f}% • backlog {backlog}"
-            )
-        elif execution_plan is not None:
-            fallback = execution_plan.get("resolved_workers", "?")
-            initial = execution_plan.get("initial_workers", fallback)
-            maximum = execution_plan.get("maximum_workers", fallback)
-            details.append(f"{initial}/{maximum} workers")
-        if in_flight:
-            details.append(f"{len(in_flight)} active")
-        if current_phase:
-            details.append(current_phase)
-        if last_batch:
-            details.append(f"last: {Path(last_batch).name}")
-        return " • ".join(details) or "running"
-
-    process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        bufsize=0,
-    )
-    assert process.stdout is not None
-    with log_path.open("wb") as log:
-        for raw_line in process.stdout:
-            log.write(raw_line)
-            log.flush()
-            clean = _ANSI_ESCAPE.sub("", raw_line.decode("utf-8", errors="replace")).rstrip("\r\n")
-            tail.append(clean)
-            if clean.startswith(_JRUTIL_PROGRESS_PREFIX):
-                try:
-                    event = cast(
-                        dict[str, object],
-                        json.loads(clean[len(_JRUTIL_PROGRESS_PREFIX) :]),
-                    )
-                except (json.JSONDecodeError, TypeError):
-                    event = {}
-                event_name = event.get("event")
-                event_stage = event.get("stage")
-                expected_stage = progress.stage if progress is not None else None
-                if expected_stage is None or event_stage == expected_stage:
-                    structured_progress_events = True
-                    if event_name == "execution_plan":
-                        execution_plan = event
-                        if reporter is not None:
-                            budget_gib = int(cast(int, event.get("memory_budget_bytes", 0))) / (
-                                1024**3
-                            )
-                            reporter.note(
-                                f"{progress.label if progress else event_stage}: "
-                                f"{event.get('resolved_workers')} workers "
-                                f"(requested {event.get('requested_jobs')}, "
-                                f"CPU {event.get('processor_count')}, "
-                                f"memory cap {event.get('memory_limited_jobs')}, "
-                                f"budget {budget_gib:.1f} GiB)"
-                            )
-                            if task is not None:
-                                reporter.update(task, completed=completed, detail=progress_detail())
-                    elif event_name == "phase":
-                        current_phase = str(event.get("name", "running")).replace("-", " ")
-                        state = event.get("state")
-                        if state == "completed":
-                            current_phase = f"{current_phase} done"
-                        if reporter is not None and task is not None:
-                            reporter.update(task, completed=completed, detail=progress_detail())
-                    elif event_name == "resource_usage":
-                        resource_usage_events.append(event)
-                    elif event_name == "capture_metrics":
-                        capture_metrics = event
-                    elif event_name == "scheduler_sample":
-                        scheduler_samples.append(event)
-                        latest_scheduler_sample = event
-                        maximum_workers_observed = max(
-                            maximum_workers_observed,
-                            int(cast(int, event.get("maximum_active_workers", 0))),
-                        )
-                        if reporter is not None and task is not None:
-                            reporter.update(task, completed=completed, detail=progress_detail())
-                    elif event_name == "work_progress":
-                        phase_name = str(event.get("phase", "running")).replace("-", " ")
-                        work_completed = int(cast(int, event.get("completed", 0)))
-                        work_total = event.get("total")
-                        work_unit = str(event.get("unit", "items"))
-                        state = str(event.get("state", "running"))
-                        if work_total is None:
-                            current_phase = f"{phase_name}: {work_completed} {work_unit}"
-                        else:
-                            current_phase = (
-                                f"{phase_name}: {work_completed}/{int(cast(int, work_total))} "
-                                f"{work_unit}"
-                            )
-                        if state == "completed":
-                            current_phase += " done"
-                        detail = event.get("detail")
-                        if detail:
-                            current_phase += f" ({detail})"
-                        if reporter is not None and task is not None:
-                            reporter.update(task, completed=completed, detail=progress_detail())
-                    elif event_name == "batch_started":
-                        structured_batch_events = True
-                        batch = str(event.get("batch", ""))
-                        if batch:
-                            in_flight.add(batch)
-                            maximum_in_flight = max(maximum_in_flight, len(in_flight))
-                        if reporter is not None and task is not None:
-                            reporter.update(task, completed=completed, detail=progress_detail())
-                    elif event_name == "batch_completed":
-                        structured_batch_events = True
-                        batch = str(event.get("batch", ""))
-                        in_flight.discard(batch)
-                        last_batch = batch or last_batch
-                        completed += 1
-                        if reporter is not None and task is not None:
-                            reporter.update(
-                                task,
-                                completed=completed,
-                                detail=progress_detail(),
-                            )
-                    elif event_name == "batch_failed":
-                        structured_batch_events = True
-                        batch = str(event.get("batch", ""))
-                        in_flight.discard(batch)
-                        failed_batch = batch or failed_batch
-                        last_batch = failed_batch
-                        current_phase = (
-                            f"failed: {Path(failed_batch).name}" if failed_batch else "failed"
-                        )
-                        if reporter is not None and task is not None:
-                            reporter.update(task, completed=completed, detail=progress_detail())
-            elif (
-                not structured_batch_events
-                and progress
-                and progress.event
-                and progress.event in clean
-            ):
-                last_batch = clean.split(progress.event, 1)[1].strip(" :") or clean
-                completed += 1
-                if reporter is not None and task is not None:
-                    reporter.update(task, completed=completed, detail=progress_detail())
-            elif not structured_progress_events and reporter is not None and task is not None:
-                phase = next(
-                    (
-                        marker
-                        for marker in (
-                            "Reading external stops",
-                            "Reading OSM stops",
-                            "Creating stop matcher",
-                            "Creating Czech town name matcher",
-                            "Creating European town name matcher",
-                            "Resolving route overlaps",
-                            "Writing merged JDF",
-                            "Bundle phase:",
-                        )
-                        if marker in clean
-                    ),
-                    None,
-                )
-                if phase is not None:
-                    reporter.update(task, detail=clean)
-            severity = _LOG_SEVERITY.search(clean)
-            if reporter is not None and severity is not None:
-                reporter.problem(severity.group("severity"), clean)
-    returncode = process.wait()
-    elapsed = time.monotonic() - started
-    if returncode != 0:
-        raise CommandFailure(
-            command=command,
-            cwd=cwd,
-            log_path=log_path,
-            returncode=returncode,
-            elapsed=elapsed,
-            tail=tail,
-            last_batch=failed_batch or last_batch,
-            completed=completed,
-            in_flight=sorted(in_flight),
-            execution_plan=execution_plan,
-        )
-    if reporter is not None and task is not None:
-        reporter.finish(
-            task,
-            f"completed in {elapsed:.1f}s"
-            + (
-                f" with {execution_plan.get('resolved_workers')} workers"
-                if execution_plan is not None
-                else ""
-            ),
-        )
-    return CommandResult(
-        elapsed_seconds=elapsed,
-        completed=completed,
-        total=progress.total if progress is not None else None,
-        execution_plan=execution_plan,
-        failed_batch=failed_batch,
-        maximum_in_flight=maximum_in_flight,
-        resource_usage=tuple(resource_usage_events),
-        capture_metrics=capture_metrics,
-        scheduler_samples=tuple(scheduler_samples),
-        maximum_workers_observed=maximum_workers_observed,
-    )
-
-
-def git_identity(repository: Path) -> dict[str, Any]:
-    safe = f"safe.directory={repository.resolve().as_posix()}"
-    commit = subprocess.run(
-        ["git", "-c", safe, "-C", str(repository), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    status = subprocess.run(
-        ["git", "-c", safe, "-C", str(repository), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    identity: dict[str, Any] = {
-        "commit": commit,
-        "dirty": bool(status),
-        "status": status.splitlines(),
-    }
-    if status:
-        diff = subprocess.run(
-            ["git", "-c", safe, "-C", str(repository), "diff", "--binary", "HEAD"],
-            capture_output=True,
-            check=True,
-        ).stdout
-        identity["working_tree_sha256"] = hashlib.sha256(diff).hexdigest()
-    return identity
-
-
 def geodata_manifest(geodata_directory: Path) -> dict[str, Any]:
     files = sorted(geodata_directory.rglob("*.csv"), key=lambda path: path.as_posix())
     if not files:
         raise PipelineError(f"Geodata directory contains no CSV files: {geodata_directory}")
     return {
-        "repository": git_identity(geodata_directory.parent),
+        "repository": jrutil.git_identity(geodata_directory.parent),
         "directory": str(geodata_directory.resolve()),
         "files": [
             {
@@ -932,66 +236,11 @@ def geodata_manifest(geodata_directory: Path) -> dict[str, Any]:
 
 
 def _multitool_command(config: BuildConfig, arguments: Sequence[str]) -> list[str]:
-    if config.jrutil_command is not None:
-        return [*config.jrutil_command, *arguments]
-    if config.jrutil_root is None:
-        raise PipelineError("JrUtil runtime is not configured")
-    project = config.jrutil_root / "jrutil-multitool" / "jrutil-multitool.fsproj"
-    if not project.is_file():
-        raise PipelineError(f"Root-level JrUtil multitool project not found: {project}")
-    return [
-        "dotnet",
-        "run",
-        "--project",
-        str(project),
-        "--configuration",
-        "Release",
-        "--no-restore",
-        "--no-build",
-        "--",
-        *arguments,
-    ]
-
-
-def _multitool_build_command(config: BuildConfig) -> list[str] | None:
-    if config.jrutil_command is not None:
-        return None
-    if config.jrutil_root is None:
-        raise PipelineError("JrUtil runtime is not configured")
-    project = config.jrutil_root / "jrutil-multitool" / "jrutil-multitool.fsproj"
-    if not project.is_file():
-        raise PipelineError(f"Root-level JrUtil multitool project not found: {project}")
-    return [
-        "dotnet",
-        "build",
-        str(project),
-        "--configuration",
-        "Release",
-        "--no-restore",
-        "--nologo",
-    ]
+    return [*jrutil.runtime_command(config.jrutil_root, config.jrutil_command), *arguments]
 
 
 def _jrutil_cwd(config: BuildConfig) -> Path:
     return config.jrutil_root or config.workdir
-
-
-def _jrutil_identity(config: BuildConfig) -> dict[str, Any]:
-    if config.jrutil_root is not None:
-        return git_identity(config.jrutil_root)
-    assert config.jrutil_command is not None
-    files: list[dict[str, object]] = []
-    for argument in config.jrutil_command:
-        candidate = Path(argument)
-        if candidate.is_absolute() and candidate.is_file():
-            files.append(
-                {
-                    "path": str(candidate.resolve()),
-                    "bytes": candidate.stat().st_size,
-                    "sha256": file_digest(candidate),
-                }
-            )
-    return {"mode": "command", "command": list(config.jrutil_command), "files": files}
 
 
 def _job_text(value: JobSetting) -> str:
@@ -1219,15 +468,350 @@ def verify_gtfs_stops(gtfs: Path, reporter: Reporter | None = None) -> None:
         )
 
 
-def _converter_version(identity: Mapping[str, Any]) -> str:
-    if identity.get("mode") == "command":
-        files = cast(list[dict[str, object]], identity.get("files", []))
-        if files:
-            return f"command.{str(files[0]['sha256'])[:12]}"
-        return "configured-command"
-    commit = cast(str, identity["commit"])
-    dirty_hash = identity.get("working_tree_sha256")
-    return commit if dirty_hash is None else f"{commit}+dirty.{cast(str, dirty_hash)[:12]}"
+def _bundle_arguments(
+    config: BuildConfig,
+    *,
+    publish: Path,
+    logs: Path,
+    descriptor_path: Path,
+    converter_version: str,
+    gvd_year: int,
+    routing_osm_file: Path | None,
+    include_post_inference_scores: bool,
+    merged_zip: Path,
+    bundle: Path,
+) -> list[str]:
+    return [
+        "jdf-to-bundle",
+        "--progress-events",
+        f"--jobs={_job_text(config.jobs)}",
+        f"--memory-budget={config.memory_budget}",
+        "--international-route-policy=regional-adjacent",
+        f"--transport-mode-rules={TRANSPORT_MODE_RULES}",
+        f"--snapshot-descriptor={descriptor_path}",
+        f"--converter-version={converter_version}",
+        f"--gvd-year={gvd_year}",
+        *(
+            [f"--post-inference-evidence={config.post_inference_evidence.resolve()}"]
+            if config.post_inference_evidence is not None
+            else (
+                [f"--routing-osm-pbf={routing_osm_file}"]
+                if routing_osm_file is not None
+                else ["--no-estimated-posts"]
+            )
+        ),
+        *(
+            [f"--post-inference-policy={config.post_inference_policy.resolve()}"]
+            if config.post_inference_policy is not None
+            else []
+        ),
+        *([] if include_post_inference_scores else ["--no-post-inference-scores"]),
+        *(
+            [
+                f"--capture-post-inference-evidence={publish / 'post-inference-evidence-v2'}",
+                "--post-inference-evidence-only",
+            ]
+            if config.capture_post_inference_evidence
+            else []
+        ),
+        *(["--diagnostic-post-labels"] if config.diagnostic_post_labels else []),
+        *(
+            [f"--post-review-stops={config.post_review_stops.resolve()}"]
+            if config.post_review_stops is not None
+            else []
+        ),
+        f"--diagnostics-out={publish / 'diagnostics-detail'}",
+        f"--logfile={logs / 'bundle.log'}",
+        str(merged_zip),
+        str(bundle),
+    ]
+
+
+def _evidence_summary(manifest: dict[str, Any], capture_metrics: object) -> dict[str, object]:
+    return {
+        "evidence_format": manifest["evidence_format"],
+        "schema_version": manifest["schema_version"],
+        "router_evidence_version": manifest["router_evidence_version"],
+        "variant_enumeration_version": manifest["variant_enumeration_version"],
+        "capture_tool_version": manifest["capture_tool_version"],
+        "pack_id": manifest["pack_id"],
+        "observation_count": manifest["observation_count"],
+        "route_point_count": manifest["route_point_count"],
+        "context_count": manifest["context_count"],
+        "corridor_variant_count": manifest["corridor_variant_count"],
+        "route_point_evidence_count": manifest["route_point_evidence_count"],
+        "bytes": sum(
+            cast(int, entry["bytes"]) for entry in cast(list[dict[str, Any]], manifest["files"])
+        ),
+        "capture_metrics": capture_metrics,
+    }
+
+
+@dataclass(frozen=True)
+class _Plan:
+    """Settings of one build derived from its configuration and the prepared OSM."""
+
+    reference_date: date
+    gvd_year: int
+    inferred_posts: bool
+    include_post_inference_scores: bool
+    osm_manifest: Mapping[str, Any]
+    jdf_osm_file: Path
+
+
+@dataclass(frozen=True)
+class _Verified:
+    """What the verification stage learned about the bundle and the locked evidence pack."""
+
+    bundle_manifest: dict[str, Any] | None
+    evidence_manifest: dict[str, Any] | None
+    evidence_manifest_sha256: str | None
+    capture_metrics: object
+
+
+def _plan(config: BuildConfig) -> _Plan:
+    include_post_inference_scores = _include_post_inference_scores(config)
+    reference_date = config.reference_date or prague_today()
+    gvd_year = config.gvd_year or resolve_timetable_year("auto")
+    osm_manifest = validate_snapshot(config.osm_file, config.workdir)
+    return _Plan(
+        reference_date=reference_date,
+        gvd_year=gvd_year,
+        inferred_posts=(
+            config.estimated_posts
+            or config.post_inference_evidence is not None
+            or config.capture_post_inference_evidence
+        ),
+        include_post_inference_scores=include_post_inference_scores,
+        osm_manifest=osm_manifest,
+        jdf_osm_file=validate_jdf_post_candidates(config.workdir, str(osm_manifest["merge_key"])),
+    )
+
+
+def _download_sources(
+    download: DownloadFn, sources: Path, reporter: Reporter, clock: StageClock
+) -> tuple[DownloadRecord, DownloadRecord]:
+    clock.start("download-vld")
+    vld = download(VLD_URL, sources / "JDF_VLD.zip", "VLD", reporter)
+    clock.start("download-drahy")
+    drahy = download(DRAHY_URL, sources / "JDF_drahy.zip", "dráhy", reporter)
+    write_json(
+        sources / "sources.json",
+        {"schema_version": 1, "sources": [asdict(vld), asdict(drahy)]},
+    )
+    return vld, drahy
+
+
+def _fix_arguments(
+    config: BuildConfig, plan: _Plan, logs: Path, batches: Path, fixed_root: Path
+) -> list[str]:
+    return [
+        "fix-jdf",
+        "--strict",
+        "--progress-events",
+        "--batch-output=zip",
+        f"--jobs={_job_text(_stage_jobs(config, 'fix'))}",
+        f"--memory-budget={config.memory_budget}",
+        "--international-route-policy=regional-adjacent",
+        *([] if plan.inferred_posts else ["--no-estimated-posts"]),
+        f"--ext-geodata={config.geodata_root}",
+        f"--cz-pbf={plan.jdf_osm_file}",
+        f"--logfile={logs / 'fix.log'}",
+        str(batches),
+        str(fixed_root),
+    ]
+
+
+def _merge_arguments(
+    config: BuildConfig, plan: _Plan, logs: Path, merged_directory: Path, fixed_root: Path
+) -> list[str]:
+    return [
+        "merge-jdf",
+        "--strict",
+        f"--gvd-year={plan.gvd_year}",
+        f"--reference-date={plan.reference_date.isoformat()}",
+        "--progress-events",
+        f"--jobs={_job_text(_stage_jobs(config, 'merge'))}",
+        f"--memory-budget={config.memory_budget}",
+        f"--logfile={logs / 'merge.log'}",
+        str(merged_directory),
+        str(fixed_root),
+    ]
+
+
+def _snapshot_descriptor(
+    vld: DownloadRecord, drahy: DownloadRecord, merged: ArtifactIdentity
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "source_id": "national-jdf-vld-drahy",
+        "retrieved_at": max(vld.retrieved_at, drahy.retrieved_at),
+        "retrieval_method": "derived-from-https-and-configured-snapshots",
+        "source_uri": "obehy:derived:national-jdf-vld-drahy",
+        "licence": "CIS JŘ public data; OSM ODbL; external geodata source-specific",
+        "payload_kind": "zip",
+        "payload_sha256": merged.sha256,
+        "payload_bytes": merged.bytes,
+    }
+
+
+def _verify(
+    config: BuildConfig,
+    publish: Path,
+    bundle: Path,
+    run_jrutil: Callable[[str, list[str], str, CommandProgress], None],
+    bundle_result: CommandResult | None,
+    reporter: Reporter,
+) -> _Verified:
+    """Validate the published bundle, or read the captured evidence pack instead of one."""
+    captured = publish / "post-inference-evidence-v2"
+    # A capture publishes a new pack; an evidence-backed replay locks its input pack.
+    evidence_path = (
+        captured if config.capture_post_inference_evidence else config.post_inference_evidence
+    )
+    evidence_manifest = (
+        _read_post_inference_evidence_manifest(evidence_path) if evidence_path is not None else None
+    )
+    bundle_manifest = (
+        None if config.capture_post_inference_evidence else _verify_bundle(bundle, reporter)
+    )
+    if bundle_manifest is not None:
+        run_jrutil(
+            "validate_package",
+            ["validate-package", str(bundle)],
+            "validate-package.process.log",
+            CommandProgress("Validate production package", stage="validate-package"),
+        )
+    return _Verified(
+        bundle_manifest=bundle_manifest,
+        evidence_manifest=evidence_manifest,
+        evidence_manifest_sha256=(
+            file_digest(evidence_path / "manifest.json") if evidence_path is not None else None
+        ),
+        capture_metrics=(
+            bundle_result.capture_metrics
+            if config.capture_post_inference_evidence and bundle_result is not None
+            else None
+        ),
+    )
+
+
+def _extract_manifest(path: Path, extra: Mapping[str, object] | None = None) -> dict[str, object]:
+    return {
+        "path": str(path),
+        "bytes": path.stat().st_size,
+        "sha256": file_digest(path),
+        **(extra or {}),
+    }
+
+
+def _conversion_manifest(config: BuildConfig, plan: _Plan) -> dict[str, object]:
+    return {
+        "gvd_year": plan.gvd_year,
+        "reference_date": plan.reference_date.isoformat(),
+        "stop_merge": "name",
+        "strict": True,
+        "international_route_policy": "regional-adjacent",
+        "transport_mode_rules": {
+            "path": "obehy/data/jdf_transport_mode_rules.csv",
+            "sha256": file_digest(TRANSPORT_MODE_RULES),
+        },
+        "diagnostic_post_labels": config.diagnostic_post_labels,
+        "estimated_posts": plan.inferred_posts,
+        "post_inference_policy": (
+            str(config.post_inference_policy) if config.post_inference_policy else None
+        ),
+        "post_inference_evidence": (
+            str(config.post_inference_evidence) if config.post_inference_evidence else None
+        ),
+        "include_post_inference_scores": plan.include_post_inference_scores,
+        "capture_post_inference_evidence": config.capture_post_inference_evidence,
+    }
+
+
+def _run_manifest(
+    config: BuildConfig,
+    plan: _Plan,
+    *,
+    sources: Path,
+    bundle: Path,
+    routing_osm_file: Path | None,
+    geodata: dict[str, Any],
+    jrutil_identity: dict[str, Any],
+    command_results: Mapping[str, CommandResult | None],
+    clock: StageClock,
+    mappings: Sequence[BatchMapping],
+    merged_directory: Path,
+    merged: ArtifactIdentity,
+    verified: _Verified,
+) -> dict[str, object]:
+    evidence = verified.evidence_manifest
+    return {
+        "schema_version": 1,
+        "completed_at": utc_now(),
+        "sources_manifest_sha256": file_digest(sources / "sources.json"),
+        "osm_source_key": plan.osm_manifest["merge_key"],
+        "osm_jdf_transit_extract": _extract_manifest(plan.jdf_osm_file),
+        "osm_jdf_routing_extract": (
+            _extract_manifest(
+                routing_osm_file,
+                {
+                    "manifest": str(
+                        routing_osm_file.with_suffix(routing_osm_file.suffix + ".manifest.json")
+                    )
+                },
+            )
+            if routing_osm_file is not None
+            else None
+        ),
+        "geodata": geodata,
+        "jrutil": jrutil_identity,
+        "conversion": _conversion_manifest(config, plan),
+        "execution": {
+            "requested": {
+                "jobs": _job_text(config.jobs),
+                "fix_jobs": _job_text(_stage_jobs(config, "fix")),
+                "merge_jobs": _job_text(_stage_jobs(config, "merge")),
+                "memory_budget": config.memory_budget,
+            },
+            "commands": {
+                name: command_manifest(result) for name, result in command_results.items()
+            },
+            "stage_timings_seconds": clock.timings(),
+        },
+        "batch_counts": {
+            "vld": sum(mapping.source == "vld" for mapping in mappings),
+            "drahy": sum(mapping.source == "drahy" for mapping in mappings),
+            "total": len(mappings),
+        },
+        "batch_mapping": [asdict(mapping) for mapping in mappings],
+        "merged_jdf": {
+            "bytes": merged.bytes,
+            "sha256": merged.sha256,
+            "uncompressed_bytes": sum(
+                path.stat().st_size for path in merged_directory.rglob("*") if path.is_file()
+            ),
+            "compression": config.zip_compression,
+            "compression_level": ZIP_COMPRESSION_LEVELS[config.zip_compression],
+        },
+        "bundle_manifest_sha256": (
+            None if verified.bundle_manifest is None else file_digest(bundle / "manifest.json")
+        ),
+        "bundle_file_count": (
+            0
+            if verified.bundle_manifest is None
+            else len(cast(list[object], verified.bundle_manifest["files"]))
+        ),
+        "post_inference_evidence_manifest_sha256": verified.evidence_manifest_sha256,
+        "post_inference_evidence": (
+            _evidence_summary(evidence, verified.capture_metrics) if evidence is not None else None
+        ),
+        "post_inference_evidence_lock": (
+            _post_inference_evidence_lock(evidence, verified.evidence_manifest_sha256)
+            if evidence is not None and verified.evidence_manifest_sha256 is not None
+            else None
+        ),
+    }
 
 
 def build(
@@ -1237,69 +821,33 @@ def build(
     reporter: Reporter | None = None,
 ) -> Path:
     _validate_build_config(config)
-    include_post_inference_scores = _include_post_inference_scores(config)
-    reference_date = config.reference_date or prague_today()
-    gvd_year = config.gvd_year or resolve_timetable_year("auto")
-    inferred_posts = (
-        config.estimated_posts
-        or config.post_inference_evidence is not None
-        or config.capture_post_inference_evidence
-    )
-    osm_manifest = validate_snapshot(config.osm_file, config.workdir)
-    jdf_osm_file = validate_jdf_post_candidates(config.workdir, str(osm_manifest["merge_key"]))
-    output = config.output.resolve()
-    if output.exists():
-        raise PipelineError(f"Output path must not exist: {output}")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    stage = output.parent / f".{output.name}.work-{uuid.uuid4().hex}"
-    stage.mkdir()
-    publish = stage / "publish"
-    publish.mkdir()
+    plan = _plan(config)
+    staging = create_staging(config.output, config.workdir, "national-jdf")
+    publish = staging.publish
     sources = publish / "sources"
     derived = publish / "derived"
     bundle = publish / "bundle"
     logs = publish / "logs"
-    run_root = (
-        config.workdir.resolve()
-        / "runs"
-        / "national-jdf"
-        / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex}"
-    )
-    work = run_root / "work"
-    for directory in (sources, derived, logs, work):
+    work = staging.work
+    for directory in (sources, derived, logs):
         directory.mkdir(parents=True)
-
-    active_stage = "initialization"
-    active_stage_started = time.monotonic()
-    stage_timings: dict[str, float] = {}
+    clock = StageClock()
     command_results: dict[str, CommandResult | None] = {}
-
-    def set_stage(name: str) -> None:
-        nonlocal active_stage, active_stage_started
-        now = time.monotonic()
-        stage_timings[active_stage] = stage_timings.get(active_stage, 0.0) + (
-            now - active_stage_started
-        )
-        active_stage = name
-        active_stage_started = now
-
-    def result_manifest(result: CommandResult | None) -> dict[str, object] | None:
-        if result is None:
-            return None
-        return {
-            "elapsed_seconds": result.elapsed_seconds,
-            "completed": result.completed,
-            "total": result.total,
-            "maximum_in_flight": result.maximum_in_flight,
-            "execution_plan": result.execution_plan,
-            "resource_usage": list(result.resource_usage),
-            "capture_metrics": result.capture_metrics,
-            "scheduler_samples": list(result.scheduler_samples),
-            "maximum_workers_observed": result.maximum_workers_observed,
-        }
 
     owned_reporter = reporter is None
     reporter = reporter or BuildReporter(config.progress)
+
+    def run_jrutil(
+        name: str, arguments: list[str], log_name: str, progress: CommandProgress
+    ) -> None:
+        command_results[name] = command_runner(
+            _multitool_command(config, arguments),
+            _jrutil_cwd(config),
+            logs / log_name,
+            reporter,
+            progress,
+        )
+
     reporter.note(
         "Build configuration: "
         f"fix jobs={_job_text(_stage_jobs(config, 'fix'))}, "
@@ -1307,41 +855,32 @@ def build(
         f"memory budget={config.memory_budget}, "
         f"ZIP compression={config.zip_compression} "
         f"(level {ZIP_COMPRESSION_LEVELS[config.zip_compression]}), "
-        f"run={run_root}, staging={stage}, output={output}"
+        f"run={staging.run_root}, staging={staging.stage}, output={staging.output}"
     )
     try:
-        set_stage("download-vld")
-        vld = download(VLD_URL, sources / "JDF_VLD.zip", "VLD", reporter)
-        set_stage("download-drahy")
-        drahy = download(DRAHY_URL, sources / "JDF_drahy.zip", "dráhy", reporter)
-        write_json(
-            sources / "sources.json",
-            {"schema_version": 1, "sources": [asdict(vld), asdict(drahy)]},
-        )
+        vld, drahy = _download_sources(download, sources, reporter, clock)
 
-        set_stage("stage-national-batches")
-        combined_root = work / "batches"
+        clock.start("stage-national-batches")
+        batches = work / "batches"
         mappings = stage_nested_jdf_batches(
             (
                 ("vld", sources / "JDF_VLD.zip"),
                 ("drahy", sources / "JDF_drahy.zip"),
             ),
-            combined_root,
+            batches,
             reporter,
         )
-        vld_count = sum(mapping.source == "vld" for mapping in mappings)
-        drahy_count = sum(mapping.source == "drahy" for mapping in mappings)
 
-        set_stage("provenance")
-        jrutil_identity = _jrutil_identity(config)
+        clock.start("provenance")
+        jrutil_identity = jrutil.provenance(config.jrutil_root, config.jrutil_command)
         geodata = geodata_manifest(config.geodata_root)
         if not TRANSPORT_MODE_RULES.is_file():
             raise PipelineError(f"Transport mode rules are missing: {TRANSPORT_MODE_RULES}")
-        transport_mode_rules_sha256 = file_digest(TRANSPORT_MODE_RULES)
-        fixed_root = work / "fixed"
 
-        set_stage("build-jrutil")
-        build_command = _multitool_build_command(config)
+        clock.start("build-jrutil")
+        build_command = (
+            None if config.jrutil_root is None else jrutil.build_command(config.jrutil_root)
+        )
         if config.build_jrutil and build_command is not None:
             command_results["build"] = command_runner(
                 build_command,
@@ -1351,29 +890,12 @@ def build(
                 CommandProgress("Build JrUtil", stage="build-jrutil"),
             )
 
-        set_stage("fix-national-jdf")
-        command_results["fix"] = command_runner(
-            _multitool_command(
-                config,
-                [
-                    "fix-jdf",
-                    "--strict",
-                    "--progress-events",
-                    "--batch-output=zip",
-                    f"--jobs={_job_text(_stage_jobs(config, 'fix'))}",
-                    f"--memory-budget={config.memory_budget}",
-                    "--international-route-policy=regional-adjacent",
-                    *([] if inferred_posts else ["--no-estimated-posts"]),
-                    f"--ext-geodata={config.geodata_root}",
-                    f"--cz-pbf={jdf_osm_file}",
-                    f"--logfile={logs / 'fix.log'}",
-                    str(combined_root),
-                    str(fixed_root),
-                ],
-            ),
-            _jrutil_cwd(config),
-            logs / "fix.process.log",
-            reporter,
+        clock.start("fix-national-jdf")
+        fixed_root = work / "fixed"
+        run_jrutil(
+            "fix",
+            _fix_arguments(config, plan, logs, batches, fixed_root),
+            "fix.process.log",
             CommandProgress(
                 "Fix national JDF",
                 total=len(mappings),
@@ -1381,30 +903,14 @@ def build(
                 stage="fix-jdf",
             ),
         )
-        expected_fixed = {Path(item.combined_filename).stem for item in mappings}
-        _verify_fixed_batches(fixed_root, expected_fixed)
+        _verify_fixed_batches(fixed_root, {Path(item.combined_filename).stem for item in mappings})
 
-        set_stage("merge-national-jdf")
+        clock.start("merge-national-jdf")
         merged_directory = work / "merged-jdf"
-        command_results["merge"] = command_runner(
-            _multitool_command(
-                config,
-                [
-                    "merge-jdf",
-                    "--strict",
-                    f"--gvd-year={gvd_year}",
-                    f"--reference-date={reference_date.isoformat()}",
-                    "--progress-events",
-                    f"--jobs={_job_text(_stage_jobs(config, 'merge'))}",
-                    f"--memory-budget={config.memory_budget}",
-                    f"--logfile={logs / 'merge.log'}",
-                    str(merged_directory),
-                    str(fixed_root),
-                ],
-            ),
-            _jrutil_cwd(config),
-            logs / "merge.process.log",
-            reporter,
+        run_jrutil(
+            "merge",
+            _merge_arguments(config, plan, logs, merged_directory, fixed_root),
+            "merge.process.log",
             CommandProgress(
                 "Merge national JDF",
                 total=len(mappings),
@@ -1413,330 +919,89 @@ def build(
             ),
         )
         routing_osm_file: Path | None = None
-        if inferred_posts and config.post_inference_evidence is None:
-            set_stage("prepare-routing-osm")
+        if plan.inferred_posts and config.post_inference_evidence is None:
+            clock.start("prepare-routing-osm")
             routing_osm_file = prepare_jdf_demand_routing(
                 config.workdir,
                 merged_directory / "JrutilRoutingDemands.txt",
-                str(osm_manifest["merge_key"]),
+                str(plan.osm_manifest["merge_key"]),
             )
-        set_stage("package-merged-jdf")
+
+        clock.start("package-merged-jdf")
         merged_zip = derived / "merged-jdf.zip"
-        zip_level = ZIP_COMPRESSION_LEVELS[config.zip_compression]
-        merged_identity = deterministic_zip(
+        merged = deterministic_zip(
             merged_directory,
             merged_zip,
             reporter,
-            compression_level=zip_level,
+            compression_level=ZIP_COMPRESSION_LEVELS[config.zip_compression],
         )
-        descriptor = {
-            "schema_version": 1,
-            "source_id": "national-jdf-vld-drahy",
-            "retrieved_at": max(vld.retrieved_at, drahy.retrieved_at),
-            "retrieval_method": "derived-from-https-and-configured-snapshots",
-            "source_uri": "obehy:derived:national-jdf-vld-drahy",
-            "licence": "CIS JŘ public data; OSM ODbL; external geodata source-specific",
-            "payload_kind": "zip",
-            "payload_sha256": merged_identity.sha256,
-            "payload_bytes": merged_identity.bytes,
-        }
         descriptor_path = derived / "snapshot-descriptor.json"
-        write_json(descriptor_path, descriptor)
+        write_json(descriptor_path, _snapshot_descriptor(vld, drahy, merged))
 
-        set_stage("generate-bundle")
-        command_results["bundle"] = command_runner(
-            _multitool_command(
+        clock.start("generate-bundle")
+        run_jrutil(
+            "bundle",
+            _bundle_arguments(
                 config,
-                [
-                    "jdf-to-bundle",
-                    "--progress-events",
-                    f"--jobs={_job_text(config.jobs)}",
-                    f"--memory-budget={config.memory_budget}",
-                    "--international-route-policy=regional-adjacent",
-                    f"--transport-mode-rules={TRANSPORT_MODE_RULES}",
-                    f"--snapshot-descriptor={descriptor_path}",
-                    f"--converter-version={_converter_version(jrutil_identity)}",
-                    f"--gvd-year={gvd_year}",
-                    *(
-                        [f"--post-inference-evidence={config.post_inference_evidence.resolve()}"]
-                        if config.post_inference_evidence is not None
-                        else (
-                            [f"--routing-osm-pbf={routing_osm_file}"]
-                            if routing_osm_file is not None
-                            else ["--no-estimated-posts"]
-                        )
-                    ),
-                    *(
-                        [f"--post-inference-policy={config.post_inference_policy.resolve()}"]
-                        if config.post_inference_policy is not None
-                        else []
-                    ),
-                    *([] if include_post_inference_scores else ["--no-post-inference-scores"]),
-                    *(
-                        [
-                            "--capture-post-inference-evidence="
-                            f"{publish / 'post-inference-evidence-v2'}",
-                            "--post-inference-evidence-only",
-                        ]
-                        if config.capture_post_inference_evidence
-                        else []
-                    ),
-                    *(["--diagnostic-post-labels"] if config.diagnostic_post_labels else []),
-                    *(
-                        [f"--post-review-stops={config.post_review_stops.resolve()}"]
-                        if config.post_review_stops is not None
-                        else []
-                    ),
-                    f"--diagnostics-out={publish / 'diagnostics-detail'}",
-                    f"--logfile={logs / 'bundle.log'}",
-                    str(merged_zip),
-                    str(bundle),
-                ],
+                publish=publish,
+                logs=logs,
+                descriptor_path=descriptor_path,
+                converter_version=jrutil.converter_version(jrutil_identity),
+                gvd_year=plan.gvd_year,
+                routing_osm_file=routing_osm_file,
+                include_post_inference_scores=plan.include_post_inference_scores,
+                merged_zip=merged_zip,
+                bundle=bundle,
             ),
-            _jrutil_cwd(config),
-            logs / "bundle.process.log",
-            reporter,
+            "bundle.process.log",
             CommandProgress("Generate GTFS + Parquet bundle", stage="jdf-to-bundle"),
         )
-        set_stage(
+
+        clock.start(
             "record-evidence" if config.capture_post_inference_evidence else "validate-bundle"
         )
-        evidence_manifest = (
-            _read_post_inference_evidence_manifest(publish / "post-inference-evidence-v2")
-            if config.capture_post_inference_evidence
-            else None
+        verified = _verify(
+            config, publish, bundle, run_jrutil, command_results.get("bundle"), reporter
         )
-        input_evidence_manifest = (
-            _read_post_inference_evidence_manifest(config.post_inference_evidence)
-            if config.post_inference_evidence is not None
-            else None
-        )
-        bundle_manifest = (
-            None if evidence_manifest is not None else _verify_bundle(bundle, reporter)
-        )
-        if bundle_manifest is not None:
-            command_results["validate_package"] = command_runner(
-                _multitool_command(config, ["validate-package", str(bundle)]),
-                _jrutil_cwd(config),
-                logs / "validate-package.process.log",
-                reporter,
-                CommandProgress("Validate production package", stage="validate-package"),
-            )
-        locked_evidence_manifest = evidence_manifest or input_evidence_manifest
-        locked_evidence_path = (
-            publish / "post-inference-evidence-v2"
-            if evidence_manifest is not None
-            else config.post_inference_evidence
-        )
-        locked_evidence_manifest_sha256 = (
-            file_digest(locked_evidence_path / "manifest.json")
-            if locked_evidence_path is not None
-            else None
-        )
-        bundle_command = command_results.get("bundle")
-        capture_metrics = (
-            bundle_command.capture_metrics
-            if config.capture_post_inference_evidence and bundle_command is not None
-            else None
-        )
-        set_stage("write-run-manifest")
-        run_manifest = {
-            "schema_version": 1,
-            "completed_at": utc_now(),
-            "sources_manifest_sha256": file_digest(sources / "sources.json"),
-            "osm_source_key": osm_manifest["merge_key"],
-            "osm_jdf_transit_extract": {
-                "path": str(jdf_osm_file),
-                "bytes": jdf_osm_file.stat().st_size,
-                "sha256": file_digest(jdf_osm_file),
-            },
-            "osm_jdf_routing_extract": (
-                {
-                    "path": str(routing_osm_file),
-                    "bytes": routing_osm_file.stat().st_size,
-                    "sha256": file_digest(routing_osm_file),
-                    "manifest": str(
-                        routing_osm_file.with_suffix(routing_osm_file.suffix + ".manifest.json")
-                    ),
-                }
-                if routing_osm_file is not None
-                else None
+
+        clock.start("write-run-manifest")
+        write_json(
+            publish / "run-manifest.json",
+            _run_manifest(
+                config,
+                plan,
+                sources=sources,
+                bundle=bundle,
+                routing_osm_file=routing_osm_file,
+                geodata=geodata,
+                jrutil_identity=jrutil_identity,
+                command_results=command_results,
+                clock=clock,
+                mappings=mappings,
+                merged_directory=merged_directory,
+                merged=merged,
+                verified=verified,
             ),
-            "geodata": geodata,
-            "jrutil": jrutil_identity,
-            "conversion": {
-                "gvd_year": gvd_year,
-                "reference_date": reference_date.isoformat(),
-                "stop_ids_cis": False,
-                "stop_merge": "name",
-                "strict": True,
-                "international_route_policy": "regional-adjacent",
-                "transport_mode_rules": {
-                    "path": "obehy/data/jdf_transport_mode_rules.csv",
-                    "sha256": transport_mode_rules_sha256,
-                },
-                "diagnostic_post_labels": config.diagnostic_post_labels,
-                "estimated_posts": inferred_posts,
-                "post_inference_policy": (
-                    str(config.post_inference_policy) if config.post_inference_policy else None
-                ),
-                "post_inference_evidence": (
-                    str(config.post_inference_evidence) if config.post_inference_evidence else None
-                ),
-                "include_post_inference_scores": include_post_inference_scores,
-                "capture_post_inference_evidence": config.capture_post_inference_evidence,
-            },
-            "execution": {
-                "requested": {
-                    "jobs": _job_text(config.jobs),
-                    "fix_jobs": _job_text(_stage_jobs(config, "fix")),
-                    "merge_jobs": _job_text(_stage_jobs(config, "merge")),
-                    "memory_budget": config.memory_budget,
-                },
-                "commands": {
-                    name: result_manifest(result) for name, result in command_results.items()
-                },
-                "stage_timings_seconds": {
-                    name: round(seconds, 3) for name, seconds in stage_timings.items()
-                },
-            },
-            "batch_counts": {
-                "vld": vld_count,
-                "drahy": drahy_count,
-                "total": len(mappings),
-            },
-            "batch_mapping": [asdict(mapping) for mapping in mappings],
-            "merged_jdf": {
-                "bytes": merged_identity.bytes,
-                "sha256": merged_identity.sha256,
-                "uncompressed_bytes": sum(
-                    path.stat().st_size for path in merged_directory.rglob("*") if path.is_file()
-                ),
-                "compression": config.zip_compression,
-                "compression_level": zip_level,
-            },
-            "bundle_manifest_sha256": (
-                None if bundle_manifest is None else file_digest(bundle / "manifest.json")
-            ),
-            "bundle_file_count": (
-                0 if bundle_manifest is None else len(cast(list[object], bundle_manifest["files"]))
-            ),
-            "post_inference_evidence_manifest_sha256": (locked_evidence_manifest_sha256),
-            "post_inference_evidence": (
-                {
-                    "evidence_format": locked_evidence_manifest["evidence_format"],
-                    "schema_version": locked_evidence_manifest["schema_version"],
-                    "router_evidence_version": locked_evidence_manifest["router_evidence_version"],
-                    "variant_enumeration_version": locked_evidence_manifest[
-                        "variant_enumeration_version"
-                    ],
-                    "capture_tool_version": locked_evidence_manifest["capture_tool_version"],
-                    "pack_id": locked_evidence_manifest["pack_id"],
-                    "observation_count": locked_evidence_manifest["observation_count"],
-                    "route_point_count": locked_evidence_manifest["route_point_count"],
-                    "context_count": locked_evidence_manifest["context_count"],
-                    "corridor_variant_count": locked_evidence_manifest["corridor_variant_count"],
-                    "route_point_evidence_count": locked_evidence_manifest[
-                        "route_point_evidence_count"
-                    ],
-                    "bytes": sum(
-                        cast(int, entry["bytes"])
-                        for entry in cast(list[dict[str, Any]], locked_evidence_manifest["files"])
-                    ),
-                    "capture_metrics": capture_metrics,
-                }
-                if locked_evidence_manifest is not None
-                else None
-            ),
-            "post_inference_evidence_lock": (
-                _post_inference_evidence_lock(
-                    locked_evidence_manifest, locked_evidence_manifest_sha256
-                )
-                if locked_evidence_manifest is not None
-                and locked_evidence_manifest_sha256 is not None
-                else None
-            ),
-        }
-        write_json(publish / "run-manifest.json", run_manifest)
-        set_stage("activation")
-        if config.keep_work:
-            os.replace(work, publish / "work")
-        os.replace(publish, output)
-        try:
-            if stage.exists():
-                shutil.rmtree(stage)
-            if not config.keep_work and run_root.exists():
-                shutil.rmtree(run_root)
-        except OSError as cleanup_error:
-            reporter.problem(
-                "warning",
-                f"Published output successfully but could not remove scratch directory "
-                f"{stage}: {cleanup_error}",
-            )
-            reporter.note(f"SCRATCH CLEANUP RETAINED: {stage}")
-        return output
+        )
+        clock.start("activation")
+        return staging.activate(reporter, keep_work=config.keep_work)
     except Exception as error:
-        failure: dict[str, Any] = {
-            "schema_version": 1,
-            "failed_at": utc_now(),
-            "stage": active_stage,
-            "error_type": type(error).__name__,
-            "message": str(error),
-            "traceback": traceback.format_exc(),
-            "progress": reporter.snapshot(),
-            "stage_timings_seconds": {
-                **{name: round(seconds, 3) for name, seconds in stage_timings.items()},
-                active_stage: round(time.monotonic() - active_stage_started, 3),
-            },
-            "staging_directory": str(stage),
-            "run_directory": str(run_root),
-            "logs_directory": str(logs),
-        }
-        if isinstance(error, CommandFailure):
-            failure["command"] = error.command
-            failure["working_directory"] = str(error.cwd)
-            failure["exit_code"] = error.returncode
-            failure["exit_code_hex"] = f"0x{error.returncode & 0xFFFFFFFF:08X}"
-            failure["elapsed_seconds"] = error.elapsed
-            failure["last_batch"] = error.last_batch
-            failure["completed"] = error.completed
-            failure["in_flight_batches"] = error.in_flight
-            failure["execution_plan"] = error.execution_plan
-            failure["process_log"] = str(error.log_path)
-            failure["process_output_tail"] = error.tail
-        failure_path = logs / "failure.json"
-        write_json(failure_path, failure)
-        reporter.problem("error", f"Stage {active_stage} failed: {error}")
-        if isinstance(error, CommandFailure):
-            reporter.note(
-                f"Last batch: {error.last_batch or 'none reported'}; process log: {error.log_path}"
-            )
-            if error.tail:
-                reporter.note("Last process output:\n" + "\n".join(error.tail[-12:]))
-        reporter.note(f"FAILED STAGING RETAINED: {stage}")
-        reporter.note(f"Failure report: {failure_path}")
+        write_json(
+            staging.failure_path,
+            failure_record(
+                error,
+                clock,
+                reporter,
+                staging_directory=str(staging.stage),
+                run_directory=str(staging.run_root),
+                logs_directory=str(logs),
+            ),
+        )
+        report_failure(reporter, error, clock.current, staging.stage, staging.failure_path)
         raise
     finally:
         if owned_reporter:
             reporter.close()
-
-
-def _parse_job_setting(value: str) -> JobSetting:
-    if value.casefold() == "auto":
-        return "auto"
-    try:
-        parsed = int(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("must be 'auto' or a positive integer") from error
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be 'auto' or a positive integer")
-    return parsed
-
-
-def _parse_memory_budget(value: str) -> str:
-    if not re.fullmatch(r"(?i)(?:auto|[0-9]+(?:\.[0-9]+)?(?:KiB|MiB|GiB))", value):
-        raise argparse.ArgumentTypeError("must be 'auto' or a size such as 10GiB")
-    return value
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1748,23 +1013,23 @@ def _parser() -> argparse.ArgumentParser:
     build_parser.add_argument("--keep-work", action="store_true")
     build_parser.add_argument(
         "--jobs",
-        type=_parse_job_setting,
+        type=parse_jobs,
         default="auto",
         help="workers for parallel JrUtil stages: auto or a positive integer",
     )
     build_parser.add_argument(
         "--fix-jobs",
-        type=_parse_job_setting,
+        type=parse_jobs,
         help="override --jobs for fix-jdf",
     )
     build_parser.add_argument(
         "--merge-jobs",
-        type=_parse_job_setting,
+        type=parse_jobs,
         help="override --jobs for merge-jdf",
     )
     build_parser.add_argument(
         "--memory-budget",
-        type=_parse_memory_budget,
+        type=parse_memory_budget,
         default="auto",
         help="JrUtil parallel-work budget such as 10GiB or auto",
     )

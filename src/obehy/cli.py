@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -13,14 +12,17 @@ import uuid
 import zipfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal, cast
-from urllib.request import Request, urlopen
 
-from obehy import filtered_jdf, gvd, national_czptt, national_jdf, osm_snapshot
-from obehy.national_jdf import BuildReporter, CommandProgress, PipelineError
-from obehy.pipeline_support import file_digest, utc_now, write_json
+from obehy import filtered_jdf, gvd, national_czptt, national_jdf, osm_snapshot, regional_overlay
+from obehy.pipeline import jrutil
+from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
+from obehy.pipeline.errors import PipelineError
+from obehy.pipeline.files import file_digest, utc_now, write_json
+from obehy.pipeline.process import CommandFn, run_command
+from obehy.pipeline.reporting import BuildReporter, CommandProgress, Reporter
 from obehy.production_package import (
     ProductionPackageError,
     package_digest,
@@ -28,13 +30,8 @@ from obehy.production_package import (
 )
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
-PID_URL = "https://data.pid.cz/PID_GTFS.zip"
-IDS_JMK_URL = "https://kordis-jmk.cz/gtfs/gtfs.zip"
-POLICY = (
-    Path(__file__).with_name("data") / "regional-gtfs-overlay" / "pid-ids-jmk-production-v1.json"
-)
+POLICY = regional_overlay.POLICY
 ProgressMode = Literal["auto", "rich", "plain", "off"]
-JobSetting = Literal["auto"] | int
 
 
 @dataclass(frozen=True)
@@ -62,75 +59,44 @@ class Release:
     jdf_filtered: Path | None = None
 
 
-def _package_converter_version(package: Path) -> str:
-    """The overlay runs the same JrUtil build that compiled its base package."""
-    manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
-    compiler = cast(dict[str, object], manifest).get("compiler")
-    version = (
-        cast(dict[str, object], compiler).get("version") if isinstance(compiler, dict) else None
-    )
-    if not isinstance(version, str) or not version:
-        raise PipelineError(f"{package} manifest does not record a compiler version")
-    return version
+@dataclass(frozen=True)
+class _Run:
+    """Directories of one production run; `partial_release` becomes `release` on success."""
+
+    run_id: str
+    release: Path
+    partial_release: Path
+    root: Path
+    sources: Path
+    logs: Path
+    diagnostics: Path
+    lock: Path
+
+    @property
+    def jdf_output(self) -> Path:
+        return self.root / "national-jdf"
+
+    @property
+    def czptt_output(self) -> Path:
+        return self.root / "national-czptt"
 
 
 def _runtime_command(runtime: RuntimeConfig) -> list[str]:
-    if runtime.jrutil.command is not None:
-        return list(runtime.jrutil.command)
-    assert runtime.jrutil.directory is not None
-    return [
-        "dotnet",
-        str(
-            runtime.jrutil.directory
-            / "jrutil-multitool"
-            / "bin"
-            / "Release"
-            / "net10.0"
-            / "jrutil-multitool.dll"
-        ),
-    ]
+    return jrutil.runtime_command(runtime.jrutil.directory, runtime.jrutil.command)
 
 
-def _download_gtfs(url: str, source_id: str, destination: Path, *, require_api: bool) -> Path:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    partial = destination.with_suffix(destination.suffix + ".part")
-    request = Request(url, headers={"User-Agent": "Obehy/0.1 production-feed-builder"})
-    retrieved_at = utc_now()
-    try:
-        with urlopen(request, timeout=120) as response, partial.open("wb") as stream:
-            while chunk := response.read(1024 * 1024):
-                stream.write(chunk)
-        os.replace(partial, destination)
-        with zipfile.ZipFile(destination) as archive:
-            names = {name.casefold() for name in archive.namelist() if not name.endswith("/")}
-            required = {"agency.txt", "routes.txt", "trips.txt", "stops.txt", "stop_times.txt"}
-            missing = sorted(required - names)
-            if missing:
-                raise PipelineError(f"{source_id} GTFS is missing required files: {missing}")
-            if require_api and "api.txt" not in names:
-                raise PipelineError("IDS JMK GTFS is missing required api.txt")
-    except Exception:
-        if partial.exists():
-            partial.unlink()
-        raise
-    descriptor = destination.with_name(f"{source_id}-descriptor.json")
-    write_json(
-        descriptor,
-        {
-            "schema_version": 1,
-            "source_id": source_id,
-            "retrieved_at": retrieved_at,
-            "source_uri": url,
-            "payload_sha256": file_digest(destination),
-        },
-    )
-    return descriptor
-
-
-def _enrich(package: Path) -> Path:
-    """Future immutable shape-enrichment boundary; currently a pass-through."""
-
-    return package
+def _check_inputs(options: BuildOptions) -> Path:
+    runtime = options.runtime
+    geodata = runtime.jrunify_ext_geodata_dir / "other"
+    if not geodata.is_dir():
+        raise PipelineError(f"Geodata directory does not exist: {geodata}")
+    national_jdf.geodata_manifest(geodata)
+    if not POLICY.is_file():
+        raise PipelineError(f"Production overlay policy is missing: {POLICY}")
+    if options.refresh_osm:
+        osm_snapshot.build_snapshot(runtime)
+    osm_snapshot.validate_snapshot(runtime.osm_file, runtime.workdir, full_hash=True)
+    return geodata
 
 
 def _acquire_lock(path: Path, run_id: str) -> int:
@@ -143,43 +109,187 @@ def _acquire_lock(path: Path, run_id: str) -> int:
     return descriptor
 
 
+def _start_run(runtime: RuntimeConfig) -> tuple[_Run, int]:
+    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:12]
+    releases = runtime.artifact_root / "releases"
+    root = runtime.workdir / "runs" / "production" / run_id
+    run = _Run(
+        run_id=run_id,
+        release=releases / run_id,
+        partial_release=releases / f".{run_id}.part",
+        root=root,
+        sources=root / "regional-sources",
+        logs=root / "logs",
+        diagnostics=root / "diagnostics",
+        lock=runtime.artifact_root / ".production-build.lock",
+    )
+    lock_descriptor = _acquire_lock(run.lock, run_id)
+    try:
+        for directory in (run.partial_release, run.sources, run.logs, run.diagnostics):
+            directory.mkdir(parents=True, exist_ok=False)
+    except Exception:
+        os.close(lock_descriptor)
+        run.lock.unlink(missing_ok=True)
+        raise
+    return run, lock_descriptor
+
+
+def _jdf_config(
+    options: BuildOptions, geodata: Path, output: Path, reference_date: date
+) -> national_jdf.BuildConfig:
+    runtime = options.runtime
+    return national_jdf.BuildConfig(
+        output=output,
+        workdir=runtime.workdir,
+        osm_file=runtime.osm_file,
+        jrutil_root=runtime.jrutil.directory,
+        jrutil_command=runtime.jrutil.command,
+        geodata_root=geodata,
+        keep_work=options.keep_work,
+        progress=options.progress,
+        jobs=options.jobs,
+        memory_budget=options.memory_budget,
+        estimated_posts=options.estimated_posts,
+        post_inference_policy=options.post_inference_policy,
+        build_jrutil=False,
+        gvd_year=options.gvd_year,
+        reference_date=reference_date,
+    )
+
+
+def _czptt_config(options: BuildOptions, output: Path) -> national_czptt.BuildConfig:
+    runtime = options.runtime
+    return national_czptt.BuildConfig(
+        output=output,
+        workdir=runtime.workdir,
+        osm_file=runtime.osm_file,
+        # CZPTT reads rail/SR70.csv from the snapshot root, not from other/.
+        geodata_root=runtime.jrunify_ext_geodata_dir,
+        jrutil_root=runtime.jrutil.directory,
+        jrutil_command=runtime.jrutil.command,
+        timetable_year=options.gvd_year,
+        operational_points=options.czptt_operational_points,
+        jobs=options.jobs,
+        memory_budget=options.memory_budget,
+        keep_work=options.keep_work,
+        progress=options.progress,
+        build_jrutil=False,
+    )
+
+
+def _validate_packages(
+    packages: dict[str, Path],
+    runtime: RuntimeConfig,
+    run: _Run,
+    reporter: Reporter,
+    command_runner: CommandFn,
+) -> dict[str, object]:
+    manifests: dict[str, object] = {}
+    for name, package in packages.items():
+        command_runner(
+            [*_runtime_command(runtime), "validate-package", str(package)],
+            runtime.jrutil.directory or Path.cwd(),
+            run.logs / f"validate-{name}.process.log",
+            reporter,
+            CommandProgress(f"Validate {name.upper()} package", stage="validate-package"),
+        )
+        manifest = read_manifest(package, require_publication=True)
+        manifests[name] = {
+            "manifest_sha256": file_digest(package / "manifest.json"),
+            "package_sha256": package_digest(package),
+            "feed_version": manifest.get("feed_version"),
+            "compiler": manifest.get("compiler"),
+        }
+    return manifests
+
+
+def _release_record(
+    options: BuildOptions,
+    run: _Run,
+    sources: Sequence[regional_overlay.Source],
+    packages: dict[str, object],
+    stages: list[dict[str, str]],
+) -> dict[str, object]:
+    outputs: dict[str, object] = {}
+    if options.filtered_jdf:
+        filtered = run.partial_release / "jdf-filtered"
+        outputs["jdf_filtered"] = {
+            "gtfs_sha256": file_digest(filtered / "gtfs.zip"),
+            "filter_report_sha256": file_digest(filtered / "filter-report.json"),
+        }
+    return {
+        "schema_version": 1,
+        "run_id": run.run_id,
+        "completed_at": utc_now(),
+        "gvd_year": options.gvd_year,
+        "options": {
+            "jobs": options.jobs,
+            "memory_budget": options.memory_budget,
+            "estimated_posts": options.estimated_posts,
+            "post_inference_policy": (
+                str(options.post_inference_policy) if options.post_inference_policy else None
+            ),
+            "refresh_osm": options.refresh_osm,
+            "czptt_operational_points": options.czptt_operational_points,
+            "filtered_jdf": options.filtered_jdf,
+        },
+        "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
+        "sources": {
+            source.source_id: json.loads(source.descriptor.read_text(encoding="utf-8"))
+            for source in sources
+        },
+        "packages": packages,
+        "outputs": outputs,
+        "stages": stages,
+    }
+
+
+def _publish(options: BuildOptions, run: _Run) -> Release:
+    os.replace(run.partial_release, run.release)
+    release = run.release
+    current = {
+        "schema_version": 1,
+        "run_id": run.run_id,
+        "release": str(release.resolve()),
+        "jdf": str((release / "jdf").resolve()),
+        "czptt": str((release / "czptt").resolve()),
+    }
+    filtered = release / "jdf-filtered" if options.filtered_jdf else None
+    if filtered is not None:
+        current["jdf_filtered"] = str((filtered / "gtfs.zip").resolve())
+    write_json(options.runtime.artifact_root / "current.json", current)
+    if not options.keep_work:
+        shutil.rmtree(run.jdf_output, ignore_errors=True)
+        shutil.rmtree(run.czptt_output, ignore_errors=True)
+    return Release(run.run_id, release, release / "jdf", release / "czptt", filtered)
+
+
+def _record_failure(run: _Run, error: Exception, stages: list[dict[str, str]]) -> None:
+    write_json(
+        run.root / "failure.json",
+        {
+            "schema_version": 1,
+            "failed_at": utc_now(),
+            "error_type": type(error).__name__,
+            "error": str(error),
+            "completed_stages": stages,
+            "partial_release": str(run.partial_release),
+        },
+    )
+
+
 def build(
     options: BuildOptions,
     *,
     jdf_builder: Callable[..., Path] = national_jdf.build,
     czptt_builder: Callable[..., Path] = national_czptt.build,
-    downloader: Callable[..., Path] = _download_gtfs,
+    downloader: regional_overlay.DownloadGtfsFn = regional_overlay.download_gtfs,
     filtered_jdf_builder: Callable[..., Path] = filtered_jdf.build_filtered_jdf,
-    command_runner: national_jdf.CommandFn = national_jdf.run_command,
+    command_runner: CommandFn = run_command,
 ) -> Release:
     runtime = options.runtime
-    geodata = runtime.jrunify_ext_geodata_dir / "other"
-    if not geodata.is_dir():
-        raise PipelineError(f"Geodata directory does not exist: {geodata}")
-    national_jdf.geodata_manifest(geodata)
-    if not POLICY.is_file():
-        raise PipelineError(f"Production overlay policy is missing: {POLICY}")
-    if options.refresh_osm:
-        osm_snapshot.build_snapshot(runtime)
-    osm_snapshot.validate_snapshot(runtime.osm_file, runtime.workdir, full_hash=True)
-
-    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:12]
-    releases = runtime.artifact_root / "releases"
-    release = releases / run_id
-    partial_release = releases / f".{run_id}.part"
-    run_root = runtime.workdir / "runs" / "production" / run_id
-    sources = run_root / "regional-sources"
-    logs = run_root / "logs"
-    diagnostics = run_root / "diagnostics"
-    lock = runtime.artifact_root / ".production-build.lock"
-    lock_descriptor = _acquire_lock(lock, run_id)
-    try:
-        for directory in (partial_release, sources, logs, diagnostics):
-            directory.mkdir(parents=True, exist_ok=False)
-    except Exception:
-        os.close(lock_descriptor)
-        lock.unlink(missing_ok=True)
-        raise
+    geodata = _check_inputs(options)
+    run, lock_descriptor = _start_run(runtime)
     reporter = BuildReporter(options.progress)
     stages: list[dict[str, str]] = []
 
@@ -188,230 +298,77 @@ def build(
 
     try:
         if runtime.jrutil.directory is not None:
-            project = runtime.jrutil.directory / "jrutil-multitool" / "jrutil-multitool.fsproj"
-            if not project.is_file():
-                raise PipelineError(f"JrUtil multitool project does not exist: {project}")
             command_runner(
-                ["dotnet", "build", str(project), "-c", "Release", "--no-restore"],
+                jrutil.build_command(runtime.jrutil.directory),
                 runtime.jrutil.directory,
-                logs / "jrutil-build.process.log",
+                run.logs / "jrutil-build.process.log",
                 reporter,
                 CommandProgress("Build JrUtil", stage="build-jrutil"),
             )
         completed("build-jrutil")
 
-        jdf_output = run_root / "national-jdf"
         reference_date = gvd.prague_today()
         jdf_builder(
-            national_jdf.BuildConfig(
-                output=jdf_output,
-                workdir=runtime.workdir,
-                osm_file=runtime.osm_file,
-                jrutil_root=runtime.jrutil.directory,
-                jrutil_command=runtime.jrutil.command,
-                geodata_root=geodata,
-                keep_work=options.keep_work,
-                progress=options.progress,
-                jobs=options.jobs,
-                memory_budget=options.memory_budget,
-                estimated_posts=options.estimated_posts,
-                post_inference_policy=options.post_inference_policy,
-                build_jrutil=False,
-                gvd_year=options.gvd_year,
-                reference_date=reference_date,
-            ),
-            reporter=reporter,
+            _jdf_config(options, geodata, run.jdf_output, reference_date), reporter=reporter
         )
         completed("national-jdf")
+        jdf_bundle = run.jdf_output / "bundle"
 
         if options.filtered_jdf:
-            filtered_work = run_root / "filtered-jdf"
+            filtered_work = run.root / "filtered-jdf"
             filtered_work.mkdir()
             filtered_jdf_builder(
-                jdf_output / "bundle",
-                partial_release / "jdf-filtered",
+                jdf_bundle,
+                run.partial_release / "jdf-filtered",
                 reference=reference_date,
                 work=filtered_work,
                 line_snapshot=options.line_filter_snapshot,
             )
             completed("filtered-jdf")
 
-        pid = sources / "pid-gtfs.zip"
-        jmk = sources / "ids-jmk-gtfs.zip"
-        pid_descriptor = downloader(PID_URL, "pid-gtfs", pid, require_api=False)
-        jmk_descriptor = downloader(IDS_JMK_URL, "ids-jmk-gtfs", jmk, require_api=True)
+        sources = regional_overlay.snapshot_sources(run.sources, downloader)
         completed("regional-snapshots")
 
-        jdf_package = partial_release / "jdf"
-        jdf_bundle = jdf_output / "bundle"
-        overlay_command = [
-            *_runtime_command(runtime),
-            "regional-gtfs-overlay",
-            f"--jobs={options.jobs}",
-            f"--memory-budget={options.memory_budget}",
-            f"--policy={POLICY}",
-            f"--gvd-year={options.gvd_year}",
-            f"--converter-version={_package_converter_version(jdf_bundle)}",
-            f"--source=pid-gtfs={pid}",
-            f"--source-descriptor=pid-gtfs={pid_descriptor}",
-            f"--source=ids-jmk-gtfs={jmk}",
-            f"--source-descriptor=ids-jmk-gtfs={jmk_descriptor}",
-            f"--diagnostics-out={diagnostics / 'regional-overlay'}",
-            str(jdf_bundle),
-            str(jdf_package),
-        ]
-        command_runner(
-            overlay_command,
-            runtime.jrutil.directory or Path.cwd(),
-            logs / "regional-overlay.process.log",
-            reporter,
-            CommandProgress("Overlay PID + IDS JMK", stage="regional-gtfs-overlay"),
+        regional_overlay.run(
+            runtime_command=_runtime_command(runtime),
+            cwd=runtime.jrutil.directory or Path.cwd(),
+            base=jdf_bundle,
+            output=run.partial_release / "jdf",
+            sources=sources,
+            gvd_year=options.gvd_year,
+            jobs=options.jobs,
+            memory_budget=options.memory_budget,
+            diagnostics=run.diagnostics / "regional-overlay",
+            log=run.logs / "regional-overlay.process.log",
+            reporter=reporter,
+            command_runner=command_runner,
         )
         completed("regional-overlay")
 
-        czptt_output = run_root / "national-czptt"
-        czptt_builder(
-            national_czptt.BuildConfig(
-                output=czptt_output,
-                workdir=runtime.workdir,
-                osm_file=runtime.osm_file,
-                # CZPTT reads rail/SR70.csv from the snapshot root, not from other/.
-                geodata_root=runtime.jrunify_ext_geodata_dir,
-                jrutil_root=runtime.jrutil.directory,
-                jrutil_command=runtime.jrutil.command,
-                timetable_year=options.gvd_year,
-                operational_points=options.czptt_operational_points,
-                jobs=options.jobs,
-                memory_budget=options.memory_budget,
-                keep_work=options.keep_work,
-                progress=options.progress,
-                build_jrutil=False,
-            ),
-            reporter=reporter,
-        )
-        shutil.move(czptt_output / "bundle", partial_release / "czptt")
+        czptt_builder(_czptt_config(options, run.czptt_output), reporter=reporter)
+        shutil.move(run.czptt_output / "bundle", run.partial_release / "czptt")
         completed("national-czptt")
 
-        final_jdf = _enrich(jdf_package)
-        final_czptt = _enrich(partial_release / "czptt")
-        manifests = {}
-        for name, package in (("jdf", final_jdf), ("czptt", final_czptt)):
-            command_runner(
-                [*_runtime_command(runtime), "validate-package", str(package)],
-                runtime.jrutil.directory or Path.cwd(),
-                logs / f"validate-{name}.process.log",
-                reporter,
-                CommandProgress(f"Validate {name.upper()} package", stage="validate-package"),
-            )
-            manifest = read_manifest(package, require_publication=True)
-            manifests[name] = {
-                "manifest_sha256": file_digest(package / "manifest.json"),
-                "package_sha256": package_digest(package),
-                "feed_version": manifest.get("feed_version"),
-                "compiler": manifest.get("compiler"),
-            }
-        completed("enrichment-and-validation")
-
-        outputs: dict[str, object] = {}
-        if options.filtered_jdf:
-            report = partial_release / "jdf-filtered" / "filter-report.json"
-            outputs["jdf_filtered"] = {
-                "gtfs_sha256": file_digest(partial_release / "jdf-filtered" / "gtfs.zip"),
-                "filter_report_sha256": file_digest(report),
-            }
+        packages = _validate_packages(
+            {"jdf": run.partial_release / "jdf", "czptt": run.partial_release / "czptt"},
+            runtime,
+            run,
+            reporter,
+            command_runner,
+        )
+        completed("validation")
 
         write_json(
-            partial_release / "release.json",
-            {
-                "schema_version": 1,
-                "run_id": run_id,
-                "completed_at": utc_now(),
-                "gvd_year": options.gvd_year,
-                "options": {
-                    "jobs": options.jobs,
-                    "memory_budget": options.memory_budget,
-                    "estimated_posts": options.estimated_posts,
-                    "post_inference_policy": (
-                        str(options.post_inference_policy)
-                        if options.post_inference_policy
-                        else None
-                    ),
-                    "refresh_osm": options.refresh_osm,
-                    "czptt_operational_points": options.czptt_operational_points,
-                    "filtered_jdf": options.filtered_jdf,
-                },
-                "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
-                "sources": {
-                    "pid-gtfs": json.loads(pid_descriptor.read_text(encoding="utf-8")),
-                    "ids-jmk-gtfs": json.loads(jmk_descriptor.read_text(encoding="utf-8")),
-                },
-                "packages": manifests,
-                "outputs": outputs,
-                "stages": stages,
-            },
+            run.partial_release / "release.json",
+            _release_record(options, run, sources, packages, stages),
         )
-        os.replace(partial_release, release)
-        current = {
-            "schema_version": 1,
-            "run_id": run_id,
-            "release": str(release.resolve()),
-            "jdf": str((release / "jdf").resolve()),
-            "czptt": str((release / "czptt").resolve()),
-        }
-        filtered = release / "jdf-filtered" if options.filtered_jdf else None
-        if filtered is not None:
-            current["jdf_filtered"] = str((filtered / "gtfs.zip").resolve())
-        write_json(runtime.artifact_root / "current.json", current)
-        if not options.keep_work:
-            shutil.rmtree(jdf_output, ignore_errors=True)
-            shutil.rmtree(czptt_output, ignore_errors=True)
-        return Release(run_id, release, release / "jdf", release / "czptt", filtered)
+        return _publish(options, run)
     except Exception as error:
-        write_json(
-            run_root / "failure.json",
-            {
-                "schema_version": 1,
-                "failed_at": utc_now(),
-                "error_type": type(error).__name__,
-                "error": str(error),
-                "completed_stages": stages,
-                "partial_release": str(partial_release),
-            },
-        )
+        _record_failure(run, error, stages)
         raise
     finally:
         os.close(lock_descriptor)
-        lock.unlink(missing_ok=True)
-
-
-def _year(value: str) -> int | Literal["auto"]:
-    if value == "auto":
-        return "auto"
-    try:
-        year = int(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("must be auto or a timetable year") from error
-    if year < 2000:
-        raise argparse.ArgumentTypeError("must be auto or a timetable year")
-    return year
-
-
-def _jobs(value: str) -> JobSetting:
-    if value == "auto":
-        return "auto"
-    try:
-        jobs = int(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("must be auto or a positive integer") from error
-    if jobs <= 0:
-        raise argparse.ArgumentTypeError("must be auto or a positive integer")
-    return jobs
-
-
-def _memory_budget(value: str) -> str:
-    if not re.fullmatch(r"(?i)(?:auto|[0-9]+(?:\.[0-9]+)?(?:KiB|MiB|GiB))", value):
-        raise argparse.ArgumentTypeError("must be auto or a size such as 10GiB")
-    return value
+        run.lock.unlink(missing_ok=True)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -419,9 +376,9 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     command = commands.add_parser("build", help="build and publish the production feeds")
     command.add_argument("--config", type=Path)
-    command.add_argument("--gvd-year", type=_year, default="auto")
-    command.add_argument("--jobs", type=_jobs, default="auto")
-    command.add_argument("--memory-budget", type=_memory_budget, default="auto")
+    command.add_argument("--gvd-year", type=parse_year, default="auto")
+    command.add_argument("--jobs", type=parse_jobs, default="auto")
+    command.add_argument("--memory-budget", type=parse_memory_budget, default="auto")
     command.add_argument("--progress", choices=("auto", "rich", "plain", "off"), default="auto")
     command.add_argument("--keep-work", action="store_true")
     command.add_argument("--estimated-posts", action="store_true")

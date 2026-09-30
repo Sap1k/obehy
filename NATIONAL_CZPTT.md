@@ -27,12 +27,10 @@ railway builder validates and records both artifacts but never downloads, merges
 
 `--source-snapshot PATH` copies and validates an existing `sources/` snapshot and performs no
 network requests. The snapshot must contain `sources.json`, the annual/monthly objects named by
-that manifest, `kadr/catalog.json`, `sr70/SR70.csv`, and
-`sr70/SR70_Nazev20.csv`. JrUtil, JrUnify-Ext-GeoData, the work directory, and the shared merged
+that manifest, `kadr/catalog.json`, and `sr70/SR70.csv`. JrUtil, JrUnify-Ext-GeoData, the work directory, and the shared merged
 OSM PBF are mandatory absolute paths in the selected TOML configuration. There is no
 parent-directory fallback. `--sr70` selects a coordinate snapshot used only while creating a new live
-snapshot; its `SR70_Nazev20.csv` companion is resolved from the same directory unless explicitly
-selected with `--sr70-name20`. A missing pair fails rather than mixing editions.
+snapshot.
 `--jobs auto` means eight download workers.
 
 Discovery reads monthly HTTP directory listings concurrently and makes no per-object metadata
@@ -128,21 +126,13 @@ sources/
   kadr/*.xml
   kadr/catalog.json
   sr70/SR70.csv
-  sr70/SR70_Nazev20.csv
 derived/messages.zip
 bundle/
-  gtfs-intermediate/
-  extensions/
-    cz_routes.txt
-    cz_trips.txt
-    cz_trip_stop_zones.txt
+  gtfs.zip
+  serving/<relation>.parquet
   diagnostics.json
-  operational_points.parquet
-  operational_calls.parquet
-  source_call_metadata.parquet
-  source_ids_coverage_metadata.parquet
-  source_ids_coverage_trip_metadata.parquet
   manifest.json
+diagnostics-detail/
 run-manifest.json
 manifest.json
 ```
@@ -155,9 +145,11 @@ applied after its timetable instead of accidentally resurrecting the timetable. 
 payloads are removed. Conflicting timetables with the same complete
 object-type/company/core/variant/year PA identity fail the build.
 
-`gtfs-intermediate/` contains standard GTFS only. `extensions/` contains the three Oběhy Czech
-extension tables, whose foreign keys are checked against the standard files. The official GTFS
-validator must be run only on `gtfs-intermediate/`. Friendly KADR `Znacka` values such as `S1` and
+`bundle/` is a JrUtil production package (bundle version 2, serving schema version 3).
+`gtfs.zip` contains standard GTFS only and is what the official GTFS validator checks. The
+converter's Czech tables (`cz_routes`, `cz_trips`, `cz_trip_stop_zones`) and source metadata are
+compiler-internal: they are projected into the serving relations and are not written to the
+package. Friendly KADR `Znacka` values such as `S1` and
 `U32` are route short names. Route/operator/mode changes split one PA into linked trips sharing a
 PA block; category changes do the same, and `transfers.txt` uses linked-trip `transfer_type=4`.
 Every segment keeps the complete PA's final passenger call as its headsign.
@@ -168,7 +160,7 @@ patterns therefore share a route. Its `route_short_name` is a combined label suc
 `RJ Praha – Břeclav`; `route_long_name` is empty. The display direction is the direction
 with the greatest summed active service days, with full PA identity as the deterministic tie
 break. Standard `trip_short_name` combines category and train number, such as `Os 3456`, while
-`cz_trips.txt` retains the raw train number.
+the compiler-internal `cz_trips` table retains the raw train number.
 
 Fallback identities and labels always use the first and last passenger calls of the complete PA,
 including when only a prefix or suffix lacks a KADR line. Endpoint labels are derived from the
@@ -178,8 +170,7 @@ railway qualifiers are removed conservatively, and each endpoint keeps the deter
 20-character cap and municipality-safe abbreviations such as `…stadt → …st.`. Thus
 `Os Karlovy Vary dol.n. – Johanngeorgenstadt` becomes
 `Os Karlovy Vary – Johanngeorgenst.`. Raw GTFS stop names, trip headsigns, and KADR names remain
-unchanged. `SR70_Nazev20.csv` and `--sr70-name20` remain validated, copied, checksummed provenance
-inputs, but their values no longer influence conversion output.
+unchanged.
 
 Routes use white text and one shared palette by passenger-facing service class:
 
@@ -196,7 +187,8 @@ Generated IDs use the same colon-separated convention as the JDF feed:
 - `czptt:stop:<country>:<primary-code>` with `:unspecified` or
   `:platform:<subsidiary-code>` children.
 
-CZPTT Parquet schema v1 retains only source facts and typed projection bridges:
+The compiler-internal CZPTT source metadata retains only source facts and typed projection
+bridges:
 
 - `operational_points`: source location identity/name plus optional coordinate, source object, and
   match method (`sz_sr70/country_primary_code`, `osm/ref_eu_plc`, `osm/reviewed_alias`, or
@@ -210,10 +202,9 @@ CZPTT Parquet schema v1 retains only source facts and typed projection bridges:
 - `source_ids_coverage_metadata`: normalized accepted `CZIPTS`/`CZCalendarIPTS` source facts;
 - `source_ids_coverage_trip_metadata`: typed coverage-to-overlapping-GTFS-trip projection.
 
-PA/TR identities live in `cz_trips.source_trip_ids`; there is no trip mirror Parquet or
-pipe-delimited generated-trip list. Split boundaries produce multiple projection rows and
-sidecar-only calls produce none. All Parquets use deterministic ordering, Snappy compression,
-65,536-row groups, and embedded `czptt-v1`/schema/source metadata.
+PA/TR identities reach the package as `source_trip_map` bindings; there is no trip mirror
+relation or pipe-delimited generated-trip list. Split boundaries produce multiple projection rows
+and sidecar-only calls produce none.
 
 The production package schema is unchanged: the finalizer maps the two note/feature bridges into
 the existing `service_note`, `service_note_assignment`, and `service_feature_assignment`
@@ -253,7 +244,7 @@ low-floor guarantee because its source meaning also permits a lift-equipped vehi
 
 Every KADR IDS entry remains represented as coverage metadata. Entries whose catalog note
 explicitly identifies a fare band (for example `PID pásmo P`) additionally produce catalog-resolved
-trip/stop memberships in `cz_trip_stop_zones.txt`. Standard `stops.zone_id` is populated only
+trip/stop zone memberships in the serving zone relations. Standard `stops.zone_id` is populated only
 where all generated memberships for that stop agree on one zone.
 
 `diagnostics.json` schema v1 records rejected journeys, unresolved IDS intervals, unknown

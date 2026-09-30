@@ -13,7 +13,9 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from obehy import gvd, national_czptt
-from obehy.national_czptt import BuildConfig, PipelineError, RemoteObject, SourceRecord
+from obehy.national_czptt import BuildConfig, RemoteObject, SourceRecord
+from obehy.pipeline import jrutil as jrutil_runtime
+from obehy.pipeline.errors import PipelineError
 
 
 @pytest.fixture(autouse=True)
@@ -93,10 +95,6 @@ def _source_snapshot(root: Path) -> Path:
     sr70 = sources / "sr70" / "SR70.csv"
     sr70.parent.mkdir(parents=True)
     sr70.write_text("570760,Praha,50.083,14.435\n", encoding="utf-8")
-    (sr70.parent / "SR70_Nazev20.csv").write_text(
-        "570760,Praha hl.n.,50.083,14.435\n",
-        encoding="utf-8",
-    )
     records = [
         SourceRecord(
             relative_path="annual/JR2026.zip",
@@ -150,7 +148,7 @@ def test_discovery_includes_change_months_from_both_calendar_years(
     def read_url(url: str, **_kwargs: object) -> bytes:
         return listings[url]
 
-    monkeypatch.setattr(national_czptt, "_read_url", read_url)
+    monkeypatch.setattr(national_czptt, "read_url", read_url)
     inventory = national_czptt.discover_remote_inventory(base, 2026)
     assert [item.relative_path for item in inventory] == [
         "annual/JR2026.zip",
@@ -222,7 +220,6 @@ def _live_inventory_fixture(
     rail = geodata / "rail"
     rail.mkdir(parents=True)
     (rail / "SR70.csv").write_text("570760,Praha,50.083,14.435\n", encoding="utf-8")
-    (rail / "SR70_Nazev20.csv").write_text("570760,Praha hl.n.,50.083,14.435\n", encoding="utf-8")
     config = BuildConfig(
         output=tmp_path / "out",
         workdir=tmp_path / "workdir",
@@ -313,7 +310,7 @@ def test_kadr_snapshot_preserves_central_note_catalog(
             f"{item}</Result></Response></Body></Envelope>"
         ).encode()
 
-    monkeypatch.setattr(national_czptt, "_read_url", soap_response)
+    monkeypatch.setattr(national_czptt, "read_url", soap_response)
     catalog_path = national_czptt.snapshot_kadr(tmp_path / "kadr")
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
 
@@ -490,7 +487,8 @@ def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(
 ) -> None:
     snapshot = _source_snapshot(tmp_path / "snapshot")
     jrutil = tmp_path / "jrutil"
-    jrutil.mkdir()
+    (jrutil / "jrutil-multitool").mkdir(parents=True)
+    (jrutil / "jrutil-multitool" / "jrutil-multitool.fsproj").touch()
     (jrutil / ".git").mkdir()
     output = tmp_path / "result"
     commands: list[list[str]] = []
@@ -498,12 +496,12 @@ def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(
     def no_network(*_args: object, **_kwargs: object) -> bytes:
         raise AssertionError("offline build attempted network access")
 
-    monkeypatch.setattr(national_czptt, "_read_url", no_network)
+    monkeypatch.setattr(national_czptt, "read_url", no_network)
 
     def git_identity(_path: Path) -> dict[str, object]:
         return {"commit": "abc123", "dirty": False, "status": []}
 
-    monkeypatch.setattr(national_czptt, "git_identity", git_identity)
+    monkeypatch.setattr(jrutil_runtime, "git_identity", git_identity)
 
     def command_runner(
         command: Sequence[str],
@@ -562,17 +560,13 @@ def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(
     assert "--operational-points=sidecar" in converter
     assert "--jobs=auto" in converter
     assert "--memory-budget=auto" in converter
-    assert any(argument.startswith("--sr70-name20=") for argument in converter)
+    assert not any(argument.startswith("--sr70-name20=") for argument in converter)
     assert (output / "bundle" / "gtfs.zip").is_file()
-    assert (output / "sources" / "sr70" / "SR70_Nazev20.csv").is_file()
     manifest = json.loads((output / "run-manifest.json").read_text(encoding="utf-8"))
     assert manifest["operational_points"] == "sidecar"
     assert manifest["jrutil"]["git"]["commit"] == "abc123"
     assert manifest["sr70_sha256"] == national_czptt.file_digest(
         output / "sources" / "sr70" / "SR70.csv"
-    )
-    assert manifest["sr70_name20_sha256"] == national_czptt.file_digest(
-        output / "sources" / "sr70" / "SR70_Nazev20.csv"
     )
 
     repeated = tmp_path / "result-repeated"
@@ -619,13 +613,13 @@ def test_source_snapshot_and_custom_remote_are_mutually_exclusive(tmp_path: Path
         )
 
 
-def test_source_snapshot_requires_the_sr70_pair(tmp_path: Path) -> None:
+def test_source_snapshot_requires_sr70(tmp_path: Path) -> None:
     snapshot = _source_snapshot(tmp_path / "snapshot")
-    (snapshot / "sr70" / "SR70_Nazev20.csv").unlink()
+    (snapshot / "sr70" / "SR70.csv").unlink()
     jrutil = tmp_path / "jrutil"
     jrutil.mkdir()
 
-    with pytest.raises(PipelineError, match="must contain both"):
+    with pytest.raises(PipelineError, match="must contain sr70/SR70"):
         national_czptt.build(
             BuildConfig(
                 output=tmp_path / "out",
@@ -637,21 +631,6 @@ def test_source_snapshot_requires_the_sr70_pair(tmp_path: Path) -> None:
                 timetable_year=2026,
                 source_snapshot=snapshot,
                 progress="off",
-            )
-        )
-
-
-def test_sr70_name20_override_requires_coordinate_pair(tmp_path: Path) -> None:
-    with pytest.raises(PipelineError, match="requires --sr70"):
-        national_czptt.build(
-            BuildConfig(
-                output=tmp_path / "out",
-                workdir=tmp_path / "workdir",
-                osm_file=tmp_path / "regional.osm.pbf",
-                geodata_root=tmp_path / "geodata",
-                jrutil_root=tmp_path,
-                jrutil_command=None,
-                sr70_name20=tmp_path / "SR70_Nazev20.csv",
             )
         )
 
@@ -709,9 +688,7 @@ def test_command_runtime_records_dll_hash_and_skips_checkout(tmp_path: Path) -> 
         jrutil_command=("dotnet", str(dll)),
     )
 
-    provenance = national_czptt._jrutil_provenance(  # pyright: ignore[reportPrivateUsage]
-        config
-    )
+    provenance = jrutil_runtime.provenance(config.jrutil_root, config.jrutil_command)
 
     assert provenance["mode"] == "command"
     files = cast(list[dict[str, object]], provenance["files"])

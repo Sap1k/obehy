@@ -10,7 +10,7 @@ from urllib.parse import parse_qs
 import pytest
 
 from obehy import filtered_jdf
-from obehy.national_jdf import PipelineError
+from obehy.pipeline.errors import PipelineError
 
 PORTAL_HTML = """
 <html><body>

@@ -16,7 +16,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import uuid
 import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -25,28 +24,30 @@ from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 from urllib.parse import quote, unquote, urljoin, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
 from obehy.gvd import resolve_timetable_year
-from obehy.national_jdf import (
-    BuildReporter,
-    CommandFn,
-    CommandProgress,
-    PipelineError,
-    Reporter,
-    file_digest,
-    git_identity,
-    run_command,
-    write_json,
-)
 from obehy.osm_snapshot import (
     OsmSnapshotError,
     validate_railway_locations,
     validate_snapshot,
 )
-from obehy.pipeline_support import atomic_output_path
+from obehy.pipeline import jrutil
+from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
+from obehy.pipeline.download import USER_AGENT, read_url
+from obehy.pipeline.errors import PipelineError
+from obehy.pipeline.files import atomic_output_path, file_digest, write_json
+from obehy.pipeline.process import (
+    CommandFn,
+    CommandResult,
+    command_manifest,
+    failure_record,
+    report_failure,
+    run_command,
+)
+from obehy.pipeline.reporting import BuildReporter, CommandProgress, Reporter, StageClock
+from obehy.pipeline.staging import create as create_staging
 from obehy.production_package import ProductionPackageError, extracted_gtfs, read_manifest
 from obehy.runtime_config import ConfigurationError, load_runtime_config
 
@@ -64,7 +65,6 @@ KADR_OPERATIONS = (
 OSM_REVIEW_PATH = Path(__file__).with_name("data") / "czptt_osm_aliases.json"
 ProgressMode = Literal["auto", "rich", "plain", "off"]
 OperationalPointMode = Literal["gtfs", "sidecar"]
-JobSetting = Literal["auto"] | int
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,6 @@ class BuildConfig:
     source_base_url: str = DEFAULT_SOURCE_BASE_URL
     source_snapshot: Path | None = None
     sr70: Path | None = None
-    sr70_name20: Path | None = None
     jobs: JobSetting = "auto"
     memory_budget: str = "auto"
     keep_work: bool = False
@@ -123,13 +122,6 @@ def _jobs(value: JobSetting) -> int:
     return 8 if value == "auto" else value
 
 
-def _read_url(url: str, *, data: bytes | None = None, headers: Mapping[str, str] = {}) -> bytes:
-    request_headers = {"User-Agent": "Obehy/0.1 national-CZPTT builder", **headers}
-    request = Request(url, data=data, headers=request_headers)
-    with urlopen(request, timeout=120) as response:
-        return response.read()
-
-
 def _listing_names(payload: bytes) -> list[str]:
     text = payload.decode("utf-8", errors="replace")
     parser = _HrefParser()
@@ -145,7 +137,7 @@ def _listing_names(payload: bytes) -> list[str]:
 
 def _discover_url_inventory(base_url: str, timetable_year: int) -> list[RemoteObject]:
     year_url = f"{base_url.rstrip('/')}/{timetable_year}/"
-    year_names = _listing_names(_read_url(year_url))
+    year_names = _listing_names(read_url(year_url))
     annual_name = f"JR{timetable_year}.zip"
     if annual_name not in year_names:
         raise PipelineError(f"Annual CZPTT archive is missing from discovery: {annual_name}")
@@ -162,7 +154,7 @@ def _discover_url_inventory(base_url: str, timetable_year: int) -> list[RemoteOb
     def discover_month(month: str) -> list[RemoteObject]:
         month_url = urljoin(year_url, f"{month}/")
         objects: list[RemoteObject] = []
-        for filename in _listing_names(_read_url(month_url)):
+        for filename in _listing_names(read_url(month_url)):
             if filename.casefold().endswith((".xml.zip", ".xml.gz")):
                 objects.append(
                     RemoteObject(
@@ -246,7 +238,7 @@ class _HttpSourceDownloader:
                     "GET",
                     target,
                     headers={
-                        "User-Agent": "Obehy/0.1 national-CZPTT builder",
+                        "User-Agent": USER_AGENT,
                         "Accept-Encoding": "identity",
                     },
                 )
@@ -318,7 +310,7 @@ def snapshot_kadr(destination: Path) -> Path:
             f"{parameters}</{operation}></soap:Body>"
             "</soap:Envelope>"
         ).encode()
-        payload = _read_url(
+        payload = read_url(
             KADR_ENDPOINT,
             data=envelope,
             headers={
@@ -656,47 +648,12 @@ def flatten_messages(sources: Path, records: Sequence[SourceRecord], destination
         shutil.rmtree(spool, ignore_errors=True)
 
 
-def _multitool_dll(root: Path) -> Path:
-    return root / "jrutil-multitool" / "bin" / "Release" / "net10.0" / "jrutil-multitool.dll"
-
-
-def _build_command(root: Path) -> list[str]:
-    project = root / "jrutil-multitool" / "jrutil-multitool.fsproj"
-    return ["dotnet", "build", str(project), "-c", "Release", "--no-restore"]
-
-
 def _jrutil_cwd(config: BuildConfig) -> Path:
     return config.jrutil_root or config.workdir
 
 
-def _jrutil_provenance(config: BuildConfig) -> dict[str, object]:
-    if config.jrutil_root is not None:
-        return {
-            "mode": "directory",
-            "directory": str(config.jrutil_root.resolve()),
-            "git": git_identity(config.jrutil_root),
-        }
-    assert config.jrutil_command is not None
-    files: list[dict[str, object]] = []
-    for argument in config.jrutil_command:
-        candidate = Path(argument)
-        if candidate.is_absolute() and candidate.is_file():
-            files.append(
-                {
-                    "path": str(candidate.resolve()),
-                    "bytes": candidate.stat().st_size,
-                    "sha256": file_digest(candidate),
-                }
-            )
-    return {"mode": "command", "command": list(config.jrutil_command), "files": files}
-
-
 def _runtime_command(config: BuildConfig) -> list[str]:
-    return (
-        list(config.jrutil_command)
-        if config.jrutil_command is not None
-        else ["dotnet", str(_multitool_dll(cast(Path, config.jrutil_root)))]
-    )
+    return jrutil.runtime_command(config.jrutil_root, config.jrutil_command)
 
 
 def _converter_command(
@@ -714,7 +671,6 @@ def _converter_command(
         f"--catalog-snapshot={catalog}",
         f"--operational-points={config.operational_points}",
         f"--sr70={messages.parent.parent / 'sources' / 'sr70' / 'SR70.csv'}",
-        f"--sr70-name20={messages.parent.parent / 'sources' / 'sr70' / 'SR70_Nazev20.csv'}",
         f"--osm-pbf={config.osm_file}",
         f"--osm-aliases={OSM_REVIEW_PATH}",
         f"--diagnostics-out={bundle.parent / 'diagnostics-detail'}",
@@ -867,18 +823,144 @@ def _validate_config(config: BuildConfig) -> None:
         raise PipelineError(f"Geodata root does not exist: {config.geodata_root}")
     if config.source_snapshot is not None and config.source_base_url != DEFAULT_SOURCE_BASE_URL:
         raise PipelineError("--source-snapshot forbids --source-base-url")
-    if config.source_snapshot is not None and (
-        config.sr70 is not None or config.sr70_name20 is not None
-    ):
+    if config.source_snapshot is not None and config.sr70 is not None:
         raise PipelineError("--source-snapshot forbids SR70 overrides")
-    if config.sr70_name20 is not None and config.sr70 is None:
-        raise PipelineError("--sr70-name20 requires --sr70")
     if _jobs(config.jobs) <= 0:
         raise PipelineError("--jobs must be auto or a positive integer")
 
 
 def _resolve_osm_snapshot(config: BuildConfig) -> tuple[Path, dict[str, Any]]:
     return config.osm_file, validate_snapshot(config.osm_file, config.workdir)
+
+
+def _download_sources(
+    config: BuildConfig,
+    sources: Path,
+    timetable_year: int,
+    reporter: Reporter,
+    clock: StageClock,
+) -> tuple[list[SourceRecord], Path]:
+    """Download the annual and monthly CZPTT objects until the inventory stops growing."""
+
+    clock.start("discover-source")
+    discovery_task = reporter.start("Discover CZPTT source inventory", unit="files")
+    inventory = discover_remote_inventory(config.source_base_url, timetable_year)
+    reporter.update(
+        discovery_task,
+        completed=len(inventory),
+        detail=f"{len(inventory)} objects",
+    )
+    reporter.finish(discovery_task, f"{len(inventory)} objects")
+    records: list[SourceRecord] = []
+    to_download = inventory
+    catalog: Path | None = None
+    downloader = _HttpSourceDownloader(sources)
+    worker_count = _jobs(config.jobs)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+            for attempt in range(1, MAX_INVENTORY_DOWNLOAD_PASSES + 1):
+                clock.start("download-source")
+                download_task = reporter.start(
+                    f"Download CZPTT sources ({attempt}/{MAX_INVENTORY_DOWNLOAD_PASSES})",
+                    total=len(to_download),
+                    unit="files",
+                )
+                remaining = iter(to_download)
+                pending: set[concurrent.futures.Future[SourceRecord]] = set()
+                batch_records: list[SourceRecord] = []
+                for _ in range(worker_count * 2):
+                    item = next(remaining, None)
+                    if item is None:
+                        break
+                    pending.add(executor.submit(downloader.download, item))
+                while pending:
+                    finished, pending = concurrent.futures.wait(
+                        pending,
+                        return_when=concurrent.futures.FIRST_COMPLETED,
+                    )
+                    for future in finished:
+                        record = future.result()
+                        records.append(record)
+                        batch_records.append(record)
+                        reporter.update(
+                            download_task,
+                            advance=1,
+                            detail=record.relative_path,
+                        )
+                        item = next(remaining, None)
+                        if item is not None:
+                            pending.add(executor.submit(downloader.download, item))
+                reporter.finish(download_task, f"{len(to_download)} files")
+                for record in batch_records:
+                    _validate_object(sources / record.relative_path, record.kind)
+
+                if attempt == 1:
+                    clock.start("snapshot-kadr")
+                    catalog = snapshot_kadr(sources / "kadr")
+
+                clock.start("recheck-source")
+                rediscovery_task = reporter.start("Recheck CZPTT source inventory", unit="files")
+                later = discover_remote_inventory(config.source_base_url, timetable_year)
+                reporter.update(
+                    rediscovery_task,
+                    completed=len(later),
+                    detail=f"{len(later)} objects",
+                )
+                reporter.finish(rediscovery_task, f"{len(later)} objects")
+                discovered = {value.relative_path for value in inventory}
+                rediscovered = {value.relative_path for value in later}
+                missing = discovered - rediscovered
+                if missing:
+                    raise PipelineError(f"Discovered CZPTT objects disappeared: {sorted(missing)}")
+                additions = rediscovered - discovered
+                if not additions:
+                    break
+                if attempt == MAX_INVENTORY_DOWNLOAD_PASSES:
+                    raise PipelineError(
+                        f"CZPTT inventory kept growing after {attempt} download passes; "
+                        f"new objects remain: {sorted(additions)}"
+                    )
+                reporter.note(
+                    f"Found {len(additions)} new CZPTT objects; downloading them "
+                    f"in pass {attempt + 1}/{MAX_INVENTORY_DOWNLOAD_PASSES}"
+                )
+                to_download = [value for value in later if value.relative_path in additions]
+                inventory = later
+    finally:
+        downloader.close()
+    assert catalog is not None
+    records.sort(key=lambda value: value.relative_path)
+    write_json(
+        sources / "inventory.json",
+        {
+            "schema_version": 1,
+            "timetable_year": timetable_year,
+            "objects": [asdict(value) for value in inventory],
+        },
+    )
+    write_json(
+        sources / "sources.json",
+        {
+            "schema_version": 1,
+            "timetable_year": timetable_year,
+            "source_base_url": config.source_base_url,
+            "objects": [asdict(value) for value in records],
+        },
+    )
+    return records, catalog
+
+
+def _snapshot_sr70(config: BuildConfig, sources: Path) -> Path:
+    destination = sources / "sr70" / "SR70.csv"
+    if not destination.is_file():
+        if config.source_snapshot is not None:
+            raise PipelineError("SR70 source snapshot must contain sr70/SR70.csv")
+        sr70 = config.sr70 or config.geodata_root / "rail" / "SR70.csv"
+        if not sr70.is_file():
+            raise PipelineError(f"SR70 snapshot does not exist: {sr70}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(sr70, destination)
+    return destination
 
 
 def build(
@@ -889,215 +971,66 @@ def build(
 ) -> Path:
     _validate_config(config)
     _osm_file, osm_manifest = _resolve_osm_snapshot(config)
-    output = config.output.resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    stage = output.parent / f".{output.name}.work-{uuid.uuid4().hex}"
-    publish = stage / "publish"
+    staging = create_staging(config.output, config.workdir, "national-czptt")
+    publish = staging.publish
     sources = publish / "sources"
     derived = publish / "derived"
-    logs = stage / "logs"
-    run_root = (
-        config.workdir.resolve()
-        / "runs"
-        / "national-czptt"
-        / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex}"
-    )
-    work = run_root / "work"
-    for directory in (publish, sources, derived, logs, work):
-        directory.mkdir(parents=True, exist_ok=True)
+    logs = staging.stage / "logs"
+    for directory in (sources, derived, logs):
+        directory.mkdir(parents=True)
     own_reporter = reporter is None
     reporter = reporter or BuildReporter(config.progress)
     timetable_year = resolve_timetable_year(config.timetable_year)
-    active_stage = "initialization"
-    command_results: dict[str, Any] = {}
-
-    def command_manifest(result: Any) -> dict[str, object] | None:
-        if result is None:
-            return None
-        return {
-            "elapsed_seconds": result.elapsed_seconds,
-            "completed": result.completed,
-            "total": result.total,
-            "maximum_in_flight": result.maximum_in_flight,
-            "execution_plan": result.execution_plan,
-            "resource_usage": list(result.resource_usage),
-            "scheduler_samples": list(getattr(result, "scheduler_samples", ())),
-            "maximum_workers_observed": getattr(result, "maximum_workers_observed", 0),
-        }
+    clock = StageClock()
+    command_results: dict[str, CommandResult | None] = {}
 
     try:
         reporter.note(
             f"CZPTT GVD {timetable_year}; operational points={config.operational_points}; "
-            f"workers={_jobs(config.jobs)}; run={run_root}; staging={stage}"
+            f"workers={_jobs(config.jobs)}; run={staging.run_root}; staging={staging.stage}"
         )
         if config.source_snapshot is not None:
-            active_stage = "copy-source-snapshot"
+            clock.start("copy-source-snapshot")
             records = _copy_snapshot(config.source_snapshot, sources)
             catalog = sources / "kadr" / "catalog.json"
             if not catalog.is_file():
                 raise PipelineError("Source snapshot is missing kadr/catalog.json")
         else:
-            active_stage = "discover-source"
-            discovery_task = reporter.start("Discover CZPTT source inventory", unit="files")
-            inventory = discover_remote_inventory(config.source_base_url, timetable_year)
-            reporter.update(
-                discovery_task,
-                completed=len(inventory),
-                detail=f"{len(inventory)} objects",
-            )
-            reporter.finish(discovery_task, f"{len(inventory)} objects")
-            records: list[SourceRecord] = []
-            to_download = inventory
-            catalog: Path | None = None
-            downloader = _HttpSourceDownloader(sources)
-            worker_count = _jobs(config.jobs)
-            try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
-                    for attempt in range(1, MAX_INVENTORY_DOWNLOAD_PASSES + 1):
-                        active_stage = "download-source"
-                        download_task = reporter.start(
-                            f"Download CZPTT sources ({attempt}/{MAX_INVENTORY_DOWNLOAD_PASSES})",
-                            total=len(to_download),
-                            unit="files",
-                        )
-                        remaining = iter(to_download)
-                        pending: set[concurrent.futures.Future[SourceRecord]] = set()
-                        batch_records: list[SourceRecord] = []
-                        for _ in range(worker_count * 2):
-                            item = next(remaining, None)
-                            if item is None:
-                                break
-                            pending.add(executor.submit(downloader.download, item))
-                        while pending:
-                            finished, pending = concurrent.futures.wait(
-                                pending,
-                                return_when=concurrent.futures.FIRST_COMPLETED,
-                            )
-                            for future in finished:
-                                record = future.result()
-                                records.append(record)
-                                batch_records.append(record)
-                                reporter.update(
-                                    download_task,
-                                    advance=1,
-                                    detail=record.relative_path,
-                                )
-                                item = next(remaining, None)
-                                if item is not None:
-                                    pending.add(executor.submit(downloader.download, item))
-                        reporter.finish(download_task, f"{len(to_download)} files")
-                        for record in batch_records:
-                            _validate_object(sources / record.relative_path, record.kind)
+            records, catalog = _download_sources(config, sources, timetable_year, reporter, clock)
 
-                        if attempt == 1:
-                            active_stage = "snapshot-kadr"
-                            catalog = snapshot_kadr(sources / "kadr")
-
-                        active_stage = "recheck-source"
-                        rediscovery_task = reporter.start(
-                            "Recheck CZPTT source inventory", unit="files"
-                        )
-                        later = discover_remote_inventory(config.source_base_url, timetable_year)
-                        reporter.update(
-                            rediscovery_task,
-                            completed=len(later),
-                            detail=f"{len(later)} objects",
-                        )
-                        reporter.finish(rediscovery_task, f"{len(later)} objects")
-                        discovered = {value.relative_path for value in inventory}
-                        rediscovered = {value.relative_path for value in later}
-                        missing = discovered - rediscovered
-                        if missing:
-                            raise PipelineError(
-                                f"Discovered CZPTT objects disappeared: {sorted(missing)}"
-                            )
-                        additions = rediscovered - discovered
-                        if not additions:
-                            break
-                        if attempt == MAX_INVENTORY_DOWNLOAD_PASSES:
-                            raise PipelineError(
-                                f"CZPTT inventory kept growing after {attempt} download passes; "
-                                f"new objects remain: {sorted(additions)}"
-                            )
-                        reporter.note(
-                            f"Found {len(additions)} new CZPTT objects; downloading them "
-                            f"in pass {attempt + 1}/{MAX_INVENTORY_DOWNLOAD_PASSES}"
-                        )
-                        to_download = [value for value in later if value.relative_path in additions]
-                        inventory = later
-            finally:
-                downloader.close()
-            assert catalog is not None
-            records.sort(key=lambda value: value.relative_path)
-            write_json(
-                sources / "inventory.json",
-                {
-                    "schema_version": 1,
-                    "timetable_year": timetable_year,
-                    "objects": [asdict(value) for value in inventory],
-                },
-            )
-            write_json(
-                sources / "sources.json",
-                {
-                    "schema_version": 1,
-                    "timetable_year": timetable_year,
-                    "source_base_url": config.source_base_url,
-                    "objects": [asdict(value) for value in records],
-                },
-            )
-
-        active_stage = "snapshot-sr70"
-        sr70_destination = sources / "sr70" / "SR70.csv"
-        sr70_name20_destination = sources / "sr70" / "SR70_Nazev20.csv"
-        if not sr70_destination.exists() and not sr70_name20_destination.exists():
-            default_sr70 = config.geodata_root / "rail" / "SR70.csv"
-            sr70 = config.sr70 or default_sr70
-            sr70_name20 = config.sr70_name20 or sr70.with_name("SR70_Nazev20.csv")
-            if not sr70.is_file():
-                raise PipelineError(f"SR70 snapshot does not exist: {sr70}")
-            if not sr70_name20.is_file():
-                raise PipelineError(
-                    f"SR70 Název20 companion snapshot does not exist: {sr70_name20}"
-                )
-            sr70_destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(sr70, sr70_destination)
-            shutil.copy2(sr70_name20, sr70_name20_destination)
-        elif not sr70_destination.is_file() or not sr70_name20_destination.is_file():
-            raise PipelineError(
-                "SR70 source snapshot must contain both sr70/SR70.csv and sr70/SR70_Nazev20.csv"
-            )
+        clock.start("snapshot-sr70")
+        sr70_destination = _snapshot_sr70(config, sources)
         _finalize_sources_manifest(sources)
 
-        active_stage = "flatten-messages"
+        clock.start("flatten-messages")
         message_count = flatten_messages(sources, records, derived / "messages.zip")
 
-        active_stage = "build-jrutil"
+        clock.start("build-jrutil")
         if config.build_jrutil and config.jrutil_root is not None:
             command_results["build_jrutil"] = command_runner(
-                _build_command(config.jrutil_root),
+                jrutil.build_command(config.jrutil_root),
                 config.jrutil_root,
                 logs / "jrutil-build.process.log",
                 reporter,
-                CommandProgress("Build JrUtil", stage=active_stage),
+                CommandProgress("Build JrUtil", stage=clock.current),
             )
-        active_stage = "validate-osm-railway-locations"
+        clock.start("validate-osm-railway-locations")
         filtered_osm = validate_railway_locations(
             config.workdir,
             str(osm_manifest["merge_key"]),
         )
         converter_config = replace(config, osm_file=filtered_osm)
-        active_stage = "convert"
+        clock.start("convert")
         bundle = publish / "bundle"
         command_results["convert"] = command_runner(
             _converter_command(converter_config, derived / "messages.zip", catalog, bundle),
             _jrutil_cwd(config),
             logs / "jrutil-czptt.process.log",
             reporter,
-            CommandProgress("Convert CZPTT", stage=active_stage),
+            CommandProgress("Convert CZPTT", stage=clock.current),
         )
         read_manifest(bundle)
-        active_stage = "verify-bundle"
+        clock.start("verify-bundle")
         with extracted_gtfs(bundle) as gtfs:
             _verify_gtfs_stops(gtfs, sr70_destination)
         _verify_foreign_coordinate_acceptance(publish / "diagnostics-detail")
@@ -1109,19 +1042,18 @@ def build(
             CommandProgress("Validate production package", stage="validate-package"),
         )
 
-        active_stage = "run-manifest"
+        clock.start("run-manifest")
         run_manifest = {
             "schema_version": 1,
             "pipeline": "obehy-national-czptt",
             "timetable_year": timetable_year,
             "operational_points": config.operational_points,
             "message_count": message_count,
-            "jrutil": _jrutil_provenance(config),
+            "jrutil": jrutil.provenance(config.jrutil_root, config.jrutil_command),
             "osm_source_key": osm_manifest["merge_key"],
             "sources_manifest_sha256": file_digest(sources / "sources.json"),
             "messages_sha256": file_digest(derived / "messages.zip"),
             "sr70_sha256": file_digest(sr70_destination),
-            "sr70_name20_sha256": file_digest(sr70_name20_destination),
             "execution": {
                 "commands": {
                     name: command_manifest(result)
@@ -1131,62 +1063,32 @@ def build(
         }
         write_json(publish / "run-manifest.json", run_manifest)
         if config.keep_work:
-            shutil.copytree(logs, work / "logs", dirs_exist_ok=True)
-            shutil.copytree(work, publish / "work", dirs_exist_ok=True)
+            shutil.copytree(logs, staging.work / "logs", dirs_exist_ok=True)
+            shutil.copytree(staging.work, publish / "work", dirs_exist_ok=True)
         write_json(publish / "manifest.json", _manifest(publish))
-        os.replace(publish, output)
-        shutil.rmtree(stage)
+        os.replace(publish, staging.output)
+        shutil.rmtree(staging.stage)
         if not config.keep_work:
-            shutil.rmtree(run_root)
-        reporter.note(f"National CZPTT bundle written to {output}")
-        return output
+            shutil.rmtree(staging.run_root)
+        reporter.note(f"National CZPTT bundle written to {staging.output}")
+        return staging.output
     except Exception as error:
         write_json(
-            stage / "failure.json",
-            {
-                "schema_version": 1,
-                "stage": active_stage,
-                "error_type": type(error).__name__,
-                "message": str(error),
-                "staging_directory": str(stage),
-                "run_directory": str(run_root),
-            },
+            staging.failure_path,
+            failure_record(
+                error,
+                clock,
+                reporter,
+                staging_directory=str(staging.stage),
+                run_directory=str(staging.run_root),
+                logs_directory=str(logs),
+            ),
         )
-        reporter.note(f"FAILED STAGING RETAINED: {stage}")
+        report_failure(reporter, error, clock.current, staging.stage, staging.failure_path)
         raise
     finally:
         if own_reporter:
             reporter.close()
-
-
-def _parse_year(value: str) -> int | Literal["auto"]:
-    if value.casefold() == "auto":
-        return "auto"
-    try:
-        year = int(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("must be auto or a four-digit year") from error
-    if not 2000 <= year <= 9999:
-        raise argparse.ArgumentTypeError("must be auto or a four-digit year")
-    return year
-
-
-def _parse_jobs(value: str) -> JobSetting:
-    if value.casefold() == "auto":
-        return "auto"
-    try:
-        count = int(value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("must be auto or a positive integer") from error
-    if count <= 0:
-        raise argparse.ArgumentTypeError("must be auto or a positive integer")
-    return count
-
-
-def _parse_memory_budget(value: str) -> str:
-    if not re.fullmatch(r"(?i)(?:auto|[0-9]+(?:\.[0-9]+)?(?:KiB|MiB|GiB))", value):
-        raise argparse.ArgumentTypeError("must be auto or a size such as 5GiB")
-    return value
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1195,16 +1097,15 @@ def _parser() -> argparse.ArgumentParser:
     build_parser = commands.add_parser("build", help="build a national CZPTT bundle")
     build_parser.add_argument("--output", required=True, type=Path)
     build_parser.add_argument("--config", type=Path)
-    build_parser.add_argument("--timetable-year", type=_parse_year, default="auto")
+    build_parser.add_argument("--timetable-year", type=parse_year, default="auto")
     build_parser.add_argument(
         "--operational-points", choices=("gtfs", "sidecar"), default="sidecar"
     )
     build_parser.add_argument("--source-base-url", default=DEFAULT_SOURCE_BASE_URL)
     build_parser.add_argument("--source-snapshot", type=Path)
     build_parser.add_argument("--sr70", type=Path)
-    build_parser.add_argument("--sr70-name20", type=Path)
-    build_parser.add_argument("--jobs", type=_parse_jobs, default="auto")
-    build_parser.add_argument("--memory-budget", type=_parse_memory_budget, default="auto")
+    build_parser.add_argument("--jobs", type=parse_jobs, default="auto")
+    build_parser.add_argument("--memory-budget", type=parse_memory_budget, default="auto")
     build_parser.add_argument("--keep-work", action="store_true")
     build_parser.add_argument(
         "--progress", choices=("auto", "rich", "plain", "off"), default="auto"
@@ -1228,7 +1129,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_base_url=cast(str, args.source_base_url),
             source_snapshot=cast(Path | None, args.source_snapshot),
             sr70=cast(Path | None, args.sr70),
-            sr70_name20=cast(Path | None, args.sr70_name20),
             jobs=cast(JobSetting, args.jobs),
             memory_budget=cast(str, args.memory_budget),
             keep_work=cast(bool, args.keep_work),

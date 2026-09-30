@@ -16,7 +16,6 @@ import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 from urllib.request import Request, urlopen
@@ -24,7 +23,8 @@ from urllib.request import Request, urlopen
 from shapely import MultiPolygon, Polygon, box, union_all
 from shapely.geometry import mapping
 
-from obehy.pipeline_support import write_json
+from obehy.pipeline.download import USER_AGENT
+from obehy.pipeline.files import utc_now, write_json
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
 GEOFABRIK_BASE = "https://download.geofabrik.de/europe"
@@ -94,10 +94,6 @@ class RailwayFilterFn(Protocol):
 TransitFilterFn = RailwayFilterFn
 
 
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
 def _progress(message: str) -> None:
     print(f"[obehy-osm] {message}", file=sys.stderr, flush=True)
 
@@ -139,7 +135,7 @@ def file_digest(
 
 
 def _fetch_bytes(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": "Obehy/0.1 OSM snapshot builder"})
+    request = Request(url, headers={"User-Agent": USER_AGENT})
     with cast(_Response, urlopen(request, timeout=120)) as response:
         return response.read()
 
@@ -217,7 +213,7 @@ def _download_extract(
     size = 0
     started = time.monotonic()
     last_report = started
-    request = Request(url, headers={"User-Agent": "Obehy/0.1 OSM snapshot builder"})
+    request = Request(url, headers={"User-Agent": USER_AGENT})
     _progress(f"{region_id}: downloading {url}")
     try:
         with (

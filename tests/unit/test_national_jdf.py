@@ -14,19 +14,13 @@ from pathlib import Path
 import pytest
 
 from obehy import national_jdf
-from obehy.national_jdf import (
-    BuildConfig,
-    CommandFailure,
-    CommandProgress,
-    DownloadRecord,
-    PipelineError,
-    build,
-    deterministic_zip,
-    download_file,
-    file_digest,
-    run_command,
-    stage_nested_jdf_batches,
-)
+from obehy.national_jdf import BuildConfig, build, stage_nested_jdf_batches
+from obehy.pipeline import download, jrutil, reporting
+from obehy.pipeline.download import DownloadRecord, download_file
+from obehy.pipeline.errors import PipelineError
+from obehy.pipeline.files import deterministic_zip, file_digest
+from obehy.pipeline.process import CommandFailure, CommandResult, run_command
+from obehy.pipeline.reporting import BuildReporter, CommandProgress
 
 
 def test_transport_mode_rules_exclude_liberec_replacement_buses() -> None:
@@ -295,7 +289,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             "status": [],
         }
 
-    monkeypatch.setattr(national_jdf, "git_identity", fake_git_identity)
+    monkeypatch.setattr(jrutil, "git_identity", fake_git_identity)
 
     def valid_snapshot(_osm: Path, _workdir: Path) -> dict[str, object]:
         return {"merge_key": "fixture-osm"}
@@ -342,7 +336,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         log: Path,
         _reporter: object = None,
         _progress: object = None,
-    ) -> national_jdf.CommandResult | None:
+    ) -> CommandResult | None:
         command = list(command)
         commands.append(command)
         log.parent.mkdir(parents=True, exist_ok=True)
@@ -351,7 +345,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             return
         if "validate-package" in command:
             return
-        arguments = command[command.index("--") + 1 :]
+        arguments = command[2:]  # dotnet <multitool.dll> <arguments>
         operation = arguments[0]
         if operation == "fix-jdf":
             input_root = Path(arguments[-2])
@@ -365,7 +359,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             merged.mkdir(parents=True)
             (merged / "VerzeJDF.txt").write_text('"1.11";\r\n', encoding="cp1250")
             (merged / "JrutilRoutingDemands.txt").write_text("", encoding="cp1250")
-            return national_jdf.CommandResult(
+            return CommandResult(
                 elapsed_seconds=1.5,
                 completed=2,
                 total=2,
@@ -454,8 +448,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     if keep_work:
         assert len(list((output / "work" / "fixed").glob("*.zip"))) == 2
     assert commands[0][1] == "build"
-    multitool_commands = [command for command in commands if "--" in command]
-    operations = [command[command.index("--") + 1] for command in multitool_commands]
+    multitool_commands = [command for command in commands if command[1] != "build"]
+    operations = [command[2] for command in multitool_commands]
     assert operations == ["fix-jdf", "merge-jdf", "jdf-to-bundle", "validate-package"]
     assert all("--strict" in command for command in multitool_commands[:2])
     assert all("--by-id" not in command for command in multitool_commands)
@@ -515,7 +509,6 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             "path": "obehy/data/jdf_transport_mode_rules.csv",
             "sha256": national_jdf.file_digest(national_jdf.TRANSPORT_MODE_RULES),
         },
-        "stop_ids_cis": False,
         "stop_merge": "name",
         "strict": True,
         "diagnostic_post_labels": False,
@@ -542,12 +535,34 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     ]
     assert run_manifest["merged_jdf"]["compression"] == "balanced"
     assert run_manifest["merged_jdf"]["compression_level"] == 6
-    assert run_manifest["jrutil"] == {
+    assert run_manifest["jrutil"]["mode"] == "directory"
+    assert run_manifest["jrutil"]["git"] == {
         "commit": "0123456789abcdef0123456789abcdef01234567",
         "dirty": False,
         "status": [],
     }
     assert [file["path"] for file in run_manifest["geodata"]["files"]] == ["fixture.csv"]
+    if estimated_posts and not evidence_backed:
+        assert run_manifest["osm_jdf_routing_extract"] == {
+            "path": str(routing_extract),
+            "bytes": len(b"routing-osm"),
+            "sha256": file_digest(routing_extract),
+            "manifest": str(routing_extract) + ".manifest.json",
+        }
+    else:
+        assert run_manifest["osm_jdf_routing_extract"] is None
+    if evidence_backed:
+        evidence_sha256 = file_digest(evidence / "manifest.json")
+        assert run_manifest["post_inference_evidence_manifest_sha256"] == evidence_sha256
+        assert run_manifest["post_inference_evidence"]["capture_metrics"] is None
+        assert run_manifest["post_inference_evidence_lock"] is not None
+    else:
+        assert run_manifest["post_inference_evidence_manifest_sha256"] is None
+        assert run_manifest["post_inference_evidence"] is None
+        assert run_manifest["post_inference_evidence_lock"] is None
+    assert run_manifest["bundle_manifest_sha256"] == file_digest(
+        output / "bundle" / "manifest.json"
+    )
 
 
 def test_gtfs_stop_verifier_allows_zero_coordinates_with_aggregate_warning(
@@ -558,7 +573,7 @@ def test_gtfs_stop_verifier_allows_zero_coordinates_with_aggregate_warning(
         encoding="utf-8",
     )
     (tmp_path / "stop_times.txt").write_text("trip_id,stop_id\nt,s\n", encoding="utf-8")
-    reporter = national_jdf.BuildReporter("off")
+    reporter = BuildReporter("off")
 
     national_jdf.verify_gtfs_stops(tmp_path, reporter)
 
@@ -572,7 +587,7 @@ def test_gtfs_stop_verifier_rejects_unreferenced_boarding_stop(tmp_path: Path) -
     )
     (tmp_path / "stop_times.txt").write_text("trip_id,stop_id\nt,used\n", encoding="utf-8")
 
-    with pytest.raises(national_jdf.PipelineError, match="unreferenced"):
+    with pytest.raises(PipelineError, match="unreferenced"):
         national_jdf.verify_gtfs_stops(tmp_path)
 
 
@@ -621,7 +636,7 @@ def test_build_retains_staging_directory_after_failure(
     retained = list(tmp_path.glob(".failed-output.work-*"))
     assert len(retained) == 1
     assert (retained[0] / "publish" / "sources").is_dir()
-    failure = json.loads((retained[0] / "publish" / "logs" / "failure.json").read_text())
+    failure = json.loads((retained[0] / "failure.json").read_text())
     assert failure["stage"] == "download-vld"
     assert failure["message"] == "fixture download failure"
 
@@ -679,7 +694,7 @@ class _Reporter:
 
 
 def test_rich_indeterminate_task_gets_a_finished_lifecycle_state() -> None:
-    reporter = national_jdf.BuildReporter("rich")
+    reporter = BuildReporter("rich")
     try:
         task = reporter.start("Build JrUtil")
         reporter.finish(task, "completed")
@@ -691,10 +706,10 @@ def test_rich_indeterminate_task_gets_a_finished_lifecycle_state() -> None:
         assert rich_task.fields["lifecycle_finished"] is True
         assert rich_task.stop_time is not None
         assert rich_task.total is None
-        status_column = national_jdf._LifecycleSpinnerColumn()  # pyright: ignore[reportPrivateUsage]
+        status_column = reporting._LifecycleSpinnerColumn()  # pyright: ignore[reportPrivateUsage]
         rendered_status = status_column.render(rich_task)
         assert str(rendered_status) == "✓"
-        bar_column = national_jdf._LifecycleBarColumn()  # pyright: ignore[reportPrivateUsage]
+        bar_column = reporting._LifecycleBarColumn()  # pyright: ignore[reportPrivateUsage]
         rendered_bar = bar_column.render(rich_task)
         assert str(rendered_bar) == ""
     finally:
@@ -726,7 +741,7 @@ def test_download_hashes_incrementally(
     def fake_urlopen(*_args: object, **_kwargs: object) -> _Response:
         return response
 
-    monkeypatch.setattr(national_jdf, "urlopen", fake_urlopen)
+    monkeypatch.setattr(download, "urlopen", fake_urlopen)
     reporter = _Reporter()
 
     record = download_file("https://example.invalid/data", tmp_path / "data", "data", reporter)
@@ -749,7 +764,7 @@ def test_interrupted_download_retains_partial_file(
     def interrupted_urlopen(*_args: object, **_kwargs: object) -> Interrupted:
         return Interrupted([b"partial"])
 
-    monkeypatch.setattr(national_jdf, "urlopen", interrupted_urlopen)
+    monkeypatch.setattr(download, "urlopen", interrupted_urlopen)
 
     with pytest.raises(OSError, match="connection lost"):
         download_file("https://example.invalid/data", tmp_path / "data", "data")

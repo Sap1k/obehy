@@ -12,9 +12,9 @@ one JrUtil invocation, and builds CZPTT using the same resolved GVD year. It pub
 after JrUtil validation and publication-eligibility checks pass.
 
 Source snapshots, orchestration manifests, process logs and detailed diagnostics remain outside the
-closed package trees. The serving-v2 database importer is intentionally deferred; the serving-v1
-loader has been removed. A no-op enrichment boundary sits
-between compilation and final validation so MOTIS shape generation can be inserted there later.
+closed package trees. The serving database importer is intentionally deferred; the serving-v1
+loader has been removed. MOTIS shape generation will be inserted between compilation and final
+validation when it is built.
 
 Live release acceptance is still pending. The previously failing national overlay finalizer now
 peaks at 4,373,061,632 private bytes on the retained production staging, down from
@@ -33,7 +33,7 @@ for measured results and the actual verification state.
 3. During the pre-registry phase JrUtil assigns opaque deterministic `v0:<kind>:<digest>` IDs from
    compiler-local normalized identity seeds. They are explicitly provisional and are guaranteed
    only to repeat for identical inputs.
-4. Oběhy validates every package byte and relation before database work, streams sorted relations
+4. Oběhy validates every package byte and relation before database work, streams relations
    into isolated per-build tables, validates them set-wise, and attaches the complete partition set.
 5. One `control.publication` transaction activates the GTFS artifact, static mirror, source
    mappings, and realtime resolver version together.
@@ -49,39 +49,35 @@ public ID is unrestricted text.
 
 ## Commands and build identity
 
-Current provisional compilation:
+`obehy build` drives the JrUtil multitool (the built `jrutil-multitool.dll` or a configured
+command): `fix-jdf`, `merge-jdf` and `jdf-to-bundle` for the national JDF package,
+`regional-gtfs-overlay` for PID + IDS JMK on top of it, `czptt-to-bundle` for rail, and
+`validate-package` for each result. Every package records the exact JrUtil commit (plus a
+working-tree digest when dirty) as its `compiler` version via `--converter-version`; the overlay
+reuses the version recorded by its base package.
+
+Registry-backed compilation (discovery, proposal and snapshot commands) is future work described in
+`IDENTITY_REGISTRY.md`. Live source URLs and credentials never enter JrUtil inputs; sources reach it
+as checksum-pinned snapshots with descriptors.
+
+## Production package
+
+JrUtil's normative contract is `jrutil/docs/PRODUCTION_CONTRACT.md` (bundle version 2, serving
+schema version 3). Oběhy accepts nothing else.
 
 ```text
-jrutil-multitool static-compile <build-spec.json> --identity-mode provisional-v0 <output-root>
-```
-
-Later registry-backed compilation:
-
-```text
-jrutil-multitool static-discover <build-spec.json> <proposal-output>
-jrutil-multitool static-compile <build-spec.json> <registry-snapshot> <output-root>
-```
-
-The build specification pins its schema, ordered source manifests, overlay-policy digest, JrUtil
-identity, compiler options, resource limits and deterministic options. Registry fields are nullable
-only for `provisional-v0`. Live source URLs and credentials never enter the specification.
-
-## Serving-package v1
-
-```text
-build/
+package/
 ├── gtfs.zip
-├── extensions/
 ├── serving/
 │   ├── agency.parquet
 │   ├── location.parquet
 │   ├── route.parquet
 │   ├── service_calendar.parquet
 │   ├── service_exception.parquet
-│   ├── trip.parquet
-│   ├── trip_call.parquet
 │   ├── shape.parquet
 │   ├── shape_point.parquet
+│   ├── trip.parquet
+│   ├── trip_call.parquet
 │   ├── route_segment.parquet
 │   ├── transfer.parquet
 │   ├── fare_system.parquet
@@ -105,26 +101,28 @@ build/
 │   ├── road_route_key.parquet
 │   ├── road_trip_key.parquet
 │   ├── rail_trip_key.parquet
-│   └── selected_field_provenance.parquet
-├── diagnostics.json
-├── validation/
-└── manifest.json
+│   ├── object_origin.parquet
+│   ├── binding_evidence.parquet
+│   ├── route_stop.parquet
+│   └── route_stop_zone.parquet
+├── manifest.json
+└── diagnostics.json
 ```
 
-`src/obehy/serving.py` is the executable schema contract. Each Parquet file has a fixed Arrow
-schema/nullability contract, Snappy compression, `obehy.schema_version` and `obehy.relation`
-metadata, and strictly increasing primary sort keys. The canonical manifest records each relation's
-schema, sort key, row count, byte size and SHA-256 plus the aggregate serving digest.
+`gtfs.zip` is standard GTFS only; zones and transfer waiting limits live in `fare_zone`,
+`location_zone`, `route_stop_zone`, `call_zone` and `transfer`. Each relation has a fixed schema,
+Snappy compression and a unique primary key. Rows are in deterministic generation order and are not
+sorted. Provenance is kept at trip and route level (`object_origin`, `source_trip_map`,
+`source_entity_map`); field-level provenance is not recorded.
 
-The manifest also pins build-spec, ordered-source-set, overlay-policy, compiler, compiler-options,
-GTFS, extensions, diagnostics and validation digests; compiler identity; feed version; identity
-contract; and a nullable registry snapshot digest. Identical inputs must produce identical semantic
-output.
+The manifest inventories every payload with its size and SHA-256, declares every relation, and pins
+the build specification digest, source snapshots, compiler version, feed version and identity
+contract. Identical inputs must produce identical semantic output.
 
 `JDF_SEMANTICS.md` is the normative preservation addendum. The current JrUtil GTFS conversion is
 not lossless for JDF fixed codes: it collapses accessibility detail, can only approximate
 order/conditional service in GTFS, and drops luggage,
-reservation, stop facilities, and interchange hints. Serving-package v1 therefore requires typed
+reservation, stop facilities, and interchange hints. The production package therefore carries typed
 service/call features, location features, notes, connection claims, restrictions, and operational
 relations. GTFS is a projection of those facts, not their storage format.
 

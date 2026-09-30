@@ -3,7 +3,7 @@
 A Swiss-army knife for Czech public-transport operations and realtime data.
 
 Oběhy orchestrates immutable static snapshots and publishes the finalized JrUtil packages; the
-serving-v2 importer and the realtime platform come later. JrUtil compiles the unified nationwide GTFS and static overlays. A
+serving importer and the realtime platform come later. JrUtil compiles the unified nationwide GTFS and static overlays. A
 future standalone public registry will own permanent IDs. Until the first static-overlay and PID
 realtime vertical slices are stable, JrUtil emits explicitly provisional `v0:` IDs. PostgreSQL is
 never the static compiler.
@@ -174,9 +174,9 @@ pack plus a fixed reserve; activation is a same-volume directory rename rather t
 ## National CZPTT conversion bundle
 
 The national railway builder snapshots the selected GVD annual CZPTT archive, every discovered
-monthly change object, KADR dictionaries, and paired SR70/`Název 20` data; converts them with the
-separately checked-out JrUtil fork; and atomically publishes GTFS plus operational/IDS Parquet
-sidecars:
+monthly change object, KADR dictionaries, and SR70 data; converts them with the separately
+checked-out JrUtil fork; and atomically publishes a production package (GTFS plus operational and
+IDS serving relations):
 
 ```powershell
 uv run obehy-national-czptt build --output C:\data\obehy-national-czptt
@@ -198,13 +198,13 @@ they have no SR70/OSM coordinate, they remain in operational Parquet but are omi
 By default, internal timing points appear only in the operational Parquet sidecars. Use
 `--operational-points gtfs` (or `obehy build --czptt-operational-points gtfs`) to also emit those
 with real coordinates as non-boardable/non-alightable GTFS rows. Synthesized fallback route labels use municipalities rather than
-station/facility names; `SR70_Nazev20.csv` remains a checksummed provenance input but does not
-affect conversion output. See [NATIONAL_CZPTT.md](NATIONAL_CZPTT.md) for source snapshots, GVD year
+station/facility names. See [NATIONAL_CZPTT.md](NATIONAL_CZPTT.md) for source snapshots, GVD year
 selection, bundle schemas, line changes, platform handling, IDS zones, and diagnostics.
 
 ## Serving database
 
-The serving-v1 PostgreSQL loader and its schema were removed: JrUtil now writes serving-v2
-packages, and the v2 importer will be written against that contract when it is needed.
+The serving-v1 PostgreSQL loader and its schema were removed. JrUtil writes
+`jrutil-production` packages (bundle version 2, serving schema version 3; see `STATIC_PIPELINE.md`),
+and the importer will be written against that contract when it is needed.
 `JDF_SEMANTICS.md` records the JDF preservation gaps that block calling GTFS plus the current
 sidecars a lossless semantic export.

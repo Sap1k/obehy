@@ -38,14 +38,15 @@ heap hard limit is configured; memory figures are telemetry.
   `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe`. Evidence-v2 packs can be
   replayed, but only for a byte-identical merged JDF. A learned scorer (policy v3,
   `src/obehy/data/post-inference/learned-v1.json`) is available via `--post-inference-policy`.
-- **Serving:** JrUtil production packages (`jrutil-production`/serving-v2) with GTFS, extensions,
-  diagnostics and typed Parquet relations. The serving-v1 database loader was removed; the
-  serving-v2 importer is not written yet.
+- **Serving:** JrUtil production packages (`jrutil-production` bundle v2, serving schema v3):
+  standard GTFS, bounded diagnostics and typed Parquet relations, with no `extensions/`, no sort
+  keys and trip/route-level provenance only. The serving-v1 database loader was removed; the
+  importer is not written yet.
 
 ### Last validation evidence
 
-- JrUtil Release suite: 293 tests (2026-09-28); focused CZPTT suite 68.
-- Oběhy: focused CZPTT pipeline 17 tests; CLI/JDF/CZPTT focused set 52 (2026-09-19).
+- JrUtil Release suite: 278 tests (2026-09-30, after the refactor removed dead paths).
+- Oběhy: unit suite 76 tests, ruff and pyright clean (2026-09-30).
 - Default JDF conversion: 179.4 s, 2.88 GB peak private memory, package valid (2026-09-15).
 - National finalizer replay with overlays: 4.07 GiB peak, package valid (2026-09-19).
 - Post-estimator frozen replay: bundle 13m04s vs ~43m33s live baseline, byte-identical payloads
@@ -63,10 +64,9 @@ heap hard limit is configured; memory figures are telemetry.
   `provisional-v0`/`registry-v1`.
 - The live post estimator is slow (~30 min of graph build + A*), and there is no persistent graph
   or per-context evidence cache.
-- Serving validation checks keys/order/hashes, but full foreign-key and cross-representation
-  content validation is incomplete.
-- The build's enrichment stage (`_enrich`, reserved for MOTIS route shapes) is a pass-through; no
-  shapes are generated yet.
+- Serving validation checks key uniqueness and hashes, but full foreign-key and
+  cross-representation content validation is incomplete.
+- No route shapes are generated yet (MOTIS shape generation is future work).
 
 ## Next steps
 
@@ -125,6 +125,21 @@ Work order: §4 → §1 → §2 → §3.
   `src/obehy/data/filtered-jdf/rules-v1.json`). Not yet run inside a complete live `obehy build`.
 
 ## Recent log
+
+- **2026-09-30** — Refactor of JrUtil and Oběhy before optimisation work.
+  - JrUtil: dead upstream code, v1 packages, CZ extensions, field-level provenance, staging
+    directories and relation sorting removed; bundle v2 / serving schema v3. Removed options
+    include `--stop-ids-cis`, `--international-route-overrides` and `--sr70-name20`. The overlay
+    takes `--converter-version` (Oběhy passes the base package's). God-modules split
+    (JdfBundle, JdfToGtfs, CzPttToGtfs, PackageWriter, Utils, overlay Support, multitool).
+  - Oběhy: serving-v1 stack removed; shared `obehy.pipeline` package (errors, files, reporting,
+    process, download, jrutil, args, staging); JrUtil runs as the built DLL everywhere; one
+    User-Agent; one `failure.json` at the staging root; overlay stage in `regional_overlay.py`.
+  - Validated: JrUtil 278/278, Oběhy 76/76 with ruff/pyright. The bounded golden semantic
+    comparison against the pre-refactor baseline shows only the allow-listed contract changes in
+    every stage. Peak private memory is lower in every stage; overlay wall time -47%, CZPTT -13%.
+    Single-sample JDF fix/merge/routing times moved +8-31% with unchanged code and worker plans;
+    earlier runs of identical code spread by up to 35%, so a repeated benchmark should confirm.
 
 - **2026-09-29** — JDF output: one route per line, detour routes, GVD-bounded validity.
   - `merge-jdf` requires `--gvd-year`/`--reference-date`. It drops expired and next-GVD

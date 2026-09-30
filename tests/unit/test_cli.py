@@ -10,7 +10,7 @@ from typing import Any, cast
 import pytest
 
 from obehy import cli
-from obehy.national_jdf import PipelineError
+from obehy.pipeline.errors import PipelineError
 from obehy.runtime_config import JrUtilRuntime, RuntimeConfig
 
 
