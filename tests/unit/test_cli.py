@@ -47,6 +47,7 @@ def _package(path: Path, *, publishable: bool = True) -> None:
                 "contract_valid": True,
                 "publication_eligible": publishable,
                 "feed_version": "fixture",
+                "compiler": {"tool": "jrutil", "version": "fixture-version"},
             }
         ),
         encoding="utf-8",
@@ -179,6 +180,7 @@ def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None
     assert overlay is not None
     assert sum(item.startswith("--source=") for item in overlay) == 2
     assert "--memory-budget=auto" in overlay
+    assert "--converter-version=fixture-version" in overlay
 
 
 @pytest.mark.parametrize("overlay_publishable,fail_czptt", [(False, False), (True, True)])

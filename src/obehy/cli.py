@@ -62,6 +62,18 @@ class Release:
     jdf_filtered: Path | None = None
 
 
+def _package_converter_version(package: Path) -> str:
+    """The overlay runs the same JrUtil build that compiled its base package."""
+    manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
+    compiler = cast(dict[str, object], manifest).get("compiler")
+    version = (
+        cast(dict[str, object], compiler).get("version") if isinstance(compiler, dict) else None
+    )
+    if not isinstance(version, str) or not version:
+        raise PipelineError(f"{package} manifest does not record a compiler version")
+    return version
+
+
 def _runtime_command(runtime: RuntimeConfig) -> list[str]:
     if runtime.jrutil.command is not None:
         return list(runtime.jrutil.command)
@@ -231,6 +243,7 @@ def build(
         completed("regional-snapshots")
 
         jdf_package = partial_release / "jdf"
+        jdf_bundle = jdf_output / "bundle"
         overlay_command = [
             *_runtime_command(runtime),
             "regional-gtfs-overlay",
@@ -238,12 +251,13 @@ def build(
             f"--memory-budget={options.memory_budget}",
             f"--policy={POLICY}",
             f"--gvd-year={options.gvd_year}",
+            f"--converter-version={_package_converter_version(jdf_bundle)}",
             f"--source=pid-gtfs={pid}",
             f"--source-descriptor=pid-gtfs={pid_descriptor}",
             f"--source=ids-jmk-gtfs={jmk}",
             f"--source-descriptor=ids-jmk-gtfs={jmk_descriptor}",
             f"--diagnostics-out={diagnostics / 'regional-overlay'}",
-            str(jdf_output / "bundle"),
+            str(jdf_bundle),
             str(jdf_package),
         ]
         command_runner(
