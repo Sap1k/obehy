@@ -628,6 +628,23 @@ class _Reporter:
     def close(self) -> None: ...
 
 
+def test_reporter_treats_process_output_as_literal_text(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    reporter = BuildReporter("off")
+    process_output = (
+        "error MSB4181: The task returned false "
+        "[/opt/obehy/jrutil/jrutil-multitool/jrutil-multitool.fsproj]"
+    )
+
+    reporter.problem("error", process_output)
+    reporter.note("Last process output:\n" + process_output)
+
+    captured = capsys.readouterr().err
+    assert captured.count("[/opt/obehy/jrutil/jrutil-multitool/jrutil-multitool.fsproj]") == 2
+    assert "Last process output:" in captured
+
+
 def test_rich_indeterminate_task_gets_a_finished_lifecycle_state() -> None:
     reporter = BuildReporter("rich")
     try:

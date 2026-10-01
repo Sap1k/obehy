@@ -215,12 +215,12 @@ class BuildReporter:
         self._problems[key] = self._problems.get(key, 0) + 1
         if self._problems[key] <= 20:
             style = "bold red" if severity == "error" else "yellow"
-            self.console.print(f"{severity.upper()}: {message}", style=style)
+            self.console.print(f"{severity.upper()}: {message}", style=style, markup=False)
         else:
             self._suppressed[key] = self._suppressed.get(key, 0) + 1
 
     def note(self, message: str) -> None:
-        self.console.print(f"[{utc_now()}] {message}")
+        self.console.print(f"[{utc_now()}] {message}", markup=False)
 
     def snapshot(self) -> dict[str, object]:
         return {
@@ -243,6 +243,7 @@ class BuildReporter:
                 self.console.print(
                     f"{count} additional {severity} messages from {stage} were retained in logs",
                     style="yellow" if severity == "warning" else "bold red",
+                    markup=False,
                 )
 
 
