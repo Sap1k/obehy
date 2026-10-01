@@ -59,20 +59,10 @@
    "conflict_adjustment": -0.05,
    "maximum_combined_supporting_adjustment": 0.1
   },
-  "side_groups": {
-   "maximum_ordinary_groups": 2,
-   "maximum_compactness_metres": 75,
-   "additional_group_minimum_contexts": 2
-  },
   "authored_resolution": {
    "minimum_physical_score": 0.75,
    "minimum_physical_margin": 0.2,
    "require_unanimous_contexts": true
-  },
-  "same_stop_pairs": {
-   "enabled": true,
-   "minimum_individual_score": 0.7,
-   "minimum_individual_margin": 0.15
   }
  },
  "scorer": {

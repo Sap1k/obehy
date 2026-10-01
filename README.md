@@ -131,45 +131,29 @@ The builder writes fixed work batches as uncompressed ZIPs to reduce temporary f
 The builder does not enable JrUtil's experimental persistent cache.
 
 Estimated posts remain default-off for national builds. Pass `--estimated-posts` to construct the
-Osmium demand clip and enable conservative directed road/tram routing; add
-`--diagnostic-post-labels` independently to expose `O1`/`O-N`/`?` only through GTFS
-`platform_code`. Authored identities and labels remain unchanged. A decision is one physical
-candidate, a predefined compact side group represented by a real medoid, or the parent centroid;
-coordinates are never averaged. `JrutilPostCandidateEvidence.txt` and
-`JrutilRoutingDemands.txt` survive deterministic JDF round trips and merge. Parquet schema v7 adds
-candidate evidence, side groups and distinct pattern/candidate score relations. The complete
-rollback is the default build or JrUtil's explicit `--no-estimated-posts`.
+Osmium demand clip and enable directed road/tram routing. Oběhy passes the packaged learned scorer
+(`src/obehy/data/post-inference/learned-v1.json`) unless `--post-inference-policy=FILE` names
+another. Authored identities and labels remain unchanged. A decision is one physical candidate, the
+most probable post of a confident area, or the parent centroid; coordinates are never averaged.
+`JrutilPostCandidateEvidence.txt` and `JrutilRoutingDemands.txt` survive deterministic JDF round
+trips and merge. The complete rollback is the default build or JrUtil's explicit
+`--no-estimated-posts`.
 
-For tuning, JrUtil can capture a versioned, policy-neutral evidence directory once, replay JSON
-policies and deterministic grids without OSM/A*, and generate a final bundle from the selected
-evidence/policy pair. The national command accepts `--post-inference-policy=policy.json` for a live
-build, `--post-inference-evidence=DIR` for an evidence-backed replay, and
-`--capture-post-inference-evidence` to publish an evidence-v2 pack and run manifest without writing
-a bundle. Oběhy supplies JrUtil's internal `--post-inference-evidence-only` switch for that capture.
-Capture is policy-neutral and cannot be combined with a policy or evidence reuse. When no policy
-file is supplied, JrUtil uses the selected
-`conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe` policy as its compiled default.
-
-Evidence-backed publication is the score-free replay path: Oběhy passes
-`--no-post-inference-scores`, so the selected policy produces the final GTFS and assignments without
-materializing diagnostic score rows (the stable score relation remains present with zero rows).
-Diagnostic GTFS platform labels use final assignments and remain compatible with that score-free
-path. `--post-review-stops=FILE` and the standalone review commands retain score rows for tuning and
-inspection. Evidence reuse validates the merged-JDF identity and bypasses graph construction and A*.
+For retraining, `obehy-national-jdf build --capture-post-inference-evidence` publishes a
+policy-neutral evidence-v2 pack and run manifest instead of a bundle (Oběhy supplies JrUtil's
+internal `--post-inference-evidence-only` switch). Capture cannot be combined with a policy.
+`jrutil/scripts/post-scorer` turns region captures into training data and a new `learned-vN.json`.
 
 JrUtil verifies the exact relation set, hashes, sizes, Parquet schemas and row counts, capture
 ceilings, router and capture-tool versions, schema fingerprints, and the pack ID repeated in every
-relation. It also validates canonical ordering, memberships, foreign keys, contiguous variants,
-sentinels, numeric ranges, movement-family/block identity, and complete attachment coverage before
-atomically publishing the evidence directory. Oběhy trusts that successful command boundary and reads
-only the published manifest to record the evidence lock; it does not decode the national Parquet pack
-a second time or reproduce policy decisions. The run manifest records capture estimates,
-atomic-output headroom, current and peak spill bytes, the requested worker ceiling, and a
-policy-independent lock containing the manifest hash, pack/tool/JDF/PBF identities, routing and
-capture versions/ceilings, and every relation's hash, row count, byte count, and schema fingerprint.
-Replay carries the same lock forward from its input pack. The capture disk preflight uses canonical
-deduplicated route-pattern contexts, not raw timetable-call count, and charges one temporary evidence
-pack plus a fixed reserve; activation is a same-volume directory rename rather than a second full copy.
+relation, plus canonical ordering, memberships, foreign keys, contiguous variants, sentinels,
+numeric ranges, movement-family/block identity, and complete attachment coverage, before atomically
+publishing the evidence directory. Oběhy trusts that command boundary and reads only the published
+manifest; the run manifest records its hash and a summary with capture estimates, atomic-output
+headroom, current and peak spill bytes, and the requested worker ceiling. The capture disk
+preflight uses canonical deduplicated route-pattern contexts, not raw timetable-call count, and
+charges one temporary evidence pack plus a fixed reserve; activation is a same-volume directory
+rename rather than a second full copy.
 
 ## National CZPTT conversion bundle
 

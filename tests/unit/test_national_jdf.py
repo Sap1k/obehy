@@ -32,7 +32,7 @@ def test_transport_mode_rules_exclude_liberec_replacement_buses() -> None:
     assert {"545902", "545903"}.isdisjoint(liberec_routes)
 
 
-def test_post_evidence_manifest_is_read_for_lock_without_parquet_rescan(
+def test_post_evidence_manifest_is_read_without_parquet_rescan(
     tmp_path: Path,
 ) -> None:
     evidence = tmp_path / "evidence"
@@ -59,12 +59,8 @@ def test_post_evidence_manifest_is_read_for_lock_without_parquet_rescan(
     loaded = national_jdf._read_post_inference_evidence_manifest(  # pyright: ignore[reportPrivateUsage]
         evidence
     )
-    lock = national_jdf._post_inference_evidence_lock(  # pyright: ignore[reportPrivateUsage]
-        loaded, file_digest(manifest_path)
-    )
 
-    assert lock["pack_id"] == "pack"
-    assert lock["files"] == manifest["files"]
+    assert loaded == manifest
 
 
 def test_capture_only_rejects_post_inference_policy(tmp_path: Path) -> None:
@@ -105,36 +101,6 @@ def test_estimated_posts_default_to_learned_policy_except_capture(tmp_path: Path
     )
     captured = replace(estimated, capture_post_inference_evidence=True)
     assert national_jdf.effective_post_inference_policy(captured) is None
-
-
-@pytest.mark.parametrize(
-    ("diagnostic_post_labels", "with_review_output", "include_scores"),
-    [(False, False, False), (True, False, False), (False, True, True)],
-)
-def test_evidence_replay_only_omits_scores_without_review_output(
-    tmp_path: Path,
-    diagnostic_post_labels: bool,
-    with_review_output: bool,
-    include_scores: bool,
-) -> None:
-    config = BuildConfig(
-        output=tmp_path / "output",
-        workdir=tmp_path / "work",
-        osm_file=tmp_path / "cz.osm.pbf",
-        jrutil_root=None,
-        jrutil_command=("jrutil",),
-        geodata_root=tmp_path / "geodata",
-        diagnostic_post_labels=diagnostic_post_labels,
-        post_review_stops=tmp_path / "review-stops.txt" if with_review_output else None,
-        post_inference_evidence=tmp_path / "evidence",
-    )
-
-    assert (
-        national_jdf._include_post_inference_scores(  # pyright: ignore[reportPrivateUsage]
-            config
-        )
-        is include_scores
-    )
 
 
 WORKSPACE = Path(__file__).parents[3]
@@ -252,12 +218,10 @@ def test_stage_nested_batches_rejects_malformed_inner_archive(tmp_path: Path) ->
 
 @pytest.mark.parametrize("keep_work", [False, True])
 @pytest.mark.parametrize("estimated_posts", [False, True])
-@pytest.mark.parametrize("evidence_backed", [False, True])
 def test_build_orchestrates_fix_merge_and_bundle_atomically(
     tmp_path: Path,
     keep_work: bool,
     estimated_posts: bool,
-    evidence_backed: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output = tmp_path / "national"
@@ -268,39 +232,6 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     geodata_root = tmp_path / "jrunify-ext-geodata" / "other"
     geodata_root.mkdir(parents=True)
     (geodata_root / "fixture.csv").write_text("Town,Stop,49.0,14.0,CZ\n", encoding="utf-8")
-    review_stops = tmp_path / "review-stops.txt"
-    review_stops.write_text("7050\n7064\n", encoding="utf-8")
-    evidence = tmp_path / "post-inference-evidence"
-    if evidence_backed:
-        evidence.mkdir()
-        (evidence / "manifest.json").write_text(
-            json.dumps(
-                {
-                    "evidence_format": "post-inference-evidence-v2",
-                    "schema_version": 2,
-                    "router_evidence_version": "packed-directed-v3",
-                    "variant_enumeration_version": "directed-thread-top3-v1",
-                    "capture_tool_version": "fixture-tool",
-                    "pack_id": "fixture-pack",
-                    "merged_jdf_sha256": "0" * 64,
-                    "routing_pbf_sha256": "1" * 64,
-                    "osm_snapshot": None,
-                    "capture_ceilings": {
-                        "routed_excess_metres": 1000.0,
-                        "maximum_corridor_variants": 3,
-                    },
-                    "maximum_search_states": 100_000,
-                    "maximum_search_distance_metres": 30_000.0,
-                    "observation_count": 1,
-                    "route_point_count": 1,
-                    "context_count": 1,
-                    "corridor_variant_count": 1,
-                    "route_point_evidence_count": 1,
-                    "files": [{"path": "contexts.parquet", "bytes": 4, "rows": 1}],
-                }
-            ),
-            encoding="utf-8",
-        )
 
     def fake_git_identity(_repository: Path) -> dict[str, object]:
         return {
@@ -426,12 +357,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
                         "candidate_bearing_stops": 0,
                         "authored_posts_positioned": 0,
                         "single_internal_posts": 0,
-                        "composite_internal_posts": 0,
-                        "single_candidate_skips": 0,
+                        "physical_internal_posts": 0,
                         "weak_or_unresolved_contexts": 0,
-                        "two_call_same_stop_blocks": 0,
-                        "distinct_pair_choices": 0,
-                        "unresolved_block_edges": 0,
                     },
                 },
                 "files": [],
@@ -451,8 +378,6 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             progress="off",
             keep_work=keep_work,
             estimated_posts=estimated_posts,
-            post_review_stops=review_stops if estimated_posts else None,
-            post_inference_evidence=evidence if evidence_backed else None,
             gvd_year=2026,
             reference_date=date(2026, 9, 29),
         ),
@@ -489,23 +414,19 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     assert any(argument.startswith("--ext-geodata=") for argument in fix_command)
     assert any(argument.startswith("--cz-pbf=") for argument in fix_command)
     assert f"--cz-pbf={transit_extract}" in fix_command
-    assert ("--no-estimated-posts" in fix_command) is not (estimated_posts or evidence_backed)
+    assert ("--no-estimated-posts" in fix_command) is not estimated_posts
     assert not any(argument.startswith("--ext-geodata=") for argument in merge_command)
     assert not any(argument.startswith("--cz-pbf=") for argument in merge_command)
     assert "--international-route-policy=regional-adjacent" in fix_command
     assert "--international-route-policy=regional-adjacent" in bundle_command
     assert any(argument.startswith("--transport-mode-rules=") for argument in bundle_command)
     has_routing_pbf = any(argument.startswith("--routing-osm-pbf=") for argument in bundle_command)
-    assert has_routing_pbf is (estimated_posts and not evidence_backed)
-    assert ("--no-estimated-posts" in bundle_command) is not (estimated_posts or evidence_backed)
+    assert has_routing_pbf is estimated_posts
+    assert ("--no-estimated-posts" in bundle_command) is not estimated_posts
     default_policy = national_jdf.DEFAULT_POST_INFERENCE_POLICY
-    assert (f"--post-inference-policy={default_policy.resolve()}" in bundle_command) is (
-        estimated_posts or evidence_backed
-    )
-    assert ("--no-post-inference-scores" in bundle_command) is (
-        evidence_backed and not estimated_posts
-    )
-    assert (f"--post-review-stops={review_stops}" in bundle_command) is estimated_posts
+    assert (
+        f"--post-inference-policy={default_policy.resolve()}" in bundle_command
+    ) is estimated_posts
     assert all(
         not any(argument.startswith("--cache=") for argument in command)
         for command in multitool_commands
@@ -535,13 +456,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         },
         "stop_merge": "name",
         "strict": True,
-        "diagnostic_post_labels": False,
-        "estimated_posts": estimated_posts or evidence_backed,
-        "post_inference_policy": (
-            str(default_policy) if estimated_posts or evidence_backed else None
-        ),
-        "post_inference_evidence": str(evidence) if evidence_backed else None,
-        "include_post_inference_scores": not (evidence_backed and not estimated_posts),
+        "estimated_posts": estimated_posts,
+        "post_inference_policy": str(default_policy) if estimated_posts else None,
         "capture_post_inference_evidence": False,
     }
     assert run_manifest["execution"]["requested"] == {
@@ -568,7 +484,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "status": [],
     }
     assert [file["path"] for file in run_manifest["geodata"]["files"]] == ["fixture.csv"]
-    if estimated_posts and not evidence_backed:
+    if estimated_posts:
         assert run_manifest["osm_jdf_routing_extract"] == {
             "path": str(routing_extract),
             "bytes": len(b"routing-osm"),
@@ -577,15 +493,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         }
     else:
         assert run_manifest["osm_jdf_routing_extract"] is None
-    if evidence_backed:
-        evidence_sha256 = file_digest(evidence / "manifest.json")
-        assert run_manifest["post_inference_evidence_manifest_sha256"] == evidence_sha256
-        assert run_manifest["post_inference_evidence"]["capture_metrics"] is None
-        assert run_manifest["post_inference_evidence_lock"] is not None
-    else:
-        assert run_manifest["post_inference_evidence_manifest_sha256"] is None
-        assert run_manifest["post_inference_evidence"] is None
-        assert run_manifest["post_inference_evidence_lock"] is None
+    assert run_manifest["post_inference_evidence_manifest_sha256"] is None
+    assert run_manifest["post_inference_evidence"] is None
     assert run_manifest["bundle_manifest_sha256"] == file_digest(
         output / "bundle" / "manifest.json"
     )

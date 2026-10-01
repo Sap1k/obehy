@@ -80,11 +80,8 @@ class BuildConfig:
     merge_jobs: JobSetting | None = None
     memory_budget: str = "auto"
     zip_compression: ZipCompression = "balanced"
-    diagnostic_post_labels: bool = False
     estimated_posts: bool = False
-    post_review_stops: Path | None = None
     post_inference_policy: Path | None = None
-    post_inference_evidence: Path | None = None
     capture_post_inference_evidence: bool = False
     build_jrutil: bool = True
     # Timetables expired before reference_date or outside GVD gvd_year are dropped;
@@ -287,26 +284,10 @@ def _validate_build_config(config: BuildConfig) -> None:
         raise PipelineError("memory_budget must be 'auto' or a size such as 10GiB")
     if config.zip_compression not in ZIP_COMPRESSION_LEVELS:
         raise PipelineError("zip_compression must be one of: " + ", ".join(ZIP_COMPRESSION_LEVELS))
-    inferred_posts = (
-        config.estimated_posts
-        or config.post_inference_evidence is not None
-        or config.capture_post_inference_evidence
-    )
-    if config.capture_post_inference_evidence and config.post_inference_evidence is not None:
-        raise PipelineError("capture and evidence-backed post inference are mutually exclusive")
     if config.capture_post_inference_evidence and config.post_inference_policy is not None:
         raise PipelineError("capture-only post inference cannot be combined with a policy")
     if config.post_inference_policy is not None and not config.post_inference_policy.is_file():
         raise PipelineError(f"Post-inference policy does not exist: {config.post_inference_policy}")
-    if config.post_inference_evidence is not None and not config.post_inference_evidence.is_dir():
-        raise PipelineError(
-            f"Post-inference evidence directory does not exist: {config.post_inference_evidence}"
-        )
-    if config.post_review_stops is not None:
-        if not inferred_posts:
-            raise PipelineError("post_review_stops requires estimated_posts")
-        if not config.post_review_stops.is_file():
-            raise PipelineError(f"Post review stop file does not exist: {config.post_review_stops}")
 
 
 def effective_post_inference_policy(config: BuildConfig) -> Path | None:
@@ -319,24 +300,9 @@ def effective_post_inference_policy(config: BuildConfig) -> Path | None:
         return None
     if config.post_inference_policy is not None:
         return config.post_inference_policy
-    if config.estimated_posts or config.post_inference_evidence is not None:
+    if config.estimated_posts:
         return DEFAULT_POST_INFERENCE_POLICY
     return None
-
-
-def _include_post_inference_scores(config: BuildConfig) -> bool:
-    """Return whether JrUtil should include the diagnostic post-score relation.
-
-    A final evidence-backed publication has no consumer for score rows unless
-    it is producing post-review output. Diagnostic GTFS platform labels depend
-    only on final assignments and remain compatible with the publication-only
-    replay path.
-    """
-    return (
-        config.post_inference_evidence is None
-        or config.capture_post_inference_evidence
-        or config.post_review_stops is not None
-    )
 
 
 def _verify_fixed_batches(fixed_root: Path, expected: set[str]) -> None:
@@ -376,14 +342,10 @@ def _verify_bundle(bundle: Path, reporter: Reporter | None = None) -> dict[str, 
         "candidate_bearing_stops",
         "authored_posts_positioned",
         "single_internal_posts",
-        "composite_internal_posts",
-        "single_candidate_skips",
+        "physical_internal_posts",
         "weak_or_unresolved_contexts",
-        "two_call_same_stop_blocks",
-        "distinct_pair_choices",
-        "unresolved_block_edges",
     }.issubset(estimated_posts):
-        raise PipelineError("Bundle manifest is missing the estimated-post schema-v4 contract")
+        raise PipelineError("Bundle manifest is missing the estimated-post counters")
     with extracted_gtfs(bundle) as gtfs:
         trips = gtfs / "trips.txt"
         if not trips.is_file() or len(trips.read_text(encoding="utf-8-sig").splitlines()) < 2:
@@ -393,7 +355,7 @@ def _verify_bundle(bundle: Path, reporter: Reporter | None = None) -> dict[str, 
 
 
 def _read_post_inference_evidence_manifest(evidence: Path) -> dict[str, Any]:
-    """Read JrUtil's already-validated evidence identity for the run lock."""
+    """Read the identity of the evidence pack JrUtil captured and validated."""
     manifest_path = evidence / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -402,26 +364,6 @@ def _read_post_inference_evidence_manifest(evidence: Path) -> dict[str, Any]:
     if not isinstance(manifest, dict):
         raise PipelineError(f"JrUtil evidence manifest is not an object: {manifest_path}")
     return cast(dict[str, Any], manifest)
-
-
-def _post_inference_evidence_lock(
-    manifest: Mapping[str, Any], manifest_sha256: str
-) -> dict[str, object]:
-    """Return the immutable capture identity needed to reproduce or audit replay."""
-    return {
-        "manifest_sha256": manifest_sha256,
-        "pack_id": manifest["pack_id"],
-        "capture_tool_version": manifest["capture_tool_version"],
-        "merged_jdf_sha256": manifest["merged_jdf_sha256"],
-        "routing_pbf_sha256": manifest["routing_pbf_sha256"],
-        "osm_snapshot": manifest["osm_snapshot"],
-        "router_evidence_version": manifest["router_evidence_version"],
-        "variant_enumeration_version": manifest["variant_enumeration_version"],
-        "capture_ceilings": manifest["capture_ceilings"],
-        "maximum_search_states": manifest["maximum_search_states"],
-        "maximum_search_distance_metres": manifest["maximum_search_distance_metres"],
-        "files": manifest["files"],
-    }
 
 
 def verify_gtfs_stops(gtfs: Path, reporter: Reporter | None = None) -> None:
@@ -495,7 +437,6 @@ def _bundle_arguments(
     converter_version: str,
     gvd_year: int,
     routing_osm_file: Path | None,
-    include_post_inference_scores: bool,
     merged_zip: Path,
     bundle: Path,
 ) -> list[str]:
@@ -510,32 +451,21 @@ def _bundle_arguments(
         f"--converter-version={converter_version}",
         f"--gvd-year={gvd_year}",
         *(
-            [f"--post-inference-evidence={config.post_inference_evidence.resolve()}"]
-            if config.post_inference_evidence is not None
-            else (
-                [f"--routing-osm-pbf={routing_osm_file}"]
-                if routing_osm_file is not None
-                else ["--no-estimated-posts"]
-            )
+            [f"--routing-osm-pbf={routing_osm_file}"]
+            if routing_osm_file is not None
+            else ["--no-estimated-posts"]
         ),
         *(
             [f"--post-inference-policy={policy.resolve()}"]
             if (policy := effective_post_inference_policy(config)) is not None
             else []
         ),
-        *([] if include_post_inference_scores else ["--no-post-inference-scores"]),
         *(
             [
                 f"--capture-post-inference-evidence={publish / 'post-inference-evidence-v2'}",
                 "--post-inference-evidence-only",
             ]
             if config.capture_post_inference_evidence
-            else []
-        ),
-        *(["--diagnostic-post-labels"] if config.diagnostic_post_labels else []),
-        *(
-            [f"--post-review-stops={config.post_review_stops.resolve()}"]
-            if config.post_review_stops is not None
             else []
         ),
         f"--diagnostics-out={publish / 'diagnostics-detail'}",
@@ -572,14 +502,13 @@ class _Plan:
     reference_date: date
     gvd_year: int
     inferred_posts: bool
-    include_post_inference_scores: bool
     osm_manifest: Mapping[str, Any]
     jdf_osm_file: Path
 
 
 @dataclass(frozen=True)
 class _Verified:
-    """What the verification stage learned about the bundle and the locked evidence pack."""
+    """What the verification stage learned about the bundle or the captured evidence pack."""
 
     bundle_manifest: dict[str, Any] | None
     evidence_manifest: dict[str, Any] | None
@@ -588,19 +517,13 @@ class _Verified:
 
 
 def _plan(config: BuildConfig) -> _Plan:
-    include_post_inference_scores = _include_post_inference_scores(config)
     reference_date = config.reference_date or prague_today()
     gvd_year = config.gvd_year or resolve_timetable_year("auto")
     osm_manifest = validate_snapshot(config.osm_file, config.workdir)
     return _Plan(
         reference_date=reference_date,
         gvd_year=gvd_year,
-        inferred_posts=(
-            config.estimated_posts
-            or config.post_inference_evidence is not None
-            or config.capture_post_inference_evidence
-        ),
-        include_post_inference_scores=include_post_inference_scores,
+        inferred_posts=config.estimated_posts or config.capture_post_inference_evidence,
         osm_manifest=osm_manifest,
         jdf_osm_file=validate_jdf_post_candidates(config.workdir, str(osm_manifest["merge_key"])),
     )
@@ -682,10 +605,8 @@ def _verify(
     reporter: Reporter,
 ) -> _Verified:
     """Validate the published bundle, or read the captured evidence pack instead of one."""
-    captured = publish / "post-inference-evidence-v2"
-    # A capture publishes a new pack; an evidence-backed replay locks its input pack.
     evidence_path = (
-        captured if config.capture_post_inference_evidence else config.post_inference_evidence
+        publish / "post-inference-evidence-v2" if config.capture_post_inference_evidence else None
     )
     evidence_manifest = (
         _read_post_inference_evidence_manifest(evidence_path) if evidence_path is not None else None
@@ -734,15 +655,10 @@ def _conversion_manifest(config: BuildConfig, plan: _Plan) -> dict[str, object]:
             "path": "obehy/data/jdf_transport_mode_rules.csv",
             "sha256": file_digest(TRANSPORT_MODE_RULES),
         },
-        "diagnostic_post_labels": config.diagnostic_post_labels,
         "estimated_posts": plan.inferred_posts,
         "post_inference_policy": (
             str(policy) if (policy := effective_post_inference_policy(config)) is not None else None
         ),
-        "post_inference_evidence": (
-            str(config.post_inference_evidence) if config.post_inference_evidence else None
-        ),
-        "include_post_inference_scores": plan.include_post_inference_scores,
         "capture_post_inference_evidence": config.capture_post_inference_evidence,
     }
 
@@ -823,11 +739,6 @@ def _run_manifest(
         "post_inference_evidence_manifest_sha256": verified.evidence_manifest_sha256,
         "post_inference_evidence": (
             _evidence_summary(evidence, verified.capture_metrics) if evidence is not None else None
-        ),
-        "post_inference_evidence_lock": (
-            _post_inference_evidence_lock(evidence, verified.evidence_manifest_sha256)
-            if evidence is not None and verified.evidence_manifest_sha256 is not None
-            else None
         ),
     }
 
@@ -937,7 +848,7 @@ def build(
             ),
         )
         routing_osm_file: Path | None = None
-        if plan.inferred_posts and config.post_inference_evidence is None:
+        if plan.inferred_posts:
             clock.start("prepare-routing-osm")
             routing_osm_file = prepare_jdf_demand_routing(
                 config.workdir,
@@ -967,7 +878,6 @@ def build(
                 converter_version=jrutil.converter_version(jrutil_identity),
                 gvd_year=plan.gvd_year,
                 routing_osm_file=routing_osm_file,
-                include_post_inference_scores=plan.include_post_inference_scores,
                 merged_zip=merged_zip,
                 bundle=bundle,
             ),
@@ -1071,27 +981,12 @@ def _parser() -> argparse.ArgumentParser:
     build_parser.add_argument(
         "--post-inference-policy",
         type=Path,
-        help="policy-v2 JSON used by live or evidence-backed post inference",
-    )
-    build_parser.add_argument(
-        "--post-inference-evidence",
-        type=Path,
-        help="build the final bundle from an existing evidence-v2 directory without routing",
+        help="post-inference policy (default: the packaged learned-v1 scorer)",
     )
     build_parser.add_argument(
         "--capture-post-inference-evidence",
         action="store_true",
         help="publish a national evidence-v2 pack and run manifest instead of a bundle",
-    )
-    build_parser.add_argument(
-        "--diagnostic-post-labels",
-        action="store_true",
-        help="emit inferred O*/O-direction/? values only in GTFS platform_code",
-    )
-    build_parser.add_argument(
-        "--post-review-stops",
-        type=Path,
-        help="stop IDs or exact names for compact routed-inference review GeoJSON",
     )
     return parser
 
@@ -1114,11 +1009,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             merge_jobs=cast(JobSetting | None, args.merge_jobs),
             memory_budget=cast(str, args.memory_budget),
             zip_compression=cast(ZipCompression, args.zip_compression),
-            diagnostic_post_labels=cast(bool, args.diagnostic_post_labels),
             estimated_posts=cast(bool, args.estimated_posts),
-            post_review_stops=cast(Path | None, args.post_review_stops),
             post_inference_policy=cast(Path | None, args.post_inference_policy),
-            post_inference_evidence=cast(Path | None, args.post_inference_evidence),
             capture_post_inference_evidence=cast(bool, args.capture_post_inference_evidence),
         )
         result = build(config)

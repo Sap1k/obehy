@@ -38,8 +38,8 @@ heap hard limit is configured; memory figures are telemetry.
   `src/obehy/data/post-inference/learned-v1.json`) unless `--post-inference-policy` names
   another; capture-only runs take no policy. JrUtil's own default is still the heuristic
   `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe`, which feature export uses
-  as the training baseline. Evidence-v2 packs can be replayed, but only for a byte-identical
-  merged JDF.
+  as the training baseline. Evidence-v2 packs are captured only for retraining
+  (`--capture-post-inference-evidence`); bundles always route live.
 - **Serving:** JrUtil production packages (`jrutil-production` bundle v2, serving schema v3):
   standard GTFS, bounded diagnostics and typed Parquet relations, with no `extensions/`, no sort
   keys and trip/route-level provenance only. The serving-v1 database loader was removed; the
@@ -108,9 +108,8 @@ Work order: §4 → §1 → §2 → §3.
 - **Actions:**
   1. profile one live run;
   2. add a persistent routing-graph cache keyed by PBF hash and format version;
-  3. add a per-context evidence cache so capture routes only new contexts;
-  4. only if still dominant, deduplicate/one-to-many A*;
-  5. `obehy build` passes the previous pack and cache automatically.
+  3. add a per-context evidence cache so a live build routes only new contexts;
+  4. only if still dominant, deduplicate/one-to-many A*.
 - **Accept:** payload hashes equal a cold live run on the same inputs.
 - **Status:** not started.
 
@@ -127,6 +126,19 @@ Work order: §4 → §1 → §2 → §3.
   `src/obehy/data/filtered-jdf/rules-v1.json`). Not yet run inside a complete live `obehy build`.
 
 ## Recent log
+
+- **2026-10-01** — Learned post scorer by default; post-inference and overlay cuts.
+  - `obehy build --estimated-posts` passes `learned-v1.json` unless another policy is named.
+    On the golden subset, calls left at the stop centroid fall from 354k to 186k.
+  - Removed evidence-backed replay, review GeoJSON, diagnostic labels, the
+    `derived_post_scores` table, side groups and same-stop pairs. Bundles always route live;
+    capture and `jdf-export-post-features` remain for retraining.
+  - Overlay: one combined-source path (profile schema v4, capabilities as a list); calibration,
+    publication flags, coverage floors, route/trip overrides and unread reports removed. The
+    PID Národní třída stop override now applies (it was silently ignored).
+  - Validation: JrUtil Release 274, post-scorer 26, Oběhy unit 70, ruff and pyright clean.
+    Golden gate `learned` → `cuts`: GTFS, serving and diagnostics identical in all four
+    packages; only compiler provenance and build-spec hashes differ.
 
 - **2026-09-30** — Refactor of JrUtil and Oběhy before optimisation work.
   - JrUtil: dead upstream code, v1 packages, CZ extensions, field-level provenance, staging

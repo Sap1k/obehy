@@ -228,19 +228,7 @@ def test_existing_build_lock_rejects_concurrent_publication(tmp_path: Path) -> N
     assert not (runtime.artifact_root / "releases").exists()
 
 
-def test_production_overlay_policies_enable_all_nonblocking_coverage_gates() -> None:
-    policy_root = cli.POLICY.parent
-    expected = {"route", "stop", "trip", "trip_date", "call", "call_date", "shape", "transfer"}
-    for name in (
-        "pid-production-v1.json",
-        "ids-jmk-production-v1.json",
-        "pid-ids-jmk-production-v1.json",
-    ):
-        policy = json.loads((policy_root / name).read_text(encoding="utf-8"))
-        assert policy["calibration"] is False
-        assert policy["publication_enabled"] is True
-        assert policy["minimum_coverage"] == dict.fromkeys(expected, 0)
-
+def test_production_overlay_policy_combines_pid_and_ids_jmk() -> None:
     combined = json.loads(cli.POLICY.read_text(encoding="utf-8"))
     assert {source["source_id"] for source in combined["sources"]} == {
         "pid-gtfs",
