@@ -103,9 +103,6 @@ def test_estimated_posts_default_to_learned_policy_except_capture(tmp_path: Path
     assert national_jdf.effective_post_inference_policy(captured) is None
 
 
-WORKSPACE = Path(__file__).parents[3]
-
-
 def _zip_bytes(files: dict[str, bytes]) -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
@@ -535,6 +532,10 @@ def test_build_retains_staging_directory_after_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "failed-output"
+    jrutil_root = tmp_path / "jrutil"
+    jrutil_root.mkdir()
+    geodata_root = tmp_path / "jrunify-ext-geodata" / "other"
+    geodata_root.mkdir(parents=True)
 
     def failing_download(
         _url: str, _destination: Path, _name: str, _reporter: object = None
@@ -564,9 +565,9 @@ def test_build_retains_staging_directory_after_failure(
                 output=output,
                 workdir=tmp_path / "workdir",
                 osm_file=tmp_path / "regional.osm.pbf",
-                jrutil_root=WORKSPACE / "jrutil",
+                jrutil_root=jrutil_root,
                 jrutil_command=None,
-                geodata_root=WORKSPACE / "jrunify-ext-geodata" / "other",
+                geodata_root=geodata_root,
                 progress="off",
             ),
             failing_download,
