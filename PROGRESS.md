@@ -64,8 +64,8 @@ heap hard limit is configured; memory figures are telemetry.
   stop-name component.
 - Identity contract naming disagrees: JrUtil writes `jrutil-identity-v1`, Oběhy expects
   `provisional-v0`/`registry-v1`.
-- The live post estimator is slow (~30 min of graph build + A*), and there is no persistent graph
-  or per-context evidence cache.
+- The live post estimator still builds the routing graph on every run; there is no persistent
+  graph cache.
 - Serving validation checks key uniqueness and hashes, but full foreign-key and
   cross-representation content validation is incomplete.
 - No route shapes are generated yet (MOTIS shape generation is future work).
@@ -111,7 +111,8 @@ Work order: §4 → §1 → §2 → §3.
   3. add a per-context evidence cache so a live build routes only new contexts;
   4. only if still dominant, deduplicate/one-to-many A*.
 - **Accept:** payload hashes equal a cold live run on the same inputs.
-- **Status:** not started.
+- **Status:** 3 done (JrUtil `--routing-cache`, on by default in Oběhy; entries revalidated against
+  per-tile graph fingerprints). Routing also runs on up to 8 workers. 2 and 4 not started.
 
 ### 4. Build outputs: filtered JDF + CZPTT sidecar mode
 
@@ -126,6 +127,14 @@ Work order: §4 → §1 → §2 → §3.
   `src/obehy/data/filtered-jdf/rules-v1.json`). Not yet run inside a complete live `obehy build`.
 
 ## Recent log
+
+- **2026-10-02** — Speed pass and routing cache.
+  - JrUtil: CZPTT 305 → 33 s, bundle-posts 392 → 182 s, overlay 232 → 170 s on the golden
+    subset; CZPTT, overlay and the no-posts bundle are byte-identical.
+  - Road thread identities are now deterministic (canonical walk); a few estimated posts change.
+  - `obehy build` passes `--routing-cache` by default (`workdir/cache/routing`,
+    `--no-routing-cache` to disable). Entries are revalidated per graph tile, so they survive daily
+    demand clips and monthly OSM updates where the network did not change.
 
 - **2026-10-01** — Learned post scorer by default; post-inference and overlay cuts.
   - `obehy build --estimated-posts` passes `learned-v1.json` unless another policy is named.

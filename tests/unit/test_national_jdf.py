@@ -378,6 +378,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             progress="off",
             keep_work=keep_work,
             estimated_posts=estimated_posts,
+            routing_cache_dir=tmp_path / "workdir" / "cache" / "routing",
             gvd_year=2026,
             reference_date=date(2026, 9, 29),
         ),
@@ -423,6 +424,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     has_routing_pbf = any(argument.startswith("--routing-osm-pbf=") for argument in bundle_command)
     assert has_routing_pbf is estimated_posts
     assert ("--no-estimated-posts" in bundle_command) is not estimated_posts
+    routing_cache = tmp_path / "workdir" / "cache" / "routing"
+    assert (f"--routing-cache={routing_cache}" in bundle_command) is estimated_posts
     default_policy = national_jdf.DEFAULT_POST_INFERENCE_POLICY
     assert (
         f"--post-inference-policy={default_policy.resolve()}" in bundle_command
@@ -491,8 +494,10 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             "sha256": file_digest(routing_extract),
             "manifest": str(routing_extract) + ".manifest.json",
         }
+        assert run_manifest["routing_cache_dir"] == str(routing_cache)
     else:
         assert run_manifest["osm_jdf_routing_extract"] is None
+        assert run_manifest["routing_cache_dir"] is None
     assert run_manifest["post_inference_evidence_manifest_sha256"] is None
     assert run_manifest["post_inference_evidence"] is None
     assert run_manifest["bundle_manifest_sha256"] == file_digest(
@@ -897,3 +902,39 @@ def test_cli_worker_overrides_and_compression_are_parsed() -> None:
     assert args.merge_jobs is None
     assert args.memory_budget == "9.5GiB"
     assert args.zip_compression == "fast"
+
+
+def test_routing_cache_is_omitted_when_disabled(tmp_path: Path) -> None:
+    config = BuildConfig(
+        output=tmp_path / "output",
+        workdir=tmp_path / "work",
+        osm_file=tmp_path / "cz.osm.pbf",
+        jrutil_root=None,
+        jrutil_command=("jrutil",),
+        geodata_root=tmp_path / "geodata",
+        estimated_posts=True,
+    )
+    arguments = national_jdf._bundle_arguments(  # pyright: ignore[reportPrivateUsage]
+        config,
+        publish=tmp_path / "publish",
+        logs=tmp_path / "logs",
+        descriptor_path=tmp_path / "descriptor.json",
+        converter_version="test",
+        gvd_year=2026,
+        routing_osm_file=tmp_path / "routing.osm.pbf",
+        merged_zip=tmp_path / "merged.zip",
+        bundle=tmp_path / "bundle",
+    )
+    assert not any(argument.startswith("--routing-cache=") for argument in arguments)
+    cached = national_jdf._bundle_arguments(  # pyright: ignore[reportPrivateUsage]
+        replace(config, routing_cache_dir=tmp_path / "cache"),
+        publish=tmp_path / "publish",
+        logs=tmp_path / "logs",
+        descriptor_path=tmp_path / "descriptor.json",
+        converter_version="test",
+        gvd_year=2026,
+        routing_osm_file=tmp_path / "routing.osm.pbf",
+        merged_zip=tmp_path / "merged.zip",
+        bundle=tmp_path / "bundle",
+    )
+    assert f"--routing-cache={tmp_path / 'cache'}" in cached

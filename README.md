@@ -128,7 +128,13 @@ The top-level `obehy build` forwards the same jobs and memory-budget settings to
 overlay, and CZPTT. The budget is a soft admission/spill target, not a hard .NET heap limit.
 
 The builder writes fixed work batches as uncompressed ZIPs to reduce temporary file count.
-The builder does not enable JrUtil's experimental persistent cache.
+
+With estimated posts, routed evidence is reused across runs from `workdir/cache/routing`
+(override with `[paths] routing_cache_dir`; disable with `--no-routing-cache`). JrUtil keys each
+routed context by its exact coordinates and reuses it only while the routing-graph tiles it read are
+unchanged, so daily demand-clip changes and monthly OSM updates recompute only the affected contexts
+and reused results are byte-identical to routing them again. Changing JrUtil's routing code
+invalidates the whole cache; entries unused for 45 days are dropped. No manual pruning is needed.
 
 Estimated posts remain default-off for national builds. Pass `--estimated-posts` to construct the
 Osmium demand clip and enable directed road/tram routing. Oběhy passes the packaged learned scorer

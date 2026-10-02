@@ -83,6 +83,8 @@ class BuildConfig:
     estimated_posts: bool = False
     post_inference_policy: Path | None = None
     capture_post_inference_evidence: bool = False
+    # Routed post-inference evidence reused across runs (None disables it).
+    routing_cache_dir: Path | None = None
     build_jrutil: bool = True
     # Timetables expired before reference_date or outside GVD gvd_year are dropped;
     # None resolves to today in Europe/Prague and its GVD.
@@ -262,6 +264,10 @@ def _validate_build_config(config: BuildConfig) -> None:
     ):
         if not path.is_absolute():
             raise PipelineError(f"{label} must be an absolute path: {path}")
+    if config.routing_cache_dir is not None and not config.routing_cache_dir.is_absolute():
+        raise PipelineError(
+            f"routing_cache_dir must be an absolute path: {config.routing_cache_dir}"
+        )
     if config.jrutil_root is not None and not config.jrutil_root.is_dir():
         raise PipelineError(f"JrUtil directory does not exist: {config.jrutil_root}")
     if not config.geodata_root.is_dir():
@@ -454,6 +460,11 @@ def _bundle_arguments(
             [f"--routing-osm-pbf={routing_osm_file}"]
             if routing_osm_file is not None
             else ["--no-estimated-posts"]
+        ),
+        *(
+            [f"--routing-cache={config.routing_cache_dir}"]
+            if routing_osm_file is not None and config.routing_cache_dir is not None
+            else []
         ),
         *(
             [f"--post-inference-policy={policy.resolve()}"]
@@ -696,6 +707,11 @@ def _run_manifest(
                 },
             )
             if routing_osm_file is not None
+            else None
+        ),
+        "routing_cache_dir": (
+            str(config.routing_cache_dir)
+            if routing_osm_file is not None and config.routing_cache_dir is not None
             else None
         ),
         "geodata": geodata,
@@ -988,6 +1004,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="publish a national evidence-v2 pack and run manifest instead of a bundle",
     )
+    build_parser.add_argument(
+        "--no-routing-cache",
+        action="store_true",
+        help="route every post-inference context instead of reusing the routing cache",
+    )
     return parser
 
 
@@ -1012,6 +1033,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             estimated_posts=cast(bool, args.estimated_posts),
             post_inference_policy=cast(Path | None, args.post_inference_policy),
             capture_post_inference_evidence=cast(bool, args.capture_post_inference_evidence),
+            routing_cache_dir=(
+                None if cast(bool, args.no_routing_cache) else runtime.routing_cache_dir
+            ),
         )
         result = build(config)
     except (

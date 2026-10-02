@@ -27,6 +27,7 @@ def _runtime(tmp_path: Path) -> RuntimeConfig:
         workdir=tmp_path / "work",
         artifact_root=tmp_path / "artifacts",
         osm_file=tmp_path / "osm.pbf",
+        routing_cache_dir=tmp_path / "work" / "cache" / "routing",
         jrunify_ext_geodata_dir=tmp_path / "geodata",
         jrutil=JrUtilRuntime(directory=jrutil, command=None),
     )
@@ -161,6 +162,7 @@ def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None
         value for value in seen if isinstance(value, cli.national_czptt.BuildConfig)
     )
     assert jdf_config.estimated_posts is True
+    assert jdf_config.routing_cache_dir == runtime.routing_cache_dir
     assert jdf_config.build_jrutil is False
     assert czptt_config.geodata_root == runtime.jrunify_ext_geodata_dir
     assert czptt_config.timetable_year == 2027

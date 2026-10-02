@@ -48,6 +48,7 @@ class BuildOptions:
     czptt_operational_points: national_czptt.OperationalPointMode = "sidecar"
     filtered_jdf: bool = True
     line_filter_snapshot: Path | None = None
+    routing_cache: bool = True
 
 
 @dataclass(frozen=True)
@@ -151,6 +152,7 @@ def _jdf_config(
         memory_budget=options.memory_budget,
         estimated_posts=options.estimated_posts,
         post_inference_policy=options.post_inference_policy,
+        routing_cache_dir=runtime.routing_cache_dir if options.routing_cache else None,
         build_jrutil=False,
         gvd_year=options.gvd_year,
         reference_date=reference_date,
@@ -234,6 +236,7 @@ def _release_record(
             "refresh_osm": options.refresh_osm,
             "czptt_operational_points": options.czptt_operational_points,
             "filtered_jdf": options.filtered_jdf,
+            "routing_cache": options.routing_cache,
         },
         "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
         "sources": {
@@ -391,6 +394,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     command.add_argument("--skip-filtered-jdf", action="store_true")
     command.add_argument(
+        "--no-routing-cache",
+        action="store_true",
+        help="route every post-inference context instead of reusing the routing cache",
+    )
+    command.add_argument(
         "--line-filter-snapshot",
         type=Path,
         help="replay a saved line-snapshot.json instead of querying the line portal",
@@ -420,6 +428,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
                 filtered_jdf=not cast(bool, args.skip_filtered_jdf),
                 line_filter_snapshot=cast(Path | None, args.line_filter_snapshot),
+                routing_cache=not cast(bool, args.no_routing_cache),
             )
         )
     except (

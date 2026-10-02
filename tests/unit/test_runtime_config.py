@@ -23,6 +23,7 @@ schema_version = 1
 [paths]
 workdir = "{(tmp_path / "work").as_posix()}"
 artifact_root = "{(tmp_path / "artifacts").as_posix()}"
+routing_cache_dir = "{(tmp_path / "routing-cache").as_posix()}"
 osm_file = "{(tmp_path / "osm" / "region.osm.pbf").as_posix()}"
 jrunify_ext_geodata_dir = "{(tmp_path / "geodata").as_posix()}"
 [jrutil]
@@ -34,6 +35,7 @@ directory = "{(tmp_path / "jrutil").as_posix()}"
 
     assert loaded.source == config.resolve()
     assert loaded.artifact_root == tmp_path / "artifacts"
+    assert loaded.routing_cache_dir == tmp_path / "routing-cache"
     assert loaded.jrutil.directory == tmp_path / "jrutil"
     assert loaded.jrutil.command is None
 
@@ -55,6 +57,7 @@ command = ["dotnet", "{(tmp_path / "jrutil.dll").as_posix()}"]
     loaded = load_runtime_config(config)
 
     assert loaded.artifact_root == tmp_path / "work"
+    assert loaded.routing_cache_dir == tmp_path / "work" / "cache" / "routing"
     assert loaded.jrutil.directory is None
     assert loaded.jrutil.command == ("dotnet", (tmp_path / "jrutil.dll").as_posix())
 

@@ -47,6 +47,7 @@ def _config(tmp_path: Path) -> RuntimeConfig:
         workdir=tmp_path / "work",
         artifact_root=tmp_path / "artifacts",
         osm_file=tmp_path / "active" / "region.osm.pbf",
+        routing_cache_dir=tmp_path / "work" / "cache" / "routing",
         jrunify_ext_geodata_dir=tmp_path / "geodata",
         jrutil=JrUtilRuntime(directory=tmp_path / "jrutil", command=None),
     )

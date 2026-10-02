@@ -25,6 +25,9 @@ class RuntimeConfig:
     workdir: Path
     artifact_root: Path
     osm_file: Path
+    # Routed post-inference evidence reused across runs; entries are
+    # revalidated against the routing graph, so no pruning is needed.
+    routing_cache_dir: Path
     jrunify_ext_geodata_dir: Path
     jrutil: JrUtilRuntime
 
@@ -96,10 +99,16 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
         if paths.get("artifact_root") is not None
         else workdir
     )
+    routing_cache_dir = (
+        _absolute_path(paths, "routing_cache_dir", source)
+        if paths.get("routing_cache_dir") is not None
+        else workdir / "cache" / "routing"
+    )
     return RuntimeConfig(
         source=source,
         workdir=workdir,
         artifact_root=artifact_root,
+        routing_cache_dir=routing_cache_dir,
         osm_file=_absolute_path(paths, "osm_file", source),
         jrunify_ext_geodata_dir=_absolute_path(paths, "jrunify_ext_geodata_dir", source),
         jrutil=JrUtilRuntime(directory=directory, command=command),
