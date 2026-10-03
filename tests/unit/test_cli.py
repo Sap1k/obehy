@@ -122,6 +122,45 @@ def _preflight(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli.national_jdf, "geodata_manifest", valid_snapshot)
 
 
+def test_build_applies_the_stop_registry_and_keeps_review_files(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    registry = runtime.jrunify_ext_geodata_dir / "registry"
+    registry.mkdir()
+    (registry / "stops.csv").write_text(
+        "id,town,district,nearby_place,okres,country,lat,lon,status,note\n", encoding="utf-8"
+    )
+    jdf, czptt, downloader, filtered, runner, seen = _dependencies(runtime)
+
+    def jdf_with_candidates(config: Any, **kwargs: object) -> Path:
+        output = jdf(config, **kwargs)
+        review = output / "stop-registry"
+        review.mkdir()
+        (review / "stop-candidates.csv").write_text("provisional_id\n", encoding="utf-8")
+        return output
+
+    result = cli.build(
+        cli.BuildOptions(runtime, 2027, progress="off"),
+        jdf_builder=jdf_with_candidates,
+        czptt_builder=czptt,
+        downloader=downloader,
+        filtered_jdf_builder=filtered,
+        command_runner=runner,
+    )
+
+    jdf_config = next(value for value in seen if isinstance(value, cli.national_jdf.BuildConfig))
+    assert jdf_config.stop_registry == registry
+    overlay = next(
+        cast(list[str], value)
+        for value in seen
+        if isinstance(value, list) and "regional-gtfs-overlay" in value
+    )
+    assert f"--stop-registry={registry}" in overlay
+    partial = runtime.artifact_root / "releases" / f".{result.run_id}.part"
+    candidates = partial / "stop-registry" / "place-candidates.csv"
+    assert f"--stop-registry-candidates={candidates}" in overlay
+    assert (result.root / "stop-registry" / "stop-candidates.csv").is_file()
+
+
 def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     jdf, czptt, downloader, filtered, runner, seen = _dependencies(runtime)
