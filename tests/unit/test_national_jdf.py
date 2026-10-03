@@ -345,8 +345,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             national_jdf.write_json(bundle / "diagnostics.json", diagnostics)
             manifest: dict[str, object] = {
                 "bundle_format": "jrutil-production",
-                "bundle_version": 2,
-                "serving_schema_version": 3,
+                "bundle_version": 3,
+                "serving_schema_version": 4,
                 "contract_valid": True,
                 "publication_eligible": True,
                 "compiler": {

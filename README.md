@@ -194,7 +194,7 @@ selection, bundle schemas, line changes, platform handling, IDS zones, and diagn
 ## Serving database
 
 The serving-v1 PostgreSQL loader and its schema were removed. JrUtil writes
-`jrutil-production` packages (bundle version 2, serving schema version 3; see `STATIC_PIPELINE.md`),
+`jrutil-production` packages (bundle version 3, serving schema version 4; see `STATIC_PIPELINE.md`),
 and the importer will be written against that contract when it is needed.
 `JDF_SEMANTICS.md` records the JDF preservation gaps that block calling GTFS plus the current
 sidecars a lossless semantic export.
