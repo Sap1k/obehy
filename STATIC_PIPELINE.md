@@ -80,6 +80,7 @@ package/
 │   ├── trip_call.parquet
 │   ├── transfer.parquet
 │   ├── call_zone.parquet
+│   ├── location_zone.parquet
 │   ├── service_note.parquet
 │   ├── service_note_assignment.parquet
 │   ├── service_feature_assignment.parquet
@@ -96,13 +97,15 @@ package/
 │   ├── road_route_key.parquet
 │   ├── road_trip_key.parquet
 │   ├── rail_trip_key.parquet
-│   └── route_stop.parquet
+│   ├── route_stop.parquet
+│   └── route_stop_zone.parquet
 ├── manifest.json
 └── diagnostics.json
 ```
 
 `gtfs.zip` is standard GTFS only; transfer waiting limits live in `transfer`. Zones are
-call-scoped only: `call_zone` holds each call's zone codes in source order. `route_stop` is the
+codes: a route stop slot holds them in `route_stop_zone` when all its calls agree, otherwise the
+calls carry them in `call_zone`; `location_zone` answers "zones of this stop" directly. `route_stop` is the
 merged, ordered stop list of each route direction (one slot per visit), and every
 `trip_call.route_stop_id` points at its slot, so line timetables need no pattern merging in Oběhy.
 Each relation has a fixed schema, Snappy compression, a unique primary key and resolving foreign
