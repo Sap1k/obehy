@@ -93,6 +93,8 @@ def run(
     log: Path,
     reporter: Reporter,
     command_runner: CommandFn,
+    stop_registry: Path | None = None,
+    stop_registry_candidates: Path | None = None,
 ) -> None:
     command = [
         *runtime_command,
@@ -108,6 +110,10 @@ def run(
             f"--source={source.source_id}={source.payload}",
             f"--source-descriptor={source.source_id}={source.descriptor}",
         ]
+    if stop_registry is not None:
+        command.append(f"--stop-registry={stop_registry}")
+        if stop_registry_candidates is not None:
+            command.append(f"--stop-registry-candidates={stop_registry_candidates}")
     command += [f"--diagnostics-out={diagnostics}", str(base), str(output)]
     command_runner(
         command,

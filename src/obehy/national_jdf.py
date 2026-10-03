@@ -90,6 +90,11 @@ class BuildConfig:
     # None resolves to today in Europe/Prague and its GVD.
     gvd_year: int | None = None
     reference_date: date | None = None
+    # jrunify-ext-geodata/registry; None keeps JrUtil's merge-order stop numbers.
+    stop_registry: Path | None = None
+
+
+STOP_REGISTRY_FILES = ("stops.csv", "posts.csv", "overlay_places.csv")
 
 
 @dataclass(frozen=True)
@@ -237,6 +242,31 @@ def geodata_manifest(geodata_directory: Path) -> dict[str, Any]:
     }
 
 
+def stop_registry_manifest(registry: Path) -> dict[str, Any]:
+    """Identity of the stop ID registry files a build applied."""
+
+    files = [registry / name for name in STOP_REGISTRY_FILES if (registry / name).is_file()]
+    if not (registry / "stops.csv").is_file():
+        raise PipelineError(f"Stop registry has no stops.csv: {registry}")
+    return {
+        "repository": jrutil.git_identity(registry.parent),
+        "directory": str(registry.resolve()),
+        "files": [
+            {"path": path.name, "bytes": path.stat().st_size, "sha256": file_digest(path)}
+            for path in files
+        ],
+    }
+
+
+def _stop_registry_arguments(config: BuildConfig, candidates: Path) -> list[str]:
+    if config.stop_registry is None:
+        return []
+    return [
+        f"--stop-registry={config.stop_registry}",
+        f"--stop-registry-candidates={candidates}",
+    ]
+
+
 def _multitool_command(config: BuildConfig, arguments: Sequence[str]) -> list[str]:
     return [*jrutil.runtime_command(config.jrutil_root, config.jrutil_command), *arguments]
 
@@ -264,6 +294,8 @@ def _validate_build_config(config: BuildConfig) -> None:
     ):
         if not path.is_absolute():
             raise PipelineError(f"{label} must be an absolute path: {path}")
+    if config.stop_registry is not None and not config.stop_registry.is_absolute():
+        raise PipelineError(f"stop_registry must be an absolute path: {config.stop_registry}")
     if config.routing_cache_dir is not None and not config.routing_cache_dir.is_absolute():
         raise PipelineError(
             f"routing_cache_dir must be an absolute path: {config.routing_cache_dir}"
@@ -479,6 +511,7 @@ def _bundle_arguments(
             if config.capture_post_inference_evidence
             else []
         ),
+        *_stop_registry_arguments(config, publish / "stop-registry" / "post-candidates.csv"),
         f"--diagnostics-out={publish / 'diagnostics-detail'}",
         f"--logfile={logs / 'bundle.log'}",
         str(merged_zip),
@@ -575,7 +608,12 @@ def _fix_arguments(
 
 
 def _merge_arguments(
-    config: BuildConfig, plan: _Plan, logs: Path, merged_directory: Path, fixed_root: Path
+    config: BuildConfig,
+    plan: _Plan,
+    logs: Path,
+    merged_directory: Path,
+    fixed_root: Path,
+    registry_review: Path,
 ) -> list[str]:
     return [
         "merge-jdf",
@@ -585,6 +623,7 @@ def _merge_arguments(
         "--progress-events",
         f"--jobs={_job_text(_stage_jobs(config, 'merge'))}",
         f"--memory-budget={config.memory_budget}",
+        *_stop_registry_arguments(config, registry_review / "stop-candidates.csv"),
         f"--logfile={logs / 'merge.log'}",
         str(merged_directory),
         str(fixed_root),
@@ -682,6 +721,7 @@ def _run_manifest(
     bundle: Path,
     routing_osm_file: Path | None,
     geodata: dict[str, Any],
+    stop_registry: dict[str, Any] | None,
     jrutil_identity: dict[str, Any],
     command_results: Mapping[str, CommandResult | None],
     clock: StageClock,
@@ -715,6 +755,7 @@ def _run_manifest(
             else None
         ),
         "geodata": geodata,
+        "stop_registry": stop_registry,
         "jrutil": jrutil_identity,
         "conversion": _conversion_manifest(config, plan),
         "execution": {
@@ -819,6 +860,9 @@ def build(
         clock.start("provenance")
         jrutil_identity = jrutil.provenance(config.jrutil_root, config.jrutil_command)
         geodata = geodata_manifest(config.geodata_root)
+        stop_registry = (
+            None if config.stop_registry is None else stop_registry_manifest(config.stop_registry)
+        )
         if not TRANSPORT_MODE_RULES.is_file():
             raise PipelineError(f"Transport mode rules are missing: {TRANSPORT_MODE_RULES}")
 
@@ -854,7 +898,9 @@ def build(
         merged_directory = work / "merged-jdf"
         run_jrutil(
             "merge",
-            _merge_arguments(config, plan, logs, merged_directory, fixed_root),
+            _merge_arguments(
+                config, plan, logs, merged_directory, fixed_root, publish / "stop-registry"
+            ),
             "merge.process.log",
             CommandProgress(
                 "Merge national JDF",
@@ -918,6 +964,7 @@ def build(
                 bundle=bundle,
                 routing_osm_file=routing_osm_file,
                 geodata=geodata,
+                stop_registry=stop_registry,
                 jrutil_identity=jrutil_identity,
                 command_results=command_results,
                 clock=clock,
