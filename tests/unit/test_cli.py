@@ -43,8 +43,8 @@ def _package(path: Path, *, publishable: bool = True) -> None:
         json.dumps(
             {
                 "bundle_format": "jrutil-production",
-                "bundle_version": 2,
-                "serving_schema_version": 3,
+                "bundle_version": 3,
+                "serving_schema_version": 4,
                 "contract_valid": True,
                 "publication_eligible": publishable,
                 "feed_version": "fixture",

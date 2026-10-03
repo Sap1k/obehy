@@ -528,8 +528,8 @@ def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(
         (bundle / "serving").mkdir()
         (bundle / "diagnostics.json").write_text("{}\n", encoding="utf-8")
         (bundle / "manifest.json").write_text(
-            '{"bundle_format":"jrutil-production","bundle_version":2,'
-            '"serving_schema_version":3,"contract_valid":true,'
+            '{"bundle_format":"jrutil-production","bundle_version":3,'
+            '"serving_schema_version":4,"contract_valid":true,'
             '"publication_eligible":true,"files":[]}\n',
             encoding="utf-8",
         )

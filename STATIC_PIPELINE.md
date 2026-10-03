@@ -62,8 +62,8 @@ as checksum-pinned snapshots with descriptors.
 
 ## Production package
 
-JrUtil's normative contract is `jrutil/docs/PRODUCTION_CONTRACT.md` (bundle version 2, serving
-schema version 3). Oběhy accepts nothing else.
+JrUtil's normative contract is `jrutil/docs/PRODUCTION_CONTRACT.md` (bundle version 3, serving
+schema version 4). Oběhy accepts nothing else.
 
 ```text
 package/
@@ -78,11 +78,7 @@ package/
 │   ├── shape_point.parquet
 │   ├── trip.parquet
 │   ├── trip_call.parquet
-│   ├── route_segment.parquet
 │   ├── transfer.parquet
-│   ├── fare_system.parquet
-│   ├── fare_zone.parquet
-│   ├── location_zone.parquet
 │   ├── call_zone.parquet
 │   ├── service_note.parquet
 │   ├── service_note_assignment.parquet
@@ -97,23 +93,21 @@ package/
 │   ├── source_trip_map.parquet
 │   ├── source_call_map.parquet
 │   ├── source_trip_coverage.parquet
-│   ├── identifier_alias.parquet
 │   ├── road_route_key.parquet
 │   ├── road_trip_key.parquet
 │   ├── rail_trip_key.parquet
-│   ├── object_origin.parquet
-│   ├── binding_evidence.parquet
-│   ├── route_stop.parquet
-│   └── route_stop_zone.parquet
+│   └── route_stop.parquet
 ├── manifest.json
 └── diagnostics.json
 ```
 
-`gtfs.zip` is standard GTFS only; zones and transfer waiting limits live in `fare_zone`,
-`location_zone`, `route_stop_zone`, `call_zone` and `transfer`. Each relation has a fixed schema,
-Snappy compression and a unique primary key. Rows are in deterministic generation order and are not
-sorted. Provenance is kept at trip and route level (`object_origin`, `source_trip_map`,
-`source_entity_map`); field-level provenance is not recorded.
+`gtfs.zip` is standard GTFS only; transfer waiting limits live in `transfer`. Zones are
+call-scoped only: `call_zone` holds each call's zone codes in source order. `route_stop` is the
+merged, ordered stop list of each route direction (one slot per visit), and every
+`trip_call.route_stop_id` points at its slot, so line timetables need no pattern merging in Oběhy.
+Each relation has a fixed schema, Snappy compression, a unique primary key and resolving foreign
+keys. Rows are in deterministic generation order and are not sorted. Provenance is kept at trip and
+route level (`source_trip_map`, `source_entity_map`); field-level provenance is not recorded.
 
 The manifest inventories every payload with its size and SHA-256, declares every relation, and pins
 the build specification digest, source snapshots, compiler version, feed version and identity
@@ -147,5 +141,5 @@ remain selected. Every source entity/trip/call key names its identifier namespac
 as `gtfs_trip_id`, `gtfs_stop_id`, or `gtfs_stop_sequence`; observation-source identity remains a
 separate realtime concern. Runtime source-trip mappings may have multiple dated candidates.
 Operating date and optional exact scheduled start/end, source route, direction, endpoints,
-block/run/duty IDs, and call-pattern digest must reduce them to exactly one before realtime is
+block ID, and call-pattern digest must reduce them to exactly one before realtime is
 accepted. Missing optional context is unknown; supplied contradictory context rejects a candidate.

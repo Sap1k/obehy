@@ -29,8 +29,8 @@ def read_manifest(package: Path, *, require_publication: bool = False) -> dict[s
     manifest = cast(dict[str, Any], value)
     if (
         manifest.get("bundle_format") != "jrutil-production"
-        or manifest.get("bundle_version") != 2
-        or manifest.get("serving_schema_version") != 3
+        or manifest.get("bundle_version") != 3
+        or manifest.get("serving_schema_version") != 4
         or manifest.get("contract_valid") is not True
     ):
         raise ProductionPackageError("Unsupported or contract-invalid JrUtil production package")

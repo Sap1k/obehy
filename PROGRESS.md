@@ -40,14 +40,15 @@ heap hard limit is configured; memory figures are telemetry.
   `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe`, which feature export uses
   as the training baseline. Evidence-v2 packs are captured only for retraining
   (`--capture-post-inference-evidence`); bundles always route live.
-- **Serving:** JrUtil production packages (`jrutil-production` bundle v2, serving schema v3):
-  standard GTFS, bounded diagnostics and typed Parquet relations, with no `extensions/`, no sort
-  keys and trip/route-level provenance only. The serving-v1 database loader was removed; the
-  importer is not written yet.
+- **Serving:** JrUtil production packages (`jrutil-production` bundle v3, serving schema v4):
+  standard GTFS, bounded diagnostics and 28 typed Parquet relations. Zones are call-scoped
+  (`call_zone`); `route_stop` is the merged, ordered stop list per route direction that every
+  `trip_call` points at; foreign keys are validated. This is the contract the importer will be
+  written against; the importer is not written yet.
 
 ### Last validation evidence
 
-- JrUtil Release suite: 278 tests (2026-09-30, after the refactor removed dead paths).
+- JrUtil Release suite: 301 tests (2026-10-03, serving schema 4).
 - Oběhy: unit suite 76 tests, ruff and pyright clean (2026-09-30).
 - Default JDF conversion: 179.4 s, 2.88 GB peak private memory, package valid (2026-09-15).
 - National finalizer replay with overlays: 4.07 GiB peak, package valid (2026-09-19).
@@ -134,6 +135,19 @@ Work order: §4 → §1 → §2 → §3.
   `src/obehy/data/filtered-jdf/rules-v1.json`). Not yet run inside a complete live `obehy build`.
 
 ## Recent log
+
+- **2026-10-03** — Serving schema 4 (bundle v3), the final pre-core contract revision.
+  - Zones: `fare_system`, `fare_zone`, `location_zone`, `route_stop_zone` removed; `call_zone`
+    carries `zone_code`/`zone_system` per call (JDF Zaslinky tokens, CZPTT, IDS JMK overlay stops).
+  - `route_stop`: merged per route direction from the final calls of every producer (LCS
+    alignment, one slot per visit); `trip_call.route_stop_id` and restrictions point at it.
+  - Removed `route_segment`, `identifier_alias`, `object_origin`, `binding_evidence` and the
+    null `source_run_id`/`source_duty_id`; `validate-package` checks foreign keys.
+  - Oběhy accepts only bundle v3 / schema v4. The `converters/jrutil` pointer is not advanced
+    yet, so `obehy build` needs the bump once the JrUtil change is merged.
+  - Validation: JrUtil Release 301 tests; Oběhy unit 75, ruff and pyright clean.
+    No golden-subset or live run yet: route-stop merge cost, `call_zone` size and FK validation
+    time on national data are unmeasured.
 
 - **2026-10-03** — Stop-ID registry (§2).
   - JrUtil `--stop-registry`/`--stop-registry-candidates` for `merge-jdf`, `jdf-to-bundle` and
