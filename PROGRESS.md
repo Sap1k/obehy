@@ -58,8 +58,10 @@ heap hard limit is configured; memory figures are telemetry.
 
 - No complete paired live `obehy build` has been accepted as a release yet.
 - The R10 inconsistent-time fix has not been through a full national CZPTT rebuild.
-- `jdf:stop:N` IDs come from a merge counter and depend on batch order, so they change between
-  exports.
+- The stop-ID registry (`jrunify-ext-geodata/registry/`) is not seeded yet, so `jdf:stop:N` still
+  comes from a merge counter (or, with an empty registry, a provisional hash) and is not final.
+  Authored `:post:id:<n>` posts keep the carrier's Označníky number; only inferred `:est:<k>`
+  posts are pinned.
 - The real JDF district code (`BM`, `KV`, …) is not exported; the Parquet `district` field is a
   stop-name component.
 - Identity contract naming disagrees: JrUtil writes `jrutil-identity-v1`, Oběhy expects
@@ -91,16 +93,21 @@ Work order: §4 → §1 → §2 → §3.
 ### 2. Fixed JDF stop-ID registry
 
 - **Goal:** stop IDs stay the same between exports.
-- **Actions:**
-  - add a versioned registry CSV (default `jrunify-ext-geodata/stop-registry/jdf-stops.csv`);
-  - JrUtil exports the district code;
-  - `merge-jdf --stop-registry`/`--stop-registry-out` reuses IDs for unique
-    (name, district code, country) or alias matches, quarantines ambiguity and allocates new IDs
-    deterministically;
-  - Oběhy passes the registry in and stages the updated file plus a diff report for manual review.
+- **Design:** the reviewed, append-only registry lives in `jrunify-ext-geodata/registry/`
+  (`stops.csv`, `posts.csv`, `overlay_places.csv`; see its README). JrUtil `--stop-registry`:
+  - `merge-jdf` preloads registered identities, so `jdf:stop:N` does not depend on batch order;
+    same-named stops are split by reference coordinates and ambiguity is quarantined.
+    Unregistered stops get a provisional number ≥ 1e9 hashed from name, okres and country.
+  - `jdf-to-bundle` keeps inferred `est:<k>` ordinals within 25 m of a registered post.
+  - `regional-gtfs-overlay` uses pinned IDs for source-native stop places.
+  - `--stop-registry-candidates` lists what is missing; `registry.py promote` adds reviewed rows.
+- **Oběhy:** passes the registry when `registry/stops.csv` exists, records its hashes in the
+  national-JDF run manifest, and keeps the candidate CSVs in `releases/<run>/stop-registry/`.
 - **Accept:** identical IDs across batch orders and consecutive builds; ambiguous stops are
   quarantined, not merged.
-- **Status:** not started. Seeding the registry is the one planned stop-ID break.
+- **Status:** implemented and unit-tested in all three repositories. Not run on live data. Next:
+  one bounded build with the empty registry, then `registry.py promote --accept-new` on its
+  candidates — the one planned stop-ID break — and a second build to confirm identical IDs.
 
 ### 3. Faster post estimator
 
@@ -127,6 +134,14 @@ Work order: §4 → §1 → §2 → §3.
   `src/obehy/data/filtered-jdf/rules-v1.json`). Not yet run inside a complete live `obehy build`.
 
 ## Recent log
+
+- **2026-10-03** — Stop-ID registry (§2).
+  - JrUtil `--stop-registry`/`--stop-registry-candidates` for `merge-jdf`, `jdf-to-bundle` and
+    `regional-gtfs-overlay`; `source_stop_metadata` gains `okres` and `stop_id_provisional`.
+  - jrunify-ext-geodata `registry/` plus `registry.py validate|promote`.
+  - Oběhy passes the registry and keeps the review CSVs in the release.
+  - Validation: JrUtil Release 296 tests; Oběhy unit 75, ruff and pyright clean; geodata
+    `test_registry` passes. No live or bounded real-data run yet.
 
 - **2026-10-02** — Speed pass and routing cache.
   - JrUtil: CZPTT 305 → 33 s, bundle-posts 392 → 182 s, overlay 232 → 170 s on the golden

@@ -939,3 +939,59 @@ def test_routing_cache_is_omitted_when_disabled(tmp_path: Path) -> None:
         bundle=tmp_path / "bundle",
     )
     assert f"--routing-cache={tmp_path / 'cache'}" in cached
+
+
+def test_stop_registry_arguments_reach_merge_and_bundle(tmp_path: Path) -> None:
+    registry = tmp_path / "geodata" / "registry"
+    config = BuildConfig(
+        output=tmp_path / "output",
+        workdir=tmp_path / "work",
+        osm_file=tmp_path / "cz.osm.pbf",
+        jrutil_root=None,
+        jrutil_command=("jrutil",),
+        geodata_root=tmp_path / "geodata",
+        stop_registry=registry,
+    )
+    arguments = national_jdf._bundle_arguments(  # pyright: ignore[reportPrivateUsage]
+        config,
+        publish=tmp_path / "publish",
+        logs=tmp_path / "logs",
+        descriptor_path=tmp_path / "descriptor.json",
+        converter_version="test",
+        gvd_year=2026,
+        routing_osm_file=None,
+        merged_zip=tmp_path / "merged.zip",
+        bundle=tmp_path / "bundle",
+    )
+    assert f"--stop-registry={registry}" in arguments
+    candidates = tmp_path / "publish" / "stop-registry" / "post-candidates.csv"
+    assert f"--stop-registry-candidates={candidates}" in arguments
+    plain = national_jdf._bundle_arguments(  # pyright: ignore[reportPrivateUsage]
+        replace(config, stop_registry=None),
+        publish=tmp_path / "publish",
+        logs=tmp_path / "logs",
+        descriptor_path=tmp_path / "descriptor.json",
+        converter_version="test",
+        gvd_year=2026,
+        routing_osm_file=None,
+        merged_zip=tmp_path / "merged.zip",
+        bundle=tmp_path / "bundle",
+    )
+    assert not any(argument.startswith("--stop-registry") for argument in plain)
+
+
+def test_stop_registry_manifest_records_registry_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_git_identity(_repository: Path) -> dict[str, object]:
+        return {"commit": "fixture"}
+
+    monkeypatch.setattr(jrutil, "git_identity", fake_git_identity)
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    with pytest.raises(PipelineError):
+        national_jdf.stop_registry_manifest(registry)
+    (registry / "stops.csv").write_text("id\n", encoding="utf-8")
+    (registry / "posts.csv").write_text("stop_id\n", encoding="utf-8")
+    manifest = national_jdf.stop_registry_manifest(registry)
+    assert [item["path"] for item in manifest["files"]] == ["stops.csv", "posts.csv"]

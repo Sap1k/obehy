@@ -135,6 +135,13 @@ def _start_run(runtime: RuntimeConfig) -> tuple[_Run, int]:
     return run, lock_descriptor
 
 
+def _stop_registry(runtime: RuntimeConfig) -> Path | None:
+    """The geodata checkout's stop ID registry, once it has been created."""
+
+    registry = runtime.jrunify_ext_geodata_dir / "registry"
+    return registry if (registry / "stops.csv").is_file() else None
+
+
 def _jdf_config(
     options: BuildOptions, geodata: Path, output: Path, reference_date: date
 ) -> national_jdf.BuildConfig:
@@ -156,6 +163,7 @@ def _jdf_config(
         build_jrutil=False,
         gvd_year=options.gvd_year,
         reference_date=reference_date,
+        stop_registry=_stop_registry(runtime),
     )
 
 
@@ -318,6 +326,10 @@ def build(
         )
         completed("national-jdf")
         jdf_bundle = run.jdf_output / "bundle"
+        # Registry review files outlive the work directory in the release.
+        registry_review = run.partial_release / "stop-registry"
+        if (run.jdf_output / "stop-registry").is_dir():
+            shutil.move(run.jdf_output / "stop-registry", registry_review)
 
         if options.filtered_jdf:
             filtered_work = run.root / "filtered-jdf"
@@ -347,6 +359,8 @@ def build(
             log=run.logs / "regional-overlay.process.log",
             reporter=reporter,
             command_runner=command_runner,
+            stop_registry=_stop_registry(runtime),
+            stop_registry_candidates=registry_review / "place-candidates.csv",
         )
         completed("regional-overlay")
 
