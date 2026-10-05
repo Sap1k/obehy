@@ -48,14 +48,15 @@ What is still missing for the NeTEx gate:
 
 ## Required typed sidecars
 
-All IDs are unrestricted text and all rows belong to one immutable build. Every national semantic
-row carries `source_id`, `source_snapshot_sha256`, `source_object_id`, and the original one-character
-`source_code`. A regional GTFS overlay may neither author these national facts nor delete them by
+Relation names follow serving schema 5 (JrUtil `contracts/serving-v5.json`). All IDs are
+unrestricted text and all rows belong to one immutable build. Every national semantic row carries
+`source_object_id` and the original one-character `source_code`; the source id and snapshot digest
+are recorded once in the package manifest. A regional GTFS overlay may neither author these national facts nor delete them by
 omission.
 
-### `service_feature_assignment`
+### `assignment`: service features
 
-One selected route-, trip-, or call-scoped feature:
+One selected route-, trip-, call- or call-range-scoped feature:
 
 - identity and target: `feature_id`, `scope`, nullable `route_id`, `trip_id`, `call_sequence`;
 - typed meaning: `kind`, one of `reservation_available`, `reservation_required`,
@@ -71,22 +72,22 @@ views, never the authoritative representation. For `O`, both the positive marker
 have the Czech meaning JrUtil currently projects; the sidecar adds conditions and provenance rather
 than changing that boolean result.
 
-### `location_feature`
+### `assignment`: location features
 
-One selected physical stop-place feature:
+One selected physical stop-place feature (scope `location`):
 
-- `feature_id`, `location_id`, `kind`, `source_code`, and source provenance;
+- `assignment_id`, `location_id`, `kind`, `source_code`, and `source_object_id`;
 - `kind` is one of `wheelchair_accessible`, `refreshments`, `toilet`, `accessible_toilet`,
   `request_stop`, `urban_transport_interchange`, `border_control_only`,
   `visually_impaired_accessible`, `accessibility_terminal`, `rail_interchange`,
   `line_interchange`, `metro_interchange`, `ship_terminal`, `airport_nearby`, or
   `park_and_ride`.
 
-Call-specific `x`, `(`, and `)` belong in `service_feature_assignment`, even when an identically
+Call-specific `x`, `(`, and `)` are call-scoped assignments, even when an identically
 encoded feature also exists on the stop place. Context is part of the JDF meaning and must not be
 flattened.
 
-### `service_note` and `service_note_assignment`
+### `service_note` and note-link assignments
 
 Retain route information, all `Caskody`, and `Mistenky` as verbatim Unicode plus typed note kind,
 designation, service-note type, validity, assignment scope, source identity, and provenance.
@@ -114,14 +115,14 @@ as claims or constraints without invented target specificity.
 
 ### Other mandatory semantic relations
 
-- `travel_restriction_assignment` retains `§`/`A`/`B`/`C` and the original route-stop or trip-call
-  scope without national call expansion.
-- `call_zone` retains each original zone token and `source_order`.
-- `source_trip_coverage` retains coverage identity/type, IDS system, role, and inclusive call bounds.
-- `operational_location`, `operational_journey`, and `operational_call` retain complete accepted
-  CZPTT sequences, including timing-only and non-passenger points.
+- `travel_restriction` retains `§`/`A`/`B`/`C` and the original route-stop or trip-call scope
+  without national call expansion.
+- `route_stop_zone` and `call_zone` retain each original zone token and `source_order`.
+- `trip_call` retains the complete accepted CZPTT sequence of every rail part, including
+  timing-only and non-passenger points; JDF calendar codes are `calendar_designation`
+  assignments.
 - `location` retains municipality, district name, actual JDF district code, nearby place, country,
-  and coordinate precision.
+  coordinate precision and source, and the platform or post designation.
 
 ## Compiler and database gate
 

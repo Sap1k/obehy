@@ -45,8 +45,8 @@ heap hard limit is configured; memory figures are telemetry.
   standard GTFS, bounded diagnostics and 30 typed Parquet relations. Zones sit on route stop
   slots (`route_stop_zone`), on calls only where trips disagree (`call_zone`), plus a per-stop
   `location_zone`; `route_stop` is the merged, ordered stop list per route direction that every
-  `trip_call` points at; foreign keys are validated. This is the contract the importer will be
-  written against; the importer is not written yet.
+  `trip_call` points at; foreign keys are validated. The importer will be written against
+  serving schema 5 (Next steps §6), not v4; it is not written yet.
 
 ### Last validation evidence
 
@@ -80,8 +80,8 @@ heap hard limit is configured; memory figures are telemetry.
 
 ## Next steps
 
-Work order: §2 → §3 (static readiness; §1 and §4 are done), then §5 (core runtime). §5.1 can
-start at once because it needs no database.
+Work order: §6 (serving schema 5) first, then §5 (core runtime) against it. The rest of §2 and §3
+waits on the first GitHub Actions build; §5.1 needs no database and continues in parallel.
 
 ### 1. Stop coordinates and easy `[?]` clusters
 
@@ -155,8 +155,7 @@ start at once because it needs no database.
      payload; 468 of 469 trains resolve to one CZPTT timetable by TR ID + calendars), and Arriva
      Express (one sample; both express vehicles resolve to one trip by line, destination and
      time). All list their open questions.
-  2. JrUtil contract check: CZPTT trip ↔ operational journey link, `operational_call` ↔
-     `trip_call` alignment, `stop_sequence` = `trip_call.sequence`.
+  2. Serving schema 5 (§6; replaces the planned CZPTT contract check).
   3. Database foundation and `obehy release fetch|load|activate --rollback`.
   4. Realtime skeleton: model, clock, archive, core loop, `rt` migrations, replay.
   5. Inference engine (facts, scorers, decision rule, date inference, vehicle binding, rail
@@ -169,7 +168,41 @@ start at once because it needs no database.
 - **Status:** step 1: `obehy rt record` implemented (2026-10-05); the multi-day capture is
   pending. All three dossiers now record their endpoints. Steps 2–12 are design only.
 
+### 6. Serving schema 5
+
+- **Goal:** a minimal, easy-to-query serving contract before the loader is written. v4 has 30
+  relations, keeps rail operational points apart from trips, and spreads realtime keys over seven
+  binding relations (JDF `source_call_map`: 16.57M rows, all but 10,209 identity).
+- **Design:** JrUtil `contracts/serving-v5.json` (5.0 draft) and `docs/PRODUCTION_CONTRACT.md`:
+  19 relations; one `trip_call` sequence including CZPTT railway points (NAD bus parts carry
+  none); `source_key`/`call_key` lookups with per-namespace identifier encodings; closed
+  enumerations, including the typed JDF feature kinds; feed-prefixed IDs; GTFS-style times; zones
+  on route stops with call exceptions; calendars as in v4; lossless typed semantics in
+  `service_note`, `assignment` (with CZPTT call ranges), `connection_claim`,
+  `travel_restriction`; boarding-point platform/post codes; GTFS projected from the relations.
+  Versions are `major.minor`; minors only add.
+- **Validation:** a v5 prototype (DuckDB views over the 2026-10-03 v4 packages) ran the
+  consumer scenarios. DÚK (CIS line + trip), SŽ (TR id, train number, run timeline at Nový Bor),
+  Arriva Express (line + destination + time) each resolve to exactly the trip their dossier
+  names. A mixed rail/bus departure board at Česká Lípa hl.n. and a vehicle-detail query
+  (schedule, zones, notes, features, restrictions, claims) run as plain joins. The NeTEx mapping
+  in `JDF_SEMANTICS.md` finds a home for every fact. Contract fixes found on the way: typed
+  kinds, platform codes, CZPTT note ranges, source-qualified namespaces, feed-prefixed IDs, and
+  no reserved words (`key`, `method`).
+- **Next:** JrUtil writer and validation for v5 (bundle v4), a bounded comparison against v4
+  output on the golden subset, then Oběhy accepts serving major 5. The CZPTT manifest must record
+  its source snapshot digest (v4 writes zeros). Supersedes §5.2: the CZPTT trip ↔
+  operational-call link becomes `trip_call` itself.
+- **Status:** 5.0 draft contract checked against the consumer scenarios (2026-10-05); no code.
+
 ## Recent log
+
+- **2026-10-05** — Serving schema 5 drafted (§6) after a v4 fitness check on the 2026-10-03
+  release: CZPTT trips already link to their PA through `czptt_pa_id` bindings (all 583,171
+  calls align, 53 corrected times differ); GTFS `stop_times` equal the passenger `trip_call`s in
+  both feeds; CZPTT `source_snapshot_sha256` is all zeros; `location.domain` is `scheduled`
+  everywhere. The planned CZPTT contract checks and the DB foundation were dropped in favour of
+  v5. `BASE_PLAN.md` now targets v5. Validation: documentation and draft JSON only.
 
 - **2026-10-05** — daily `build` workflow (`.github/workflows/build.yml`).
   - 02:30 UTC and on demand: `obehy build --estimated-posts --memory-budget 8GiB` on

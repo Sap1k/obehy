@@ -22,7 +22,10 @@ facts, a manifest and fixtures, not a new matcher.
 
 `PROGRESS.md` holds the current state and working backlog. The executable static contract is
 JrUtil's `docs/PRODUCTION_CONTRACT.md` together with `contracts/production-v3.json` and
-`contracts/serving-v4.json`.
+`contracts/serving-v4.json`. The target contract for the mirror and the realtime core is serving
+schema 5.0 (`contracts/serving-v5.json`, draft). Serving versions are `major.minor`: a minor
+version only adds relations, nullable fields, enumeration values or namespaces, and Oběhy accepts
+every minor of its major.
 
 ---
 
@@ -253,8 +256,8 @@ is also what lets the two feeds share one database without stitching.
    snapshot.
 2. A **source binding** links a source-local object (a PID or IDS JMK GTFS trip, stop or route)
    to a public entity after identifiers, calendars and structure have been considered. Bindings
-   are published in `source_trip_map`, `source_call_map` and `source_entity_map` with explicit
-   identifier namespaces.
+   are published in `source_key` (with the binding method) and, where call sequences differ,
+   `call_key`, both with explicit identifier namespaces.
 
 Never copy a guessed CIS identifier into normalized source data to make matching look uniform.
 Store the original fact and the binding separately. Trivial transformations of identifiers by a
@@ -301,9 +304,9 @@ station passed without stopping, a junction, a block or timing point, a non-pass
 location, potentially a bus timing checkpoint.
 
 Operational points stay outside public `stop_times.txt`. A railway location keeps its SR70
-identity whether a call is passenger-facing or operational-only. Operational facts are in the
-`operational_location`, `operational_journey` and `operational_call` serving relations and are
-used by the realtime core (section 19.4).
+identity whether a call is passenger-facing or operational-only. Operational points are
+`location` rows of kind `operational_point`, and the calls at them are non-passenger rows of the
+trip's `trip_call` sequence, used by the realtime core (section 19.4).
 
 ## 7.4 Disjoint transport domains and nearby presentation
 
@@ -354,15 +357,16 @@ A sudden increase in provisional stops should block publication of the release.
 The timetable-stable trip key is `CIS line + CIS trip`. The operating instance is
 `CIS line + CIS trip + operating date`. These are identities of the national timetable, not
 mandatory fields in every regional overlay: a regional GTFS trip reaches them through a source
-binding without exposing the CIS identifiers itself. `road_route_key` and `road_trip_key` publish
-the key mapping with validity ranges.
+binding without exposing the CIS identifiers itself. `source_key` publishes the key mapping with
+validity ranges.
 
 ## 9.2 Rail
 
 The timetable-stable key is the train number. The operating instance is
-`train number + operating date`. `rail_trip_key` publishes the mapping. CZPTT may split one train
-into several GTFS trips (`:1`, `:2`, rail-replacement parts); the realtime core treats the parts
-of one train on one date as one **run** (section 19.4).
+`train number + operating date`. `source_key` publishes the mapping. CZPTT may split one train
+into several GTFS trips (`:1`, `:2`, rail-replacement parts); `trip.run_key` and `run_part` group
+and order them, and the realtime core treats the parts of one train on one date as one **run**
+(section 19.4).
 
 ## 9.3 Realtime instances
 
@@ -377,8 +381,9 @@ RunInstance  = (train_number, operating_date)       rail; projects onto its trip
 
 The serving model uses one ordered call sequence per trip (`trip_call`) with passenger flags,
 scheduled arrival/departure/passage, an optional boarding point, the route stop slot, pickup and
-drop-off types, the timepoint flag and shape distance. CZPTT additionally publishes complete
-operational journeys (`operational_call`) including timing points passed without stopping.
+drop-off types, the timepoint flag and shape distance. For CZPTT the sequence is complete:
+it includes the timing points passed without stopping, with passage times and the CZPTT
+subsidiary location and active line code.
 
 ```text
 10  Praha hl.n.     passenger=true
@@ -406,11 +411,15 @@ validate-package                               for each result
 Every package records the exact JrUtil commit as its compiler version. Sources reach JrUtil only
 as checksum-pinned local snapshots; live URLs and credentials never enter its inputs.
 
-The production package (bundle v3, serving schema v4) contains standard `gtfs.zip`, 30 typed
-Parquet serving relations with fixed schemas, unique keys and resolving foreign keys, a manifest
-with sizes, SHA-256 hashes, namespaces, feed version and identity contract, and bounded
-diagnostics. `JDF_SEMANTICS.md` is the normative preservation addendum: GTFS is a projection of
-the typed facts, not their storage.
+The production package contains standard `gtfs.zip`, the typed Parquet serving relations with
+fixed schemas, unique keys and resolving foreign keys, a manifest with sizes, SHA-256 hashes,
+namespaces, source snapshots, feed version and identity contract, and bounded diagnostics. Bundle
+v3 carries serving schema 4 (30 relations). Serving schema 5.0 (draft, 19 relations) is the
+target: one call sequence per trip including rail pass-throughs, `source_key`/`call_key` lookups
+with documented identifier encodings, closed enumerations, feed-prefixed IDs, and the typed
+semantics in `service_note`, `assignment`, `connection_claim` and `travel_restriction`. `gtfs.zip`
+is a pure projection of the relations. `JDF_SEMANTICS.md` is the normative preservation addendum:
+GTFS is a projection of the typed facts, not their storage.
 
 Resource rules:
 
@@ -422,13 +431,10 @@ Resource rules:
 - the build must fit a GitHub Actions runner. If it cannot, a self-hosted runner is the fallback,
   never the application server.
 
-Open JrUtil contract items needed by the realtime core:
-
-- the actual JDF district code (`BM`, `KV`, …) separately from stop-name components;
-- an explicit, documented link from each CZPTT trip part to its operational journey, with
-  `operational_call` ↔ `trip_call` alignment (through `czptt_pa_id`/`czptt_pa_sequence`
-  bindings or a dedicated relation);
-- a documented guarantee that GTFS `stop_sequence` equals `trip_call.sequence`.
+Contract items needed by the realtime core are resolved by serving schema 5: the JDF district
+code is published separately from stop-name components (JrUtil `d26bf0b`), CZPTT operational
+points are part of `trip_call`, and GTFS `stop_sequence` equals `trip_call.sequence` because GTFS
+is projected from it.
 
 Maintain tiny golden fixtures for one JDF bus route, one JDF trip with multiple posts, one CZPTT
 train with passenger and pass-through points, one overnight service, and one export where local
@@ -617,14 +623,13 @@ On the application server:
 
 1. `obehy release fetch` polls for new releases, downloads, verifies every hash against
    `release.json` and the package manifests, and unpacks into `data/releases/<run-id>`.
-2. `obehy release load` verifies the contract versions (bundle v3, serving schema v4), then:
+2. `obehy release load` verifies the contract versions (serving schema major 5), then:
    - creates fresh LIST partitions per package load in `static.*`;
    - streams every relation through binary COPY;
    - builds indexes after loading;
    - checks counts, keys and references set-wise;
    - derives non-semantic helpers: `service_date` (service × operating day over the service
-     horizon), PostGIS geometry for locations and shapes, rail run assembly, and the inference
-     indexes;
+     horizon), PostGIS geometry for locations and shapes, and the inference indexes;
    - records the load in `control`.
 3. `obehy release activate` switches `control.publication` in one transaction (GTFS files, static
    mirror, source mappings and realtime resolver version together) and sends `NOTIFY`.
@@ -640,13 +645,13 @@ static claim arbitration.
 
 ```text
 control   release, package, load, publication (+ history), source health, configuration digests
-static    the 30 serving relations per package load, plus derived helpers
+static    the serving relations per package load, plus derived helpers
 rt        realtime observations, events, conflicts, alerts, assignments, current-state projection
 history   later: archived events, vehicle day runs, circulation model
 ```
 
 All public IDs are unrestricted text. Migrations are raw SQL, versioned in
-`src/obehy/release/migrations/`. The static DDL is generated from `contracts/serving-v4.json` so
+`src/obehy/release/migrations/`. The static DDL is generated from `contracts/serving-v5.json` so
 column types cannot drift from the contract.
 
 ## 16.3 Two feeds
@@ -663,13 +668,12 @@ departures mix both feeds.
 
 ## 16.4 Typed semantic subset
 
-The typed relations are not optional. `service_feature_assignment` preserves route, trip and call
-features (reservations, bicycle and luggage carriage, vehicle accessibility, on-request and
-conditional operation) with original JDF code, note link and provenance. `location_feature`
-preserves stop accessibility, facilities and interchange hints. `service_note` and its
-assignments preserve `Udaje`, `Caskody` and `Mistenky` verbatim and typed. `connection_claim`
-preserves `m`/`M` at the supplied specificity, including unresolved claims. Restrictions retain
-their original scope.
+The typed relations are not optional. `assignment` preserves route, trip and call features
+(reservations, bicycle and luggage carriage, vehicle accessibility, on-request and conditional
+operation), stop accessibility, facilities and interchange hints, and note links, each with its
+original JDF code and source object. `service_note` preserves `Udaje`, `Caskody` and `Mistenky`
+verbatim and typed. `connection_claim` preserves `m`/`M` at the supplied specificity, including
+unresolved claims. `travel_restriction` retains its original scope.
 
 CZPTT uses the same relations: notes stay lossless; codes `17`/`34` become wheelchair-capable
 vehicle features; `22`/`26`–`29` positive bicycle features; `36` an authoritative bicycle
@@ -851,8 +855,8 @@ changes). Its manifest semantics must be backed by captured examples.
 - CIS line + CIS trip;
 - PID/IDS GTFS route and trip IDs (on the overlaid parts).
 
-These resolve through the `TripKey` indexes (`rail_trip_key`, `road_trip_key`,
-`source_trip_map`). Only the operating date still has to be inferred (section 19.3).
+These resolve through the `TripKey` index built from `source_key`. Only the operating date
+still has to be inferred (section 19.3).
 
 **The long tail is handled, not special-cased.** Some sources are much poorer:
 
@@ -885,7 +889,7 @@ Facts are typed and versioned. A new kind is added by registering a fact type an
 **Names are matched only against a candidate's own calls, never globally.** "Teplice,Pražská"
 only needs to match a call name on the candidate trip (normalized JDF `Obec,Část,Místo` form),
 with GPS proximity as tie-breaker. Ambiguous stop names across the country therefore do not
-matter. Stop references in a known namespace are matched through `source_entity_map`.
+matter. Stop references in a known namespace are matched through `source_key`.
 
 ## 19.2 Procedure
 
@@ -1383,7 +1387,7 @@ come from station departure boards, a separate channel still to be investigated.
 ## 26.3 PID
 
 Golemio APIs for vehicle positions, trip progress and departures (`TripKey` via `gtfs_trip_id`
-bindings in `source_trip_map` on the overlaid parts, train numbers for trains), and PID GTFS-RT
+keys in `source_key` on the overlaid parts, train numbers for trains), and PID GTFS-RT
 **for alerts only**. PID protobuf is never proxied unchanged; every ID is rewritten to the active
 release, and alerts are mapped to entities per feed. PID trains apply to the complete CZPTT run
 (sections 13 and 19.4). Capabilities are handled independently: positions, progress, predictions, alerts,
@@ -1640,8 +1644,7 @@ propagation without circulations.
 # 34. Next implementation tickets
 
 1. `obehy rt record` and source dossiers for DÚK, SŽ and Arriva Express; record several days.
-2. JrUtil contract check: CZPTT trip ↔ operational journey link, `operational_call` ↔
-   `trip_call` alignment, `stop_sequence` identity.
+2. Serving schema 5 in JrUtil: writer, validation, GTFS projection; Oběhy accepts only v5.
 3. Database foundation: compose file, generated static DDL, `control` schema, migration runner.
 4. `obehy release fetch|load|activate --rollback` with derived helpers.
 5. Realtime skeleton: model, clock, archive, core loop, `rt` migrations, replay.
