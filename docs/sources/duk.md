@@ -1,8 +1,16 @@
 # Source dossier: DÚK vehicle list (`duk`)
 
 Status: **field meanings from the provider's documentation; one sample payload
-(2026-10-05 20:06) checked against release `20261003T144231Z-53e241dba302`.** Endpoint URL, poll
-interval and terms of use are still to be recorded.
+(2026-10-05 20:06) checked against release `20261003T144231Z-53e241dba302`.** Terms of use are still to be recorded.
+
+## Endpoint
+
+```text
+GET https://tabule.portabo.cz/api/v1-tabule/cis/GetTraffic/0
+```
+
+No authentication. `obehy rt record` polls it every 15 s (channel `duk/vehicles`); the response
+is about 20–65 KB depending on the time of day.
 
 ## Response
 
@@ -91,5 +99,5 @@ the trip's later stops, and must not trigger events for them.
 
 ## Open questions for the capture
 
-- Endpoint URL, poll interval, terms of use.
+- Terms of use; how often the upstream data actually changes (from recorded polls).
 - Meaning of `Delay = −1`.

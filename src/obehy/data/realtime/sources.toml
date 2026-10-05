@@ -1,0 +1,37 @@
+# Realtime channels recorded by `obehy rt record` (BASE_PLAN.md sections 18.2 and 18.4).
+# Endpoints and semantics are documented in docs/sources/<source>.md.
+
+schema_version = 1
+
+[[channel]]
+source = "duk"
+channel = "vehicles"
+method = "GET"
+url = "https://tabule.portabo.cz/api/v1-tabule/cis/GetTraffic/0"
+interval_s = 15
+timeout_s = 20
+
+[[channel]]
+source = "sz-mapa"
+channel = "trains"
+method = "GET"
+url = 'https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers\OsVlaky&&action=load'
+interval_s = 30
+timeout_s = 25
+
+# The endpoint returns Arriva's whole fleet and takes no arguments; only Arriva Express is kept.
+[[channel]]
+source = "arriva-express"
+channel = "buses"
+method = "POST"
+url = "https://www.arriva.cz/api/graphql"
+interval_s = 30
+timeout_s = 25
+filter = "arriva-express"
+body = '[{"query":"query busesCurrentLocation { busesCurrentLocations { angle delay destinationName lastStopName latitude longitude linkNumber state type mainType spz updated linkNumberAlias } }","operationName":"busesCurrentLocation","variables":{}}]'
+
+[channel.headers]
+content-type = "application/json"
+x-enviroment = "client"
+origin = "https://www.arriva.cz"
+referer = "https://www.arriva.cz/cs/dopravni-info/aktualni-poloha-autobusu-online"

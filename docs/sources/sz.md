@@ -11,7 +11,9 @@ and licence: to be confirmed.
 GET https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers\OsVlaky&&action=load
 ```
 
-One poll returns every train on the SŽ map. No authentication. The response envelope:
+One poll returns every train on the SŽ map (about 200 KB). No authentication or cookies are
+needed. `obehy rt record` polls it every 30 s (channel `sz-mapa/trains`). The response
+envelope:
 
 ```text
 md                  response timestamp, local Europe/Prague, "dd.MM.yyyy HH:mm:ss" → source clock

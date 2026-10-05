@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import contextlib
 import json
 import os
 import shutil
@@ -28,6 +30,7 @@ from obehy.production_package import (
     package_digest,
     read_manifest,
 )
+from obehy.realtime import record
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
 POLICY = regional_overlay.POLICY
@@ -417,11 +420,50 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="replay a saved line-snapshot.json instead of querying the line portal",
     )
+    realtime = commands.add_parser("rt", help="realtime tools")
+    realtime_commands = realtime.add_subparsers(dest="rt_command", required=True)
+    recorder = realtime_commands.add_parser(
+        "record", help="archive realtime source payloads without processing them"
+    )
+    recorder.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
+    recorder.add_argument(
+        "--sources",
+        type=lambda text: [source.strip() for source in text.split(",") if source.strip()],
+        help="comma-separated source IDs (default: every channel in the manifest)",
+    )
+    recorder.add_argument("--manifest", type=Path, default=record.MANIFEST)
+    recorder.add_argument("--once", action="store_true", help="poll every channel once and exit")
+    recorder.add_argument(
+        "--duration", type=record.parse_duration, help="stop after e.g. 30m, 6h or 2d"
+    )
     return parser
+
+
+def _record(args: argparse.Namespace) -> int:
+    try:
+        channels = record.select_channels(
+            record.load_channels(cast(Path, args.manifest)),
+            cast(list[str] | None, args.sources),
+        )
+    except (OSError, record.ManifestError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(
+            record.record(
+                channels,
+                cast(Path, args.archive),
+                once=cast(bool, args.once),
+                duration_s=cast(float | None, args.duration),
+            )
+        )
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.command == "rt":
+        return _record(args)
     try:
         runtime = load_runtime_config(cast(Path | None, args.config))
         requested_year = cast(int | Literal["auto"], args.gvd_year)

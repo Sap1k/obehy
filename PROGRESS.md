@@ -166,9 +166,23 @@ start at once because it needs no database.
      11. Arriva Express with own GPS delay; 12. circulation learning.
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
-- **Status:** design only. Nothing implemented.
+- **Status:** step 1: `obehy rt record` implemented (2026-10-05); the multi-day capture is
+  pending. All three dossiers now record their endpoints. Steps 2–12 are design only.
 
 ## Recent log
+
+- **2026-10-05** — `obehy rt record` (core runtime step 1).
+  - Polls the channels in `src/obehy/data/realtime/sources.toml` (DÚK 15 s, SŽ 30 s, Arriva
+    30 s) into `data/rt-raw/<source>/<channel>/<UTC date>/`: an `index.jsonl` line per poll
+    (errors included) and content-addressed zstd objects. New dependency: `zstandard`.
+  - Arriva's fleet-wide GraphQL feed is reduced to Arriva Express before storage
+    (`arriva-express@1`; source size and hash are kept in the index). Arriva exposes no trip
+    number: introspection is off, no trip fields or arguments exist, and there is no detail
+    endpoint.
+  - Validation: Oběhy unit 91, ruff and pyright clean; a live `--once` run and a 2-minute run of
+    all three channels. Storage is about 6.5 KB per DÚK poll and 28 KB per SŽ poll (about
+    120 MB/day). Remaining: record several days on Linux, then answer the dossiers' open
+    questions from the capture.
 
 - **2026-10-05** — JrUtil `d26bf0b`: `location.district_code` now carries the JDF okres code,
   and the regional overlay keeps base location metadata (municipality, district, nearby place,

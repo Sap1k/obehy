@@ -1,8 +1,25 @@
 # Source dossier: Arriva Express (`arriva-express`)
 
 Status: **one sample payload (2026-10-05, about 21:23 local), checked against release
-`20261003T144231Z-53e241dba302`.** Endpoint URL, poll interval and terms of use are still to be
-recorded.
+`20261003T144231Z-53e241dba302`.** Terms of use are still to be recorded.
+
+## Endpoint
+
+```text
+POST https://www.arriva.cz/api/graphql
+content-type: application/json
+x-enviroment: client        (the API's spelling)
+origin, referer             the arriva.cz map page; a batch request without referer fails
+                            with errorCode "referer.missing"
+[{"query":"query busesCurrentLocation { busesCurrentLocations { angle delay destinationName
+  lastStopName latitude longitude linkNumber state type mainType spz updated linkNumberAlias } }",
+  "operationName":"busesCurrentLocation","variables":{}}]
+```
+
+No cookies are needed. The response is the whole fleet (about 56 KB, 160+ vehicles in the
+evening). `obehy rt record` polls it every 30 s (channel `arriva-express/buses`) and stores only
+the Arriva Express entries (filter `arriva-express@1`); each index line keeps the source size,
+SHA-256 and kept/dropped counts.
 
 ## Scope
 
@@ -36,9 +53,13 @@ all.
 | `spz` | licence plate, right-padded with spaces | vehicle | `VehicleKey` (trimmed); stable per physical bus |
 | `updated` | ISO time labelled `+00:00` | time of the vehicle's last report | `observed_at` — see time semantics |
 
-There is **no trip number, no next stop and no operating date**. The detail view on Arriva's
-website (the earlier example with next stop, "Čas poslední polohy" and "Jede včas") shows more;
-whether that comes from a separate endpoint is an open question.
+There is **no trip number, no next stop and no operating date**, and none can be requested
+(checked 2026-10-05): introspection is disabled, every trip, connection, next-stop and vehicle-ID
+field name tried on `BusesCurrentLocationsType` is rejected, and `busesCurrentLocations` takes
+no arguments. The website loads only this one query. Its popup makes no further request, and its
+"Následující zastávka" is `lastStopName` relabelled. One other root field exists:
+`trainsCurrentLocations` (accepts `trainNumber`, `delay`, `latitude`, `longitude`). It is not
+recorded, because SŽ covers rail.
 
 ## Matching (checked on the two express vehicles in the sample)
 
@@ -74,7 +95,6 @@ trip.
 
 ## Open questions for the capture
 
-- Endpoint URL, poll interval, terms of use.
+- Terms of use.
 - Confirm the `updated` timezone against receipt time.
-- Is there a detail endpoint with next stop or trip identity?
 - Rounding and reference event of `delay`.

@@ -34,6 +34,20 @@ paths for the work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkou
 JrUtil checkout or an executable command. Every national command accepts `--config PATH`;
 there is no sibling-checkout or parent-directory fallback.
 
+## Recording realtime payloads
+
+`obehy rt record` polls the realtime sources (DÚK, SŽ, Arriva Express) and archives their
+payloads, unprocessed, for later replay. Channels are defined in
+`src/obehy/data/realtime/sources.toml`. Recording needs no `obehy.local.toml`:
+
+```bash
+uv run obehy rt record --once                      # one poll per channel, smoke test
+nohup uv run obehy rt record --archive data/rt-raw > rt-record.log 2>&1 &
+```
+
+`--sources duk,sz-mapa` limits the sources and `--duration 2d` stops after a set time. The
+recorder stops cleanly on SIGINT/SIGTERM. A restart appends to the same archive.
+
 ## Production feed pair
 
 The main CLI freezes the current national and regional inputs, builds JDF and CZPTT sequentially,
