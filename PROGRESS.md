@@ -189,13 +189,21 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   in `JDF_SEMANTICS.md` finds a home for every fact. Contract fixes found on the way: typed
   kinds, platform codes, CZPTT note ranges, source-qualified namespaces, feed-prefixed IDs, and
   no reserved words (`key`, `method`).
-- **Next:** JrUtil writer and validation for v5 (bundle v4), a bounded comparison against v4
-  output on the golden subset, then Oběhy accepts serving major 5. The CZPTT manifest must record
-  its source snapshot digest (v4 writes zeros). Supersedes §5.2: the CZPTT trip ↔
-  operational-call link becomes `trip_call` itself.
-- **Status:** 5.0 draft contract checked against the consumer scenarios (2026-10-05); no code.
+- **Next:** one bounded real-data run (golden subset, re-frozen from fresh snapshots) comparing v5
+  against the 2026-10-03 v4 output; then the release loader against v5. Supersedes §5.2: the
+  CZPTT trip ↔ operational-call link is `trip_call` itself.
+- **Status:** JrUtil writes and validates 5.0 natively (bundle 3, 2026-10-06): typed JDF kinds,
+  CZPTT trip parts with railway points and `call_range` notes, `source_key`/`call_key`, GTFS
+  projected from the relations, CZPTT input digest in the manifest. Oběhy accepts serving major
+  5. Real-data run pending (the golden inputs are no longer on disk).
 
 ## Recent log
+
+- **2026-10-06** — Serving schema 5.0 implemented in JrUtil (§6): writer, `validate-package`
+  enumeration/prefix/key-encoding/trip-part/GTFS-projection/source-digest checks, contract
+  `serving-v5.json` normative, `serving-v4.json` removed, golden expectation `serving-v5.txt`.
+  Oběhy's manifest gate accepts any `5.<minor>`. Validation: JrUtil `dotnet test` 304/304; Oběhy
+  unit tests, ruff, pyright clean. Skipped: the bounded real-data run (no golden inputs on disk).
 
 - **2026-10-05** — Serving schema 5 drafted (§6) after a v4 fitness check on the 2026-10-03
   release: CZPTT trips already link to their PA through `czptt_pa_id` bindings (all 583,171

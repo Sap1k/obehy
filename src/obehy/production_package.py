@@ -13,9 +13,22 @@ from typing import Any, cast
 
 from obehy.pipeline.files import file_digest
 
+SERVING_SCHEMA_MAJOR = 5
+
 
 class ProductionPackageError(RuntimeError):
     """A JrUtil production package is malformed or cannot be published."""
+
+
+def serving_schema_major(version: object) -> int | None:
+    """The major of a ``major.minor`` serving schema version; any minor is accepted."""
+
+    if not isinstance(version, str):
+        return None
+    major, separator, minor = version.partition(".")
+    if separator != "." or not major.isdigit() or not minor.isdigit():
+        return None
+    return int(major)
 
 
 def read_manifest(package: Path, *, require_publication: bool = False) -> dict[str, Any]:
@@ -30,7 +43,7 @@ def read_manifest(package: Path, *, require_publication: bool = False) -> dict[s
     if (
         manifest.get("bundle_format") != "jrutil-production"
         or manifest.get("bundle_version") != 3
-        or manifest.get("serving_schema_version") != 4
+        or serving_schema_major(manifest.get("serving_schema_version")) != SERVING_SCHEMA_MAJOR
         or manifest.get("contract_valid") is not True
     ):
         raise ProductionPackageError("Unsupported or contract-invalid JrUtil production package")

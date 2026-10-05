@@ -346,7 +346,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             manifest: dict[str, object] = {
                 "bundle_format": "jrutil-production",
                 "bundle_version": 3,
-                "serving_schema_version": 4,
+                "serving_schema_version": "5.0",
                 "contract_valid": True,
                 "publication_eligible": True,
                 "compiler": {

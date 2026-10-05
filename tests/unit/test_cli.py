@@ -44,7 +44,7 @@ def _package(path: Path, *, publishable: bool = True) -> None:
             {
                 "bundle_format": "jrutil-production",
                 "bundle_version": 3,
-                "serving_schema_version": 4,
+                "serving_schema_version": "5.0",
                 "contract_valid": True,
                 "publication_eligible": publishable,
                 "feed_version": "fixture",
