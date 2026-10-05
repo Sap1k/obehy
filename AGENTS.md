@@ -4,20 +4,20 @@
 
 - The app and public-facing project name is **Oběhy**. Use the diacritic in prose and user-facing
   text; use ASCII `obehy` for repositories, packages, paths, identifiers and commands.
-- `BASE_PLAN.md` is the long-term architecture document. It is partly out of date; do not rewrite
-  it as a side effect of other work.
+- `BASE_PLAN.md` is the long-term architecture document. Do not rewrite it as a side effect of
+  other work; change it deliberately when an architectural decision changes.
 
-## Current focus: static feed readiness
+## Current focus: static readiness, then the core runtime
 
-- Read `PROGRESS.md` first. Its **Next steps** section is the working backlog: stop coordinates,
-  the fixed JDF stop-ID registry, post-estimator speed and the `obehy build` outputs.
-- Production static compilation and overlays belong to JrUtil. Oběhy acquires sources, supervises
-  `obehy build`, and publishes/loads JrUtil output. Do not recreate PostgreSQL source
-  reconciliation.
+- Read `PROGRESS.md` first. Its **Next steps** section is the working backlog: static feed
+  readiness, then the core runtime (release loader, realtime core) in `BASE_PLAN.md` order.
+- Production static compilation and overlays belong to JrUtil. `obehy build` runs on GitHub
+  Actions, never on the application server. On the server, Oběhy fetches, loads and activates
+  releases and runs the realtime core. Do not recreate PostgreSQL source reconciliation.
 - JrUtil work happens in the standalone checkout `E:/Git/obehy/jrutil`. `converters/jrutil` is a
   pinned submodule: do not edit it or advance its pointer unless the task explicitly asks.
-- Stable JDF stop IDs come from the versioned stop-ID registry file applied by JrUtil. The separate
-  public identity-registry service in `IDENTITY_REGISTRY.md` remains a later milestone.
+- Stable JDF stop IDs come from the versioned stop-ID registry files applied by JrUtil. There is no
+  identity service and none is planned (`BASE_PLAN.md` section 6).
 - Keep generated data, source snapshots, build artifacts, credentials and local environment files
   out of version control.
 
@@ -35,7 +35,8 @@
 ## Database
 
 - There is currently no database code. The serving-v1 loader, ORM models and Alembic migration
-  were removed; the serving-v2 importer will reintroduce PostgreSQL when it is built.
+  were removed. The release loader (`BASE_PLAN.md` section 16) reintroduces PostgreSQL with raw
+  SQL migrations and psycopg 3, without an ORM.
 
 ## Validation
 

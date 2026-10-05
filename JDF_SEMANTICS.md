@@ -1,9 +1,8 @@
 # JDF 1.11 semantic preservation contract
 
-This document is a blocking design input for JrUtil serving-package v1 and the Oběhy database-v1
-baseline. It describes semantics that the current JDF-to-GTFS conversion either drops or can only
-project approximately,
-and the typed sidecars required before Oběhy may claim lossless JDF or NeTEx exportability.
+This document is the semantic acceptance contract for the JrUtil production package and the Oběhy
+static mirror. It describes semantics that GTFS either drops or can only project approximately,
+and the typed relations required before Oběhy may claim lossless JDF or NeTEx exportability.
 
 The normative source is the Ministry of Transport's [JDF 1.11 specification][jdf-111], especially
 the `Pevnykod`, `Caskody`, and `Navaznosti` sections. The immutable source archive remains the
@@ -28,8 +27,24 @@ a subset into GTFS or the conversion bundle:
 | Stop codes `@`, `%`, `W`, `w`, `x`, `~`, `$`, `}`, `t`, `v`, `b`, `U`, `S`, `J`, `P` | Mostly dropped | Accessibility, WC, request-stop, CLO, MHD/rail/line/metro interchange, port, airport, and P+R facts cannot be reconstructed. |
 | `Navaznosti` `m`/`M` | Compact source sidecar | Direction and supplied columns/text survive, but no typed distinction exists between structured targets, targets parsed from the specification-defined note form, and final resolution. |
 
-Consequently, current GTFS plus current sidecars are **not** sufficient for lossless JDF-to-NeTEx
-export. Production serving-package v1 is blocked until the compiler emits the typed relations below.
+GTFS alone is therefore **not** sufficient for lossless JDF-to-NeTEx export.
+
+### Status in the 2026-10-03 release (serving schema 4)
+
+The typed relations below exist and carry `source_code` and provenance, so no listed fact is
+lost: `service_feature_assignment` (796k rows), `location_feature` (6.3k), `service_note` (44.5k)
+with its assignments, `connection_claim` (118k) and `travel_restriction_assignment` (3.6k).
+What is still missing for the NeTEx gate:
+
+- **Typed kinds.** Only wheelchair (`@`, `{`), reservation (`R`, `#`), bicycle (`O`) and stop
+  wheelchair access (`@`) have dedicated kinds. Every other code (for example `T`, `!`, `[`,
+  `%`, `I`, the calendar codes `X`, `+`, `1`–`7`, and stop codes `~`, `v`, `W`, `w`, `x`, `}`,
+  `b`, `U`) is kept only as a generic `jdf_trip_attribute` / `jdf_stop_attribute` row with its
+  source code.
+- **Connections.** All 118,090 claims are `jdf_structured` and `unresolved`; note-form parsing
+  and final target resolution are not implemented.
+- **District code.** Null in the 2026-10-03 release; fixed in JrUtil `d26bf0b` (okres →
+  `location.district_code`) for the next build.
 
 ## Required typed sidecars
 

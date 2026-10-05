@@ -1,51 +1,45 @@
 # Oběhy static-pipeline contract
 
 `BASE_PLAN.md` is authoritative. This document fixes the executable boundary between Oběhy,
-JrUtil, the serving database, and the future public identity registry.
+JrUtil and the serving database.
 
 ## Current two-package production command
 
-`obehy build` is the current production entry point. It validates the configured OSM/geodata,
+`obehy build` is the current production entry point. In production it runs on GitHub Actions,
+never on the application server. It validates the configured OSM/geodata,
 builds the national JDF package, freezes PID and IDS JMK GTFS snapshots, applies both overlays in
 one JrUtil invocation, and builds CZPTT using the same resolved GVD year. It publishes exactly two
 `jrutil-production` packages under one immutable release and atomically updates `current.json` only
 after JrUtil validation and publication-eligibility checks pass.
 
 Source snapshots, orchestration manifests, process logs and detailed diagnostics remain outside the
-closed package trees. The serving database importer is intentionally deferred; the serving-v1
-loader has been removed. MOTIS shape generation will be inserted between compilation and final
+closed package trees. The release loader is the next step; the serving-v1 loader has been
+removed. MOTIS shape generation will be inserted between compilation and final
 validation when it is built.
 
-Live release acceptance is still pending. The previously failing national overlay finalizer now
-peaks at 4,373,061,632 private bytes on the retained production staging, down from
-14,130,675,712 bytes. JDF uses native typed sinks and disk-backed calls; overlay finalization now
-sequences its largest writers, discards completed relation state and reclaims dead Parquet buffers.
-Memory budgets remain soft admission/spill targets, with no process or .NET heap hard limit.
-Complete migration of CZPTT/overlay and content validation remains unfinished. See `PROGRESS.md`
-for measured results and the actual verification state.
+Two complete live releases have been published (2026-10-02 and 2026-10-03); formal acceptance
+(GTFS validator, MOTIS import check) is still to run. Memory budgets are soft admission/spill
+targets, with no process or .NET heap hard limit. Cross-representation content validation remains
+unfinished. See `PROGRESS.md` for measured results and the actual verification state.
 
-## Ownership and current build protocol
+## Ownership and build protocol
 
-1. Oběhy downloads each configured static source, stores it immutably by SHA-256, and exports a
-   versioned, secret-free build specification.
-2. JrUtil validates/converts those snapshots, performs national compilation and regional/operator
-   overlays, and writes deterministic GTFS plus the finalized serving package.
-3. During the pre-registry phase JrUtil assigns opaque deterministic `v0:<kind>:<digest>` IDs from
-   compiler-local normalized identity seeds. They are explicitly provisional and are guaranteed
-   only to repeat for identical inputs.
-4. Oběhy validates every package byte and relation before database work, streams relations
-   into isolated per-build tables, validates them set-wise, and attaches the complete partition set.
-5. One `control.publication` transaction activates the GTFS artifact, static mirror, source
-   mappings, and realtime resolver version together.
+1. `obehy build` (GitHub Actions) downloads each configured static source and stores it immutably
+   by SHA-256.
+2. JrUtil validates and converts those snapshots, performs national compilation and
+   regional/operator overlays, and writes deterministic GTFS plus the finalized serving package.
+   Identity follows `BASE_PLAN.md` section 6: deterministic `jdf:`/`czptt:` IDs, JDF stops and
+   posts pinned by the reviewed registry in `jrunify-ext-geodata/registry/`, and
+   `identity_contract = "jrutil-identity-v1"`. There is no identity service.
+3. The workflow publishes the release (`release.json` plus both packages) as a GitHub Release.
+4. On the application server, `obehy release fetch` verifies every hash, and `obehy release load`
+   streams the relations into isolated per-load partitions, validates them set-wise and attaches
+   the complete partition set.
+5. One `control.publication` transaction activates the GTFS artifacts, static mirror, source
+   mappings and realtime resolver version together.
 
 The compiler never reads or mutates Oběhy serving tables. The loader never performs identity
 matching, trip collapse, overlay precedence, fuzzy matching, or static claim arbitration.
-
-After one PID-overlay build and one PID realtime entity work end to end, the registry is built in a
-separate repository. JrUtil then resumes the discovery/proposal/snapshot protocol described in
-`IDENTITY_REGISTRY.md`, emits `identity_contract = "registry-v1"`, and makes the single declared
-breaking transition away from provisional IDs. Oběhy needs no schema migration because every
-public ID is unrestricted text.
 
 ## Commands and build identity
 
@@ -56,9 +50,10 @@ command): `fix-jdf`, `merge-jdf` and `jdf-to-bundle` for the national JDF packag
 working-tree digest when dirty) as its `compiler` version via `--converter-version`; the overlay
 reuses the version recorded by its base package.
 
-Registry-backed compilation (discovery, proposal and snapshot commands) is future work described in
-`IDENTITY_REGISTRY.md`. Live source URLs and credentials never enter JrUtil inputs; sources reach it
-as checksum-pinned snapshots with descriptors.
+When `jrunify-ext-geodata/registry/stops.csv` exists, Oběhy passes the registry to `merge-jdf`,
+`jdf-to-bundle` and `regional-gtfs-overlay` and keeps the review candidates in the release's
+`stop-registry/` directory. Live source URLs and credentials never enter JrUtil inputs; sources
+reach it as checksum-pinned snapshots with descriptors.
 
 ## Production package
 

@@ -1,614 +1,349 @@
 # Oběhy — Czech Nationwide Public-Transport Data Platform
 
-## Authoritative implementation plan
+## Authoritative architecture plan
 
 **Working goal:** build **Oběhy**, a nationwide Czech public-transport data platform that:
 
-- publishes one stable nationwide GTFS Schedule feed;
-- overlays higher-quality regional and operator data onto national JDF and CZPTT conversions;
-- publishes a fused GTFS-Realtime feed;
+- publishes two coordinated nationwide GTFS Schedule feeds: road and urban transport from JDF
+  (`jdf`), and rail from CZPTT (`czptt`);
+- overlays higher-quality regional and operator data onto the national conversions;
+- publishes fused GTFS-Realtime feeds for each static feed;
+- infers trips, delays and vehicle circulations (*oběhy*) from realtime sources of very
+  different quality;
 - powers a public vehicle and departures map;
 - preserves Czech-specific identifiers and metadata where useful;
-- supports dynamic platforms/posts, alerts, vehicle details, train compositions and historical arrival/departure data;
-- can initially run as a community project on one machine.
+- supports dynamic platforms/posts, alerts, vehicle details, train compositions and historical
+  arrival/departure data;
+- runs as a community project on one application server.
 
-The system should be designed so that additional regions and providers can be added incrementally without rewriting the frontend or the core matching logic.
+Additional regions and providers must be addable incrementally without rewriting the frontend or
+the core matching logic. Adding a realtime source should mean writing a connector that emits
+facts, a manifest and fixtures, not a new matcher.
+
+`PROGRESS.md` holds the current state and working backlog. The executable static contract is
+JrUtil's `docs/PRODUCTION_CONTRACT.md` together with `contracts/production-v3.json` and
+`contracts/serving-v4.json`.
 
 ---
 
-# 1. Core architectural decision
-
-This section updates the ownership model without removing the detailed static, realtime, API,
-frontend, observability and testing requirements later in this plan.
-
-The public identity registry is the source of truth for permanent public IDs, aliases, redirects,
-canonical location coordinates and identity history. JrUtil is the source of truth for each
-immutable compiled static build. Oběhy PostgreSQL stores a full finalized mirror for operations,
-realtime mapping and project APIs, but it does not compile or arbitrate static source data.
-
-Source data must never directly define permanent public identity.
-
-## Provisional vertical-slice phase
-
-Permanent identity is deliberately deferred until the static-overlay and realtime architecture has
-been proven. JrUtil initially emits opaque deterministic `v0:<kind>:<digest>` IDs from normalized
-compiler-local identity seeds. They repeat for identical inputs but are not promised to survive
-changed inputs and must be labelled `identity_contract = "provisional-v0"` in every artifact/API.
-
-Oběhy stores all public IDs as unrestricted text and resolves realtime only through mappings in the
-active static build. This allows the registry to launch later without a database migration. Once
-one PID posts-only overlay build loads and activates and one PID realtime entity rewrites end to
-end, build the registry in a separate repository, recompile with `identity_contract = "registry-v1"`,
-and make the single declared breaking public-ID transition. Provisional IDs are never imported as
-permanent registry identity.
-
-Before that transition the static flow bypasses discovery/registry mutation:
+# 1. Architecture and ownership
 
 ```text
-Oběhy immutable snapshots -> JrUtil provisional compilation/overlays
-                          -> GTFS + serving package -> Oběhy static mirror
+GitHub Actions: obehy build ──► GitHub Release (release.json + jdf/ + czptt/ packages)
+                                        │  pull, verify hashes
+application server:                     ▼
+  obehy release fetch → obehy release load ──► PostgreSQL + PostGIS ◄─────────────┐
+                                                control / static / rt              │ observation log,
+                                                  │        ▲ NOTIFY publication    │ events, current
+                                                  │        │                       │ state projection
+           upstream realtime APIs ──► obehy realtime (one asyncio process, in-memory state)
+                                                  │
+                                                  ├─► /gtfs-rt/{jdf,czptt}/*.pb (atomic files)
+                                                  ▼
+                                          obehy api (FastAPI) ──► /api/*, /gtfs/{feed}.zip
 ```
 
-The registry-backed flow below remains the permanent target after the vertical slice is stable.
+Ownership:
+
+- **JrUtil** compiles every static build: national JDF and CZPTT conversion, regional overlays,
+  stop and post identity, GTFS and the typed serving package. It is the only static compiler.
+- **The GitHub Actions pipeline** runs `obehy build`, which acquires sources, drives JrUtil and
+  publishes one immutable release. **Static feeds are never built on the application server.**
+- **Oběhy on the application server** fetches releases, loads them into its PostgreSQL mirror,
+  activates them atomically, runs the realtime core and serves the API and feeds. It never
+  compiles, reconciles or arbitrates static source data.
+- **Identity** is owned by JrUtil's deterministic ID rules plus the reviewed, append-only
+  registry files in `jrunify-ext-geodata/registry/` (section 6). There is no identity service.
+- **MOTIS** remains the connection-search engine and the source of the route-shapes companion
+  (section 17).
+
+Oběhy is a **modular monolith**: one Python package (`src/obehy/`) with a few processes. On the
+application server:
 
 ```text
-STATIC SOURCES
-
-Oběhy immutable source snapshots
-                 |
-                 v
-       JrUtil identity discovery ----> public identity registry
-                 |                              |
-                 +------ registry snapshot <---+
-                 |
-                 v
-       JrUtil static compilation
-                 |
-       +---------+-------------------+
-       |                             |
-       v                             v
-   GTFS.zip              finalized serving package
-       |                             |
-       v                             v
-     MOTIS                 Oběhy static mirror
-
-
-REALTIME SOURCES
-
-PID GTFS-RT ────────┐
-DÚK custom API ─────┤
-SŽ / rail APIs ─────┤
-other IDS APIs ─────┘
-                           |
-                           v
-                normalized realtime claims
-                           |
-                  validation and matching
-                           |
-               source arbitration / fusion
-                           |
-          +----------------+----------------+
-          |                |                |
-          v                v                v
-      GTFS-RT          project API       history
+obehy release fetch|load|activate   one-shot, driven by a systemd timer
+obehy realtime                      long-running realtime worker
+obehy api                           FastAPI
+web                                 later: React + MapLibre static assets
+motis                               later: managed MOTIS instance
 ```
 
-Oběhy should initially remain a **modular monolith**. The identity registry is the single
-intentional microservice because its public contract must outlive either the compiler or operations
-application. JrUtil remains an offline compiler and MOTIS remains the connection-search engine.
-
-The production storage boundary separates permanent identity, immutable compiled state and
-operational state:
-
-- the standalone registry owns stable operators, locations, routes, trips and other public IDs;
-- JrUtil bundles and serving sidecars retain replayable static provenance;
-- CISLineID/CISTripID and train-number relations remain dedicated indexed matching paths;
-- finalized schedule attributes, calendars, calls, shapes, zones, transfers and mappings are loaded
-  into Oběhy partitions scoped to an immutable static build;
-- one transactional publication pointer activates a complete build;
-- only the active build and its two most recently activated predecessors retain compiled database
-  payloads, while build metadata and content-addressed artifacts remain available for replay.
-
-Use separate Oběhy processes where operationally useful. The registry has its own database and API;
-JrUtil and Oběhy never access its tables directly.
-
-Suggested runtime processes:
-
-```text
-snapshot-worker
-build-worker
-realtime-worker
-estimator-worker
-api
-web
-identity-registry
-```
+There is no job queue, message broker or stream processor. PostgreSQL, the filesystem and one
+realtime process are enough for one machine. Revisit only when measurements show otherwise.
 
 ---
 
 # 2. Project scope
 
-## Initial public proof of concept
+## First public release
 
-The first meaningful release should contain:
-
-- nationwide static data from JDF and CZPTT;
-- a canonical stop, route and trip registry owned by the project;
-- PID static data overlaid where it is better than the national conversion;
-- PID GTFS-RT rewritten against the canonical feed;
-- DÚK realtime matched against national static data;
-- PID alerts preserved;
-- at least one train correctly fused from multiple sources;
-- at least one GPS-derived delay estimate;
-- a basic map showing the resulting vehicles and departures.
+- nationwide static data from JDF and CZPTT as two GTFS feeds, with the PID and IDS JMK overlays;
+- stable public stop, route and trip IDs from the JrUtil identity rules and reviewed registry;
+- the static mirror loaded and activated through Oběhy;
+- DÚK realtime (buses and trains) and SŽ rail realtime, fused per train;
+- PID realtime from the Golemio APIs, and PID alerts from GTFS-RT;
+- realtime for long-tail sources without trip IDs, starting with Arriva Express;
+- delay derived from Oběhy's own GPS progress where that beats the source's delay;
+- per-feed GTFS-RT and a project API with scheduled and realtime departures;
+- a basic map of vehicles and departures.
 
 ## Later capabilities
 
-After the proof of concept:
-
-- additional regional static feeds;
-- additional regional and operator realtime connectors;
+- learned vehicle circulations (*oběhy*): trip forecasts, knock-on delays, expected vehicles;
+- additional regional static feeds and realtime connectors;
 - dynamic bus posts and train platforms;
-- SŽ or other railway infrastructure observations;
-- inferred arrivals, departures and pass-through events;
+- inferred arrivals, departures and pass-through events, and historical punctuality;
 - vehicle registries and features;
-- ČD train compositions;
-- 55p.cz train compositions after explicit permission;
-- optional paid Mapy.com routing for selected long-distance coach services;
-- historical trip replay and punctuality data.
+- ČD train compositions, and 55p.cz compositions after explicit permission;
+- external travel-time providers for long coach segments;
+- historical trip replay.
 
 ---
 
 # 3. Non-negotiable design rules
 
-1. Never treat source IDs as permanent canonical IDs.
-2. Never recycle canonical IDs.
+1. Public IDs come from JrUtil's identity rules and the reviewed registry, never directly from a
+   mutable source-local ID.
+2. Never recycle public IDs.
 3. Never replace an entire trip with a regional trip that only covers part of it.
 4. Overlay fields and journey segments, not ZIP files as opaque units.
-5. Keep every realtime observation and claim with provenance, even when it loses arbitration.
+5. Keep every realtime observation with provenance, even when it loses arbitration.
 6. Never interpret a coarse zero-minute delay as proof that a vehicle is exactly on time.
-7. Never average contradictory vehicle positions blindly.
+7. Never average contradictory vehicle positions.
 8. Never expose railway pass-through points as passenger stops.
-9. Never publish a realtime platform/post assignment that cannot be mapped to a canonical boarding point.
+9. Never publish a realtime platform/post assignment that cannot be mapped to a boarding point in
+   the active static build.
 10. Never broaden a regional alert beyond the area or journey segment it actually affects.
-11. Activate a new static feed and its realtime ID mappings atomically.
-12. Quarantine ambiguous matches instead of guessing.
-13. Prefer a degraded but valid feed over publishing corrupted data.
-14. Every build must be reproducible from stored input snapshots and configuration.
-15. Every selected realtime value must be explainable by its source, timestamp and confidence.
-16. GTFS is not the semantic archive: every useful JDF 1.11 fixed code, note, restriction, and
+11. Activate a new static release and its realtime mappings atomically.
+12. Quarantine ambiguous matches instead of guessing. An inferred match is accepted only when it
+    is unique by a policy margin, and its explanation is retained.
+13. Trip progress never jumps backwards or skips unvisited calls without evidence. A bad
+    observation holds the state; it does not move it.
+14. Prefer a degraded but valid feed over publishing corrupted data.
+15. Every static build must be reproducible from stored input snapshots and configuration.
+16. Every realtime output must be reproducible by replaying the archived source payloads.
+17. Every selected realtime value must be explainable by its source, timestamp, method and
+    confidence.
+18. GTFS is not the semantic archive: every useful JDF 1.11 fixed code, note, restriction and
     connection claim must survive in a typed serving relation at its original scope.
-17. Preserve each JDF code's actual closed- or open-world semantics. A useful GTFS approximation
+19. Preserve each JDF code's actual closed- or open-world semantics. A useful GTFS approximation
     may coexist with, but never replace, the exact typed fact needed by Oběhy and NeTEx.
-18. A NeTEx v2.0.0 export with zero unexplained semantic loss is the acceptance gate for the static
-    serving model. See `JDF_SEMANTICS.md`.
+20. A NeTEx v2.0.0 export with zero unexplained semantic loss is the acceptance gate for the
+    static serving model. See `JDF_SEMANTICS.md`.
 
 ---
 
-# 4. Recommended implementation stack
+# 4. Implementation stack
 
-## Backend and data processing
+## Static build (GitHub Actions)
 
-- **Python**
-  - source downloading;
-  - build orchestration and finalized serving-package loading;
-  - realtime connectors;
-  - source arbitration;
-  - estimators;
-  - API.
-- **PostgreSQL + PostGIS**
-  - a dedicated database for the standalone public identity registry;
-  - a separate Oběhy database for finalized static mirrors and operations;
-  - current realtime state;
-  - historical events;
-  - configuration-backed mappings.
-- **F#/.NET and JrUtil**
-  - high-performance national conversion;
-  - identity discovery and evidence;
-  - static overlays and GTFS/serving-package compilation.
-- **FastAPI**
-  - public identity-registry API;
-  - project API;
-  - feed endpoints;
-  - debugging endpoints.
-- **Protocol Buffers**
-  - GTFS-Realtime decode and encode.
-- **Parquet**
-  - immutable conversion sidecars;
-  - cold historical observation storage.
+- **Python 3.13** — `obehy build`: source acquisition, GVD resolution, OSM snapshot, JrUtil
+  orchestration, filtered feed, validation and publication.
+- **F#/.NET and JrUtil** — national conversion, overlays, identity, GTFS and serving packages.
+- **Parquet** — the typed serving relations.
+
+## Application server
+
+- **Python 3.13**, asyncio.
+- **PostgreSQL + PostGIS** — the static mirror, the realtime log and projections, history.
+- **psycopg 3** with raw SQL migrations; no ORM.
+- **pyarrow** — reading serving Parquet for binary COPY.
+- **FastAPI** — project API, feed endpoints and debugging endpoints.
+- **gtfs-realtime-bindings / protobuf** — GTFS-RT decode and encode.
+- **Parquet** — cold historical archive.
 
 ## Frontend
 
-- **React**
-- **MapLibre GL JS**
+- **React** and **MapLibre GL JS**.
 
 ## Deployment
 
-Initially use:
-
-- Docker Compose or systemd;
-- one PostgreSQL server is acceptable, but registry and Oběhy use separate databases;
-- local filesystem/object-style directories for raw snapshots and immutable feed versions;
-- reverse proxy for public endpoints.
-
-Do not introduce Kafka, Kubernetes, Celery, Redis Streams or a dedicated stream-processing database until actual load proves that PostgreSQL and normal workers are insufficient.
+- systemd units (or Docker Compose) on one server; reverse proxy for public endpoints;
+- one PostgreSQL server;
+- local filesystem directories for releases, the raw realtime archive and checkpoints;
+- GTFS-RT files written atomically and served directly by the reverse proxy.
 
 ---
 
-# 5. Repository structure
+# 5. Repository layout
 
 ```text
-obehy/
-├── apps/
-│   ├── build_control/
-│   ├── static_loader/
+obehy/                         (this repository)
+├── src/obehy/
+│   ├── cli.py                 obehy build and the command entry points
+│   ├── pipeline/              shared static-build plumbing
+│   ├── national_jdf.py, national_czptt.py, regional_overlay.py, filtered_jdf.py, ...
+│   ├── release/               fetch.py, load.py, activate.py, migrations/
 │   ├── realtime/
-│   ├── estimator/
-│   ├── api/
-│   └── web/
-├── packages/
-│   ├── canonical_model/
-│   ├── identity/
-│   ├── gtfs_io/
-│   ├── realtime_model/
-│   ├── source_registry/
-│   ├── matching/
-│   └── diagnostics/
-├── connectors/
-│   ├── pid_gtfsrt/
-│   ├── duk/
-│   ├── sz/
-│   ├── cd_compositions/
-│   └── fiftyfivep/
-├── converters/
-│   ├── jrutil/
-│   └── motis-route-shapes/
-├── config/
-│   ├── sources/
-│   ├── aliases/
-│   ├── precedence/
-│   ├── overlays/
-│   └── estimators/
-├── tests/
-│   ├── fixtures/
-│   ├── golden/
-│   ├── integration/
-│   └── replay/
-├── data/
-│   ├── raw/
-│   ├── converted/
-│   ├── builds/
-│   └── archive/
-└── infra/
-    └── compose.yaml
+│   │   ├── model.py clock.py archive.py worker.py replay.py evaluate.py policy.py
+│   │   ├── connectors/        base.py, duk.py, sz_*.py, pid_*.py, arriva.py, ...
+│   │   ├── infer/             facts.py, scorers/, engine.py, index.py, dates.py, runs.py, binding.py
+│   │   ├── progress/          path.py, project.py, gps_delay.py, travel_time.py
+│   │   ├── timeline/          intervals.py, semantics.py, engine.py, propagate.py, arbitration.py
+│   │   ├── circulations/      build.py, model.py
+│   │   └── emit/              gtfsrt.py, state_table.py
+│   ├── api/                   app.py, static.py, realtime.py, debug.py
+│   └── data/                  versioned rules, policies and connector manifests
+├── config/                    obehy.example.toml, local config (not committed)
+├── docs/sources/              one dossier per realtime source
+├── tests/                     unit/, fixtures/, replay/
+├── infra/                     compose.yaml, systemd units
+└── converters/
+    ├── jrutil/                pinned submodule
+    └── jrunify-ext-geodata/   pinned submodule (geodata and identity registry)
 ```
 
-The public identity registry is a separately deployable service with its own repository or a clear
-top-level repository boundary, its own PostgreSQL database, migrations and release cycle. JrUtil
-and the MOTIS route-shapes companion can remain external repositories or Git submodules pinned to
-known commits. Their patches should be kept independently reviewable. The initial MOTIS pin is
-release `v2.11.0`, commit `dc441d684099afbf4ce82d605f26e46504c70c28`.
+JrUtil and JrUnify-Ext-GeoData are developed in their standalone checkouts and pinned here. The
+MOTIS route-shapes companion will live in `converters/motis-route-shapes/`, pinned to MOTIS
+release `v2.11.0` (`dc441d684099afbf4ce82d605f26e46504c70c28`) initially.
 
 ---
 
-# 6. Public identity-registry strategy
+# 6. Identity
 
-## 6.1 Own the canonical numbering
+There is no identity service. Public identity consists of:
 
-Czech national non-rail exports do not provide immutable stop IDs. IDs may change between exports,
-and some feeds do not provide CIS StopIDs or PostIDs at all. A standalone FastAPI/PostgreSQL
-registry therefore owns every permanent public namespace. It exposes anonymous OpenAPI reads and
-immutable CSV/Parquet snapshots; OIDC-protected mutations use viewer, operator, editor and
-administrator roles.
+1. **Deterministic JrUtil ID rules** that derive IDs from stable source identities:
 
-Example prefixes:
+   ```text
+   jdf:route:<cis line>                     regular line route
+   jdf:route:<cis line>:detour              výluka timetable route
+   jdf:trip:<line>:<yymmdd>[:det][:<hash>][:pN]:<cis trip>
+   czptt:stop:<country>:<SR70>              railway primary location
+   czptt:stop:<country>:<SR70>:platform:<n> railway platform
+   czptt:route:…, czptt:trip:<PA id>:<part>, czptt:block:<PA id>
+   ```
 
-```text
-S000000123                    surface stop place
-P000000456                    surface boarding point or post
-rail:CZ:<SR70>                railway primary location
-rail:CZ:<SR70>:<subsidiary>   railway subsidiary or platform
-C000000123                    operator
-R000000123    canonical route
-T000000456    scheduled trip
-V000000789    vehicle
-A000000123    canonical alert, if persistent alert identity is required
-```
+2. **The reviewed, append-only registry** in `jrunify-ext-geodata/registry/`, for identities
+   that the sources do not keep stable:
 
-Country-scoped SR70 primary/subsidiary identity is the railway location ID because it is unique and
-available in accepted CZPTT data. Surface and railway identities never share a sequence or merge.
-Allocated entity kinds use independent sequences. Required properties:
+   ```text
+   stops.csv            jdf:stop:<N>  ← (town, district, nearby place, okres, country, coordinates)
+   posts.csv            posts of a registered stop, including pinned inferred est:<k> posts
+   overlay_places.csv   source-native stop places created by regional overlays
+   ```
 
-- opaque;
-- registry-owned;
-- stable;
-- never recycled;
-- not derived from mutable source IDs;
-- redirects supported after merges;
-- tombstones retained after deletion.
+   - `merge-jdf --stop-registry` preloads registered stops, so `jdf:stop:N` does not depend on
+     batch order. Same-named stops are split by reference coordinates; ambiguity is quarantined.
+   - An unregistered stop gets a provisional number ≥ 1 000 000 000 hashed from name, okres and
+     country, and it appears in the release's `stop-registry/` candidate CSVs.
+   - `registry.py promote` adds reviewed rows. Rows are never deleted or renumbered; retirement
+     is a status change. A future redirect or alias is another reviewed registry file applied
+     by JrUtil.
 
-The registry also owns canonical names, coordinates, parent/intermodal relationships, revisions and
-audit history. Display values selected by a particular static overlay may differ from the registry's
-canonical search metadata.
+Stability scope, stated honestly:
 
-Pinned SR70 coordinates are authoritative by default. A reviewed override is allowed only when it
-retains the original value, evidence, reason, author and timestamp in a new immutable snapshot.
+- stop, post and rail-location IDs are stable across builds;
+- route IDs are stable while the CIS line exists;
+- **trip IDs are stable for one timetable version** of a line. A new version (`yymmdd`) yields
+  new trip IDs. Realtime never depends on trip-ID stability across releases because it resolves
+  through timetable-stable keys (CIS line + CIS trip, train number, source bindings) against the
+  active release.
 
-## 6.2 Source bindings
+Every package declares `identity_contract = "jrutil-identity-v1"` and the identifier namespaces
+it uses. Oběhy stores every ID as unrestricted text.
 
-Every source identifier is a time-bounded registry binding to a public entity.
+Surface (JDF) and heavy-rail (CZPTT) identities never merge. Their namespaces are disjoint, which
+is also what lets the two feeds share one database without stitching.
 
-```text
-source_binding
-    source_id
-    entity_type
-    source_object_id
-    public_entity_id
-    valid_from
-    valid_to
-    match_method
-    match_confidence
-    created_at
-    reviewed_by
-```
+## 6.1 Identity claims versus source bindings
 
-Examples:
+1. An **identity claim** is an explicit source assertion such as a CIS line, CIS trip, CIS stop
+   or a trip ID documented to contain a CIS trip. JrUtil validates it against the national
+   snapshot.
+2. A **source binding** links a source-local object (a PID or IDS JMK GTFS trip, stop or route)
+   to a public entity after identifiers, calendars and structure have been considered. Bindings
+   are published in `source_trip_map`, `source_call_map` and `source_entity_map` with explicit
+   identifier namespaces.
 
-```text
-PID stop U123Z4                -> P000014842
-CIS StopID 12345               -> S000003012
-JDF stop 98142 in export A     -> S000003012
-JDF stop 41287 in export B     -> S000003012
-PID trip 775_80_251220         -> T000000456
-```
+Never copy a guessed CIS identifier into normalized source data to make matching look uniform.
+Store the original fact and the binding separately. Trivial transformations of identifiers by a
+realtime API (prefixes, padding, formatting) are normalized by that source's connector and
+documented in its dossier; they are not an identity mechanism. A source that gives only a public
+line number supplies it as a `LineRef`, and the inference engine resolves it (section 19).
 
-## 6.3 Explicit identifier aliases
-
-Aliases normalize an identifier that a source claims is from a known external namespace but
-encodes differently. They are not a way to invent a missing CISLineID from a public line number,
-route name or arbitrary GTFS ID.
-
-Manual aliases must be supported because some source systems transform identifiers. The initial
-use case is a realtime API that is not keyed by the static GTFS identifiers:
-
-Example:
-
-```yaml
-aliases:
-  - source: duk
-    entity: cis_line
-    observed_id: "582588"
-    canonical_value: "001588"
-    valid_from: "2026-01-01"
-    valid_to: null
-    reason: "DÚK realtime API-specific encoding"
-```
-
-Aliases should be applied before canonical matching.
-
-They should support validity ranges because upstream conventions may change.
-
-## 6.4 Keep identity claims, aliases and source bindings separate
-
-These mechanisms solve different problems:
-
-1. An **identity claim** is an explicit source assertion such as
-   `route_licence_number=260775`, `cis_stop_id=50619` or a trip ID documented to contain a
-   CISTripID. Preserve its field-level provenance and validate its syntax and consistency against
-   the applicable national snapshot.
-2. An **identifier alias** deterministically rewrites one asserted external identifier into the
-   same external namespace, such as a DÚK realtime API-specific line encoding into a CISLineID.
-   Alias rules are explicit, versioned and validity-bounded. They never use fuzzy matching.
-3. A **source binding** links an arbitrary source-local object such as a PID or DPMLJ GTFS trip to
-   a canonical entity after exact identifiers, calendars and structural evidence have been
-   considered. This includes a provider-supplied, snapshot-scoped crosswalk between that
-   provider's realtime/operational key and its own static GTFS `trip_id`. A binding may exist even
-   when the source never exposes a CISLineID.
-
-Do not copy a guessed CISLineID into normalized source data merely to make downstream matching
-look uniform. Store the original fact, the matching evidence and the resulting canonical binding
-separately.
-
-For realtime tied to a known static feed, prefer the static binding chain:
-
-```text
-PID GTFS-RT trip_id
- -> PID static GTFS trip_id
- -> active source trip binding
- -> canonical trip instance
-```
-
-No CISLineID remapping is needed in that path. CIS aliases are mainly for sources such as custom
-realtime APIs that emit CIS-like identifiers but do not reference an imported static timetable.
-They may also be used by a static adapter when that source explicitly publishes a transformed CIS
-identifier, but not when the identifier is absent.
-
-Treat a provider-supplied operational-to-static crosswalk as a candidate relation, not necessarily
-as a unique dictionary. IDS JMK `api.txt`, for example, maps `(source line code, source
-course/train number)` to its numeric GTFS `trip_id`; the same operational key can map to multiple
-static rows for different calendars or timetable variants. Resolve it using the active snapshot,
-operating date and, when still necessary, scheduled time or call context. If two active candidates
-remain plausible, quarantine the realtime claim rather than selecting the first row.
-
-## 6.5 Registry redirects
-
-If two public entities are later proven to be the same:
-
-```text
-S000004321 -> S000003012
-```
-
-The losing ID becomes a redirect.
-
-Historical records remain unchanged and resolvable.
-
-Do not bulk-renumber old history unless absolutely necessary.
-
-## 6.6 Batch reconciliation and snapshots
-
-JrUtil proposes matches and evidence; the registry alone commits bindings or allocates IDs. A batch
-is idempotent and pins a base registry snapshot. It contains source/snapshot identity, entity
-kind/domain, source object and validity, normalized facts, ordered candidates/evidence and the
-requested bind/allocate/quarantine action.
-
-The registry atomically returns accepted mappings, allocations, quarantines and the new snapshot
-digest. Optimistic snapshot conflicts require rediscovery. IDs allocated for a later failed static
-build remain allocated and are never recycled. Merges create redirects; retirement creates a
-tombstone; no operation erases earlier snapshots.
+Treat a provider-supplied operational-to-static crosswalk as a candidate relation, not a unique
+dictionary. IDS JMK `api.txt`, for example, maps `(source line code, course/train number)` to a
+GTFS `trip_id`; the same key can map to several rows for different calendars. Resolve by
+operating date and context; quarantine what stays ambiguous.
 
 ---
 
 # 7. Stop and location model
 
-A single generic “stop” entity is insufficient.
-
-The system should distinguish at least three classes.
+A single generic "stop" entity is insufficient. The model distinguishes three classes.
 
 ## 7.1 Stop place
 
-A rider-facing geographic place or station:
-
-```text
-Praha, hlavní nádraží
-Teplice, Benešovo náměstí
-Ústí nad Labem, hlavní nádraží
-```
-
-Used for:
-
-- search;
-- map labels;
-- nearby-departure grouping;
-- interchange grouping;
-- parent-station relationships;
-- accessibility and place-level metadata.
+A rider-facing geographic place or station, such as `Praha, hlavní nádraží` or
+`Teplice, Benešovo náměstí`. Used for search, map labels, nearby-departure grouping,
+interchange grouping, parent-station relationships, and accessibility and place-level metadata.
 
 ## 7.2 Boarding point
 
-A concrete place where passengers board or alight:
+A concrete place where passengers board or alight: a platform, track, post or direction-specific
+pole. A stop place may have many boarding points. A stop place with boarding points also has an
+**unspecified** child (`…:unspecified`); calls without a known post or platform use it until an
+exact claim exists.
 
 ```text
-platform 3
-track 2
-post B
-direction-specific bus pole
-unspecified boarding point
+czptt:stop:CZ:<SR70>               stop place
+czptt:stop:CZ:<SR70>:unspecified   unspecified boarding point
+czptt:stop:CZ:<SR70>:platform:1    platform 1
 ```
 
-A stop place may have many boarding points.
-
-Each stop place should have an **unspecified boarding point** fallback where the timetable contains the place but no exact post/platform.
-
-Example:
-
-```text
-rail:CZ:<SR70>                Ústí nad Labem, hl.n.
-rail:CZ:<SR70>:unspecified    unspecified boarding point
-rail:CZ:<SR70>:1              track/platform 1
-rail:CZ:<SR70>:2              track/platform 2
-```
-
-Static trips without a known platform use the unspecified child.
-
-Realtime can reassign a call to a known child platform.
+Realtime can reassign a call to a known boarding point of the same stop place (section 24).
 
 ## 7.3 Operational point
 
-A location used for vehicle progress and timing, but not shown as a passenger stop:
+A location used for vehicle progress and timing, but not shown as a passenger stop: a railway
+station passed without stopping, a junction, a block or timing point, a non-passenger CZPTT
+location, potentially a bus timing checkpoint.
 
-- a railway station passed without stopping;
-- a junction;
-- a block or timing point;
-- a non-passenger CZPTT location;
-- potentially a bus timing checkpoint.
-
-Operational points must remain outside public passenger `stop_times.txt`. A railway primary
-location keeps its country-scoped SR70 identity whether a particular call is passenger-facing or
-operational-only; passenger exposure is a call/build property, not a second identity. Operational
-facts remain in JrUtil sidecars and the Oběhy finalized mirror.
+Operational points stay outside public `stop_times.txt`. A railway location keeps its SR70
+identity whether a call is passenger-facing or operational-only. Operational facts are in the
+`operational_location`, `operational_journey` and `operational_call` serving relations and are
+used by the realtime core (section 19.4).
 
 ## 7.4 Disjoint transport domains and nearby presentation
 
-Canonical locations belong permanently to either the `surface` or `heavy_rail` domain. National
-JDF defines the surface domain and national CZPTT defines heavy rail. Objects from those domains
-must never resolve to the same canonical stop place, even when a railway station and bus stop have
-the same name and coordinates.
+Locations belong permanently to either the `surface` or `heavy_rail` domain. National JDF defines
+the surface domain and national CZPTT defines heavy rail. They never resolve to the same stop
+place, even when a railway station and bus stop share a name and coordinates.
 
 Boarding points remain children of exactly one stop place in the same domain. Regional sources
 that contain both domains, such as PID, classify each source object before matching.
 
-The frontend may query or display independently canonicalized nearby places together, but this is
-presentation and walking-transfer behavior, not a canonical stop-knot or identity merge.
+The API and frontend may show nearby places of both domains together. That is presentation and
+walking-transfer behaviour, not an identity merge.
 
 ---
 
-# 8. Reconciling mutable national stops
+# 8. Stop continuity across national exports
 
-Every new national export needs continuity matching through JrUtil discovery and an immutable
-registry reconciliation batch.
+Czech national JDF exports do not provide immutable stop IDs. Continuity comes from the registry
+(section 6):
 
-## Matching order
+1. registered stop by `(town, district, nearby place, okres, country)`, split by reference
+   coordinates when names repeat;
+2. stable identifiers such as PostID or ASW ID where genuinely supplied (overlays);
+3. otherwise a provisional hashed number and a registry candidate for review.
 
-1. Existing reviewed/manual registry binding
-2. Stable identifier such as PostID or ASW ID when genuinely supplied
-3. One unique normalized `(full stop name, actual JDF district code, country)` continuation
-4. Review candidate when that tuple collides or conflicts
-5. Allocate a new surface ID when no prior candidate exists
+Structural signals (coordinates, serving routes, neighbouring stops, mode, boarding points,
+coordinate shift) are review evidence. They never override a conflicting registered identity
+automatically.
 
-## Structural matching signals
-
-JrUtil must first extend the JDF bundle to preserve the actual JDF district code (`BM`, `KV`,
-`CV`, `TP`, and so on). The existing Parquet field called `district` contains a stop-name component
-and is not suitable for this identity rule. Generated `jdf:stop:*` values are provenance only.
-
-Retain the following structural signals as ordered review evidence:
-
-- normalized stop name;
-- municipality;
-- district or local part;
-- coordinates;
-- routes serving the location;
-- neighbouring stops in trip sequences;
-- trip-pattern topology;
-- directionality;
-- mode;
-- historical source-object lineage;
-- known boarding points;
-- distance from prior coordinates.
-
-Version 1 does not let those signals override a conflicting name/district-code/country tuple
-automatically. They support quarantine review and future measured matcher revisions.
-
-## Suggested confidence policy
+Each build reports, in the release's `stop-registry/` output and diagnostics:
 
 ```text
-1.00    explicit manual mapping
-0.99    stable authoritative identifier
-0.95    unique exact normalized JDF tuple continuation
-0.85    structural review candidate, never auto-bound in v1
-<0.85   allocate only when no plausible prior candidate exists; otherwise quarantine
+Registered stops matched
+Provisional (unregistered) stops
+Ambiguous same-name stops (quarantined)
+Large coordinate shifts against the registry
+Registry candidates for review
 ```
 
-Actual thresholds should be tuned using real exports.
-
-## Build diagnostics
-
-Each import should produce:
-
-```text
-Stops in previous export
-Stops in new export
-Exact stable-ID matches
-Structural continuation matches
-Manual matches
-New canonical stops
-Possible duplicates
-Ambiguous matches
-Retired source objects
-Large coordinate shifts
-```
-
-A sudden increase in newly allocated stops should block automatic activation.
+A sudden increase in provisional stops should block publication of the release.
 
 ---
 
@@ -616,100 +351,34 @@ A sudden increase in newly allocated stops should block automatic activation.
 
 ## 9.1 Road, tram and urban transit
 
-The scheduled-trip identity anchor is:
-
-```text
-normalized CISLineID + CISTripID
-```
-
-The concrete operating instance is:
-
-```text
-CISLineID + CISTripID + operating date
-```
-
-These are identities of the national/canonical timetable, not mandatory fields in every regional
-overlay. A regional GTFS trip may reach this identity through a source binding without ever
-exposing either CIS identifier itself.
-
-Match regional data at the operating-instance level first whenever calendars overlap:
-
-```text
-source trip + source service date
- -> national candidates active on that date
- -> route/operator/mode constraints
- -> ordered stop and time comparison
- -> canonical trip instance
-```
-
-Only collapse those results into one scheduled-trip binding when the same unique relationship is
-valid across the relevant dates. If one regional GTFS trip represents multiple national
-CISTripIDs on disjoint service dates, retain date-scoped instance bindings instead of guessing one
-scheduled identity.
+The timetable-stable trip key is `CIS line + CIS trip`. The operating instance is
+`CIS line + CIS trip + operating date`. These are identities of the national timetable, not
+mandatory fields in every regional overlay: a regional GTFS trip reaches them through a source
+binding without exposing the CIS identifiers itself. `road_route_key` and `road_trip_key` publish
+the key mapping with validity ranges.
 
 ## 9.2 Rail
 
-The scheduled-trip anchor is the train number.
+The timetable-stable key is the train number. The operating instance is
+`train number + operating date`. `rail_trip_key` publishes the mapping. CZPTT may split one train
+into several GTFS trips (`:1`, `:2`, rail-replacement parts); the realtime core treats the parts
+of one train on one date as one **run** (section 19.4).
 
-The concrete operating instance is:
-
-```text
-train number + operating date
-```
-
-If the static source contains multiple timetable variants for one train number, the correct static variant should be resolved from:
-
-- service calendar;
-- call sequence;
-- direction;
-- validity period;
-- source schedule metadata.
-
-The train number remains the primary realtime anchor.
-
-## 9.3 Canonical entities
+## 9.3 Realtime instances
 
 ```text
-scheduled_trip
-    canonical_trip_id
-    mode
-    canonical_route_id
-    road_cis_line_id
-    road_cis_trip_id
-    train_number
-    timetable_variant
-    validity_range
+TripInstance = (feed, trip_id, service_date)        road
+RunInstance  = (train_number, operating_date)       rail; projects onto its trip parts
 ```
-
-```text
-trip_instance
-    canonical_trip_id
-    operating_date
-```
-
-GTFS trip IDs should be stable projections of the canonical trip registry, not raw JrUtil or regional IDs.
 
 ---
 
-# 10. Canonical trip calls
+# 10. Trip calls
 
-The internal model should use one ordered call sequence containing both passenger and operational locations.
-
-```text
-trip_call
-    canonical_trip_id
-    sequence
-    location_id
-    passenger_service
-    scheduled_arrival
-    scheduled_departure
-    scheduled_passage
-    scheduled_boarding_point_id
-    pickup_allowed
-    dropoff_allowed
-```
-
-Example:
+The serving model uses one ordered call sequence per trip (`trip_call`) with passenger flags,
+scheduled arrival/departure/passage, an optional boarding point, the route stop slot, pickup and
+drop-off types, the timepoint flag and shape distance. CZPTT additionally publishes complete
+operational journeys (`operational_call`) including timing points passed without stopping.
 
 ```text
 10  Praha hl.n.     passenger=true
@@ -718,292 +387,72 @@ Example:
 40  Kolín           passenger=true
 ```
 
-The GTFS exporter publishes only passenger calls.
-
-The realtime estimator uses the full call sequence.
-
-This allows non-stop railway points to anchor delay calculations without exposing them to riders as stops.
+The GTFS export publishes only passenger calls. The realtime core uses the full sequence, so
+non-stop railway points anchor delay estimates without being exposed to riders as stops.
 
 ---
 
 # 11. JrUtil workstream
 
-JrUtil owns the complete production static pipeline. Existing JDF and CZPTT conversion bundles
-remain its normalized, lossless intermediate contracts; they are inputs to a new high-performance
-identity-discovery and overlay compiler which produces the ready-made nationwide GTFS and a typed
-Oběhy serving package.
-
-## Static compiler commands and boundary
-
-During the provisional vertical slice:
+JrUtil owns the complete production static pipeline. `obehy build` drives the JrUtil multitool:
 
 ```text
-jrutil-multitool static-compile <build-spec.json> --identity-mode provisional-v0 <output-root>
+fix-jdf → merge-jdf → jdf-to-bundle            national JDF package
+regional-gtfs-overlay                          PID + IDS JMK on top of it
+czptt-to-bundle                                national rail package
+validate-package                               for each result
 ```
 
-After registry launch:
+Every package records the exact JrUtil commit as its compiler version. Sources reach JrUtil only
+as checksum-pinned local snapshots; live URLs and credentials never enter its inputs.
 
-```text
-jrutil-multitool static-discover <build-spec.json> <proposal-output>
-jrutil-multitool static-compile <build-spec.json> <registry-snapshot> <output-root>
-```
+The production package (bundle v3, serving schema v4) contains standard `gtfs.zip`, 30 typed
+Parquet serving relations with fixed schemas, unique keys and resolving foreign keys, a manifest
+with sizes, SHA-256 hashes, namespaces, feed version and identity contract, and bounded
+diagnostics. `JDF_SEMANTICS.md` is the normative preservation addendum: GTFS is a projection of
+the typed facts, not their storage.
 
-Oběhy downloads and hashes every static source, then passes immutable local snapshots and a
-secret-free build specification. `static-discover` emits deterministic identity proposals and
-evidence. Oběhy submits those proposals to the registry. `static-compile` consumes the returned
-immutable snapshot and performs no network or registry mutations.
+Resource rules:
 
-The build specification pins its schema, source manifests, overlay-policy digest, nullable registry
-base, identity contract, JrUtil identity, resource limits and deterministic options. The output contains `gtfs.zip`,
-extensions, sorted serving relations, source/public mappings, trip/call coverage mappings,
-operational/provenance relations, validations, diagnostics and a canonical manifest.
+- national-sized relations are streamed once per stage; the compiler may not retain or emit a
+  second 17-million-row JDF call relation;
+- stage duration, peak memory and row counts are recorded;
+- after the first accepted production benchmark, unexplained performance regressions above
+  15 percent fail the build gate;
+- the build must fit a GitHub Actions runner. If it cannot, a self-hosted runner is the fallback,
+  never the application server.
 
-National-sized relations are scanned once per stage. The compiler may not materialize or emit a
-second 17-million-row JDF call relation. Use JrUtil's resource-aware worker planning, route/trip
-partitioning, streaming output, one final sort and digest-keyed stage caches. Record stage duration,
-CPU, I/O, peak memory, cache reuse and row counts. The user stopped further runtime optimization
-after the current changes on 2026-09-15; do not continue tuning to reach the earlier 120-second
-target without a new request. The hard ceiling is less than 4,000,000,000 bytes of aggregate
-private memory across active build processes throughout the complete production build, including
-fixing, merging, inference, CZPTT, overlay and validation. Worker requests cannot override memory
-admission. Measure one warm-up and three frozen national runs; small fixtures do not establish
-acceptance. Neither the earlier v1-relative runtime gate nor the two-minute target requires further
-optimization under the current instruction.
+Open JrUtil contract items needed by the realtime core:
 
-JDF, CZPTT and regional overlays must converge on one typed compilation path and production writer.
-Retain accepted conversion and matching algorithms, replace national call/exception arrays with
-bounded storage and compact shared schedules, and emit GTFS and serving relations from native
-facts. Remove legacy staging conversion and reconstructed CSV compiler views after equivalence
-checks pass. Sorting, compression and validation share the execution budget and report their real
-phase, completed work, private memory and waiting at least once per second. Database migration,
-shape generation and further matching research remain outside this work.
+- the actual JDF district code (`BM`, `KV`, …) separately from stop-name components;
+- an explicit, documented link from each CZPTT trip part to its operational journey, with
+  `operational_call` ↔ `trip_call` alignment (through `czptt_pa_id`/`czptt_pa_sequence`
+  bindings or a dedicated relation);
+- a documented guarantee that GTFS `stop_sequence` equals `trip_call.sequence`.
 
-## National conversion bundles
-
-The implemented production entry point is `obehy build`. It emits one immutable release containing
-the PID + IDS JMK overlaid JDF package and the CZPTT package, validates both against JrUtil's closed
-production contract, and switches a single filesystem pointer only after the pair succeeds. This is
-the application-building baseline while serving-v2 database import remains deferred. Shape
-generation retains its planned position after overlay selection and before final validation through
-an explicit no-op enrichment stage.
-
-National conversion commands use one mandatory machine-local TOML configuration with absolute
-paths for the heavy-work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkout, and
-exactly one JrUtil directory or executable command. They never infer sibling checkouts from the
-repository parent.
-
-OSM acquisition is a separate, explicit snapshot operation. It caches and merges the fixed
-Czechia/Austria/Bavaria/Saxony/Slovakia/Dolnośląskie/Opolskie/Śląskie Geofabrik extracts under
-the work directory and atomically replaces the single configured PBF. Its sibling manifest
-records the ordered source hashes, Osmium identity, and output identity so unchanged builds skip
-regeneration safely. There are no versioned merged copies, hard links, or replay lookup. JDF and
-CZPTT validate and record the active manifest but never download OSM during a conversion run.
-The snapshot command also creates and manifests a reusable node-only railway-location extract.
-Both merge and filter use native `osmium` (`merge --progress` and `tags-filter --progress`);
-Python does not parse or transform OSM objects. Windows can use the default WSL installation.
-
-For CZPTT coordinates, a valid and unambiguous SŽ SR70 `(CZ, primary code)` is authoritative.
-OSM can fill only SR70 gaps, in this order: exact `ref:EU:PLC`, reviewed object alias, global
-normalized exact name, operational-suffix/qualifier-stripped name, then a close fuzzy name. OSM
-never replaces, averages, or adjusts known SR70 coordinates. Disagreements retain SR70 and produce
-structured diagnostics. Neither `uic_ref` nor `railway:ref` is a Primary Location Code;
-neighboring calls may veto a name match but may not override SR70. CZPTT consumes only
-`railway=station|halt|stop` nodes and ignores ways, relations, unrelated public-transport points,
-and station geometry. Country tags rank otherwise equivalent candidates but never exclude a name
-match. A candidate is impossible only when every occurrence with usable timed-neighbor evidence
-fails the 150 km/h plus 2 km slack test; one anomalous occurrence does not veto a clear match.
-When no OSM method survives, coordinates are estimated between timed route anchors using the same
-linear/end-offset approach as the JDF stop fallback.
-
-Suggested output:
-
-```text
-conversion/
-├── gtfs-intermediate/
-│   ├── agency.txt
-│   ├── routes.txt
-│   ├── trips.txt
-│   ├── stops.txt
-│   └── stop_times.txt
-├── extensions/
-│   ├── cz_routes.txt
-│   ├── cz_trips.txt
-│   ├── cz_stops.txt
-│   └── cz_stop_zones.txt
-├── source_route_metadata.parquet
-├── source_stop_metadata.parquet
-├── source_call_metadata.parquet
-├── source_route_stop_zone_metadata.parquet
-├── source_notice_metadata.parquet
-├── source_transfer_metadata.parquet
-├── source_travel_restriction_metadata.parquet
-├── diagnostics.json
-└── manifest.json
-```
-
-Bundle format version 1 is implemented for JDF and CZPTT in the standalone JrUtil fork.
-It uses explicit flat Parquet schemas, Snappy compression, fixed row groups,
-deterministic ordering and per-file SHA-256 metadata. CZPTT uses
-`operational_points`, `operational_calls`, `source_call_metadata`,
-`source_ids_coverage_metadata`, and `source_ids_coverage_trip_metadata`; typed bridge rows replace
-generated-ID lists. PA/TR identities belong to `cz_trips.source_trip_ids`. CZPTT operational
-Parquet retains the complete accepted source route, including timing-only identities with no real
-coordinate. GTFS projects an internal timing point only when SR70 or OSM supplies a real
-coordinate; unresolved timing-only calls intentionally have no GTFS/source-call projection.
-Passenger-referenced gaps alone may use deterministic dense-service estimation.
-
-Standard GTFS plus the Oběhy extension tables are the primary normalized
-representation. Parquet must not repeat fields that can be reconstructed from
-those tables. Bundle v1 retains seven narrow enrichment relations:
-
-```text
-source_route_metadata
-    gtfs_route_id, source_route_id, route_distinction,
-    source_agency_id, source_agency_distinction, valid_from, valid_to
-
-source_stop_metadata
-    gtfs_stop_id, town, district, district_code, nearby_place, country,
-    coordinates_missing
-
-source_call_metadata
-    gtfs_trip_id, stop_sequence, source_route_stop_id
-
-source_route_stop_zone_metadata
-    gtfs_route_id, source_route_stop_id, zone_id, zone_order
-
-source_notice_metadata
-    source_notice_id, notice_kind, gtfs_route_id?, gtfs_trip_id?,
-    label?, text?, valid_from?, valid_to?, service_note_type?
-
-source_transfer_metadata
-    source_transfer_id, gtfs_trip_id, source_route_stop_id,
-    source target identifiers, wait_minutes?, note?
-
-source_travel_restriction_metadata
-    assignment_scope, gtfs_route_id?, gtfs_trip_id?,
-    source_route_stop_id, group_code
-```
-
-The call `stop_sequence` is the exact GTFS join key, not a separately numbered
-sequence. Snapshot/source identity belongs in the manifest and Parquet file
-metadata rather than on every row. Route/trip/stop/post identities, names,
-coordinates, modes, public numbers, times, distances, pickup/drop-off rules and
-zone catalogs remain solely in GTFS/extensions unless a future source exposes a
-genuinely non-projectable value.
-
-JDF zones are normalized as route-distinction-scoped source identities because
-the raw token does not identify its IDS owner. Stop memberships are stored as
-rows in `cz_stop_zones.txt`; `source_route_stop_zone_metadata.parquet` adds only
-their route-stop scope and token order. `source_call_metadata.parquet` supplies
-the join from emitted GTFS calls to those route stops, so zone membership is
-not duplicated once per trip. Standard GTFS `stops.zone_id` is
-populated only for a single source-zone identity and remains blank for plural
-membership; `stop_times.txt` contains no custom zone column.
-
-JDF `Udaje`, text-bearing or otherwise unhandled `Caskody`, `Mistenky` and
-`Navaznosti` are retained as typed source notices or connection claims.
-Calendar-only `Caskody` are omitted because their complete effect is already
-represented by GTFS calendars. The `§`/`A`/`B`/`C` travel-exclusion codes retain
-their original `Zaslinky` route-stop or `Zasspoje` trip-call scope rather than
-being expanded over every trip. Bundle Parquet is an immutable compiler input;
-JrUtil resolves it into final GTFS/serving relations. Oběhy bulk-loads those finalized relations
-and never performs runtime static arbitration.
-
-Required changes:
-
-- extract IDS zones;
-- expose friendly/public line numbers;
-- preserve CISLineID;
-- preserve CISTripID;
-- preserve any available CIS StopIDs;
-- preserve source identifiers and provenance;
-- preserve train numbers;
-- include locations trains pass through without stopping when a real SR70/OSM coordinate exists,
-  while retaining unresolved timing-only source facts in operational Parquet;
-- include scheduled passage times;
-- distinguish passenger and non-passenger calls;
-- preserve any post/platform data available in the source;
-- preserve the actual JDF district code separately from stop-name components;
-- emit deterministic, testable conversion sidecars.
-
-## JrUtil testing
-
-Maintain tiny golden fixtures for:
-
-- one JDF bus route;
-- one JDF trip with multiple posts;
-- one CZPTT train with passenger and pass-through points;
-- one overnight service;
-- one source export where local source IDs change.
-
-Do not block project delivery on upstream acceptance. Pin the project to a known fork commit while submitting clean patches upstream independently.
+Maintain tiny golden fixtures for one JDF bus route, one JDF trip with multiple posts, one CZPTT
+train with passenger and pass-through points, one overnight service, and one export where local
+source IDs change.
 
 ---
 
 # 12. Static source precedence and overlays
 
-Generic GTFS merging is not sufficient for this project.
+Static overlays apply to road and urban transport (the `jdf` feed) only. **No regional static rail
+data is used**: rail static is national CZPTT alone, and regional sources contribute to rail only
+through realtime (section 13).
 
-The required behaviour is a deterministic JrUtil **GTFS compiler** operating on registry-owned
-public entities.
+Generic GTFS merging is not sufficient. JrUtil's overlay compiler overlays selected fields,
+calls, journey segments and metadata. It does not replace entire trips merely because a matching
+trip exists. Every imported notice, zone, connection and travel restriction is a positive source
+claim; a regional feed that omits a field makes no deletion claim against national data.
+Precedence is resolved during compilation; runtime requests never scan Parquet or arbitrate
+static source claims.
 
-Regional and operator feeds should overlay:
+## 12.1 Field-level precedence
 
-- selected fields;
-- selected calls;
-- selected journey segments;
-- selected metadata.
-
-They should not replace entire trips merely because a matching trip exists.
-Every imported notice, zone, connection and travel restriction is a positive
-source claim. A regional feed that omits the corresponding field makes no
-deletion claim against national data. Precedence is resolved during static
-compilation and materialized for the active build; runtime requests must not
-scan Parquet or arbitrate source claims dynamically.
-
-## 12.1 Source coverage
-
-```text
-source_trip_binding
-    source_id
-    source_trip_id
-    canonical_trip_id
-    coverage_from_sequence
-    coverage_to_sequence
-    valid_from
-    valid_to
-```
-
-## 12.2 Field-level precedence
-
-Example:
-
-```yaml
-pid:
-  bus:
-    covered_segment:
-      stop_times: authoritative
-      boarding_points: authoritative
-      shape: authoritative
-      headsign: authoritative
-      route_colour: authoritative
-      accessibility: authoritative
-
-  train:
-    covered_segment:
-      stop_times: authoritative
-      boarding_points: authoritative
-      shape: preferred
-    outside_covered_segment:
-      schedule: national
-```
-
-The policy must be explicit, declarative and testable.
-
-Do not implement an implicit “PID wins everything” rule.
-
-Oběhy stores the versioned policy and exports it in the build specification. For every source,
-mode, coverage scope and capability, configure an integer priority and one of:
+For every source, mode, coverage scope and capability, the versioned policy sets an integer
+priority and one of:
 
 ```text
 disabled       ignore this capability
@@ -1015,148 +464,74 @@ authoritative  must win inside proven coverage or produce a blocking conflict
 Capabilities include schedules/calendars, names/coordinates, posts/platforms, route display,
 shapes, accessibility, zones/fares, notices, restrictions and connections. Equal-priority
 conflicts are quarantined. Permission to add unmatched stops, routes and trips is configured
-independently per source.
+independently per source. Do not implement an implicit "PID wins everything" rule.
 
-The first overlay fixture is deliberately a PID bus slice contributing exact posts only. National
-times, names, colours and every disabled capability must remain selected from the national baseline.
+## 12.2 Entity-specific deduplication
 
-## 12.3 Entity-specific deduplication
+- **Trips:** road/MHD by CIS line + CIS trip.
+- **Routes:** road/MHD by CIS line; source route IDs remain bindings.
+- **Stops:** PostID, ASW ID or CIS stop ID; explicit crosswalk; registry continuity; structural
+  candidate for review; reviewed manual mapping; otherwise a new provisional identity.
 
-Trips, routes and stops must be deduplicated separately.
+## 12.3 Regional GTFS adapter and matching contract
 
-### Trips
+GTFS identifiers are source-local unless the provider documents another namespace. Every adapter
+preserves the original rows and emits typed hints or identity claims; it never manufactures CIS
+identifiers. Raw custom columns and companion files (such as IDS JMK `api.txt`) stay in snapshot
+storage so adapter rules can be audited and replayed.
 
-- road/MHD: CISLineID + CISTripID;
-- rail: train number, with timetable variant resolution where necessary.
+Static road/MHD matching order:
 
-### Routes
+1. documented CIS line/trip claims, validated against the national snapshot;
+2. an already reviewed source binding that remains structurally consistent;
+3. candidate routes constrained by operator, mode, validity, public designation and geography;
+4. operating-instance comparison by active service date, ordered stops and scheduled times;
+5. a reviewed manual binding;
+6. unresolved or ambiguous quarantine.
 
-- primarily canonicalized by CISLineID for road/MHD;
-- rail route grouping may require a project-specific service or line model;
-- source route IDs remain bindings.
-
-### Stops
-
-Prefer:
-
-1. PostID, ASW ID or CIS StopID;
-2. explicit crosswalk;
-3. existing canonical continuity;
-4. structural candidate;
-5. manual mapping;
-6. new canonical allocation.
-
-## 12.4 Regional GTFS adapter and matching contract
-
-GTFS identifiers are source-local unless the provider explicitly documents another namespace.
-Every static adapter should preserve the original GTFS row and emit typed hints or identity
-claims; it should not manufacture canonical or CIS identifiers.
-
-Normalize common custom attributes into namespaced facts, for example:
-
-```text
-duk_stop_id  -> source-local stop-place hint in the DÚK namespace
-cis_stop_id  -> asserted CIS StopID
-stop_post    -> source post designation
-duk_zone     -> zone code in the DÚK fare-system namespace
-```
-
-Keep the raw custom columns in snapshot storage so an adapter rule can be audited and replayed.
-Keep nonstandard companion files such as IDS JMK `api.txt` as well. Simple field mappings may be
-declarative. Provider-specific parsing belongs in a small, versioned adapter with real-feed golden
-fixtures.
-
-Static road/MHD matching should proceed in this order:
-
-1. documented CISLineID/CISTripID claims, validated against the national snapshot;
-2. explicit, validity-bounded aliases for transformed identifiers;
-3. an already reviewed source binding that remains structurally consistent;
-4. candidate routes constrained by operator, mode, validity, public designation and geography;
-5. operating-instance comparison using active service date, ordered canonicalized stops and
-   scheduled times;
-6. a reviewed manual binding;
-7. unresolved or ambiguous quarantine.
-
-Names, public line numbers, numeric suffixes and zero-padding may generate candidates, but must
-not establish a CIS identity on their own. A source route can map to multiple CISLineIDs: PID, for
-example, associates licences with `(route_id, sub_agency_id)`, so `route_id` alone is not always a
-valid binding key. Route, trip, stop and post resolution remain independent so useful stop/post or
-shape data is not discarded solely because another entity is unresolved.
-
-Source capability is field-specific. The presence of a regional GTFS archive does not make that
-source authoritative for shapes, posts or any other table it omits. For example, a feed without
-`shapes.txt` can still contribute exact static/realtime crosswalks, stop hierarchy, zones, colours
-and timetable evidence while national or generated geometry remains active.
-
-When scheduled rows with different CISTripIDs have identical calls and times, compare service
-calendars and operating dates. If ambiguity remains, applying an attribute to a proven common
-route/segment may still be safe, but trip-specific timetable or post replacement must remain
-quarantined.
+Names, public line numbers and zero-padding may generate candidates but never establish a CIS
+identity on their own. Route, trip, stop and post resolution stay independent, so useful post or
+shape data is not discarded because another entity is unresolved. When rows with different CIS
+trips have identical calls and times, compare calendars; if ambiguity remains, trip-specific
+replacement stays quarantined.
 
 ---
 
-# 13. Partial regional train feeds
+# 13. Rail: national static, regional realtime
 
-PID may publish only the section of a train inside its area even though the train continues farther.
+Rail static data comes only from national CZPTT. Regional GTFS rail trips (PID, IDS JMK and
+others) are never overlaid onto CZPTT and never published as separate trains.
 
-The project must preserve the complete national train.
-
-Example:
-
-```text
-National CZPTT:
-Cheb -> Plzeň -> Praha -> Kolín -> Pardubice
-
-PID:
-Beroun -> Praha -> Kolín
-```
-
-Compiled result:
+Regional and operator sources still matter for rail in realtime, and they usually cover only part
+of a train:
 
 ```text
-Cheb -> Plzeň       national schedule
-Beroun -> Praha     PID fields where better
-Praha -> Kolín      PID fields where better
-Kolín -> Pardubice  national schedule
+CZPTT run:      Cheb -> Plzeň -> Beroun -> Praha -> Kolín -> Pardubice
+SŽ:             ===================================================  (whole run)
+PID realtime:                     ==================                 (inside PID's area)
+DÚK realtime:   (none on this train)
 ```
 
-It remains one canonical trip.
+So a rail run regularly **gains and loses sources en route**. The realtime core (section 19.4)
+treats this as normal:
 
-PID source trip IDs bind to the covered segment of the complete canonical trip.
-
-The same principle applies to realtime:
-
-- PID positions can update the full canonical trip instance;
-- PID stop updates apply only to the stop sequences they describe;
-- the national schedule remains available outside PID coverage;
-- another provider can continue supplying data after the train leaves PID;
-- alerts retain their original scope.
-
----
+- each source's evidence applies to the calls it actually describes; a source never truncates
+  or extends the run;
+- when a source starts reporting mid-run, its first observations must agree with the run's
+  current progress (section 20.4) before they move the state;
+- when a source stops reporting at its area boundary, that is coverage ending, not a stale or
+  failed train; the run continues on the remaining sources, or on propagation from the last
+  anchor until a source picks it up again;
+- the selected position and delay hand over between sources without jumps: a new source's
+  values must be continuous with the current state within the plausibility rules, or they are
+  held until consistent.
 
 # 14. Static stop and post overlays
 
 A regional source may provide exact posts where the national feed provides only the stop place.
-
-Example:
-
-```text
-National:
-Teplice, Benešovo náměstí
-
-Regional:
-Teplice, Benešovo náměstí, post B
-```
-
-Compiler behaviour:
-
-1. Resolve both records to the same stop place.
-2. Resolve or create canonical post B.
-3. Bind the regional PostID or source post ID.
-4. Assign that boarding point only to matching trip calls.
-5. Leave unmatched trips at the unspecified boarding point.
-
-Result:
+The compiler resolves both to the same stop place, resolves or creates the post, binds the source
+post ID, assigns that boarding point only to matching trip calls, and leaves other calls at the
+stop place's unspecified boarding point.
 
 ```text
 Trip 1 -> post B
@@ -1164,298 +539,156 @@ Trip 2 -> post D
 Trip 3 -> unspecified boarding point
 ```
 
-This preserves useful precision without pretending all sources know the same posts.
-
 ## 14.1 Flat regional stop feeds
 
-Do not assume that a parentless GTFS `location_type=0` row represents a complete independent stop
-place. Many otherwise useful feeds publish one boarding post as one GTFS stop and omit
-`parent_station` entirely. Import such rows first as **source boarding-point observations** and
-resolve their source-local grouping separately from canonical identity.
-
-Prefer source-local grouping evidence in this order:
+Do not assume a parentless GTFS `location_type=0` row is a complete stop place. Many feeds publish
+one boarding post per GTFS stop without `parent_station`. Import such rows as source
+boarding-point observations and resolve their grouping separately from identity, preferring:
 
 1. a valid explicit `parent_station`;
-2. a documented stop-place key such as PID `asw_node_id`, DÚK `cis_stop_id` or DÚK
-   `duk_stop_id`;
+2. a documented stop-place key such as PID `asw_node_id` or DÚK `cis_stop_id`/`duk_stop_id`;
 3. reviewed provider-specific parsing of a source stop ID;
-4. a trustworthy grouping carried forward from an earlier source snapshot;
-5. structural candidates using normalized name, coordinates, route/call structure and post labels;
+4. a grouping carried forward from an earlier snapshot;
+5. structural candidates (name, coordinates, call structure, post labels);
 6. otherwise a singleton source stop place.
 
-Grouping rows within one source and binding that group to a canonical stop place are different
-decisions. For example, a shared PID `asw_node_id` can establish that several PID rows are posts of
-one PID stop without itself proving which national stop that group represents. Similar names and
-nearby coordinates may generate candidates but must not silently merge railway facilities,
-grade-separated stops or similarly named nearby places.
-
-Preserve each post's own coordinates, labels and source identifiers after grouping. An uncertain
-group or canonical match remains unresolved rather than blocking ingestion or forcing a false
-merge.
+Similar names and nearby coordinates may generate candidates but must not silently merge railway
+facilities, grade-separated stops or similarly named nearby places. Uncertain groupings remain
+unresolved rather than forcing a false merge.
 
 ## 14.2 Regional coverage never limits the national stop universe
 
-The national JDF/CZPTT baseline defines timetable completeness. A regional feed may add a stop
-place, posts or exact call assignments, but its trip coverage does not determine which canonical
-trips are allowed to use that stop.
-
-Example:
-
-```text
-PID U1Z1P (ASW node 1, post A) --\
-                                      -> canonical Boletická
-PID U1Z2P (ASW node 1, post B) --/
-
-matched PID/national trip 1 -> Boletická, post A
-matched PID/national trip 2 -> Boletická, post B
-national-only trip 3        -> Boletická, unspecified boarding point
-```
-
-Creating or matching posts never assigns them to every call at the stop. Use an exact post only
-for a matched source trip/call, another authoritative call-level claim, or an explicit reviewed
-rule. Every other national call remains attached to the canonical stop's permanent unspecified
-boarding point. This allows partial regional precision without deleting, duplicating or inventing
-the rest of the national timetable.
+The national baseline defines timetable completeness. A regional feed may add a stop place, posts
+or exact call assignments, but its trip coverage never determines which trips may use that stop.
+Creating or matching posts never assigns them to every call at the stop.
 
 ---
 
-# 15. Static compilation pipeline
+# 15. Static build and release pipeline
 
-Run the compiler in this order:
+## 15.1 Build (GitHub Actions)
 
-1. Oběhy downloads each source and stores the raw bytes by checksum.
-2. Oběhy records source metadata, licence, retrieval time and required/optional status.
-3. Oběhy exports a versioned immutable build specification.
-4. JrUtil validates packaging/schemas and converts JDF/CZPTT to their existing bundles.
-5. JrUtil parses regional/operator GTFS and emits identity proposals/evidence.
-6. Oběhy commits the proposal batch through the public registry.
-7. JrUtil pins the returned registry snapshot and builds complete national routes/trips/calls.
-8. JrUtil matches regional trips and their inclusive coverage sequences.
-9. JrUtil applies aliases plus configured field/call/segment capabilities.
-10. JrUtil resolves exact boarding points and preserves complete trains outside overlay coverage.
-11. JrUtil preserves source shapes and may invoke the separate route-shapes companion for eligible
-    missing shapes.
-12. JrUtil validates public-identity, domain and schedule invariants.
-13. JrUtil writes GTFS Schedule, project extensions, sorted serving relations and diagnostics.
-14. Run the official GTFS validator and a representative MOTIS import sanity check.
-15. Automatically activate the immutable artifact only when all configured gates pass.
-16. In the later mirror milestone, Oběhy bulk-loads the finalized serving package and switches its
-    static/mapping pointer without recompiling it.
+The `obehy build` workflow runs on GitHub Actions on a schedule and on demand:
 
-## Raw source storage
+1. resolve the GVD year and reference date;
+2. restore caches (OSM snapshot, routing cache) and validate the OSM manifest;
+3. download each static source, store the raw bytes by SHA-256 and record a source manifest
+   (source, retrieval time, URL or method, checksum, declared version, licence);
+4. build JrUtil at its pinned commit;
+5. run the national JDF, regional overlay, filtered JDF and CZPTT stages;
+6. validate both production packages and the official GTFS validator;
+7. publish the release only when every configured gate passes.
+
+## 15.2 Release
+
+A release is one immutable, content-addressed directory, published as a GitHub Release:
 
 ```text
-data/raw/<source>/<sha256>/...
+release/<run-id>/
+├── release.json        run id, packages with manifest SHA-256 and feed_version, build inputs
+├── jdf/                production package: gtfs.zip, serving/, manifest.json, diagnostics.json
+├── czptt/              production package
+├── jdf-filtered/       derived plain GTFS (gtfs.zip, filter and line reports)
+└── stop-registry/      registry candidate CSVs for review
 ```
 
-A source manifest should include:
+Source snapshots, orchestration logs and detailed diagnostics are retained as workflow artifacts
+for the configured period.
 
-```text
-source
-downloaded_at
-source_url or retrieval method
-checksum
-source-declared version
-licence
-conversion version
-```
+## 15.3 Gates and last-known-good
 
-## Immutable build structure
+Publication is blocked by manifest/hash/schema, referential-integrity, domain, identity,
+required-mapping, configured count/drift and official GTFS validation errors. Warnings stay
+advisory unless a versioned gate promotes them.
 
-```text
-data/builds/2026-07-18T150000Z-4b913fa/
-├── gtfs.zip
-├── extensions/
-├── serving/
-│   ├── finalized static relations
-│   ├── source-public mappings
-│   ├── trip-call coverage mappings
-│   └── operational and provenance relations
-├── manifest.json
-├── validation/
-└── diagnostics.json
-```
-
-The active artifact is selected by one atomic pointer. After Oběhy static-mirror and managed MOTIS
-milestones exist, that pointer also selects the matching PostgreSQL partitions, realtime mapping
-version and MOTIS upstream.
-
-## Last-known-good behaviour
-
-If a new regional feed:
-
-- fails validation;
-- has catastrophic match-rate changes;
-- contains ambiguous trip mappings;
-- loses required identity fields;
-
-use the last-known-good regional snapshot only when that source explicitly enables fallback and the
-snapshot is within its configured maximum age. Otherwise omit the optional overlay and diagnose it.
-
-Activation is blocked by manifest/hash/schema, referential-integrity, domain, public-identity,
-required-mapping, configured count/drift and official GTFS validation errors. Warnings remain
-advisory unless a versioned gate explicitly promotes them.
-
-One broken upstream source must not destroy the nationwide feed.
+If a regional source fails validation, has catastrophic match-rate changes, contains ambiguous
+trip mappings or loses required identity fields, its last-known-good snapshot is used only when
+that source explicitly enables fallback and the snapshot is within its maximum age. Otherwise the
+optional overlay is omitted and diagnosed. One broken upstream source must not destroy the
+nationwide feeds.
 
 ---
 
-# 16. GTFS export
+# 16. Static publication and the Oběhy mirror
 
-## Stable exported IDs
+## 16.1 Fetch and load
 
-Example projections:
+On the application server:
+
+1. `obehy release fetch` polls for new releases, downloads, verifies every hash against
+   `release.json` and the package manifests, and unpacks into `data/releases/<run-id>`.
+2. `obehy release load` verifies the contract versions (bundle v3, serving schema v4), then:
+   - creates fresh LIST partitions per package load in `static.*`;
+   - streams every relation through binary COPY;
+   - builds indexes after loading;
+   - checks counts, keys and references set-wise;
+   - derives non-semantic helpers: `service_date` (service × operating day over the service
+     horizon), PostGIS geometry for locations and shapes, rail run assembly, and the inference
+     indexes;
+   - records the load in `control`.
+3. `obehy release activate` switches `control.publication` in one transaction (GTFS files, static
+   mirror, source mappings and realtime resolver version together) and sends `NOTIFY`.
+   `--rollback` reactivates the previous release.
+
+A failed load leaves no attached partitions. The active release and its two most recent
+predecessors keep their database payloads; older releases keep only metadata.
+
+The loader never performs identity matching, trip collapse, overlay precedence, fuzzy matching or
+static claim arbitration.
+
+## 16.2 Database
 
 ```text
-route_id = R000000123
-trip_id  = T000000456
-stop_id  = S000000123, P000000456, rail:CZ:<SR70> or rail:CZ:<SR70>:<subsidiary>
+control   release, package, load, publication (+ history), source health, configuration digests
+static    the 30 serving relations per package load, plus derived helpers
+rt        realtime observations, events, conflicts, alerts, assignments, current-state projection
+history   later: archived events, vehicle day runs, circulation model
 ```
 
-Canonical IDs can be used directly if their format is safe for public export.
+All public IDs are unrestricted text. Migrations are raw SQL, versioned in
+`src/obehy/release/migrations/`. The static DDL is generated from `contracts/serving-v4.json` so
+column types cannot drift from the contract.
 
-## Project-specific schedule extensions
+## 16.3 Two feeds
 
-Suggested public extension files:
+| Feed | Static | Realtime |
+|---|---|---|
+| `jdf` | `/gtfs/jdf.zip` | `/gtfs-rt/jdf/{trip-updates,vehicle-positions,alerts}.pb` |
+| `czptt` | `/gtfs/czptt.zip` | `/gtfs-rt/czptt/{trip-updates,vehicle-positions,alerts}.pb` |
 
-```text
-cz_routes.txt
-    route_id
-    cis_line_id
-    public_line_number
-    source_provenance
+`/gtfs/manifest.json` lists the active release, both `feed_version`s and hashes; versioned copies
+are available under `/gtfs/versions/<run-id>/`. Each GTFS-RT feed names its static
+`feed_version` and refers only to its own feed's IDs. The project API is feed-agnostic: a stop's
+departures mix both feeds.
 
-cz_trips.txt
-    trip_id
-    cis_line_id
-    cis_trip_id
-    train_number
-    source_trip_ids
-    coverage_sources
+## 16.4 Typed semantic subset
 
-cz_stops.txt
-    stop_id
-    stop_place_id
-    cis_stop_id
-    post_id
-    asw_id
-    source_ids
+The typed relations are not optional. `service_feature_assignment` preserves route, trip and call
+features (reservations, bicycle and luggage carriage, vehicle accessibility, on-request and
+conditional operation) with original JDF code, note link and provenance. `location_feature`
+preserves stop accessibility, facilities and interchange hints. `service_note` and its
+assignments preserve `Udaje`, `Caskody` and `Mistenky` verbatim and typed. `connection_claim`
+preserves `m`/`M` at the supplied specificity, including unresolved claims. Restrictions retain
+their original scope.
 
-cz_stop_zones.txt
-    stop_place_id
-    zone_id
-    zone_code
-    route_id
-    ids_system_id
-    source_provenance
-```
-
-Operational points should generally remain internal sidecars rather than public GTFS stops.
-
-`cz_routes.txt` deliberately has no route-level IDS-system or zone union. A route can participate
-in multiple systems and its zones vary by route stop, trip and call, so a singular system field or
-comma-separated route union is ambiguous and not useful for compilation. Exact route-stop
-membership remains in `cz_stop_zones.txt`; its per-membership `ids_system_id` can be populated
-later when ownership is known.
-
-In `cz_stops.txt`, `stop_id` is the exact GTFS row used by calls and may identify either a stop
-place or a boarding post. `stop_place_id` is always the containing place-level GTFS row. The two
-are equal on place rows and differ on child post rows, which also carry standard GTFS
-`parent_station`. Post identifiers use the common `:post:` hierarchy: authoritative
-`Oznacniky` values use `:post:id:<value>`, while textual `Zasspoje` values use bare
-`:post:<value>`, so the two mechanisms cannot collide.
-
-JrUtil-generated intermediate IDs use colon-separated namespaces consistently, including
-`jdf:agency:…`, `jdf:route:…`, `jdf:trip:…`, `jdf:stop:…`, `jdf:zone:…` and
-the enrichment namespaces. CIS-backed stop IDs use `cis:stop:…`; these remain source/intermediate
-identities rather than permanent canonical Oběhy IDs. Deduplicated GTFS operating patterns use
-the derived `gtfs:service:<weekday-bitmap>:<ordinal>` namespace.
-
-## Version compatibility
-
-Every static build gets a permanent `feed_version`.
-
-The realtime feed must identify the matching static feed version.
-
-The static feed, source bindings, trip-sequence mappings and realtime resolver must activate together.
-
----
-
-# 16A. Oběhy finalized static mirror
-
-Oběhy needs the complete finalized GTFS mirror plus typed extensions and sidecars to publish correct
-GTFS-RT, expose non-standard facts and perform connector-specific mappings. This is intentionally
-more than a compact crosswalk, but it is not a second compiler.
-
-JrUtil sorts serving relations by their final database keys. The Oběhy loader:
-
-1. creates fresh per-build partitions or isolated staging tables;
-2. streams finalized relations through parallel COPY;
-3. creates indexes after bulk loading;
-4. checks counts, references and mappings set-wise;
-5. attaches the complete build and switches one active pointer;
-6. retains the active build and configured predecessors for rollback.
-
-The loader never performs source identity matching, trip collapse, overlay precedence or source
-claim arbitration. Runtime requests query indexed PostgreSQL relations, not compiler Parquet.
-
-The PostgreSQL compiler/importer and its source-fact/reconciliation schema have been removed.
-Database v1 uses `control` and `static` schemas. It stores opaque text IDs, content-addressed
-artifacts, source/config/build/job metadata, complete digest contracts, per-build LIST partitions,
-finalized schedules and runtime mappings. It contains no canonical allocation, redirects,
-tombstones, registry bindings, identity diagnostics or compiler source facts.
-
-The executable serving-package v1 contract is `src/obehy/serving.py`: 33 sorted typed Parquet
-relations with fixed Arrow schema/nullability, metadata, counts, hashes and aggregate digest. The
-loader stages and COPYs every relation, validates location/call/coverage/segment invariants set-wise,
-attaches the complete partition set atomically and derives indexed PostGIS shape geometry. A single
-publication pointer selects static data and all realtime mappings; the active build and two recently
-activated predecessors retain payload for rollback.
-
-Source mappings explicitly separate identifier authority and namespace from future realtime
-observation provenance. Thus a `pid-vehiclepositions` observation may resolve a key owned by
-`pid-gtfs` in namespace `gtfs_trip_id`. Entity, trip, call and coverage mappings carry namespaces;
-trip mappings additionally retain optional exact source route, direction, start/end locations,
-scheduled end, block/run/duty IDs and call-pattern digest. Resolver context can eliminate a known
-contradiction but never fuzzy-match or treat missing context as evidence.
-
-The typed semantic subset is not optional. `service_feature_assignment` preserves route/trip/call
-features such as reservations, bicycle and luggage carriage, vehicle accessibility, on-request and
-conditional operation, including original JDF code, note link, and provenance. `location_feature`
-preserves stop accessibility/facilities and CLO/MHD/rail/line/metro/ship/airport/P+R hints.
-`service_note` and its assignments preserve `Udaje`, `Caskody`, and `Mistenky` verbatim and typed;
-`connection_claim` preserves `m`/`M`, all supplied specificity, any future specification-note parse
-provenance, and unresolved claims; restrictions retain their original scope. See
-`JDF_SEMANTICS.md` for the field-level contract and known JrUtil gaps.
-
-CZPTT uses the same relations without a schema fork. Central/non-central/calendar timetable notes
-remain lossless notes; codes `17`/`34` become wheelchair-capable vehicle features, codes
-`22`/`26`–`29` become positive bicycle features, and code `36` is authoritative bicycle
-prohibition. Only whole-generated-trip, all-active-date claims enter standard GTFS trip flags;
-partial, calendar-limited, unresolved, and contradictory claims remain semantic facts and
-diagnostics. Activity `0030` is both a call-scoped `on_request` feature and standard GTFS
-pickup/drop-off type `3`, subject to embark-only/disembark-only restrictions.
-Generated rail-replacement trips do not inherit train-equipment note features. Their boundaries
-use stop-pair `transfer_type=2` rows with `min_transfer_time=0` between the synthetic NAD `BUS`
-boarding point and the rail boarding point. This overrides MOTIS's configured default transfer
-time; the synthetic NAD-only stop bounds the rule after MOTIS/Nigiri discards trip specificity.
-
-Only uniquely resolved connection claims become `transfer` rows. A route or wait time without an
-identifiable target trip remains valuable source information, but must not be exposed as a routable
-trip-to-trip transfer or strengthened during NeTEx export.
-
-Realtime, history, alerts, compositions and vehicle state are intentionally absent from database
-v1 and receive vertical-slice migrations when implemented.
+CZPTT uses the same relations: notes stay lossless; codes `17`/`34` become wheelchair-capable
+vehicle features; `22`/`26`–`29` positive bicycle features; `36` an authoritative bicycle
+prohibition. Only whole-trip, all-date claims enter GTFS trip flags. Activity `0030` is both an
+`on_request` call feature and GTFS pickup/drop-off type `3`. Rail-replacement boundaries use
+stop-pair `transfer_type=2` rows with `min_transfer_time=0`. Only uniquely resolved connection
+claims become `transfer` rows.
 
 ---
 
 # 17. MOTIS route-shapes companion
 
-Shape generation runs after static overlays and before final canonical validation and export. It is
-an internal static-build tool, not a public Oběhy API. There is no production pfaedle dependency
-or fallback.
+Shape generation is part of the static build on GitHub Actions: it runs after overlays and before
+final validation, and its output ships in the release. It is an internal build tool, not an Oběhy
+API, and has no pfaedle fallback. The application server only loads the resulting shapes.
 
-Shape selection order:
+**Status: not implemented.** `obehy build` has an explicit no-op enrichment stage at this
+position; packages currently carry only source shapes, if any. Until generation exists, the
+realtime core uses stop-to-stop polylines (section 21.2).
 
 ```text
 authoritative regional/operator shape
@@ -1465,202 +698,530 @@ authoritative regional/operator shape
 ```
 
 A trip without a shape is preferable to a build failure. Source and retained national shapes are
-resolved before invoking MOTIS and must never be sent to the companion or overwritten by it.
+never sent to or overwritten by the companion.
 
-## Companion boundary
+## 17.1 Companion boundary
 
-Build a thin C++ CLI in `converters/motis-route-shapes/` against the pinned MOTIS, Nigiri and OSR
-sources. It invokes MOTIS's import-time `route_shapes` implementation directly. Do not copy or fork
-the routing algorithm and do not start or query a MOTIS HTTP server.
-
-```text
-obehy-motis-shapes
-  --gtfs <candidate-projection.zip>
-  --osm <snapshot.osm.pbf>
-  --work-dir <isolated-directory>
-  --output <new-bundle-directory>
-  --threads <auto|N>
-```
-
-The compiler creates a temporary GTFS projection containing only trips that still lack a selected
-shape, their required routes and stops, ordered calls, coordinates, effective modes and one
-synthetic service day. Canonical trip IDs remain unchanged. Because precedence has already selected
-the candidates, invoke `route_shapes` in `all` mode rather than delegating missing-shape policy to
-MOTIS.
-
-Enable every supported MOTIS routing profile: bus and coach, tram and railway classes, and ferry.
-Unsupported modes, routes with fewer than two distinct positioned stops and routes over configured
-safety limits remain unshaped with diagnostics.
-
-Use the shared, checksummed multi-country OSM PBF. Cache keys and reuse decisions must cover the
-exact OSM hash, MOTIS and OSR versions, routing configuration, profile and ordered stop coordinates.
-Never enable reuse across a changed OSM snapshot. A cold-cache and warm-cache run over identical
-inputs must produce byte-identical output.
-
-The companion writes a new immutable directory containing:
+A thin C++ CLI in `converters/motis-route-shapes/` against the pinned MOTIS, Nigiri and OSR
+sources invokes MOTIS's import-time `route_shapes` implementation directly, without starting a
+MOTIS server:
 
 ```text
-shapes.txt
-trip_shapes.csv
-stop_shape_offsets.csv
-diagnostics.json
-manifest.json
+obehy-motis-shapes --gtfs <candidate-projection.zip> --osm <snapshot.osm.pbf>
+                   --work-dir <dir> --output <bundle-dir> --threads <auto|N>
 ```
 
-`shapes.txt` contains generated GTFS points and cumulative distances in metres.
-`trip_shapes.csv` maps canonical trip IDs to deterministic shape IDs, records the MOTIS
-class/profile and generation status, and identifies `motis_route_shapes` as provenance.
-`stop_shape_offsets.csv` records trip ID, stop sequence, shape-point index and cumulative distance.
-`diagnostics.json` records failures by mode, unsupported routes, distant stops, geometry rejections,
-aggregate routed and beelined segments, and cache statistics. `manifest.json` records input and
-output hashes, row counts, wrapper version, pinned MOTIS commit, OSM and configuration hashes,
-command identity and timings.
+The compiler creates a temporary GTFS projection of trips still lacking a shape, with one
+synthetic service day, and invokes `route_shapes` in `all` mode. Every supported MOTIS routing
+profile is enabled. Unsupported modes and routes with fewer than two distinct positioned stops
+stay unshaped with diagnostics.
 
-Derive each generated `shape_id` from the routing profile and canonicalized output geometry so
-identical geometries deduplicate and repeated builds remain stable. Generated geometry can enrich a
-trip but cannot create or change canonical route or trip identity.
+Cache keys cover the exact OSM hash, MOTIS and OSR versions, routing configuration, profile and
+ordered stop coordinates. Cold and warm runs over identical inputs must be byte-identical.
 
-## Validation and failure handling
+Output: `shapes.txt`, `trip_shapes.csv` (trip → deterministic shape ID, profile, status,
+provenance), `stop_shape_offsets.csv` (trip, stop sequence, point index, cumulative distance),
+`diagnostics.json` and `manifest.json`. Shape IDs derive from the profile and canonicalized
+geometry.
 
-Accept a generated shape only when:
+**Shapes with stop offsets are also the preferred path for the realtime progress engine
+(section 21).** Until they exist, the realtime core uses stop-to-stop polylines.
 
-- it contains at least two distinct points with valid coordinates;
-- every stop offset exists, is in range and is monotonic; consecutive repeated stops may share an
-  offset;
-- cumulative shape and stop distances are monotonic;
-- every call is within the configured mode-specific stop-to-shape distance; and
-- every output reference joins to exactly one candidate trip and generated shape.
+## 17.2 Validation
 
-Preserve MOTIS beeline fallbacks as explicit low-quality diagnostics. They may be published only
-when the normal structural and distance checks pass, and version-controlled quality policy may
-reject them without invalidating the feed. A per-route exception, unsupported mode, invalid result
-or rejected shape leaves the affected trip without a shape and does not fail the static build.
+Accept a generated shape only when it has at least two distinct valid points, every stop offset
+exists and is monotonic, cumulative distances are monotonic, every call is within the mode's
+stop-to-shape distance, and every reference joins to exactly one trip and shape. Beeline
+fallbacks are explicit low-quality diagnostics. A rejected shape leaves the trip unshaped and
+never fails the build.
 
-## Fixtures, benchmarks and upgrades
-
-Maintain deterministic golden fixtures for bus, coach, tram or rail, ferry, loops, branches, short
-turns, repeated stops, mixed shaped and unshaped input, unsupported modes, missing coordinates,
-routing failure and beeline fallback. Retain one old and one current OSM fixture and compare graph
-and routing output across MOTIS upgrades.
-
-Before Milestone 5 activation, benchmark MOTIS against frozen pfaedle baseline outputs and withheld
-authoritative Czech shapes. Require equal-or-better coverage, lower median and p95 geometric error,
-and better wall-clock or peak-memory performance without regressing the other efficiency measure.
-If this gate fails, do not restore pfaedle automatically; leave affected trips shapeless and
-investigate. Every MOTIS upgrade requires explicit fixture, output and performance review.
-
-Build diagnostics:
-
-```text
-Trips with source shape
-Trips with retained national shape
-Trips enriched by MOTIS
-MOTIS shapes rejected
-Trips still lacking shape
-MOTIS failures by mode
-MOTIS routed segments
-MOTIS beelined segments
-Stops suspiciously far from shape
-MOTIS shape-cache hits
-MOTIS wall time
-MOTIS peak memory
-```
+Maintain golden fixtures for bus, coach, tram or rail, ferry, loops, branches, short turns,
+repeated stops, unsupported modes, missing coordinates, routing failure and beeline fallback.
+Before activation, benchmark against frozen pfaedle outputs and withheld authoritative Czech
+shapes. Every MOTIS upgrade needs an explicit fixture, output and performance review.
 
 ---
 
-# 18. Realtime architecture
+# 18. Realtime core: layers, connectors and execution
 
-Realtime connectors must emit normalized **claims**, not final truth.
+The realtime core is the heart of Oběhy. It must cope with sources ranging from exact trip IDs
+with per-stop predictions down to "line, trip, delay, untimed GPS".
 
-Claim types:
-
-```text
-PositionClaim
-StopEventClaim
-DelayClaim
-PredictionClaim
-PlatformClaim
-VehicleIdentityClaim
-AlertClaim
-CompositionClaim
-```
-
-## Connector boundary
-
-```python
-class RealtimeConnector(Protocol):
-    source_id: str
-
-    async def fetch(self) -> NormalizedRealtimeBatch:
-        ...
-```
-
-Connectors are responsible for:
-
-- downloading or polling;
-- source parsing;
-- timestamp conversion;
-- basic field normalization;
-- source-specific identity extraction;
-- returning raw references.
-
-Connectors are not responsible for deciding which provider is trusted more.
-
-## Common realtime pipeline
+## 18.1 Layers
 
 ```text
-fetch
- -> decode
- -> normalize source identifiers
- -> resolve active source-local static crosswalk
- -> apply aliases
- -> resolve canonical trip instance
- -> validate timestamps and geography
- -> store immutable claims
- -> arbitrate by capability
- -> update fused trip state
- -> emit GTFS-RT
- -> update map API
- -> append history
+connector.fetch ─► raw archive ─► decode ─► Observation (source-shaped, unresolved)
+   ─► Trip inference (trip/run instance + vehicle binding; method, confidence, explanation)
+   ─► Evidence extraction (declared source semantics → interval constraints / events / predictions)
+   ─► Timeline engine (per instance: actuals, progress, predictions, conflicts)
+   ─► Arbitration (per call field and capability, by policy)
+   ─► Projection: GTFS-RT per feed, rt.trip_state_current, rt.stop_event, debug output
 ```
 
-## Realtime claim metadata
+Every layer after the connector is a pure function of its inputs, the active release and an
+injected clock. Connectors are the only part that performs I/O. That is what makes deterministic
+replay possible.
 
-Every claim should retain:
+## 18.2 Connectors
+
+**One connector per upstream system.** The boundary is a shared base URL, authentication, rate
+limits, payload family and ID semantics. Inside it, **channels** are individual endpoints or
+polls with their own intervals (for example SŽ train positions versus SŽ station departure
+boards). Capabilities are a declared feature set of the connector, not separate connectors.
+
+Each connector has a manifest (code plus TOML):
+
+- **channels:** endpoint, poll interval, timeout, payload type;
+- **capabilities per channel:** `vehicle_position`, `trip_progress` (last/current/next stop),
+  `stop_event` (actual arrival/departure/passage), `delay`, `prediction` (per-call ETA/ETD),
+  `platform`, `vehicle_assignment`, `vehicle_attributes`, `occupancy`, `trip_status`
+  (cancelled/skipped/added/detour), `alert`, `composition`;
+- **fact semantics:** which facts it supplies (section 19) and in which namespaces, whether it
+  supplies an operating date, timezone;
+- **time and delay semantics** (section 20.2): granularity, rounding, signedness, reference
+  event, whether there is a source clock, typical latency, maximum staleness;
+- **coverage:** modes and region.
+
+Deployment configuration enables or disables channels and capabilities; a disabled capability's
+channels are not polled. Policy (section 23) is a separate versioned file. Provenance records
+`source_id` plus `channel`, and a policy may target either.
+
+Connectors parse and normalize only. They never resolve trips, rank sources or know output IDs.
+**Trivial source quirks are normalized in the connector**: line-number prefixes, plate
+formatting, "Jede včas" and similar texts. There is no alias machinery in the core.
 
 ```text
-source_id
-source_entity_id
-trip_instance_id
-event_time
-received_time
-valid_from
-valid_until
-precision
-granularity
-uncertainty
-geographical_scope
-sequence_scope
-raw_payload_reference
+Observation
+    source_id, channel
+    received_at
+    observed_at          interval: source clock at its precision,
+                         or [received_at − max_staleness, received_at] without a source clock
+    vehicle_key          stable source vehicle identifier if any (RZ plate, vhc_id, fleet number)
+    facts                open typed bag (section 19.1)
+    payload              position, delay, events, predictions, platform, status, alerts
+    raw_ref              pointer into the raw archive
 ```
+
+Every source gets a dossier in `docs/sources/<source>.md` before its connector is written:
+endpoints, terms and licence, identifier namespaces, delay rounding, sign and reference event,
+timestamp semantics, update rates and captured edge cases (midnight, regressions, platform
+changes). Its manifest semantics must be backed by captured examples.
+
+## 18.3 Execution
+
+- One asyncio process. Connector pollers push observations onto a queue; a single core loop
+  applies them in `(received_at, source order)`, so state changes are deterministic.
+- An emit tick (default 10 s) writes GTFS-RT `.pb` files per feed by atomic rename, upserts
+  changed rows of the UNLOGGED `rt.trip_state_current` (joined by the API with static
+  departures), and writes a state checkpoint.
+- The inference indexes for the active release are double-buffered and swapped between cycles
+  when `NOTIFY` announces a new publication. States are re-keyed by `(feed, trip_id, date)` where
+  unchanged; the rest are rebuilt from fresh observations. Releases activate at night.
+- Restart loads the checkpoint and today's `rt.stop_event`, then resumes polling.
+- Scale target: about 20k vehicles updating every 10–30 s, roughly 1–2k observations per second,
+  handled by one Python process with in-memory indexes. Shard per feed only if measurements
+  require it.
+
+## 18.4 Persistence, archive and replay
+
+- `rt.observation`: normalized observations with their inference result. Daily partitions,
+  batched COPY, retention by dropping partitions.
+- `rt.vehicle_assignment`: vehicle → instance bindings with method, confidence and validity.
+- `rt.stop_event`: accepted actual events (kept long term).
+- `rt.conflict`, `rt.alert`, `rt.source_health`.
+- Raw archive: `data/rt-raw/<source>/<channel>/<date>/…`, zstd-compressed and content-addressed,
+  retained per source licence.
+- `obehy rt record` archives sources without processing them, so replay corpora can be collected
+  before a connector exists.
+- `obehy rt replay --release R --from --to [--sources]` runs archived payloads through the same
+  core with a simulated clock. Outputs are deterministic and golden-testable.
+- `obehy rt evaluate` compares predictions against later actual events: MAE and p90 by lead time,
+  source, method and mode. **Source priorities, inference thresholds and the choice between
+  source delay and own GPS delay are set from these numbers.**
 
 ---
 
-# 19. Multi-source realtime arbitration
+# 19. Trip inference
 
-A train may simultaneously have data from SŽ, PID and DÚK.
+## 19.1 One extensible, fact-based engine
 
-There must not be one global source ranking.
+**The common case is easy.** Almost every source supplies one of:
 
-Trust must be:
+- a train number;
+- CIS line + CIS trip;
+- PID/IDS GTFS route and trip IDs (on the overlaid parts).
 
-- capability-specific;
-- mode-specific;
-- geographically scoped;
-- sequence scoped;
-- freshness limited.
+These resolve through the `TripKey` indexes (`rail_trip_key`, `road_trip_key`,
+`source_trip_map`). Only the operating date still has to be inferred (section 19.3).
 
-## 19.1 Example capability preferences
+**The long tail is handled, not special-cased.** Some sources are much poorer:
+
+- Arriva Express exposes line, destination, licence plate, last-position time, at-stop flag,
+  "on time" text, next stop, product type and GPS — but no trip;
+- DPKV exposes line, trip, delay and untimed GPS, and nothing else.
+
+All of them go through one engine that takes whatever facts an observation carries and infers
+the trip instance. A `TripKey` is just a very strong fact, so sane sources pay almost nothing for
+the generality. Adding a source means emitting facts, not writing a matcher.
+
+Facts are typed and versioned. A new kind is added by registering a fact type and its scorer.
+
+| Fact | Example | Evaluated as |
+|---|---|---|
+| `TripKey(namespace, key)` | `gtfs_trip_id` (PID), `cis_line_id`+`cis_trip_id`, `train_number` | index lookup → candidates |
+| `LineRef(namespace, value)` | CIS line `580916`; public line + operator | candidate generator |
+| `OperatingDate`, `ScheduledStart` | explicit date, first departure | hard filter |
+| `Destination(name or ref)` | "Teplice,Celní" | hard filter: last passenger call or headsign |
+| `Origin(name or ref)` | — | hard filter |
+| `NextStop(name or ref)` | "Teplice,Pražská" | call exists at or after current progress |
+| `LastStop`, `CurrentStop(at_stop)` | "v zastávce" | ordering constraint (section 20) |
+| `Position(lon, lat, accuracy, bearing)` | GPS | distance to the candidate's path at the implied progress |
+| `EventTime(interval)` | "19:30" → [19:30:00, 19:30:59] | anchors time-based scorers |
+| `Delay(value, semantics)` | "Jede včas" → `coarse_on_time` | residual of the implied scheduled time |
+| `Mode`, `Product`, `Operator` | "Express", Arriva | hard filter where mapped |
+| `VehicleKey` | RZ `6SA3700`, DÚK `vhc_id` | binding continuity; circulation prior |
+| `CirculationPrior` | learned successor of the vehicle's previous trip | soft prior (section 22) |
+
+**Names are matched only against a candidate's own calls, never globally.** "Teplice,Pražská"
+only needs to match a call name on the candidate trip (normalized JDF `Obec,Část,Místo` form),
+with GPS proximity as tie-breaker. Ambiguous stop names across the country therefore do not
+matter. Stop references in a known namespace are matched through `source_entity_map`.
+
+## 19.2 Procedure
+
+1. **Candidate generation** from the strongest generator available: `TripKey` lookup; else
+   `LineRef` → routes → trips; else, as a bounded last resort, `Operator + Mode` within a radius
+   of `Position`. Candidates are expanded to instances by operating-date inference.
+2. **Hard filters**: each fact may eliminate a candidate by contradiction. Missing facts are
+   unknown, never evidence.
+3. **Soft scoring**: each scorer adds a log-likelihood contribution (time residual under the
+   declared delay semantics, GPS distance to the implied position between `LastStop` and
+   `NextStop`, circulation prior).
+4. **Decision**: accept the best candidate only if its score reaches the floor **and** beats the
+   runner-up by the margin. Otherwise `ambiguous` (quarantined with all candidates) or
+   `unmatched`.
+5. **Explanation**: every decision stores each fact's contribution for the debug API.
+
+Floors and margins are versioned policy tuned on replay. An inferred match may by default emit
+positions and predictions, but its actual stop events become history-grade only once continuity
+confirms the binding.
+
+Worked example (Arriva Express): line `580916`, destination "Teplice,Celní", RZ `6SA3700`, last
+position 19:30, "v zastávce", "Jede včas", next stop "Teplice,Pražská", product Express, GPS at
+Praha, Holešovice.
+
+- Candidates: trips of line 580916 active around 19:30.
+- Destination removes the opposite direction; "Teplice,Pražská" must be a later call; at a stop
+  with that next stop means the current call is the one before it; GPS inside that call's stop
+  area confirms Praha, Holešovice.
+- "On time" at 19:30 under the declared semantics puts `S_dep(Holešovice)` in about
+  [19:28, 19:31]. One departure fits: accept. Two would be ambiguous.
+- From then on the source's coarse "on time" is weak evidence; delay comes from GPS progress
+  (section 21).
+
+## 19.3 Operating date
+
+Practically no provider sends the operating date, so date inference is core:
+
+1. Candidate service dates are local today − 1, today and today + 1. Yesterday covers trips past
+   midnight and `24:xx+` schedule times; tomorrow covers a vehicle already standing at the origin
+   at 23:55 for a 00:05 trip.
+2. Keep dates where the service is active (`service_date`) and the observation time falls in
+   `[S_start(d) − pre(mode), S_end(d) + max_delay(mode)]`. Scheduled instants are computed from
+   noon − 12 h in Europe/Prague, which handles DST days.
+3. If several dates survive, the time scorers decide; otherwise `ambiguous`.
+4. Once bound, an instance's date sticks. Continuity checks never re-guess the date, and the
+   midnight rollover never moves a running trip to the next day's service.
+
+## 19.4 Rail runs
+
+`RunInstance = (train_number, operating_date)` is the ordered concatenation of the train's CZPTT
+trip parts plus its operational points with passage times. All rail evidence — SŽ events at
+operational points, DÚK and PID positions and delays — feeds one timeline per run. Output is
+projected back onto each passenger trip part; operational-only points are never exported.
+
+Sources cover runs partially and change en route (section 13). Each run tracks per source the
+call range that source has described so far and its last observation. A source entering
+mid-run is accepted once its evidence agrees with current progress. A source falling silent at
+the edge of its declared coverage ends that source's coverage without marking the run stale.
+Staleness is judged across all sources of the run. Selected values switch between sources only
+through the continuity and plausibility rules of section 20.4, so a handover never makes progress
+or delay jump. Policy coverage scopes (section 23) say where each source is expected, so silence
+inside a source's area is distinguishable from leaving it.
+
+## 19.5 Vehicle binding and continuity
+
+- A `Vehicle` is `(source_id, source_vehicle_id)`. A `VehicleAssignment` binds it to an instance
+  with method, confidence and validity. One run may have several vehicles (an SŽ train-number
+  position and a DÚK `vhc_id`).
+- Once bound, further observations of the vehicle get a **cheap consistency check** (position
+  near the path at plausible progress, consistent next stop, not past the trip end plus grace)
+  instead of full inference.
+- Full re-inference runs on contradiction (section 20.4), at trip end, or when line or
+  destination changes. At trip end the circulation prior or `block_key` proposes the next trip.
+
+## 19.6 Untimed and stale data
+
+- A connector without a source clock declares it; `observed_at` becomes a wide interval and every
+  time-based scorer and constraint uses that width.
+- The core detects frozen positions: identical coordinates across polls while the schedule or
+  delay says the vehicle should move. Such fixes are downgraded and not used for progress.
+- With a `TripKey` the match stays exact; only the GPS evidence gets weaker.
+
+Unmatched observations stay in the log. The vehicle may appear in the API flagged as unmatched;
+it never appears in a TripUpdate.
+
+---
+
+# 20. Evidence and the timeline engine
+
+## 20.1 Event times as intervals
+
+For each call `i` of an instance (passenger calls, and for rail also operational points) the core
+knows scheduled instants `S_arr(i)` and `S_dep(i)` (a passage has arr = dep). The unknowns are
+the actual instants `A_arr(i)` and `A_dep(i)`.
+
+**Every piece of evidence becomes a constraint `A_x(i) ∈ [lo, hi]` or an ordering relation.**
+That one mechanism serves sources reporting very different amounts of information:
+
+| Source says (observed at t) | Constraint |
+|---|---|
+| actual departure from i at minute precision T | `A_dep(i) ∈ [T, T+59]` (per declared truncation) |
+| passage of operational point i at T | `A_arr(i) = A_dep(i) ∈ [T, T+59]` |
+| last stop k, not at a stop | `A_dep(k) ≤ t` and `A_arr(k+1) > t` |
+| at stop k | `A_arr(k) ≤ t < A_dep(k)` |
+| next stop k | `A_dep(k−1) ≤ t < A_arr(k)` |
+| delay d, floor, non-negative, reference = last departure k | `A_dep(k) − S_dep(k) ∈ [60d, 60d+59]`; **d = 0 → (−∞, 59]** |
+| delay d, rounded, signed | `∈ [60d−30, 60d+29]` |
+| delay d, unknown rounding | `∈ [60d−59, 60d+59]` |
+| delay d, reference = current position | anchored at the current progress gap |
+| source prediction for call j | not a constraint: a prediction candidate (section 20.5) |
+| GPS position | progress along the path (section 21) → `gps_derived` constraint |
+
+Structural constraints always hold: `A_arr(i) ≤ A_dep(i) ≤ A_arr(i+1)`, optional minimum run and
+dwell times per mode, and the no-early-departure rule where policy requires it (timepoints and
+rail passenger stops: `A_dep(i) ≥ S_dep(i)`, unless precise signed evidence shows otherwise).
+
+This is how **arrival versus departure** is handled: sources that know only departures (most
+CIS-style delays), only passages (SŽ points) or only "between stops" each narrow the right event.
+First and last calls with one scheduled time are handled naturally.
+
+## 20.2 Delay semantics
+
+Delay is never one integer internally. A coarse non-negative whole-minute delay is coarse
+evidence: "3 minutes" is roughly 180–239 s depending on rounding; "0" is not proof of exact
+on-time running and says nothing about early running. Each connector declares:
+
+```text
+granularity_seconds     e.g. 60
+rounding                floor | round | ceil | unknown
+signed                  whether early running can be reported
+reference               last_departure | last_arrival | last_event | current_position | next_arrival
+source_clock            whether the payload carries an event time; its precision
+latency_seconds         typical lag between event and publication
+text_values             e.g. "Jede včas" → coarse_on_time window
+```
+
+## 20.3 Propagation and point estimates
+
+Lower bounds are pushed forward and upper bounds backward along the call chain, in O(n) per
+update. Each event gets a feasible interval, a point estimate and a status:
+
+```text
+unknown      no evidence
+bounded      interval narrowed, event not observed
+tentative    derived and not yet confirmed (e.g. arrival without departure)
+confirmed    source actual, or a derived event confirmed by later progress
+```
+
+The point estimate is the value preferred by the highest-ranked evidence, otherwise the interval
+clipped toward schedule plus the last anchored delay.
+
+## 20.4 Progress integrity and backtracking
+
+**Trip progress never jumps around, and delay progression stays sane.** Two route shapes must
+work:
+
+- **A → B → A, stopping at A both times.** A is call `i` and call `k > i`; a fix or a source
+  "last stop A" matches both.
+- **A → B → A, stopping only the second time.** The bus passes A on the way out without a call
+  there; A is only call `k` after B. Naively, passing A fires "arrived at A", jumps progress past
+  B and produces an absurd early delay.
+
+The path also overlaps itself on the out-and-back road, so one fix projects onto both the
+outbound and the inbound leg.
+
+Rules, for GPS-derived and source-reported progress alike:
+
+1. **Calls are identified by sequence and path offset, never by stop identity or coordinates
+   alone.** A source stop reference resolves to the first matching call at or after current
+   progress that is reachable under rule 3. A fix near A means "at call j" only if progress is
+   inside call j's offset window.
+2. **Windowed forward projection.** A fix is projected only onto
+   `[progress − ε, progress + max_advance]`, where `max_advance = v_max(mode) · Δt` plus
+   accuracy. The earliest admissible projection wins, not the globally nearest one. Where fixes
+   or the source give a bearing, heading must agree with the path direction, which separates
+   outbound and inbound legs.
+3. **Sequential gating.** Progress cannot pass an unvisited intermediate call without evidence of
+   visiting it: a fix inside its offset window, or a time-plausible run of fixes beyond it. In the
+   second scenario, passing A on the way out lies in the path before B, not in call k's window,
+   so nothing fires.
+4. **Delay plausibility.** An update is rejected and logged as `jump` when it implies early
+   running beyond the mode's bound (for example more than 3 minutes early for a bus) or a delay
+   change larger than physically possible since the last accepted state
+   (`|Δdelay| > Δt + slack`). This also catches a naive source reporting the second A early.
+5. **Hold, don't jump.** A rejected update leaves progress and delay unchanged and widens the
+   uncertainty with time. Only consistent evidence moves the state; a gap or one bad fix never
+   produces a sawtooth delay.
+
+Contradictions that survive these rules show up as an **empty interval**, for example a
+high-ranked "last stop k−2" after an accepted "last stop k":
+
+1. Rank the conflicting evidence by policy priority for the capability, method (source actual >
+   confirmed derived > progress > coarse delay > tentative), precision and recency. The weaker
+   side is rejected for this state, kept in the log and flagged `regressive` or `conflict`.
+2. A confirmed event is never revoked by lower-ranked evidence; one regressive report never moves
+   the vehicle backwards.
+3. If the same or an equal-ranked source repeats the regression N times or for longer than Δt,
+   first revoke tentative and derived events beyond the regression point; if the contradiction
+   remains, mark the binding `suspect` and re-run inference (next trip in the block, opposite
+   direction, different date).
+4. Every conflict lands in `rt.conflict` and the debug output.
+
+## 20.5 Predictions
+
+Project propagation runs from the latest anchored event:
+
+```text
+pred(j) = S(j) + delay_anchor − recoverable_slack(anchor → j)
+```
+
+- Slack is the dwell slack (`S_dep − S_arr − min_dwell`) plus configured running-time recovery
+  per mode (default 0; learned from history later).
+- The no-early-departure clamp applies; arrivals may be early only with precise signed evidence.
+- Uncertainty widens with lead time and with the anchor's interval width.
+- Never propagate one scalar delay unchanged through a long trip; maintain per-call predictions.
+- Across trips of one vehicle, the circulation anchor (section 22) gives the knock-on start of
+  the next trip.
+
+## 20.6 Per-field arbitration
+
+Arbitration happens per call and field (arrival, departure), not per trip. Default order, which
+policy may override per source and mode:
+
+1. actual (source event, or confirmed progress event);
+2. an external travel-time ETA where one is enabled (section 21.3), or a fresh source prediction
+   from a policy-preferred source (typically rail);
+3. project propagation from the best anchor (own GPS-derived delay on the road, infrastructure
+   events on rail);
+4. propagation of the source's scalar delay;
+5. the schedule.
+
+A lower-ranked source may fill calls a better one does not cover. A final monotone repair keeps
+emitted times ordered, leaving the highest-confidence values fixed.
+
+---
+
+# 21. Own delay from GPS and travel-time providers
+
+## 21.1 Own delay by default where GPS is good
+
+Most sources compute their delay the same way Oběhy can, usually worse: coarse, rounded and
+stale. **Where GPS is good, Oběhy derives the delay itself and the source's scalar delay becomes
+weak supporting evidence.** The main exception is rail: infrastructure events (SŽ passages at
+operational points) and operator train delays stay strong. Policy encodes this per source and
+mode; `rt evaluate` confirms it on replay.
+
+## 21.2 Progress along the path
+
+Once a vehicle is bound:
+
+- **Path:** the trip's shape with stop offsets when available (source shape, or MOTIS shapes),
+  otherwise the stop-to-stop polyline of its calls. No router runs in the realtime core.
+- **Progress:** each fix is projected under the windowed, gated rules of section 20.4, giving a
+  distance along the path and the gap `(i, i+1)`. Fixes far from the path, frozen or implausible
+  in speed are rejected for progress; repeated rejects mark the binding `suspect`.
+- **Stop events from path offsets, not proximity:** the vehicle arrives at call j when progress
+  enters j's offset window and dwells while it stays there. Events are tentative until the next
+  accepted fix is past the call. They are the strongest road anchors.
+- **Between stops:** `t − S(position)` is the current delay, where `S(position)` interpolates the
+  schedule between `S_dep(i)` and `S_arr(i+1)` along the path. It enters the timeline as a
+  `gps_derived` constraint with uncertainty from fix age and accuracy.
+
+## 21.3 Remaining time
+
+- Progress along the path plus last-stop delay propagation (section 20.5) is the default and is
+  sufficient wherever stops are close together. That covers urban and regional traffic.
+- A pluggable `TravelTimeProvider` interface exists **only for long gaps between stops** (coaches,
+  motorway sections). Input: the instance, current progress and target calls. Output: ETAs with
+  uncertainty, entered as prediction candidates.
+- A segment is eligible when the distance or scheduled running time to the next call exceeds a
+  policy threshold (for example 20 km or 20 minutes) and the trip or line is enabled for the
+  provider.
+- **The core is built ready for providers, but none is implemented yet.** External routing or
+  traffic APIs such as Mapy.com come later with forced corridors (waypoints), caching, sparse
+  calls (never per GPS update), monthly request and cost limits, automatic fallback, and a
+  historical benchmark. A provider is enabled only on lines where replay shows it beats
+  propagation. API failure never breaks realtime output.
+
+## 21.4 Railway estimation
+
+Rail runs use passenger stops, operational points with scheduled passage times, SŽ passage events
+and available GPS. A recent infrastructure passage anchors the state more strongly than an older
+position. GPS-inferred passages of operational points (crossing the point's path offset,
+interpolated between fixes) are derived events with lower rank than infrastructure events.
+
+## 21.5 Confidence
+
+Confidence reflects the age of the last observation, distance to the path, number of recent
+observations, trajectory consistency, quality of scheduled timing points, source precision and
+availability of actual events.
+
+---
+
+# 22. Learned vehicle circulations (oběhy)
+
+An **oběh** is the chain of trips one vehicle works in a day. Static data rarely contains it: JDF
+has no blocks, and only CZPTT and some GTFS sources supply `block_key`. Oběhy learns circulations
+from history wherever a source provides a stable vehicle identifier: DÚK `vhc_id`, Arriva
+licence plates, PID vehicle IDs, later cross-source vehicles (section 27) and train sets
+(section 28).
+
+- **Observed runs.** A nightly `obehy rt circulations build` reads the day's vehicle assignments.
+  It uses only confirmed, non-suspect assignments — a `TripKey` match, or an inferred match later
+  confirmed by continuity — so weak inferences cannot feed their own prior. Per vehicle it
+  writes an ordered `vehicle_day_run`: instances with actual start and end, layovers and gaps.
+- **Timetable-stable keys.** Learning uses keys that survive timetable versions (CIS line + CIS
+  trip, train number, source binding key), not trip IDs, together with a day class (weekday,
+  Saturday, Sunday/holiday, school holiday) from the service calendar.
+- **Model.** A successor graph rather than whole-sequence clustering:
+  `circulation_edge(prev_key, next_key, day_class, support, trials, last_seen, layover stats)`,
+  weighted toward recent days so it adapts to timetable and roster changes. Full patterns are
+  derived from high-support chains for display. Edges whose trips no longer exist in the active
+  release are retired.
+- **Uses:**
+  1. **Matching prior.** When a bound vehicle finishes trip A, a strong learned successor B
+     enters inference as a `CirculationPrior` fact and is published as a forecast assignment
+     (`predicted:circulation`) before B starts. It never overrides a `TripKey` or a
+     contradiction; the explanation shows the edge's support.
+  2. **Knock-on delay.** `pred_start(B) = max(S_dep(B, first), A_arr(A, last) + min_layover)`,
+     with `min_layover` learned per edge. This is a cross-trip anchor for section 20.5.
+  3. **Vehicle forecasts.** The API shows the expected vehicle and its features (low floor, air
+     conditioning) for upcoming departures, flagged as a forecast with its confidence.
+  4. **Static feedback (optional, later).** High-confidence patterns may be exported as a
+     reviewed candidate block file for JrUtil. They never become identity.
+- **Guardrails.** Circulation evidence is a prior and never produces actual stop events.
+  Thresholds are versioned policy. `rt evaluate` measures the forecast hit rate and delay error
+  with and without circulation anchors before the prior is enabled for a source.
+
+---
+
+# 23. Capability policy and arbitration
+
+There is no global source ranking. Trust is capability-specific, mode-specific, geographically
+scoped, sequence-scoped and freshness-limited.
+
+## 23.1 Default capability preferences
 
 | Information | Preferred evidence |
 |---|---|
@@ -1668,1379 +1229,516 @@ Trust must be:
 | Actual rail passage | Infrastructure event at an operational point |
 | Vehicle identity | Operator or IDS vehicle registry |
 | Current position | Freshest spatially plausible AVL/GPS observation |
-| Per-stop ETA | Validated provider prediction or project estimator |
-| Delay | Recent actual event or high-confidence GPS derivation |
+| Road delay | Own GPS progress where GPS is good; else the best source delay |
+| Rail delay | Infrastructure events and operator delays, then GPS |
+| Per-stop ETA | Validated source prediction, own propagation, or an enabled travel-time provider |
 | Coarse scalar delay | Fallback |
-| Alerts | Preserve and deduplicate; do not select one universal winner |
-| Composition | Most authoritative permitted composition source |
+| Alerts | Preserve and deduplicate; no universal winner |
+| Composition | Most authoritative permitted source |
 
-## 19.2 Policy configuration
+## 23.2 Policy configuration
 
-```yaml
-policies:
-  - source: sz
-    mode: train
-    capability: platform_assignment
-    scope: nationwide
-    priority: 100
-    max_age_seconds: 300
+```toml
+[[policy]]
+source = "sz"
+mode = "rail"
+capability = "platform"
+scope = "nationwide"
+priority = 100
+max_age_seconds = 300
 
-  - source: pid
-    mode: train
-    capability: vehicle_position
-    scope: pid
-    priority: 90
-    max_age_seconds: 90
+[[policy]]
+source = "duk"
+mode = "bus"
+capability = "delay"
+scope = "duk"
+priority = 40              # below own GPS-derived delay
+max_age_seconds = 90
 
-  - source: duk
-    mode: train
-    capability: vehicle_position
-    scope: duk
-    priority: 80
-    max_age_seconds: 90
+[[policy]]
+source = "arriva-express"
+capability = "inference"
+score_floor = 0.0          # tuned on replay
+margin = 2.0
 ```
 
-## 19.3 Eligibility gates
+Priorities and thresholds are versioned and set from `rt evaluate` results, not guessed.
 
-Before comparing priorities, reject or downgrade claims that fail:
+## 23.3 Eligibility gates
 
-- exact trip matching;
-- plausible timestamp;
-- freshness;
-- source coverage;
-- plausible speed;
-- plausible movement from previous observations;
-- proximity to expected path;
-- consistent operating date;
-- consistent sequence progression;
-- acceptable source health.
+Before comparison, reject or downgrade evidence that fails: a binding of sufficient confidence,
+plausible timestamp, freshness, source coverage, plausible speed and movement, proximity to the
+expected path, consistent operating date, consistent sequence progression (section 20.4) and
+acceptable source health.
 
-Only eligible claims enter arbitration.
+## 23.4 Conflicting positions
 
-## 19.4 Conflicting positions
+Never average contradictory positions. Prefer the claim that best satisfies freshness, policy,
+path plausibility, trajectory continuity, source accuracy and sequence scope. Record the conflict;
+the losing observation stays stored.
 
-Never average two contradictory positions.
+## 23.5 Selected-state provenance
 
-Prefer the claim that best satisfies:
-
-- freshness;
-- source capability policy;
-- path plausibility;
-- trajectory continuity;
-- source accuracy;
-- sequence scope.
-
-Record the conflict for diagnostics.
-
-The losing observation remains stored.
-
-## 19.5 Selected-state provenance
-
-Every selected value should expose internally:
-
-```text
-selected value
-source
-source timestamp
-received timestamp
-selection reason
-confidence
-competing claims
-```
+Every selected value exposes internally: value, interval, source and channel, source and received
+timestamps, method, selection reason, confidence, and the competing evidence.
 
 ---
 
-# 20. Delay model
+# 24. Dynamic posts and train platforms
 
-Delay must not be represented internally as only one integer.
-
-## Delay claim model
+Platform and post assignments are realtime evidence:
 
 ```text
-delay_claim
-    lower_bound_seconds
-    upper_bound_seconds
-    granularity_seconds
-    supports_negative
-    applies_from_sequence
-    applies_to_sequence
-    source_method
+platform_evidence
+    instance, call sequence, raw platform/track value, boarding_point_id (if mapped),
+    source, assigned_at, valid_until, confidence
 ```
 
-A source exposing only non-negative whole-minute delays is coarse evidence.
+Arbitration order: fresh infrastructure assignment > fresh operator or IDS assignment > previous
+still-valid assignment > scheduled static boarding point > unspecified boarding point.
 
-Example:
-
-```text
-reported 3 minutes
--> approximately 180 to 239 seconds, depending on rounding semantics
-
-reported 0 minutes
--> not proof of exact on-time running
--> no reliable information about early running
-```
-
-## Preferred delay evidence
-
-1. Explicit actual arrival, departure or passage event
-2. High-confidence GPS progress estimate
-3. Reliable per-stop prediction
-4. Precise signed source delay
-5. Coarse non-negative scalar delay
-6. Static schedule
-
-A lower-ranked source may still fill stops not covered by a better source.
-
-Do not propagate one scalar delay unchanged through a long trip.
-
-Maintain per-call predictions.
-
----
-
-# 21. Trip-state estimator
-
-Maintain one fused state per active trip instance.
-
-```text
-trip_state
-    trip_instance_id
-    current_path_distance
-    current_call_sequence
-    selected_position
-    last_confirmed_event
-    estimated_delay
-    confidence
-    selected_sources
-    updated_at
-```
-
-Create a scheduled-time function over the expected path:
-
-```text
-scheduled time = f(distance along path)
-```
-
-For each position:
-
-1. map-match it to the expected route or rail path;
-2. determine distance along path;
-3. determine expected scheduled time at that position;
-4. compare observed time with expected time;
-5. reject implausible jumps;
-6. anchor against recent actual events;
-7. calculate per-stop predictions.
-
-## Railway estimation
-
-Inputs:
-
-- passenger stops;
-- non-passenger operational points;
-- scheduled passage times;
-- railway geometry;
-- SŽ or other infrastructure passage events;
-- available GPS positions.
-
-A recent actual passage event should generally anchor the state more strongly than an older position.
-
-## Normal road estimation
-
-Initial inputs:
-
-- selected source or MOTIS-generated shape;
-- scheduled stop times;
-- distance along shape;
-- current GPS position;
-- recent observed speed.
-
-Later add historical segment travel times.
-
-## Confidence
-
-Estimator output should include confidence based on:
-
-- age of last observation;
-- map-match distance;
-- number of recent observations;
-- trajectory consistency;
-- quality of scheduled timing points;
-- source precision;
-- availability of actual passage events.
-
----
-
-# 22. Long-distance coach routing
-
-Per-stop delay propagation may be weak for long coach journeys with long motorway sections.
-
-Implement an optional estimator plugin.
-
-```yaml
-trip_patterns:
-  T000004201:
-    estimator: mapy-routing
-```
-
-Use paid Mapy.com routing only for whitelisted services.
-
-The routing result should estimate remaining travel time, not define canonical route identity.
-
-Requirements:
-
-- force the intended corridor using waypoints where needed;
-- cache route geometry and reusable segments;
-- call the API sparsely;
-- do not call it on every GPS update;
-- configure monthly request and cost limits;
-- provide an automatic fallback;
-- benchmark it against actual historical trips;
-- enable it only where it measurably improves predictions.
-
-A normal car routing estimate may not perfectly model coach operations, dwell, restrictions or service roads. Treat it as one predictor, not ground truth.
-
----
-
-# 23. Dynamic posts and train platforms
-
-Platform and post assignments are realtime claims.
-
-```text
-platform_claim
-    trip_instance_id
-    scheduled_call_sequence
-    assigned_boarding_point_id
-    source
-    assigned_at
-    valid_until
-    confidence
-```
-
-Suggested arbitration order:
-
-```text
-fresh infrastructure assignment
- > fresh operator or IDS assignment
- > previous still-valid assignment
- > scheduled static boarding point
- > unspecified boarding point
-```
-
-## Static prerequisite
-
-All known posts and platforms should exist in the static stop registry, even if only a small number of scheduled calls use them.
-
-## Unknown realtime posts
-
-If an API returns a post/platform that cannot yet be mapped:
-
-- retain the raw value;
-- expose it through debugging or a custom API where safe;
-- do not invent an unstable GTFS stop ID;
-- create a review/mapping task;
-- include it in the next static build after canonicalization.
-
-## GTFS-RT output
-
-Where the assigned boarding point exists in static GTFS:
-
-- identify the correct stop sequence;
-- publish the assigned stop/platform against that sequence;
-- keep the canonical stop-place relationship intact.
-
----
-
-# 24. PID realtime on full train journeys
-
-PID realtime is applied to the complete canonical train.
-
-When PID covers only part of the train:
-
-- accept PID positions while fresh and plausible;
-- apply PID stop updates only to matching canonical call sequences;
-- retain national schedule elsewhere;
-- allow SŽ, DÚK or another provider to continue the journey state;
-- use the estimator across gaps;
-- do not terminate the canonical train at the PID boundary.
-
-Realtime output should describe the complete canonical trip, not a duplicated PID-only partial train.
+All known posts and platforms should exist in the static build, even if few scheduled calls use
+them. An unmappable realtime post or platform keeps its raw value, is exposed in the API and
+debug output, never becomes an invented GTFS stop ID, and becomes a review item for the next
+static build. Where the assigned boarding point exists in static GTFS, publish it against the
+correct stop sequence and keep the stop-place relationship intact.
 
 ---
 
 # 25. Alerts
 
-Alerts should be preserved as independent claims and mapped to canonical scope.
+Alerts are independent evidence mapped to precise scope:
 
 ```text
 alert_scope
-    canonical_trip_id
-    canonical_route_id
-    from_sequence
-    to_sequence
-    stop_place_id
-    geographical_scope
+    trip_id or run, route_id, from_sequence, to_sequence, stop place or boarding point,
+    geographical scope
 ```
 
-## Mapping rules
+- Whole-trip incident: the whole trip or run.
+- Stop-specific incident: the stop place or boarding point.
+- Segment-only incident: the affected sequence range. Do not expose a PID-only segment disruption
+  as a nationwide route disruption.
 
-### Whole-trip incident
-
-Map to the whole canonical trip.
-
-### Stop-specific incident
-
-Map to the canonical stop place or boarding point.
-
-### Segment-only incident
-
-Retain the affected sequence range.
-
-Do not expose a PID-only segment disruption as a nationwide route disruption.
-
-## Alert deduplication
-
-Use:
-
-- normalized text;
-- active period;
-- canonical scope;
-- cause;
-- effect;
-- source references.
-
-Do not merge alerts only because they mention the same line.
-
-## Standard versus custom representation
-
-Where GTFS-RT cannot represent the exact segment scope without becoming misleading:
-
-- publish the closest safe standard selector;
-- retain the precise scope in the project API;
-- expose provenance.
+Deduplicate by normalized text, active period, scope, cause, effect and source references. Never
+merge alerts only because they mention the same line. Where GTFS-RT cannot represent the exact
+scope without becoming misleading, publish the closest safe selector, keep the precise scope in
+the project API and expose provenance. Alerts are emitted per feed, with entities of that feed
+only.
 
 ---
 
-# 26. PID connector
+# 26. Realtime sources
 
-PID is the first GTFS-Realtime connector.
+Order of implementation: **DÚK and SŽ first, then PID, then Arriva Express and further long-tail
+sources.** Every source starts with a dossier and recorded payloads (section 18.2). Details below
+are expectations to be confirmed by the dossier.
 
-Do not proxy PID protobuf unchanged.
+## 26.1 DÚK
 
-Decode and rewrite:
+Dossier: `docs/sources/duk.md` (draft from a sample payload, checked against a release). The
+vehicle list gives per vehicle (3–4 digit DÚK `ID`s and `40`-prefixed Teplice city buses; `20xxx`
+train entries are dropped):
 
-```text
-PID trip_id      -> canonical trip_id
-PID route_id     -> canonical route_id
-PID stop_id      -> canonical boarding point or stop
-PID vehicle_id   -> source binding / canonical vehicle
-```
+- the CIS line (as an integer without leading zeros, zero-padded by the connector) and the CIS
+  trip number → `TripKey(cis_line_id, cis_trip_id)`. In the sample, 148 of 149 vehicles resolve
+  to exactly one `jdf` line and trip; the miss is a line absent from the CIS export and falls back
+  to `LineRef` inference;
+- the public line, a predicted delay in whole minutes, the actual arrival at the last stop and
+  its timetabled departure (which identifies the call without stop mapping), and a vehicle
+  state: off, running, at a stop, waiting before the trip, or running to the trip's first stop.
+  The two pre-trip states give forecast assignments only and never advance the trip;
+- GPS position, bearing and fix time, last activity time, low-floor flag.
 
-Unmatched or ambiguous entities go to diagnostics.
+This is a timed source with explicit arrival evidence. Its delay is rounded, never negative and
+mixes arrival- and departure-based values, so it jumps by the dwell slack: it is weak evidence
+spanning both events, and own GPS-derived delay is DÚK's delay source. DÚK stop node/post IDs
+are not used: trips match by key and progress comes from GPS. Vehicle `ID`s are the fleet
+numbers printed on the buses, stable across trips and days, so DÚK history seeds the
+circulation model. DÚK trains are not used; rail realtime comes from SŽ.
 
-Capabilities should be handled independently:
+## 26.2 SŽ
 
-- vehicle positions;
-- trip updates;
-- alerts;
-- occupancy;
-- vehicle identity.
+Dossier: `docs/sources/sz.md` (one sample payload checked against a release, plus the upstream
+JrUtil scraper `SzMapa.fs`). The SŽ train map (`mapy.spravazeleznic.cz`, layer `OsVlaky`)
+returns all trains as GeoJSON with a response timestamp. Per train:
 
-PID can be authoritative for some capabilities without owning all fields.
+- an ID `TR/<company>/<core>/<variant>/<year>/<date>`: the CZPTT TR identity and the operating
+  date → `TripKey(czptt_tr_id)` + `OperatingDate`. With binding and trip calendars applied,
+  468 of 469 sample trains resolve to exactly one CZPTT timetable; the remaining one is
+  quarantined unless position or next-stop facts separate its candidates;
+- position in S-JTSK/Křovák (EPSG:5514, transformed to WGS84) and bearing;
+- train category, number and name, origin and destination;
+- the last point by name, with timetabled and actual `HH:mm` times and a "standing there" flag →
+  actual arrival, departure or passage at passenger and operational points;
+- signed current delay in minutes, a predicted delay, the next point (SR70 with check digit) and
+  the next passenger stop (5-digit SR70) with timetabled and predicted times;
+- operator, rail-replacement and diversion flags.
 
----
+Times carry no date and are recovered from the response timestamp. Last-point names map to SR70
+through the SR70 catalogue, then to the run's calls at or after current progress. SŽ anchors rail
+runs strongly but does not override a fresher, spatially more precise GPS position. Platforms
+come from station departure boards, a separate channel still to be investigated.
 
-# 27. DÚK connector
+## 26.3 PID
 
-The DÚK connector should:
+Golemio APIs for vehicle positions, trip progress and departures (`TripKey` via `gtfs_trip_id`
+bindings in `source_trip_map` on the overlaid parts, train numbers for trains), and PID GTFS-RT
+**for alerts only**. PID protobuf is never proxied unchanged; every ID is rewritten to the active
+release, and alerts are mapped to entities per feed. PID trains apply to the complete CZPTT run
+(sections 13 and 19.4). Capabilities are handled independently: positions, progress, predictions, alerts,
+occupancy and vehicle identity.
 
-- call the custom API;
-- parse observations;
-- extract `vhc_id`;
-- extract CISLineID and CISTripID;
-- normalize timestamps and coordinates;
-- emit claims.
+## 26.4 Arriva Express and long-tail sources
 
-It must not know GTFS output IDs or database internals.
-
-Common matching performs:
-
-```text
-582588
- -> source alias
- -> 001588
- -> CISLineID + CISTripID + operating date
- -> canonical trip instance
-```
-
-DÚK can initially provide:
-
-- vehicle positions;
-- vehicle identity;
-- source delay;
-- current/next stop information;
-- later dynamic posts if available.
-
----
-
-# 28. SŽ and other rail sources
-
-A railway infrastructure connector should focus on the capabilities it is best at:
-
-- actual passage events;
-- operational-point occupancy or progress;
-- platform assignments;
-- train identity;
-- infrastructure-origin delay claims.
-
-It should not automatically override a fresher and more spatially precise GPS source for current position.
-
-Its events should strongly anchor the railway estimator.
+Dossier: `docs/sources/arriva-express.md`. Arriva's fleet-wide location feed is filtered to
+Arriva Express only. Per vehicle it gives the CIS line, destination and last stop names, an
+at-stop flag, a signed delay in minutes, GPS with bearing, the licence plate and a report time
+(apparently local time mislabelled as UTC); no trip number, next stop or date. It is the
+reference long-tail source: inferred matching by line, destination, last stop, time and GPS
+(section 19.2; both express vehicles in the sample resolve to exactly one trip), continuity by
+plate, own GPS delay (section 21), and later a travel-time provider on long motorway segments. DPKV-style sources (line, trip, delay, untimed GPS) use the exact `TripKey` path with
+untimed-GPS handling (section 19.6). Each further source is a connector, a manifest, a dossier and
+fixtures.
 
 ---
 
-# 29. Vehicle registry
+# 27. Vehicle registry
 
-A source vehicle ID should bind to a canonical vehicle.
+A source vehicle ID binds to a vehicle:
 
 ```text
-vehicle
-    canonical_vehicle_id
-    operator_id
-    fleet_number
-    public_label
-
-vehicle_source_binding
-    source_id
-    source_vehicle_id
-    canonical_vehicle_id
-    valid_from
-    valid_to
-
-vehicle_attribute
-    canonical_vehicle_id
-    attribute
-    value
-    source_id
-    valid_from
-    valid_to
+vehicle                    vehicle_id, operator_id, fleet_number, public_label
+vehicle_source_binding     source_id, source_vehicle_id, vehicle_id, valid_from, valid_to
+vehicle_attribute          vehicle_id, attribute, value, source_id, valid_from, valid_to
 ```
 
-DÚK `vhc_id` observations resolve to canonical vehicles.
-
-A separate fleet dataset can provide:
-
-- model;
-- manufacturing year;
-- low-floor status;
-- air conditioning;
-- USB;
-- Wi-Fi;
-- other features.
-
-Keep provenance per attribute because sources may disagree.
-
-The public vehicle API should indicate the source of:
-
-- current position;
-- current trip;
-- public label;
-- model;
-- features.
+A fleet dataset can supply model, manufacturing year, low-floor status, air conditioning, USB,
+Wi-Fi and other features. Keep provenance per attribute because sources disagree. The vehicle API
+indicates the source of current position, current trip, public label, model and features.
 
 ---
 
-# 30. Train compositions
+# 28. Train compositions
 
-Compositions are attached to:
-
-```text
-train number + operating date
-```
-
-Suggested model:
+Compositions attach to `train number + operating date`:
 
 ```text
-train_composition
-    train_number
-    operating_date
-    observed_at
-    source_id
-
-train_composition_vehicle
-    sequence
-    vehicle_number
-    vehicle_type
-    passenger_label
-    features
+train_composition           train_number, operating_date, observed_at, source_id
+train_composition_vehicle   sequence, vehicle_number, vehicle_type, passenger_label, features
 ```
 
-Implementation order:
-
-1. ČD source already available.
-2. 55p.cz only after explicit permission covering:
-   - retrieval;
-   - storage;
-   - display;
-   - redistribution;
-   - caching duration.
-
-The project API should remain the rich source of truth.
-
-GTFS-Realtime carriage details can be populated where suitable, but the canonical model should not be limited to what standard GTFS-RT can express.
+Order: the ČD source first; 55p.cz only after explicit permission covering retrieval, storage,
+display, redistribution and caching duration. The project API is the rich source of truth;
+GTFS-RT carriage details are populated only where suitable.
 
 ---
 
-# 31. Historical observations and stop events
+# 29. History
 
-Begin retaining normalized realtime observations as soon as the first connector works.
-
-Keep these concepts separate:
-
-```text
-scheduled event
-source prediction
-project prediction
-source-reported actual event
-GPS-inferred actual event
-```
-
-## Tables
-
-```text
-vehicle_observation
-stop_event_claim
-platform_claim
-prediction_snapshot
-resolved_trip_state
-actual_stop_event
-```
-
-## Actual event model
+Keep distinct: scheduled event, source prediction, project prediction, source-reported actual
+event, GPS-inferred actual event.
 
 ```text
 actual_stop_event
-    trip_instance_id
-    call_sequence
-    event_type
-    event_time
-    method
-    confidence
-    source_ids
+    instance, call_sequence, event_type (arrival | departure | passage),
+    event_time, interval, method (source | progress | interpolated_crossing),
+    confidence, source_ids
 ```
 
-Event types:
+Retention on one machine:
 
-```text
-arrival
-departure
-passage
-```
-
-Methods:
-
-```text
-source
-gps_geofence
-map_match
-interpolated_crossing
-```
-
-## Passenger-stop arrival inference
-
-1. Vehicle is matched to a trip instance.
-2. It approaches the expected call in sequence.
-3. It enters the stop or platform geofence.
-4. The position is consistent with the trip path.
-5. Speed or source status indicates arrival.
-6. Departure is recorded after leaving toward the next call.
-
-## Railway passage inference
-
-1. Map-match observations to the railway path.
-2. Detect crossing of an operational-point distance.
-3. Interpolate the crossing time between observations.
-4. Compare it with the scheduled passage time.
-5. Feed the event back into the trip-state estimator.
-
-## Retention
-
-For one machine:
-
-- partition high-volume observation tables by date;
-- keep high-resolution positions for a limited period;
-- retain derived actual events long term;
+- partition high-volume tables by date;
+- keep high-resolution observations for a limited period;
+- keep derived actual events, vehicle day runs and the circulation model long term;
 - downsample or export old trajectories to Parquet;
-- retain raw source payloads only for a defined debugging and licensing period.
+- keep raw payloads only for each source's debugging and licensing period.
 
 ---
 
-# 32. Map and public API
+# 30. Project API and map
 
-The frontend must consume only project-owned contracts.
-
-It must not directly know whether a vehicle came from PID, DÚK, SŽ or another provider.
-
-Initial endpoints:
+The frontend consumes only project-owned contracts. It never knows whether a vehicle came from
+PID, DÚK, SŽ or another provider.
 
 ```text
-/gtfs/gtfs.zip
-/gtfs/versions/<version>/gtfs.zip
-/gtfs/manifest.json
+/gtfs/jdf.zip, /gtfs/czptt.zip, /gtfs/manifest.json, /gtfs/versions/<run-id>/…
+/gtfs-rt/{jdf,czptt}/{vehicle-positions,trip-updates,alerts}.pb
 
-/gtfs-rt/vehicle-positions.pb
-/gtfs-rt/trip-updates.pb
-/gtfs-rt/alerts.pb
-
-/api/vehicles?bbox=...
-/api/stops?bbox=...
-/api/stop-places/<id>/departures
-/api/trips/<id>
+/api/stops?bbox=…
+/api/stop-places/<id>/departures         both feeds; scheduled + realtime + forecasts
+/api/trips/<id>?date=…                   calls, typed features, notes, realtime state
+/api/vehicles?bbox=…                     includes flagged unmatched vehicles
 /api/vehicles/<id>
 /api/alerts
-/api/debug/realtime
+
+/api/debug/realtime/instances/<instance> evidence, intervals, inference explanation
+/api/debug/realtime/sources              health per source and channel
+/api/debug/realtime/unmatched            unmatched and ambiguous observations with candidates
 ```
 
-## Frontend capabilities
+Initial frontend: nationwide stops and routes, current vehicles, scheduled and realtime
+departures, vehicle details, alerts, stale-data state, and a source/confidence indicator in debug
+views. Later: dynamic platforms and posts, circulations and vehicle forecasts, historical replay,
+compositions, disagreement diagnostics, nearby grouped departures, quality metrics.
 
-Initial:
-
-- nationwide stops and routes;
-- current vehicles;
-- scheduled departures;
-- realtime predictions;
-- vehicle details;
-- alerts;
-- stale-data state;
-- source/confidence indicator in debugging views.
-
-Later:
-
-- dynamic platform/post display;
-- historical trip replay;
-- train composition;
-- disagreement diagnostics;
-- nearby grouped departures;
-- operational quality metrics.
-
-Use viewport-based queries.
-
-Polling every few seconds is acceptable initially.
-
-WebSockets are not an early milestone.
+Use viewport-based queries. Polling every few seconds is acceptable; WebSockets are not an early
+milestone.
 
 ---
 
-# 33. Logging and observability
-
-The platform needs both technical logs and data-quality diagnostics.
+# 31. Observability
 
 ## Technical metrics
 
-- source download success;
-- source parse time;
-- connector response time;
-- source age;
-- worker lag;
-- build duration;
-- active trip count;
-- database write latency;
-- API latency;
-- GTFS-RT generation time.
+Source download success, parse time, connector response time, source age, core-loop lag, load
+duration, active instance count, database write latency, API latency, GTFS-RT generation time.
 
 ## Data-quality metrics
 
-- static trip match rate;
-- stop continuity match rate;
-- ambiguous matches;
-- newly allocated stops;
-- unmatched realtime entities;
-- source conflicts;
-- position rejection rate;
-- stale claims;
-- platform mapping failures;
-- delay disagreement;
-- estimator confidence;
-- feed entity counts;
-- alert mapping failures.
+Inference outcome rates per source (exact, inferred, ambiguous, unmatched), date-ambiguity rate,
+rejected jumps and regressions, suspect bindings, source conflicts, position rejection rate,
+frozen positions, stale evidence, platform mapping failures, delay disagreement (source versus
+own), prediction error by lead time, circulation forecast hit rate, feed entity counts, alert
+mapping failures.
 
-## Source health state
+## Source health
 
 ```text
-healthy
-degraded
-stale
-invalid
-disabled
-using_last_known_good
+healthy | degraded | stale | invalid | disabled | using_last_known_good
 ```
 
-## Realtime entity state
+## Realtime instance state
 
 ```text
-fresh
-stale
-invalid
-unmatched
-ambiguous
-suppressed_by_better_source
+fresh | stale | unmatched | ambiguous | suspect | suppressed_by_better_source
 ```
 
 ---
 
-# 34. Testing strategy
+# 32. Testing strategy
 
 ## Unit tests
 
-- identity normalization;
-- manual aliasing;
-- canonical ID allocation;
-- stop structural scoring;
-- trip-key matching;
-- source precedence;
-- delay intervals;
-- platform arbitration;
-- sequence-scope mapping.
+- fact scorers and the inference decision rule;
+- operating-date inference (past midnight, `24:xx+`, waiting before midnight, DST, rollover);
+- delay semantics → intervals;
+- interval propagation and the timeline engine;
+- progress gating: A → B → A both variants, out-and-back roads, naive source reports, loops;
+- rail source handover: a source entering mid-run, leaving at its coverage edge, and silence
+  inside its coverage;
+- arbitration and monotone repair;
+- circulation edge learning.
 
-## Golden conversion tests
+Scenario tables with small synthetic timetables are the main form.
 
-- JrUtil JDF conversion;
-- JrUtil CZPTT conversion;
-- operational points;
-- posts;
-- friendly line numbers;
-- IDS zones.
+## Static tests
 
-## Static integration tests
-
-- national-only build;
-- one PID bus overlay;
-- one truncated PID train overlay;
-- changing national stop IDs;
-- new and retired stops;
-- ambiguous regional match;
-- last-known-good fallback.
-
-## Realtime integration tests
-
-- PID ID rewriting;
-- DÚK alias mapping;
-- duplicate observations;
-- contradictory positions;
-- stale provider;
-- dynamic platform assignment;
-- partial stop updates;
-- source failover.
+JrUtil golden conversion tests (JDF, CZPTT, operational points, posts, zones, overlays). Oběhy:
+release verification, contract-to-DDL generation, load/activate/rollback on tiny fixture
+packages, failed-load cleanup.
 
 ## Replay tests
 
-Record real source payloads and replay them deterministically.
-
-Use them to test:
-
-- estimator changes;
-- source arbitration;
-- alert mapping;
-- arrival inference;
-- feed output stability.
+Recorded payloads replayed deterministically against a fixed release, for connector parsing,
+inference, arbitration, alert mapping, arrival inference and output stability. Replay output is
+golden-tested.
 
 ## Invariants
 
-Examples:
-
 ```text
-One source trip cannot resolve to multiple canonical trips.
-One canonical trip instance cannot emit duplicate competing vehicle positions.
-Every exported realtime trip ID exists in the active static feed.
-Every assigned platform ID exists in the active static feed.
-Every passenger stop_time references a passenger boarding point.
-Operational points never leak into passenger stop_times.
+One observation resolves to at most one instance.
+One instance emits at most one vehicle position per feed.
+Every exported realtime trip ID exists in the active release of its feed.
+Every assigned platform ID exists in the active release.
+Every passenger stop_time references a passenger location.
+Operational points never leak into passenger stop_times or TripUpdates.
+Progress of an instance is monotonic in emitted output.
 ```
 
----
-
-# 35. Delivery roadmap
-
-The current execution order overrides the historical milestone numbering where they differ:
-
-1. freeze provisional JrUtil compilation and serving contracts;
-2. prove the PID posts-only overlay;
-3. load and activate it through Oběhy database v1;
-4. rewrite one PID realtime entity through active-build mappings;
-5. implement the permanent registry in its separate repository and perform the declared ID break;
-6. continue expanded overlays, DÚK, rail fusion, estimation and product work.
-
-## Milestone 0 — Updated architecture and versioned contracts
-
-Document and freeze:
-
-- registry entity, binding, reconciliation and snapshot contracts;
-- JrUtil build-spec, proposal, compiler-output and serving-package contracts;
-- overlay capability matrix and ambiguity behavior;
-- Oběhy snapshot/build-worker and finalized-loader boundaries;
-- tiny JDF, CZPTT, PID and DÚK fixtures;
-- the disposition of the superseded database compiler.
-
-Exit criteria:
-
-- another implementer can build each subsystem without deciding ownership or wire boundaries;
-- all still-valid realtime and product requirements remain in this plan;
-- no current instruction recommends another full PostgreSQL static compilation.
+Real-data checks run on bounded subsets; full national builds are not a test tool.
 
 ---
 
-## Milestone 1 — Public identity registry v1 (deferred)
+# 33. Roadmap
 
-Build:
+## Done or obsolete
 
-- standalone FastAPI service and separate PostgreSQL database;
-- typed non-recycling public IDs and country-scoped railway SR70 composites;
-- bindings, aliases, redirects, tombstones, revisions and coordinate history;
-- idempotent batch reconciliation with optimistic snapshot checking;
-- anonymous REST plus immutable CSV/Parquet snapshots;
-- OIDC mutation boundary and minimal CLI/API review workflow.
+- National JDF and CZPTT compilation, PID + IDS JMK overlays, typed serving package (bundle v3,
+  serving schema v4), `obehy build` with atomic release publication.
+- The provisional `v0` identity phase and the identity-registry service are dropped; identity is
+  section 6.
 
-Exit criteria:
+## Milestone S — Static release acceptance
 
-- two changed JDF exports retain the same surface IDs through the exact tuple rule;
-- railway primary/subsidiary IDs are deterministic;
-- collisions are quarantined and reviewable;
-- IDs allocated for a failed consumer build are not reused.
+One complete live release built by the GitHub Actions pipeline, published, and accepted (package
+validation, GTFS validator, MOTIS import sanity check). This is the single permitted full run.
 
-Start this milestone only after the Milestone 3 overlay loads/activates through database v1 and the
-Milestone 6 PID connector rewrites one entity using `provisional-v0` mappings.
+## Milestone C1 — Mirror and API foundation
 
----
+PostgreSQL schemas, generated static DDL, `obehy release fetch|load|activate`, derived helpers,
+rollback; static stops, departures and trips in the API; per-feed GTFS downloads.
 
-## Milestone 2 — JrUtil national static compiler
+Exit: fixture packages load, activate and roll back; a failed load leaves nothing attached; the
+real CZPTT package loads in a bounded check.
 
-Build:
+## Milestone R1 — Realtime core
 
-- actual JDF district-code preservation;
-- provisional-v0 JDF/CZPTT compilation first;
-- `static-discover`, proposal output and registry-snapshot input when Milestone 1 begins;
-- opaque public IDs under the manifest's selected identity contract;
-- GTFS plus typed serving package, manifests and diagnostics;
-- bounded streaming/parallel performance telemetry.
+Recorder, raw archive, replay and evaluate; observation model and core loop; inference engine
+with exact and inferred paths and date inference; rail runs; timeline engine with progress
+integrity; arbitration; per-feed GTFS-RT emitters; debug endpoints.
 
-Exit criteria:
+Exit: all scenario tables pass; replay is byte-deterministic.
 
-- one command reconstructs the provisional feed from Oběhy snapshots; registry-v1 later adds the
-  immutable registry snapshot;
-- no Oběhy canonical database is required to compile it;
-- output validates and remains deterministic;
-- national production-volume resource use is measured.
+## Milestone R2 — DÚK and SŽ
 
-This is the first publishable static artifact.
+DÚK buses and trains, SŽ positions, operational-point events and platforms; one train fused from
+DÚK and SŽ with provenance.
 
----
+Exit: replays of recorded days pass the GTFS-RT validator against the matching static feed;
+every emitted ID exists; inference rates and accuracy per source are reported.
 
-## Milestone 3 — PID posts-only static overlay
+## Milestone R3 — PID
 
-Use a deliberately small PID slice.
+Golemio APIs and GTFS-RT alerts; PID trains on CZPTT runs.
 
-Build:
+Exit: PID and DÚK coexist without duplicate positions per instance; alerts keep their scope.
 
-- PID stop/post and bus-trip matching;
-- versioned capability matrix;
-- exact post assignment for covered calls;
-- posts enabled while names, colours and times are disabled;
-- source substitution and ambiguity reports.
+## Milestone R4 — Long tail and own delay
 
-Exit criteria:
+Arriva Express with inferred matching and own GPS delay; the travel-time provider interface with
+segment eligibility (no provider yet); DPKV-style untimed sources.
 
-- the final feed contains one public trip, not duplicate national and PID trips;
-- exact post information is preserved;
-- national names, colours and times remain selected;
-- a machine-readable substitution report is generated.
+Exit: inference and ambiguity rates are reported; own delay versus source delay is measured per
+source, and policy prefers own delay only where it wins.
 
----
+## Milestone R5 — Circulations
 
-## Milestone 4 — Full national benchmark and static publication
+Nightly circulation build, successor graph, forecast assignments, knock-on delays, expected
+vehicles in the API.
 
-Build:
+Exit: on a held-out week, forecast hit rate is reported and next-trip delay error improves over
+propagation without circulations.
 
-- production-volume JDF/CZPTT compilation;
-- complete manifest/count reconciliation;
-- bounded-memory and controlled performance baseline;
-- official GTFS validation and deterministic replay;
-- manual MOTIS import with representative journey checks;
-- automatic artifact activation gates.
+## Later milestones
 
-Exit criteria:
-
-- one pre-registry nationwide GTFS exists with labelled provisional IDs and the selective PID overlay;
-- required ambiguity/count/drift failures block activation;
-- unexplained later performance regressions above 15 percent fail the gate.
-
----
-
-## Milestone 5 — Oběhy build control and finalized static mirror
-
-Build:
-
-- source/config/job models and immutable build-spec export;
-- PostgreSQL-backed job queue and local pinned JrUtil worker;
-- progress, cancellation, retry and diagnostic APIs;
-- parallel bulk loader for sorted finalized serving relations;
-- per-build partitions, post-load indexes and set validation;
-- atomic static/mapping activation and rollback retention.
-
-Exit criteria:
-
-- Oběhy supervises builds and serves the full GTFS/extension mirror without static reconciliation;
-- a failed load leaves no attached partial build;
-- active static data and mapping tables switch together and can roll back.
-
----
-
-## Milestone 5A — Expanded static overlays and shape enrichment
-
-Build:
-
-- complete configured PID static coverage;
-- partial-train inclusive coverage and full-journey preservation;
-- hard ambiguity and last-known-good gates;
-- pinned MOTIS route-shapes companion for eligible post-overlay gaps;
-- deterministic shape, assignment, offset, cache and provenance sidecars.
-
-Exit criteria:
-
-- a regional partial train remains one complete national public trip;
-- ambiguous required mappings block activation;
-- regional/national source shapes remain preferred and are never overwritten;
-- shape-generation failure degrades only affected trips;
-- cold/warm identical inputs produce byte-identical static output.
-
----
-
-## Milestone 6 — PID realtime vertical slice
-
-Build:
-
-- normalized realtime claims;
-- PID GTFS-RT connector;
-- ID rewriting;
-- current trip-state storage;
-- GTFS-RT output;
-- PID alerts;
-- realtime debugging and feed-health APIs.
-
-Exit criteria:
-
-- PID realtime entities resolve against the project static feed;
-- unmatched entities are visible in diagnostics;
-- partial PID train updates apply to full canonical trains;
-- emitted entities use IDs from the active static build only and identify its feed version.
-
----
-
-## Milestone 7 — DÚK realtime
-
-Build:
-
-- DÚK connector;
-- CIS line aliasing;
-- trip-instance matching;
-- DÚK vehicle positions;
-- DÚK vehicle IDs;
-- basic source arbitration.
-
-Exit criteria:
-
-- PID and DÚK coexist in one GTFS-RT feed;
-- no duplicate vehicle positions are emitted for one trip instance;
-- DÚK can be disabled without affecting PID or static publication;
-- unmatched DÚK trips are measurable.
-
-This completes the main proof of concept:
-
-```text
-nationwide static
-+ PID static overlay
-+ PID realtime and alerts
-+ DÚK realtime against national static
-```
-
----
-
-## Milestone 8 — Rail fusion and dynamic platforms
-
-Build:
-
-- SŽ or other infrastructure connector;
-- capability-specific source policies;
-- railway passage events;
-- dynamic platform claims;
-- multi-source train arbitration;
-- conflict diagnostics.
-
-Exit criteria:
-
-One train can correctly use:
-
-```text
-position from PID
-passage event from SŽ
-vehicle metadata from DÚK
-platform assignment from infrastructure data
-```
-
-Every selected value retains provenance.
-
----
-
-## Milestone 9 — GPS and operational-point estimator
-
-Build:
-
-- path map matching;
-- distance-along-path state;
-- scheduled-time interpolation;
-- operational-point delay derivation;
-- per-stop predictions;
-- precision-aware delay handling;
-- confidence scoring;
-- replay evaluation.
-
-Exit criteria:
-
-- estimator accuracy can be compared with each provider;
-- coarse non-negative source delays no longer override better GPS evidence;
-- pass-through railway points improve prediction quality;
-- source policy is based on measured performance.
-
----
-
-## Milestone 10 — Long-distance coach estimator
-
-Build:
-
-- estimator plugin interface;
-- Mapy.com routing connector;
-- whitelist;
-- waypoint configuration;
-- cache;
-- spending limits;
-- fallback;
-- historical benchmark.
-
-Exit criteria:
-
-- paid routing is enabled only on lines where it beats simpler estimation;
-- API failure does not break realtime output;
-- cost is bounded.
-
----
-
-## Milestone 11 — Historical arrivals and vehicles
-
-Build:
-
-- immutable observation storage;
-- inferred arrival/departure events;
-- inferred railway pass events;
-- DÚK vehicle registry;
-- vehicle detail API;
-- Parquet archival.
-
-Exit criteria:
-
-- a trip can be replayed;
-- scheduled, predicted and actual events are distinct;
-- vehicle details are shown with provenance.
-
----
-
-## Milestone 12 — Train compositions
-
-Build:
-
-- ČD composition import;
-- canonical composition model;
-- project API;
-- optional GTFS-RT carriage projection;
-- 55p connector after permission.
-
-Exit criteria:
-
-- composition is matched by train number and date;
-- ordered vehicles are preserved;
-- source licence and permission state are recorded.
-
----
-
-## Milestone 13 — Public/admin frontend and managed MOTIS
-
-Build:
-
-- MapLibre nationwide map;
-- nearby independently canonicalized stop places;
-- nearby departures;
-- exact posts/platforms;
-- alert display;
-- vehicle features;
+- MOTIS route-shapes companion as a static build stage (gives section 21 real paths through the
+  release);
+- history archive, punctuality and trip replay;
+- vehicle registry and attributes;
 - train compositions;
-- historical trip view;
-- stale/conflicting data presentation.
-- OIDC administration for sources, overlays, builds, registry reviews and connectors;
-- Oběhy connection-search proxy;
-- blue-green MOTIS loading, health checks, activation and rollback.
-
-Exit criteria:
-
-- removing or disabling a connector changes coverage but requires no frontend code change;
-- source-feed grouping is no longer visible to users;
-- nearby relevant stops appear together without being falsely merged;
-- the active GTFS, mappings, realtime resolver and MOTIS instance always name the same build.
+- external travel-time providers for whitelisted coach lines;
+- public frontend and managed MOTIS (blue-green loading, health checks, activation and rollback
+  always naming the same release as GTFS, mappings and realtime);
+- additional regions and providers. Each new source requires configuration, licence metadata, a
+  dossier, a connector manifest, fixtures and a conformance report (download, parsing, licence,
+  inference rate, freshness, duplicates, vehicle identity stability, static/realtime
+  compatibility).
 
 ---
 
-## Milestone 14 — Additional regions and providers
+# 34. Next implementation tickets
 
-For every new source, require:
+1. `obehy rt record` and source dossiers for DÚK, SŽ and Arriva Express; record several days.
+2. JrUtil contract check: CZPTT trip ↔ operational journey link, `operational_call` ↔
+   `trip_call` alignment, `stop_sequence` identity.
+3. Database foundation: compose file, generated static DDL, `control` schema, migration runner.
+4. `obehy release fetch|load|activate --rollback` with derived helpers.
+5. Realtime skeleton: model, clock, archive, core loop, `rt` migrations, replay.
+6. Inference engine: facts, scorers, decision rule, explanations, date inference, vehicle
+   binding, rail runs.
+7. Timeline engine: intervals, delay semantics, propagation, progress integrity, conflicts,
+   predictions, arbitration, monotone repair.
+8. DÚK connector and per-feed GTFS-RT emitters with debug endpoints.
+9. SŽ connectors and rail fusion.
+10. Project API with realtime departures and vehicles.
+11. PID: Golemio APIs and GTFS-RT alerts.
+12. Arriva Express: inferred matching, own GPS delay, travel-time provider interface.
+13. Circulation learning v1.
+
+The first end-to-end success is:
 
 ```text
-source configuration
-licence metadata
-static adapter, if needed
-realtime connector, if available
-identity extraction
-coverage declaration
-precedence policy
-fixtures
-conformance report
+one DÚK bus and one DÚK/SŽ train
+ -> resolved against the active release of their feeds
+ -> per-call actuals and predictions with explained evidence
+ -> emitted in valid per-feed GTFS-RT and the project API
 ```
 
-Source conformance checks:
-
-- download works;
-- parser works;
-- licence is understood;
-- trip matching rate is acceptable;
-- stop matching rate is acceptable;
-- realtime freshness is acceptable;
-- duplicate rate is acceptable;
-- vehicle identity is stable enough;
-- static and realtime versions are compatible.
+After that, adding regions and providers is controlled repetition rather than architecture
+discovery.
 
 ---
 
-# 36. First implementation tickets
-
-Start with these tickets in this order.
-
-1. Add actual JDF district codes to the JrUtil bundle contract.
-2. Implement JrUtil provisional-v0 compilation over tiny JDF/CZPTT fixtures.
-3. Emit the frozen GTFS, serving relations, mappings and manifest contract from JrUtil.
-4. Add a tiny PID bus overlay with posts as its only enabled capability.
-5. Prove national names, colours and times remain selected.
-6. Load, activate and roll back that package through the implemented Oběhy database v1 loader.
-7. Add the pinned JrUtil worker and its progress/cancellation API around the implemented job model.
-8. Compile, validate, MOTIS-check and benchmark the complete provisional national feed.
-9. Decode PID GTFS-RT into immutable claims in a new realtime migration.
-10. Rewrite one PID realtime trip through the active serving mappings.
-11. Publish one valid project GTFS-RT entity and debugging explanation.
-12. Create the separate registry repository and freeze its reconciliation/snapshot schemas.
-13. Implement typed IDs, bindings, aliases, redirects, revisions and immutable snapshots there.
-14. Add JrUtil `static-discover`, compile the first registry-v1 build and perform the ID transition.
-15. Add complete PID and partial-train static coverage.
-16. Implement the DÚK `582588 -> 001588` alias and one DÚK position.
-17. Fuse one train capability-by-capability across PID/DÚK/SŽ evidence.
-18. Build the public/admin React application and managed MOTIS lifecycle after RT foundations.
-
-The first end-to-end success should be:
-
-```text
-one national trip
- -> overlaid by one regional post claim
- -> exported by JrUtil with a stable registry-owned trip ID
- -> regional realtime rewritten to that ID
- -> exposed as one fused trip/vehicle through Oběhy
-```
-
-After that works, nationwide expansion becomes controlled repetition rather than architecture discovery.
-
----
-
-# 37. Suggested source configuration
-
-```yaml
-sources:
-  national-jdf:
-    type: jdf
-    coverage: nationwide-road
-    required: true
-
-  national-czptt:
-    type: czptt
-    coverage: nationwide-rail
-    required: true
-
-  pid:
-    type: gtfs
-    coverage: pid
-    allow_new:
-      stops: false
-      routes: false
-      trips: false
-    static:
-      posts: { mode: authoritative, priority: 100 }
-      schedules: { mode: disabled, priority: 0 }
-      stop_names: { mode: disabled, priority: 0 }
-      route_display: { mode: disabled, priority: 0 }
-    realtime:
-      vehicle_positions_priority: 100
-      trip_updates_priority: 100
-      alerts_priority: 100
-
-  duk:
-    type: custom-api
-    coverage: duk
-    realtime:
-      vehicle_positions_priority: 80
-      trip_updates_priority: 70
-      vehicle_identity_priority: 100
-
-  sz:
-    type: custom-api
-    coverage: nationwide-rail
-    realtime:
-      platform_assignment_priority: 100
-      passage_event_priority: 100
-```
-
-Priorities and modes are capability-specific, not one source-wide ranking. The first PID slice
-enables posts only; later policy revisions may explicitly enable additional capabilities.
-
----
-
-# 38. Example build report
-
-```text
-Build version: 2026-07-18T150000Z-4b913fa
-
-National JDF trips imported:          142,381
-National CZPTT trips imported:         18,921
-PID source trips imported:             31,442
-
-PID exact canonical matches:           30,981
-PID partial train matches:                211
-PID trips added as new:                   302
-PID missing identity:                     148
-PID ambiguous matches:                      0
-
-Stops matched by stable ID:             7,402
-Stops matched structurally:            24,118
-Stops matched manually:                    14
-New canonical stops:                      106
-Ambiguous stop candidates:                  3
-
-Trips with source shapes:              82,103
-Trips with retained national shapes:   12,447
-Trips enriched by MOTIS:               48,973
-MOTIS shapes rejected:                     19
-Trips lacking shapes:                   1,779
-MOTIS failures by mode:                    31
-MOTIS beelined segments:                  204
-MOTIS shape-cache hits:                39,806
-MOTIS wall time:                       00:08:41
-MOTIS peak memory:                      7.2 GiB
-
-Validation errors:                           0
-Validation warnings:                       182
-```
-
-Any threshold that affects automatic activation should be configurable and version-controlled.
-
----
-
-# 39. Example realtime debugging output
+# 35. Example realtime debugging output
 
 ```json
 {
-  "trip_instance": "T000004201/2026-07-18",
+  "instance": "czptt:run:6608/2026-10-05",
+  "inference": {
+    "method": "trip_key",
+    "facts": [
+      {"fact": "TripKey", "namespace": "train_number", "value": "6608", "effect": "candidates=1"},
+      {"fact": "OperatingDate", "inferred": "2026-10-05", "rejected": ["2026-10-04"]}
+    ]
+  },
   "selected": {
     "position": {
-      "source": "pid",
-      "observed_at": "2026-07-18T17:31:04+02:00",
-      "reason": "freshest eligible path-consistent position",
-      "confidence": 0.96
+      "source": "duk", "observed_at": "2026-10-05T17:31:04+02:00",
+      "reason": "freshest eligible path-consistent position", "confidence": 0.96
     },
-    "delay": {
-      "source": "project-estimator",
-      "seconds": 214,
-      "reason": "GPS progress anchored by SŽ passage event",
+    "call:Ústí nad Labem hl.n.:departure": {
+      "interval": ["17:42:00", "17:42:59"], "estimate": "17:42:30",
+      "status": "bounded", "method": "propagation from SŽ passage at Ústí n.L.-Střekov",
       "confidence": 0.88
     },
     "platform": {
-      "source": "sz",
-      "boarding_point_id": "P000008923",
-      "reason": "fresh infrastructure assignment",
-      "confidence": 0.99
+      "source": "sz", "boarding_point_id": "czptt:stop:CZ:<SR70>:platform:3",
+      "reason": "fresh infrastructure assignment", "confidence": 0.99
     }
   },
-  "suppressed_claims": [
-    {
-      "source": "duk",
-      "capability": "position",
-      "reason": "older observation"
-    },
-    {
-      "source": "pid",
-      "capability": "delay",
-      "reason": "coarse non-negative whole-minute value"
-    }
+  "suppressed": [
+    {"source": "duk", "capability": "delay", "reason": "coarse non-negative whole-minute value"},
+    {"source": "duk", "capability": "trip_progress", "reason": "regressive: last stop behind accepted progress"}
   ]
 }
 ```
 
-This kind of endpoint will be essential while tuning the fusion logic.
-
 ---
 
-# 40. Decisions intentionally deferred
+# 36. Decisions intentionally deferred
 
-Do not decide these prematurely:
-
-- whether every canonical registry table uses integer or UUID primary keys internally;
-- websocket versus polling;
-- advanced scaling architecture;
-- permanent high-resolution position retention period;
-- exact source priorities before replay benchmarking;
+- WebSockets versus polling;
+- scaling beyond one realtime process;
+- the permanent high-resolution position retention period;
+- exact source priorities and inference thresholds before replay benchmarking;
 - whether operational sidecars are publicly downloadable;
-- whether train composition is projected into experimental GTFS-RT fields;
-- whether Mapy.com routing is worth the cost.
+- whether compositions are projected into experimental GTFS-RT fields;
+- which external travel-time provider, if any, is worth its cost;
+- the release transport beyond GitHub Releases if size or retention requires it.
 
-These decisions should be made after the relevant milestone produces real evidence.
+These are decided when the relevant milestone produces real evidence.
 
 ---
 
-# 41. Definition of project success
+# 37. Definition of project success
 
-The architecture is successful when:
-
-- national source ID churn does not break public IDs;
+- national source ID churn does not break public stop, route or rail IDs;
 - regional static feeds improve national data without duplicating or truncating journeys;
-- exact posts/platforms are preserved where known;
-- realtime from several providers can coexist without silent corruption;
-- source quality is evaluated per capability rather than by one global ranking;
-- coarse provider delays can be replaced by better GPS or infrastructure evidence;
+- exact posts and platforms are preserved where known;
+- realtime from several providers coexists without silent corruption;
+- poor sources (no trip IDs, no dates, untimed GPS) still produce correct, explained matches or
+  are visibly quarantined;
+- trip progress never jumps, and delays never sawtooth on loops or out-and-back routes;
+- own GPS-derived delays replace coarse provider delays wherever they measurably win;
 - non-passenger railway points improve predictions without appearing as public stops;
-- PID partial trains remain full national journeys;
+- learned circulations forecast vehicles and knock-on delays measurably;
 - alerts retain correct geographic and sequence scope;
 - the frontend remains backend-source agnostic;
 - historical events can be replayed and explained;
-- adding another regional provider is mostly a connector, configuration and fixture task;
-- the initial system remains operable on one community-hosted machine.
+- adding another provider is mostly a connector, manifest, dossier and fixture task;
+- the system stays operable on one community-hosted application server, with builds on GitHub
+  Actions.
 
-The project should be built as a sequence of usable vertical slices.
-
-Do not begin the polished frontend, nationwide realtime fusion, MOTIS route-shapes companion,
-arrival inference, vehicle registries and train-composition negotiations at the same time.
-
-Prove the identity and overlay model first.
-
-Then prove one static regional overlay.
-
-Then prove one rewritten realtime vehicle.
-
-Then expand coverage.
+Build in usable vertical slices: prove the mirror, then one exact-key source end to end, then rail
+fusion, then the long tail, then circulations. Then expand coverage.

@@ -2,16 +2,16 @@
 
 A Swiss-army knife for Czech public-transport operations and realtime data.
 
-Oběhy orchestrates immutable static snapshots and publishes the finalized JrUtil packages; the
-serving importer and the realtime platform come later. JrUtil compiles the unified nationwide GTFS and static overlays. A
-future standalone public registry will own permanent IDs. Until the first static-overlay and PID
-realtime vertical slices are stable, JrUtil emits explicitly provisional `v0:` IDs. PostgreSQL is
-never the static compiler.
+Oběhy builds two coordinated nationwide GTFS feeds (`jdf` for road and urban transport, `czptt`
+for rail) with JrUtil, runs those builds on GitHub Actions, and will load each published release
+into a PostgreSQL mirror on the application server, which also runs the realtime core: trip
+inference from sources of very different quality, delay estimation, learned vehicle circulations
+(*oběhy*), per-feed GTFS-RT and the project API. JrUtil is the only static compiler; stable
+public IDs come from its identity rules and the reviewed registry in `jrunify-ext-geodata`.
+PostgreSQL is never the static compiler.
 
-See [STATIC_PIPELINE.md](STATIC_PIPELINE.md) and [IDENTITY_REGISTRY.md](IDENTITY_REGISTRY.md) for
-the executable boundaries. The former PostgreSQL national compiler/importer has been removed.
-
-See [PROGRESS.md](PROGRESS.md) for the current engineering handoff and next implementation step.
+See [BASE_PLAN.md](BASE_PLAN.md) for the architecture, [STATIC_PIPELINE.md](STATIC_PIPELINE.md)
+for the static boundary, and [PROGRESS.md](PROGRESS.md) for the current state and next steps.
 
 ## Development
 
@@ -46,12 +46,10 @@ uv run obehy build --estimated-posts
 uv run obehy build --refresh-osm
 ```
 
-National release acceptance is pending. JDF calls now use disk-backed storage and typed output
-sinks, while the regional finalizer releases completed compiler, source-call, provenance and
-validation phases instead of retaining them together. A replay of the previously failing national
-overlay finalizer peaked at 4,373,061,632 private bytes, down from 14,130,675,712 bytes. This is
-soft planning and phase reclamation only; no process or .NET heap hard limit is configured.
-Measurements and remaining limitations are recorded in `PROGRESS.md`.
+Two complete live builds have been published (2026-10-02 and 2026-10-03, about 40 minutes
+each); GTFS validator and MOTIS acceptance checks are still to run. Memory budgets are soft
+admission/spill targets; no process or .NET heap hard limit is configured. Measurements and
+remaining limitations are recorded in `PROGRESS.md`.
 
 Prepared OSM is the default. `--refresh-osm` updates it before source downloads. The command writes
 the two consumer packages to `artifact_root/releases/<run-id>/jdf` and `czptt`. It also writes a
@@ -193,8 +191,7 @@ selection, bundle schemas, line changes, platform handling, IDS zones, and diagn
 
 ## Serving database
 
-The serving-v1 PostgreSQL loader and its schema were removed. JrUtil writes
-`jrutil-production` packages (bundle version 3, serving schema version 4; see `STATIC_PIPELINE.md`),
-and the importer will be written against that contract when it is needed.
-`JDF_SEMANTICS.md` records the JDF preservation gaps that block calling GTFS plus the current
-sidecars a lossless semantic export.
+There is no database code yet. JrUtil writes `jrutil-production` packages (bundle version 3,
+serving schema version 4; see `STATIC_PIPELINE.md`). The release loader and realtime core described
+in `BASE_PLAN.md` sections 16 and 18–23 are the next work. `JDF_SEMANTICS.md` records the JDF
+preservation gaps that block calling GTFS plus the current sidecars a lossless semantic export.

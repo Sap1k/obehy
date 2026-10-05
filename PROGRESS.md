@@ -8,7 +8,8 @@ Short status of the static feeds and the working backlog. Earlier dated handoffs
 ### `obehy build`
 
 One command (`src/obehy/cli.py`) resolves the GVD year, validates or refreshes the shared OSM
-snapshot, builds JrUtil once, and runs these stages:
+snapshot, builds JrUtil once, and runs these stages. It runs locally today; the production target
+is a GitHub Actions workflow (not built yet; `BASE_PLAN.md` section 15).
 
 1. **national-jdf** — download VLD and dráhy CIS JŘ archives → `fix-jdf` (stop matching,
    coordinate estimation, `regional-adjacent` international policy) → `merge-jdf` (name-based
@@ -49,8 +50,14 @@ heap hard limit is configured; memory figures are telemetry.
 
 ### Last validation evidence
 
-- JrUtil Release suite: 302 tests (2026-10-03, serving schema 4).
-- Oběhy: unit suite 76 tests, ruff and pyright clean (2026-09-30).
+- Live `obehy build` (estimated posts, learned-v1, routing cache), both published:
+  - `20261002T184241Z`: 45.3 min (JDF 19.4, overlay 4.7, CZPTT 20.1 min).
+  - `20261003T144231Z` (current; serving schema 4, seeded stop registry): 39.2 min (JDF 16.8,
+    filtered JDF 0.5, overlay 5.0, CZPTT 16.0, validation 0.8 min). Zero stop, post or
+    overlay-place registry candidates.
+  - Not run on either: MobilityData GTFS validator, MOTIS import check.
+- JrUtil Release suite: 303 tests (2026-10-05).
+- Oběhy: unit suite 75 tests, ruff and pyright clean (2026-10-05).
 - Default JDF conversion: 179.4 s, 2.88 GB peak private memory, package valid (2026-09-15).
 - National finalizer replay with overlays: 4.07 GiB peak, package valid (2026-09-19).
 - Post-estimator frozen replay: bundle 13m04s vs ~43m33s live baseline, byte-identical payloads
@@ -58,25 +65,23 @@ heap hard limit is configured; memory figures are telemetry.
 
 ## Known limitations
 
-- No complete paired live `obehy build` has been accepted as a release yet.
-- The R10 inconsistent-time fix has not been through a full national CZPTT rebuild.
-- The stop-ID registry (`jrunify-ext-geodata/registry/`) is not seeded yet, so `jdf:stop:N` still
-  comes from a merge counter (or, with an empty registry, a provisional hash) and is not final.
-  Authored `:post:id:<n>` posts keep the carrier's Označníky number; only inferred `:est:<k>`
-  posts are pinned.
-- The real JDF district code (`BM`, `KV`, …) is not exported; the Parquet `district` field is a
-  stop-name component.
-- Identity contract naming disagrees: JrUtil writes `jrutil-identity-v1`, Oběhy expects
-  `provisional-v0`/`registry-v1`.
+- The live releases have not been through the GTFS validator or a MOTIS import check, so none
+  is formally accepted yet.
+- The stop-ID registry is seeded (37,598 stops, 57,237 posts, 119 overlay places), but ID
+  stability across consecutive builds has not been compared yet. Authored `:post:id:<n>` posts
+  keep the carrier's Označníky number; only inferred `:est:<k>` posts are pinned.
+- CZPTT `location` rows carry no municipality, district or country metadata (the CZPTT
+  package has no stop metadata).
 - The live post estimator still builds the routing graph on every run; there is no persistent
   graph cache.
-- Serving validation checks key uniqueness and hashes, but full foreign-key and
-  cross-representation content validation is incomplete.
+- Serving validation checks keys, hashes and foreign keys; cross-representation content
+  validation (GTFS vs serving relations) is incomplete.
 - No route shapes are generated yet (MOTIS shape generation is future work).
 
 ## Next steps
 
-Work order: §4 → §1 → §2 → §3.
+Work order: §2 → §3 (static readiness; §1 and §4 are done), then §5 (core runtime). §5.1 can
+start at once because it needs no database.
 
 ### 1. Stop coordinates and easy `[?]` clusters
 
@@ -90,7 +95,7 @@ Work order: §4 → §1 → §2 → §3.
   - have the build write a `stop-coordinate-report.json`.
 - **Accept:** estimated and route-end-north counts drop against a recorded baseline; geodata tests
   pass.
-- **Status:** not started.
+- **Status:** done (catalogues refreshed and gapfill residuals resolved on 2026-10-02).
 
 ### 2. Fixed JDF stop-ID registry
 
@@ -107,9 +112,10 @@ Work order: §4 → §1 → §2 → §3.
   national-JDF run manifest, and keeps the candidate CSVs in `releases/<run>/stop-registry/`.
 - **Accept:** identical IDs across batch orders and consecutive builds; ambiguous stops are
   quarantined, not merged.
-- **Status:** implemented and unit-tested in all three repositories. Not run on live data. Next:
-  one bounded build with the empty registry, then `registry.py promote --accept-new` on its
-  candidates — the one planned stop-ID break — and a second build to confirm identical IDs.
+- **Status:** implemented, and seeded on 2026-10-03 (`jrunify-ext-geodata` `410457b`): the
+  planned stop-ID break is done. The 2026-10-03 release was built with it and produced zero
+  candidates. Next: compare stop/post IDs of the next build against that release to confirm
+  stability.
 
 ### 3. Faster post estimator
 
@@ -132,10 +138,56 @@ Work order: §4 → §1 → §2 → §3.
   in the filter.
 - **CZPTT:** operational points go to the sidecars only by default (`--czptt-operational-points
   gtfs` restores the old behavior).
-- **Status:** implemented (`src/obehy/filtered_jdf.py`, rules in
-  `src/obehy/data/filtered-jdf/rules-v1.json`). Not yet run inside a complete live `obehy build`.
+- **Status:** done. Implemented (`src/obehy/filtered_jdf.py`, rules in
+  `src/obehy/data/filtered-jdf/rules-v1.json`) and published by both live builds
+  (`jdf-filtered/`, about 30 s). MobilityData validation of the filtered feed is not run.
+
+### 5. Core runtime
+
+- **Design:** `BASE_PLAN.md` sections 1, 16 and 18–23 (release mirror, fact-based trip
+  inference, interval timeline engine with progress integrity, own GPS delay, circulations).
+  Feeds are built on GitHub Actions; the server only fetches, loads and serves. Realtime order:
+  DÚK + SŽ, then PID (Golemio APIs + GTFS-RT alerts), then Arriva Express.
+- **Steps:**
+  1. `obehy rt record` and dossiers for DÚK, SŽ and Arriva Express (`docs/sources/`); record
+     several days of payloads. Draft dossiers exist for DÚK (one sample payload; 148 of 149
+     vehicles resolve by CIS line + trip against the 2026-10-03 release) and SŽ (one sample
+     payload; 468 of 469 trains resolve to one CZPTT timetable by TR ID + calendars), and Arriva
+     Express (one sample; both express vehicles resolve to one trip by line, destination and
+     time). All list their open questions.
+  2. JrUtil contract check: CZPTT trip ↔ operational journey link, `operational_call` ↔
+     `trip_call` alignment, `stop_sequence` = `trip_call.sequence`.
+  3. Database foundation and `obehy release fetch|load|activate --rollback`.
+  4. Realtime skeleton: model, clock, archive, core loop, `rt` migrations, replay.
+  5. Inference engine (facts, scorers, decision rule, date inference, vehicle binding, rail
+     runs).
+  6. Timeline engine (intervals, delay semantics, progress integrity, arbitration).
+  7. DÚK connector and per-feed GTFS-RT; 8. SŽ and rail fusion; 9. project API; 10. PID;
+     11. Arriva Express with own GPS delay; 12. circulation learning.
+- **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
+  and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
+- **Status:** design only. Nothing implemented.
 
 ## Recent log
+
+- **2026-10-05** — JrUtil `d26bf0b`: `location.district_code` now carries the JDF okres code,
+  and the regional overlay keeps base location metadata (municipality, district, nearby place,
+  country, coordinate precision); before, every one of these columns was null in the published
+  `jdf` package. New overlay test; Release suite 303 passed. Takes effect with the next build.
+
+- **2026-10-05** — Architecture rewrite of `BASE_PLAN.md` for the core runtime.
+  - Decided: two feeds (`jdf`, `czptt`); the file registry is the permanent identity model (no
+    identity service; `IDENTITY_REGISTRY.md` removed; `jrutil-identity-v1` is final); builds on
+    GitHub Actions; one realtime process with in-memory state and a Postgres log.
+  - New realtime design: fact-based trip inference with date inference, rail runs, interval
+    timeline engine, progress integrity on A→B→A routes, own GPS delay, pluggable travel-time
+    providers for long segments only, learned circulations.
+  - Validation: documentation only; no code or tests changed.
+
+- **2026-10-02/03** — Two complete live `obehy build` runs published (`20261002T184241Z`,
+  `20261003T144231Z`; timings under Last validation evidence). The 2026-10-03 run used the
+  freshly seeded stop registry and serving schema 4. An earlier 2026-10-03 attempt failed on a
+  missing JDF post-candidate OSM extract (`obehy-osm build` fixes it).
 
 - **2026-10-03** — Serving schema 4 (bundle v3), the final pre-core contract revision.
   - Zones: `fare_system`, `fare_zone` removed; zones are codes with an optional system, kept on
