@@ -52,6 +52,7 @@ jobs:
           repository: Sap1k/jrutil
           ref: ${{ inputs.jrutil_ref || 'main' }}
           path: jrutil
+          lfs: true
       - uses: actions/checkout@v4
         with:
           repository: Sap1k/jrunify-ext-geodata
@@ -109,9 +110,7 @@ jobs:
         id: osm
         uses: actions/cache/restore@v4
         with:
-          path: |
-            ${{ env.WORK }}/osm
-            !${{ env.WORK }}/osm/extracts
+          path: ${{ env.WORK }}/osm
           key: osm-v1-${{ env.OSM_MONTH }}
       - name: Restore routing cache
         uses: actions/cache/restore@v4
@@ -135,15 +134,14 @@ jobs:
         if: always() && steps.osm.outputs.cache-hit != 'true'
         run: |
           if [ -f "$WORK/osm/regional-merged.osm.pbf.manifest.json" ]; then
+            rm -rf "$WORK/osm/extracts"
             echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Save OSM snapshot
         if: always() && steps.osm-built.outputs.exists == 'true'
         uses: actions/cache/save@v4
         with:
-          path: |
-            ${{ env.WORK }}/osm
-            !${{ env.WORK }}/osm/extracts
+          path: ${{ env.WORK }}/osm
           key: osm-v1-${{ env.OSM_MONTH }}
       - name: Save routing cache
         uses: actions/cache/save@v4
@@ -159,6 +157,7 @@ jobs:
           path: ${{ env.WORK }}/runs/production
           retention-days: 14
           if-no-files-found: warn
+          include-hidden-files: true
 
       - name: Publish release
         if: github.event_name == 'schedule' || inputs.publish
