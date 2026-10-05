@@ -1,0 +1,208 @@
+name: build
+
+# Daily production build of the JDF + CZPTT feed pair (BASE_PLAN.md section 15).
+# JrUtil and the geodata registry are built from their standalone repositories, as in local
+# builds; the converters/ submodule pins are not used.
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      jrutil_ref:
+        description: JrUtil ref to build
+        default: main
+      geodata_ref:
+        description: jrunify-ext-geodata ref
+        default: main
+      refresh_osm:
+        description: Rebuild the regional OSM snapshot even when cached
+        type: boolean
+        default: false
+      publish:
+        description: Publish a GitHub Release
+        type: boolean
+        default: true
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  MEMORY_BUDGET: 8GiB
+  KEEP_RELEASES: 14
+  WORK: /mnt/obehy/work
+  ARTIFACT_ROOT: /mnt/obehy/artifacts
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: obehy
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Sap1k/jrutil
+          ref: ${{ inputs.jrutil_ref || 'main' }}
+          path: jrutil
+      - uses: actions/checkout@v4
+        with:
+          repository: Sap1k/jrunify-ext-geodata
+          ref: ${{ inputs.geodata_ref || 'main' }}
+          path: jrunify-ext-geodata
+
+      - name: Prepare work disk
+        run: |
+          sudo mkdir -p /mnt/obehy
+          sudo chown "$USER" /mnt/obehy
+          mkdir -p "$WORK/osm" "$ARTIFACT_ROOT"
+          echo "OSM_MONTH=$(date -u +%Y-%m)" >> "$GITHUB_ENV"
+          df -h / /mnt
+          free -h
+
+      - name: Install osmium-tool
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q osmium-tool
+          osmium --version
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore JrUtil
+        run: dotnet restore jrutil/jrutil-multitool/jrutil-multitool.fsproj
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: obehy/uv.lock
+      - name: Install Oběhy
+        working-directory: obehy
+        run: uv sync --locked --no-dev
+
+      - name: Write configuration
+        run: |
+          cat > obehy/config/obehy.local.toml <<EOF
+          schema_version = 1
+
+          [paths]
+          workdir = "$WORK"
+          artifact_root = "$ARTIFACT_ROOT"
+          osm_file = "$WORK/osm/regional-merged.osm.pbf"
+          jrunify_ext_geodata_dir = "$GITHUB_WORKSPACE/jrunify-ext-geodata"
+
+          [jrutil]
+          directory = "$GITHUB_WORKSPACE/jrutil"
+          EOF
+          cat obehy/config/obehy.local.toml
+
+      # The merged regional snapshot and its derived extracts, refreshed once a month.
+      - name: Restore OSM snapshot
+        id: osm
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.WORK }}/osm
+            !${{ env.WORK }}/osm/extracts
+          key: osm-v1-${{ env.OSM_MONTH }}
+      - name: Restore routing cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.WORK }}/cache/routing
+          key: routing-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: routing-v1-
+
+      - name: Build
+        working-directory: obehy
+        env:
+          REFRESH_OSM: ${{ steps.osm.outputs.cache-hit != 'true' || inputs.refresh_osm }}
+        run: |
+          args=(--estimated-posts --memory-budget "$MEMORY_BUDGET" --progress plain)
+          if [ "$REFRESH_OSM" = "true" ]; then args+=(--refresh-osm); fi
+          uv run --no-sync obehy build "${args[@]}"
+
+      # Keep a fresh snapshot even when a later stage fails; a refresh costs a Geofabrik download.
+      - name: Check OSM snapshot
+        id: osm-built
+        if: always() && steps.osm.outputs.cache-hit != 'true'
+        run: |
+          if [ -f "$WORK/osm/regional-merged.osm.pbf.manifest.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Save OSM snapshot
+        if: always() && steps.osm-built.outputs.exists == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.WORK }}/osm
+            !${{ env.WORK }}/osm/extracts
+          key: osm-v1-${{ env.OSM_MONTH }}
+      - name: Save routing cache
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.WORK }}/cache/routing
+          key: routing-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload run logs and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-run-${{ github.run_id }}
+          path: ${{ env.WORK }}/runs/production
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Publish release
+        if: github.event_name == 'schedule' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          run_id=$(jq -r .run_id "$ARTIFACT_ROOT/current.json")
+          release="$ARTIFACT_ROOT/releases/$run_id"
+          assets="$RUNNER_TEMP/assets"
+          mkdir -p "$assets"
+          cp "$release/release.json" "$assets/"
+          # Packages are already compressed (zip, Snappy Parquet); tar keeps their file names.
+          for part in jdf czptt jdf-filtered stop-registry; do
+            if [ -d "$release/$part" ]; then tar -C "$release" -cf "$assets/$part.tar" "$part"; fi
+          done
+          ls -la "$assets"
+          jrutil_commit=$(git -C jrutil rev-parse HEAD)
+          geodata_commit=$(git -C jrunify-ext-geodata rev-parse HEAD)
+          printf 'Automated build %s.\n\nOběhy %s, JrUtil %s, jrunify-ext-geodata %s.\n' \
+            "$run_id" "$GITHUB_SHA" "$jrutil_commit" "$geodata_commit" > "$RUNNER_TEMP/notes.md"
+          gh release create "build-$run_id" "$assets"/* \
+            --target "$GITHUB_SHA" --title "Build $run_id" --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Prune old releases
+        if: github.event_name == 'schedule' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release list --limit 200 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("build-"))] | sort_by(.createdAt) | reverse
+                  | .['"$KEEP_RELEASES"':][] | .tagName' |
+          while read -r tag; do gh release delete "$tag" --yes --cleanup-tag; done
+
+      - name: Prune superseded caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh cache list --limit 100 --json key --jq '.[].key' |
+          while read -r key; do
+            case "$key" in
+              "routing-v1-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" | "osm-v1-$OSM_MONTH") ;;
+              routing-v1-* | osm-v1-*) gh cache delete "$key" ;;
+            esac
+          done

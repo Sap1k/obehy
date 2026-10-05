@@ -8,8 +8,8 @@ Short status of the static feeds and the working backlog. Earlier dated handoffs
 ### `obehy build`
 
 One command (`src/obehy/cli.py`) resolves the GVD year, validates or refreshes the shared OSM
-snapshot, builds JrUtil once, and runs these stages. It runs locally today; the production target
-is a GitHub Actions workflow (not built yet; `BASE_PLAN.md` section 15).
+snapshot, builds JrUtil once, and runs these stages. Production runs daily on GitHub Actions
+(`.github/workflows/build.yml`, `BASE_PLAN.md` section 15; not yet run there).
 
 1. **national-jdf** — download VLD and dráhy CIS JŘ archives → `fix-jdf` (stop matching,
    coordinate estimation, `regional-adjacent` international policy) → `merge-jdf` (name-based
@@ -171,6 +171,13 @@ start at once because it needs no database.
 
 ## Recent log
 
+- **2026-10-05** — daily `build` workflow (`.github/workflows/build.yml`).
+  - 02:30 UTC and on demand: `obehy build --estimated-posts --memory-budget 8GiB` on
+    `ubuntu-latest`, work on `/mnt`, JrUtil and geodata from their standalone `main`.
+  - Caches the merged OSM snapshot plus derived extracts per month (`--refresh-osm` only on a
+    miss) and the routing cache per run; publishes `build-<run-id>` Releases (release.json + one
+    tar per package), keeps 14; run logs/diagnostics as 14-day artifacts.
+  - Validation: actionlint clean. Not yet run on Actions.
 - **2026-10-05** — `obehy rt record` (core runtime step 1).
   - Polls the channels in `src/obehy/data/realtime/sources.toml` (DÚK 15 s, SŽ 30 s, Arriva
     30 s) into `data/rt-raw/<source>/<channel>/<UTC date>/`: an `index.jsonl` line per poll
