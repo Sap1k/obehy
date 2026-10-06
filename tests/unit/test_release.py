@@ -156,3 +156,10 @@ def test_database_url_from_config_and_environment(
     config.write_text("schema_version = 1\n", encoding="utf-8")
     with pytest.raises(ConfigurationError, match=r"\[database\]"):
         load_database_url(config)
+
+
+def test_migration_checksum_ignores_line_endings(tmp_path: Path) -> None:
+    (tmp_path / "0001_a.sql").write_bytes(b"SELECT 1;\nSELECT 2;\n")
+    lf = discover(tmp_path)[0].sha256
+    (tmp_path / "0001_a.sql").write_bytes(b"SELECT 1;\r\nSELECT 2;\r\n")
+    assert discover(tmp_path)[0].sha256 == lf

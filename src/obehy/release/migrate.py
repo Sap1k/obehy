@@ -33,13 +33,14 @@ def discover(directory: Path = MIGRATIONS) -> list[Migration]:
         match = _NAME.match(path.name)
         if match is None:
             raise MigrationError(f"Unexpected migration file name: {path.name}")
-        data = path.read_bytes()
+        # Hash LF-normalised text so a CRLF checkout (git autocrlf) keeps the same checksum.
+        text = path.read_bytes().decode("utf-8").replace("\r\n", "\n")
         migrations.append(
             Migration(
                 version=int(match.group(1)),
                 name=match.group(2),
-                sql=data.decode("utf-8"),
-                sha256=hashlib.sha256(data).hexdigest(),
+                sql=text,
+                sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
             )
         )
     versions = [migration.version for migration in migrations]

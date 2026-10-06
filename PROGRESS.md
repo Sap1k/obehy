@@ -215,8 +215,9 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
     CI runs the DB tests in a postgis service.
   - Validation: 129 tests (13 against PostgreSQL), ruff, pyright. Real load and activation of
     `20261006T194555Z`; the serving-v4 release `20261003T144231Z` is rejected.
-  - Findings for later: departure boards must drop each trip's final call (PID leaves pickup
-    allowed there); CZPTT has two trips for Os 8503 at Nymburk (S2 and S31) at the same time.
+  - Finding for the API: departure boards must drop each trip's final passenger call. PID leaves
+    pickup allowed there, and CZPTT run parts meet at the line change (Os 8503 arrives at
+    Nymburk as S31 and continues as S2 → Poděbrady, linked by an in-seat transfer).
   - Remaining: `release fetch`; GTFS paths and resolver version in the publication; inference
     indexes.
 
