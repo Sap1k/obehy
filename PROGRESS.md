@@ -41,22 +41,20 @@ heap hard limit is configured; memory figures are telemetry.
   `conservative-routed-v4|tuned-safe-v3|kostany-diagnostic-best-safe`, which feature export uses
   as the training baseline. Evidence-v2 packs are captured only for retraining
   (`--capture-post-inference-evidence`); bundles always route live.
-- **Serving:** JrUtil production packages (`jrutil-production` bundle v3, serving schema v4):
-  standard GTFS, bounded diagnostics and 30 typed Parquet relations. Zones sit on route stop
-  slots (`route_stop_zone`), on calls only where trips disagree (`call_zone`), plus a per-stop
-  `location_zone`; `route_stop` is the merged, ordered stop list per route direction that every
-  `trip_call` points at; foreign keys are validated. The importer will be written against
-  serving schema 5 (Next steps §6), not v4; it is not written yet.
+- **Serving:** JrUtil production packages (`jrutil-production` bundle v3, serving schema 5.0):
+  GTFS projected from the relations, bounded diagnostics and 19 typed Parquet relations (§6).
+  The importer (§5.3) is not written yet.
 
 ### Last validation evidence
 
 - Live `obehy build` (estimated posts, learned-v1, routing cache), both published:
   - `20261002T184241Z`: 45.3 min (JDF 19.4, overlay 4.7, CZPTT 20.1 min).
-  - `20261003T144231Z` (current; serving schema 4, seeded stop registry): 39.2 min (JDF 16.8,
+  - `20261003T144231Z` (serving schema 4, seeded stop registry): 39.2 min (JDF 16.8,
     filtered JDF 0.5, overlay 5.0, CZPTT 16.0, validation 0.8 min). Zero stop, post or
     overlay-place registry candidates.
+  - `20261006T194555Z` (current; local, serving schema 5.0): all three packages valid.
   - Not run on either: MobilityData GTFS validator, MOTIS import check.
-- JrUtil Release suite: 303 tests (2026-10-05).
+- JrUtil Release suite: 309 tests (2026-10-06).
 - Oběhy: unit suite 75 tests, ruff and pyright clean (2026-10-05).
 - Default JDF conversion: 179.4 s, 2.88 GB peak private memory, package valid (2026-09-15).
 - National finalizer replay with overlays: 4.07 GiB peak, package valid (2026-09-19).
@@ -149,12 +147,11 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   Feeds are built on GitHub Actions; the server only fetches, loads and serves. Realtime order:
   DÚK + SŽ, then PID (Golemio APIs + GTFS-RT alerts), then Arriva Express.
 - **Steps:**
-  1. `obehy rt record` and dossiers for DÚK, SŽ and Arriva Express (`docs/sources/`); record
-     several days of payloads. Draft dossiers exist for DÚK (one sample payload; 148 of 149
-     vehicles resolve by CIS line + trip against the 2026-10-03 release) and SŽ (one sample
-     payload; 468 of 469 trains resolve to one CZPTT timetable by TR ID + calendars), and Arriva
-     Express (one sample; both express vehicles resolve to one trip by line, destination and
-     time). All list their open questions.
+  1. `obehy rt record` and dossiers for DÚK, SŽ and Arriva Express (`docs/sources/`), checked
+     by replaying a 25-hour capture against the v5 release: DÚK buses 99.1% of running trips to
+     exactly one trip (DPmÚL pending the JrUtil merge fix), DÚK trains 95.3%, SŽ 99.7% of
+     train-days to one run, Arriva Express 61/61 scoreable trips by line, destination and
+     next-stop times.
   2. Serving schema 5 (§6; replaces the planned CZPTT contract check).
   3. Database foundation and `obehy release fetch|load|activate --rollback`.
   4. Realtime skeleton: model, clock, archive, core loop, `rt` migrations, replay.
@@ -165,8 +162,9 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
      11. Arriva Express with own GPS delay; 12. circulation learning.
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
-- **Status:** step 1: `obehy rt record` implemented (2026-10-05); the multi-day capture is
-  pending. All three dossiers now record their endpoints. Steps 2–12 are design only.
+- **Status:** step 1 done (2026-10-06; the replay ran as exploratory scripts, not yet a repo
+  tool; recording continues). Step 2 done (§6). Next: step 3, importing the v5 release. Steps
+  4–12 are design only.
 
 ### 6. Serving schema 5
 
@@ -189,15 +187,25 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   in `JDF_SEMANTICS.md` finds a home for every fact. Contract fixes found on the way: typed
   kinds, platform codes, CZPTT note ranges, source-qualified namespaces, feed-prefixed IDs, and
   no reserved words (`key`, `method`).
-- **Next:** one bounded real-data run (golden subset, re-frozen from fresh snapshots) comparing v5
-  against the 2026-10-03 v4 output; then the release loader against v5. Supersedes §5.2: the
-  CZPTT trip ↔ operational-call link is `trip_call` itself.
-- **Status:** JrUtil writes and validates 5.0 natively (bundle 3, 2026-10-06): typed JDF kinds,
-  CZPTT trip parts with railway points and `call_range` notes, `source_key`/`call_key`, GTFS
-  projected from the relations, CZPTT input digest in the manifest. Oběhy accepts serving major
-  5. Real-data run pending (the golden inputs are no longer on disk).
+- **Status:** done (2026-10-06). JrUtil writes and validates 5.0 natively (bundle 3): typed JDF
+  kinds, CZPTT trip parts with railway points and `call_range` notes, `source_key`/`call_key`,
+  GTFS projected from the relations, CZPTT input digest in the manifest. Oběhy accepts serving
+  major 5. A full local build produced three valid packages and the realtime replay (§5.1)
+  resolves against them; the v4-vs-v5 comparison was dropped (different source data). Supersedes
+  §5.2: the CZPTT trip ↔ operational-call link is `trip_call` itself.
 
 ## Recent log
+
+- **2026-10-06** — Realtime replay (§5.1): 25 hours of DÚK, SŽ and Arriva Express payloads
+  resolved against the v5 release; dossiers updated with the results. Findings: Arriva's
+  `lastStopName` is the next stop and `updated` is local time; DÚK `Delay` is signed (unsigned
+  for the DPmÚL and Teplice fleets), DÚK also carries trains (resolved through CZPTT by train
+  number), and vehicles keep stale trip keys while positioning; DÚK vehicle chains are 90%
+  same-stop links. Fixes in JrUtil found along the way: overlay `call_key` positions (`0d85ece`),
+  CZPTT call features and stopless in-seat transfers (`b65cc9b`), and date-by-date JDF version
+  resolution for DPmÚL's parallel versions (`6a86278`; bounded old/new merge comparison on 804
+  urban-rail batches and 518 bus lines: no overlapping versions, only corrections). Validation:
+  JrUtil `dotnet test` 309/309. Remaining: the replay as a repo tool.
 
 - **2026-10-06** — Serving schema 5.0 implemented in JrUtil (§6): writer, `validate-package`
   enumeration/prefix/key-encoding/trip-part/GTFS-projection/source-digest checks, contract
