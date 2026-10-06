@@ -31,6 +31,7 @@ from obehy.production_package import (
     read_manifest,
 )
 from obehy.realtime import record
+from obehy.release import commands as release_commands
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
 POLICY = regional_overlay.POLICY
@@ -436,6 +437,7 @@ def _parser() -> argparse.ArgumentParser:
     recorder.add_argument(
         "--duration", type=record.parse_duration, help="stop after e.g. 30m, 6h or 2d"
     )
+    release_commands.add_parsers(commands)
     return parser
 
 
@@ -464,6 +466,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "rt":
         return _record(args)
+    if args.command in ("db", "release"):
+        return release_commands.run(args)
     try:
         runtime = load_runtime_config(cast(Path | None, args.config))
         requested_year = cast(int | Literal["auto"], args.gvd_year)

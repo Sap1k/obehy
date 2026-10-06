@@ -53,6 +53,37 @@ def _absolute_path(table: dict[str, Any], key: str, source: Path) -> Path:
     return path
 
 
+DATABASE_URL_ENV = "OBEHY_DATABASE_URL"
+
+
+def load_database_url(path: Path | None = None) -> str:
+    """The PostgreSQL URL: ``OBEHY_DATABASE_URL`` or ``[database] url`` in the config.
+
+    Only ``schema_version`` and ``[database]`` are read, so a server without build paths can
+    use the same file.
+    """
+
+    environment = os.environ.get(DATABASE_URL_ENV, "").strip()
+    if environment:
+        return environment
+    source = (path or default_config_path()).resolve()
+    if not source.is_file():
+        raise ConfigurationError(
+            f"No database configured: set {DATABASE_URL_ENV} or [database] url in {source}"
+        )
+    try:
+        with source.open("rb") as stream:
+            document = tomllib.load(stream)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigurationError(f"Invalid TOML in {source}: {error}") from error
+    if document.get("schema_version") != 1:
+        raise ConfigurationError(f"{source} must contain schema_version = 1")
+    url = _table(document, "database").get("url")
+    if not isinstance(url, str) or not url.strip():
+        raise ConfigurationError(f"Missing non-empty 'url' in [database] of {source}")
+    return os.path.expandvars(url.strip())
+
+
 def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
     source = (path or default_config_path()).resolve()
     if not source.is_file():

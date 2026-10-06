@@ -12,3 +12,7 @@ jrunify_ext_geodata_dir = "D:/src/jrunify-ext-geodata"
 directory = "D:/src/jrutil"
 # Alternatively, remove directory and use:
 # command = ["dotnet", "D:/tools/jrutil-multitool.dll"]
+
+# Release mirror database (obehy db / obehy release). OBEHY_DATABASE_URL overrides it.
+# [database]
+# url = "postgresql://obehy:PASSWORD@localhost:45873/obehy"
