@@ -150,7 +150,7 @@ realtime process are enough for one machine. Revisit only when measurements show
 - **Python 3.13**, asyncio.
 - **PostgreSQL + PostGIS** — the static mirror, the realtime log and projections, history.
 - **psycopg 3** with raw SQL migrations; no ORM.
-- **pyarrow** — reading serving Parquet for binary COPY.
+- **pyarrow** — reading serving Parquet and encoding it for COPY.
 - **FastAPI** — project API, feed endpoints and debugging endpoints.
 - **gtfs-realtime-bindings / protobuf** — GTFS-RT decode and encode.
 - **Parquet** — cold historical archive.
@@ -624,16 +624,18 @@ On the application server:
 1. `obehy release fetch` polls for new releases, downloads, verifies every hash against
    `release.json` and the package manifests, and unpacks into `data/releases/<run-id>`.
 2. `obehy release load` verifies the contract versions (serving schema major 5), then:
-   - creates fresh LIST partitions per package load in `static.*`;
-   - streams every relation through binary COPY;
-   - builds indexes after loading;
-   - checks counts, keys and references set-wise;
+   - builds each package load as standalone tables in `static.*` (one LIST partition per load);
+   - streams every relation through COPY (Parquet → CSV encoded by pyarrow);
+   - builds indexes after loading, matching the parents' so ATTACH adopts them;
+   - checks counts, keys and references set-wise; unknown enumeration values are warnings;
    - derives non-semantic helpers: `service_date` (service × operating day over the service
      horizon), PostGIS geometry for locations and shapes, and the inference indexes;
-   - records the load in `control`.
+   - attaches all partitions and records the load in `control`, in the same transaction.
 3. `obehy release activate` switches `control.publication` in one transaction (GTFS files, static
-   mirror, source mappings and realtime resolver version together) and sends `NOTIFY`.
-   `--rollback` reactivates the previous release.
+   mirror, source mappings and realtime resolver version together), recreates the `active.*`
+   views over the two active loads (literal load ids, so partitions are pruned at plan time) and
+   sends `NOTIFY obehy_publication`. Readers query `active.*` only. `--rollback` returns to the
+   publication that preceded the current one.
 
 A failed load leaves no attached partitions. The active release and its two most recent
 predecessors keep their database payloads; older releases keep only metadata.

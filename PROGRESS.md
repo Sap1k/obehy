@@ -43,7 +43,11 @@ heap hard limit is configured; memory figures are telemetry.
   (`--capture-post-inference-evidence`); bundles always route live.
 - **Serving:** JrUtil production packages (`jrutil-production` bundle v3, serving schema 5.0):
   GTFS projected from the relations, bounded diagnostics and 19 typed Parquet relations (§6).
-  The importer (§5.3) is not written yet.
+- **Mirror:** `obehy db migrate`, `obehy release load <release-dir>`, `obehy release activate
+  <run-id>|--rollback`, `obehy release status` (`src/obehy/release/`). One LIST partition per
+  package load, built and checked standalone and attached in one transaction; readers use the
+  `active.*` views. Derived: `service_date`, location `geom`, `shape_line`. `release fetch` is
+  not written yet.
 
 ### Last validation evidence
 
@@ -55,7 +59,10 @@ heap hard limit is configured; memory figures are telemetry.
   - `20261006T194555Z` (current; local, serving schema 5.0): all three packages valid.
   - Not run on either: MobilityData GTFS validator, MOTIS import check.
 - JrUtil Release suite: 309 tests (2026-10-06).
-- Oběhy: unit suite 75 tests, ruff and pyright clean (2026-10-05).
+- Oběhy: 116 unit + 13 PostgreSQL tests, ruff and pyright clean (2026-10-07).
+- Mirror load of `20261006T194555Z` into PostGIS 17 over a ~10 MB/s LAN link: JDF 466 s
+  (COPY 352 s, network-bound; trip_call 7.38M rows 270 s), CZPTT 81 s; activation instant.
+  Departure boards at Česká Lípa, Duchcov and Nymburk hl.n. mix both feeds with platforms/posts.
 - Default JDF conversion: 179.4 s, 2.88 GB peak private memory, package valid (2026-09-15).
 - National finalizer replay with overlays: 4.07 GiB peak, package valid (2026-09-19).
 - Post-estimator frozen replay: bundle 13m04s vs ~43m33s live baseline, byte-identical payloads
@@ -163,8 +170,9 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
 - **Status:** step 1 done (2026-10-06; the replay ran as exploratory scripts, not yet a repo
-  tool; recording continues). Step 2 done (§6). Next: step 3, importing the v5 release. Steps
-  4–12 are design only.
+  tool; recording continues). Step 2 done (§6). Step 3 done except `release fetch`, which waits
+  for the first GitHub Actions release (2026-10-07). Next: step 4, the realtime skeleton. Steps
+  5–12 are design only.
 
 ### 6. Serving schema 5
 
@@ -195,6 +203,22 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   §5.2: the CZPTT trip ↔ operational-call link is `trip_call` itself.
 
 ## Recent log
+
+- **2026-10-07** — Release mirror (§5.3, milestone C1 without fetch).
+  - `src/obehy/release/`: migration runner (`control.schema_migration`, checksums), `control`
+    schema (release, package, load, publication + history), static DDL generated from the
+    vendored `serving-v5.json` (19 relations + `service_date`, `shape_line`, location `geom`),
+    loader (hash/contract verification, COPY via pyarrow CSV, PK/index build, set-wise FK and
+    row-count checks, unknown-enum warnings, attach in one transaction), activation through
+    regenerated `active.*` views with NOTIFY, stack rollback, retention (active + 2
+    predecessors + staged loads). New deps: psycopg 3, pyarrow. `compose.yaml` for PostGIS 17;
+    CI runs the DB tests in a postgis service.
+  - Validation: 129 tests (13 against PostgreSQL), ruff, pyright. Real load and activation of
+    `20261006T194555Z`; the serving-v4 release `20261003T144231Z` is rejected.
+  - Findings for later: departure boards must drop each trip's final call (PID leaves pickup
+    allowed there); CZPTT has two trips for Os 8503 at Nymburk (S2 and S31) at the same time.
+  - Remaining: `release fetch`; GTFS paths and resolver version in the publication; inference
+    indexes.
 
 - **2026-10-06** — Realtime replay (§5.1): 25 hours of DÚK, SŽ and Arriva Express payloads
   resolved against the v5 release; dossiers updated with the results. Findings: Arriva's

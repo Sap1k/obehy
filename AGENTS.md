@@ -34,15 +34,20 @@
 
 ## Database
 
-- There is currently no database code. The serving-v1 loader, ORM models and Alembic migration
-  were removed. The release loader (`BASE_PLAN.md` section 16) reintroduces PostgreSQL with raw
-  SQL migrations and psycopg 3, without an ORM.
+- PostgreSQL + PostGIS through psycopg 3 and raw SQL migrations (`src/obehy/release/migrations/`,
+  `obehy db migrate`); no ORM. `0003_static.sql` is generated from the vendored contract
+  (`src/obehy/data/serving/serving-v5.json`) by `python -m obehy.release.ddl`; never edit it by
+  hand, and add a new migration when the contract gains a minor.
+- `obehy release load|activate|status` (`src/obehy/release/`, `BASE_PLAN.md` section 16).
+  Consumers read the `active.*` views only.
+- DB tests live in `tests/db/` and run when `OBEHY_TEST_DATABASE_URL` names a database the user
+  may create databases from (`compose.yaml` runs one); they are skipped otherwise.
 
 ## Validation
 
 - Run the narrowest relevant checks first, then broader ones when practical:
-  `uv run pytest tests/unit -q`, `uv run ruff check src tests`, `uv run ruff format --check src
-  tests`, `uv run pyright`.
+  `uv run pytest tests/unit -q` (plus `tests/db` with `OBEHY_TEST_DATABASE_URL`),
+  `uv run ruff check src tests`, `uv run ruff format --check src tests`, `uv run pyright`.
 - JrUtil: `dotnet test jrutil.tests/jrutil.tests.fsproj -c Release --no-restore` in the standalone
   checkout; report the exact command and result.
 - Inspect JrUtil log output as well as the exit code: conversion commands may log entity-level
