@@ -7,6 +7,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: obehy_test
+          POSTGRES_USER: obehy
+          POSTGRES_PASSWORD: obehy-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U obehy -d obehy_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      OBEHY_TEST_DATABASE_URL: postgresql://obehy:obehy-ci@localhost:5432/obehy_test
     steps:
       - uses: actions/checkout@v4
         with:
