@@ -10,6 +10,7 @@ from typing import Any, cast
 import pytest
 
 from obehy import cli
+from obehy.pipeline.download import DownloadError
 from obehy.pipeline.errors import PipelineError
 from obehy.runtime_config import JrUtilRuntime, RuntimeConfig
 
@@ -113,6 +114,18 @@ def _dependencies(
     return jdf_builder, czptt_builder, downloader, filtered_builder, runner, seen
 
 
+def _fetchers() -> dict[str, Any]:
+    def jdf_fetcher(destination: Path, _reporter: object) -> Path:
+        destination.mkdir(parents=True)
+        return destination
+
+    def czptt_fetcher(_config: object, destination: Path, _reporter: object) -> Path:
+        destination.mkdir(parents=True)
+        return destination
+
+    return {"jdf_source_fetcher": jdf_fetcher, "czptt_source_fetcher": czptt_fetcher}
+
+
 @pytest.fixture(autouse=True)
 def _preflight(monkeypatch: pytest.MonkeyPatch) -> None:
     def valid_snapshot(*_args: object, **_kwargs: object) -> dict[str, Any]:
@@ -145,6 +158,7 @@ def test_build_applies_the_stop_registry_and_keeps_review_files(tmp_path: Path) 
         downloader=downloader,
         filtered_jdf_builder=filtered,
         command_runner=runner,
+        **_fetchers(),
     )
 
     jdf_config = next(value for value in seen if isinstance(value, cli.national_jdf.BuildConfig))
@@ -172,6 +186,7 @@ def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None
         downloader=downloader,
         filtered_jdf_builder=filtered,
         command_runner=runner,
+        **_fetchers(),
     )
 
     assert {path.name for path in result.root.iterdir()} == {
@@ -244,6 +259,7 @@ def test_failure_preserves_previous_current(
             downloader=downloader,
             filtered_jdf_builder=filtered,
             command_runner=runner,
+            **_fetchers(),
         )
 
     assert json.loads((runtime.artifact_root / "current.json").read_text()) == previous
@@ -264,6 +280,7 @@ def test_existing_build_lock_rejects_concurrent_publication(tmp_path: Path) -> N
             downloader=downloader,
             filtered_jdf_builder=filtered,
             command_runner=runner,
+            **_fetchers(),
         )
 
     assert not (runtime.artifact_root / "releases").exists()
@@ -290,6 +307,7 @@ def test_filtered_jdf_can_be_skipped(tmp_path: Path) -> None:
         downloader=downloader,
         filtered_jdf_builder=filtered,
         command_runner=runner,
+        **_fetchers(),
     )
 
     assert result.jdf_filtered is None
@@ -300,3 +318,65 @@ def test_filtered_jdf_can_be_skipped(tmp_path: Path) -> None:
         value for value in seen if isinstance(value, cli.national_czptt.BuildConfig)
     )
     assert czptt_config.operational_points == "gtfs"
+
+
+def test_sources_are_fetched_first_and_passed_to_the_builders(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    jdf, czptt, downloader, filtered, runner, seen = _dependencies(runtime)
+
+    result = cli.build(
+        cli.BuildOptions(runtime, 2027, progress="off"),
+        jdf_builder=jdf,
+        czptt_builder=czptt,
+        downloader=downloader,
+        filtered_jdf_builder=filtered,
+        command_runner=runner,
+        **_fetchers(),
+    )
+
+    release = json.loads((result.root / "release.json").read_text(encoding="utf-8"))
+    assert [stage["name"] for stage in release["stages"]][:2] == ["fetch-sources", "build-jrutil"]
+    assert set(release["retrieval"]["seconds"]) == {"national-jdf", "national-czptt", "regional"}
+    sources = tmp_path / "work" / "runs" / "production" / result.run_id / "sources"
+    jdf_config = next(value for value in seen if isinstance(value, cli.national_jdf.BuildConfig))
+    czptt_config = next(
+        value for value in seen if isinstance(value, cli.national_czptt.BuildConfig)
+    )
+    assert jdf_config.source_snapshot == sources / "national-jdf"
+    assert czptt_config.source_snapshot == sources / "czptt"
+    assert (sources / "fetch-log.json").is_file()
+    _name, _bundle, filtered_kwargs = next(
+        cast(tuple[str, Path, dict[str, object]], value)
+        for value in seen
+        if isinstance(value, tuple) and value[0] == "filtered-jdf"
+    )
+    assert filtered_kwargs["merged_jdf"] == (
+        sources.parent / "national-jdf" / "derived" / "merged-jdf.zip"
+    )
+
+
+def test_unreachable_source_fails_before_any_conversion(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    jdf, czptt, _downloader, filtered, runner, seen = _dependencies(runtime)
+
+    def unreachable(_url: str, source_id: str, _destination: Path, *, require_api: bool) -> Path:
+        del require_api
+        raise DownloadError(source_id, "https://example.invalid/gtfs.zip", 3, "handshake timed out")
+
+    with pytest.raises(DownloadError, match="Download pid-gtfs failed after 3 attempts"):
+        cli.build(
+            cli.BuildOptions(runtime, 2027, progress="off"),
+            jdf_builder=jdf,
+            czptt_builder=czptt,
+            downloader=unreachable,
+            filtered_jdf_builder=filtered,
+            command_runner=runner,
+            **_fetchers(),
+        )
+
+    assert seen == []
+    failure_path = next((runtime.workdir / "runs" / "production").rglob("failure.json"))
+    failure = json.loads(failure_path.read_text(encoding="utf-8"))
+    assert failure["completed_stages"] == []
+    assert "pid-gtfs" in failure["error"]
+    assert (failure_path.parent / "sources" / "fetch-log.json").is_file()

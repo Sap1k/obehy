@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -33,11 +34,17 @@ from obehy.osm_snapshot import (
     validate_railway_locations,
     validate_snapshot,
 )
-from obehy.pipeline import jrutil
+from obehy.pipeline import download, jrutil
 from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
 from obehy.pipeline.download import USER_AGENT, read_url
 from obehy.pipeline.errors import PipelineError
-from obehy.pipeline.files import atomic_output_path, file_digest, write_json
+from obehy.pipeline.files import (
+    atomic_output_path,
+    file_digest,
+    link_or_copy,
+    utc_now,
+    write_json,
+)
 from obehy.pipeline.process import (
     CommandFn,
     CommandResult,
@@ -231,8 +238,11 @@ class _HttpSourceDownloader:
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(destination.name + ".part")
 
-        for attempt in range(2):
+        attempts = len(download.RETRY_DELAYS) + 1
+        for attempt in range(1, attempts + 1):
             connection = self._connection(scheme, parsed.hostname, port)
+            started_at = utc_now()
+            started = time.monotonic()
             try:
                 connection.request(
                     "GET",
@@ -279,8 +289,20 @@ class _HttpSourceDownloader:
                 raise
             except (http.client.HTTPException, OSError) as error:
                 self._reset_connection()
-                if attempt == 1:
-                    raise PipelineError(f"CZPTT download failed: {item.url}: {error}") from error
+                download.record_attempt(
+                    f"CZPTT {item.relative_path}",
+                    item.url,
+                    attempt,
+                    started_at,
+                    time.monotonic() - started,
+                    "failed" if attempt == attempts else "retry",
+                    error,
+                )
+                if attempt == attempts:
+                    raise download.DownloadError(
+                        f"CZPTT {item.relative_path}", item.url, attempt, str(error)
+                    ) from error
+                download.sleep_before_retry(attempt)
         raise AssertionError("unreachable HTTP download retry state")
 
     def close(self) -> None:
@@ -466,7 +488,12 @@ def _copy_snapshot(snapshot: Path, destination: Path) -> list[SourceRecord]:
     root = snapshot / "sources" if (snapshot / "sources").is_dir() else snapshot
     if not root.is_dir():
         raise PipelineError(f"Source snapshot directory does not exist: {snapshot}")
-    shutil.copytree(root, destination, dirs_exist_ok=True)
+    shutil.copytree(
+        root,
+        destination,
+        dirs_exist_ok=True,
+        copy_function=lambda source, target: link_or_copy(Path(source), Path(target)),
+    )
     return _validate_source_manifest(destination)
 
 
@@ -948,6 +975,21 @@ def _download_sources(
         },
     )
     return records, catalog
+
+
+def snapshot_sources(config: BuildConfig, destination: Path, reporter: Reporter) -> Path:
+    """Download the CZPTT inventory, KADR catalog and SR70 into a reusable source snapshot.
+
+    The result is what ``BuildConfig.source_snapshot`` accepts, so a production build can fetch
+    every source up front and convert later.
+    """
+
+    destination.mkdir(parents=True, exist_ok=False)
+    timetable_year = resolve_timetable_year(config.timetable_year)
+    _download_sources(config, destination, timetable_year, reporter, StageClock())
+    _snapshot_sr70(config, destination)
+    _finalize_sources_manifest(destination)
+    return destination
 
 
 def _snapshot_sr70(config: BuildConfig, sources: Path) -> Path:

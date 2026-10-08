@@ -18,7 +18,15 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal, cast
 
-from obehy import filtered_jdf, gvd, national_czptt, national_jdf, osm_snapshot, regional_overlay
+from obehy import (
+    build_sources,
+    filtered_jdf,
+    gvd,
+    national_czptt,
+    national_jdf,
+    osm_snapshot,
+    regional_overlay,
+)
 from obehy.pipeline import jrutil
 from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
 from obehy.pipeline.errors import PipelineError
@@ -51,7 +59,6 @@ class BuildOptions:
     refresh_osm: bool = False
     czptt_operational_points: national_czptt.OperationalPointMode = "sidecar"
     filtered_jdf: bool = True
-    line_filter_snapshot: Path | None = None
     routing_cache: bool = True
 
 
@@ -123,7 +130,7 @@ def _start_run(runtime: RuntimeConfig) -> tuple[_Run, int]:
         release=releases / run_id,
         partial_release=releases / f".{run_id}.part",
         root=root,
-        sources=root / "regional-sources",
+        sources=root / "sources",
         logs=root / "logs",
         diagnostics=root / "diagnostics",
         lock=runtime.artifact_root / ".production-build.lock",
@@ -147,7 +154,11 @@ def _stop_registry(runtime: RuntimeConfig) -> Path | None:
 
 
 def _jdf_config(
-    options: BuildOptions, geodata: Path, output: Path, reference_date: date
+    options: BuildOptions,
+    geodata: Path,
+    output: Path,
+    reference_date: date,
+    source_snapshot: Path | None = None,
 ) -> national_jdf.BuildConfig:
     runtime = options.runtime
     return national_jdf.BuildConfig(
@@ -168,10 +179,13 @@ def _jdf_config(
         gvd_year=options.gvd_year,
         reference_date=reference_date,
         stop_registry=_stop_registry(runtime),
+        source_snapshot=source_snapshot,
     )
 
 
-def _czptt_config(options: BuildOptions, output: Path) -> national_czptt.BuildConfig:
+def _czptt_config(
+    options: BuildOptions, output: Path, source_snapshot: Path | None = None
+) -> national_czptt.BuildConfig:
     runtime = options.runtime
     return national_czptt.BuildConfig(
         output=output,
@@ -183,6 +197,7 @@ def _czptt_config(options: BuildOptions, output: Path) -> national_czptt.BuildCo
         jrutil_command=runtime.jrutil.command,
         timetable_year=options.gvd_year,
         operational_points=options.czptt_operational_points,
+        source_snapshot=source_snapshot,
         jobs=options.jobs,
         memory_budget=options.memory_budget,
         keep_work=options.keep_work,
@@ -220,7 +235,7 @@ def _validate_packages(
 def _release_record(
     options: BuildOptions,
     run: _Run,
-    sources: Sequence[regional_overlay.Source],
+    fetched: build_sources.FetchedSources,
     packages: dict[str, object],
     stages: list[dict[str, str]],
 ) -> dict[str, object]:
@@ -251,9 +266,10 @@ def _release_record(
             "routing_cache": options.routing_cache,
         },
         "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
+        "retrieval": fetched.retrieval,
         "sources": {
             source.source_id: json.loads(source.descriptor.read_text(encoding="utf-8"))
-            for source in sources
+            for source in fetched.regional
         },
         "packages": packages,
         "outputs": outputs,
@@ -300,9 +316,11 @@ def build(
     *,
     jdf_builder: Callable[..., Path] = national_jdf.build,
     czptt_builder: Callable[..., Path] = national_czptt.build,
-    downloader: regional_overlay.DownloadGtfsFn = regional_overlay.download_gtfs,
+    downloader: regional_overlay.DownloadGtfsFn | None = None,
     filtered_jdf_builder: Callable[..., Path] = filtered_jdf.build_filtered_jdf,
     command_runner: CommandFn = run_command,
+    jdf_source_fetcher: build_sources.JdfSourceFetcher = build_sources.fetch_jdf_sources,
+    czptt_source_fetcher: build_sources.CzpttSourceFetcher = national_czptt.snapshot_sources,
 ) -> Release:
     runtime = options.runtime
     geodata = _check_inputs(options)
@@ -314,6 +332,18 @@ def build(
         stages.append({"name": name, "completed_at": utc_now()})
 
     try:
+        # Every network source first: one retrieval date, and outages fail in minutes.
+        fetched = build_sources.fetch_sources(
+            run.sources,
+            _czptt_config(options, run.czptt_output),
+            reporter,
+            jdf_fetcher=jdf_source_fetcher,
+            czptt_fetcher=czptt_source_fetcher,
+            regional_downloader=downloader,
+        )
+        completed("fetch-sources")
+        reference_date = fetched.reference_date
+
         if runtime.jrutil.directory is not None:
             command_runner(
                 jrutil.build_command(runtime.jrutil.directory),
@@ -324,9 +354,9 @@ def build(
             )
         completed("build-jrutil")
 
-        reference_date = gvd.prague_today()
         jdf_builder(
-            _jdf_config(options, geodata, run.jdf_output, reference_date), reporter=reporter
+            _jdf_config(options, geodata, run.jdf_output, reference_date, fetched.jdf),
+            reporter=reporter,
         )
         completed("national-jdf")
         jdf_bundle = run.jdf_output / "bundle"
@@ -343,19 +373,16 @@ def build(
                 run.partial_release / "jdf-filtered",
                 reference=reference_date,
                 work=filtered_work,
-                line_snapshot=options.line_filter_snapshot,
+                merged_jdf=run.jdf_output / "derived" / "merged-jdf.zip",
             )
             completed("filtered-jdf")
-
-        sources = regional_overlay.snapshot_sources(run.sources, downloader)
-        completed("regional-snapshots")
 
         regional_overlay.run(
             runtime_command=_runtime_command(runtime),
             cwd=runtime.jrutil.directory or Path.cwd(),
             base=jdf_bundle,
             output=run.partial_release / "jdf",
-            sources=sources,
+            sources=fetched.regional,
             gvd_year=options.gvd_year,
             jobs=options.jobs,
             memory_budget=options.memory_budget,
@@ -368,7 +395,7 @@ def build(
         )
         completed("regional-overlay")
 
-        czptt_builder(_czptt_config(options, run.czptt_output), reporter=reporter)
+        czptt_builder(_czptt_config(options, run.czptt_output, fetched.czptt), reporter=reporter)
         shutil.move(run.czptt_output / "bundle", run.partial_release / "czptt")
         completed("national-czptt")
 
@@ -383,7 +410,7 @@ def build(
 
         write_json(
             run.partial_release / "release.json",
-            _release_record(options, run, sources, packages, stages),
+            _release_record(options, run, fetched, packages, stages),
         )
         return _publish(options, run)
     except Exception as error:
@@ -415,11 +442,6 @@ def _parser() -> argparse.ArgumentParser:
         "--no-routing-cache",
         action="store_true",
         help="route every post-inference context instead of reusing the routing cache",
-    )
-    command.add_argument(
-        "--line-filter-snapshot",
-        type=Path,
-        help="replay a saved line-snapshot.json instead of querying the line portal",
     )
     realtime = commands.add_parser("rt", help="realtime tools")
     realtime_commands = realtime.add_subparsers(dest="rt_command", required=True)
@@ -487,7 +509,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     national_czptt.OperationalPointMode, args.czptt_operational_points
                 ),
                 filtered_jdf=not cast(bool, args.skip_filtered_jdf),
-                line_filter_snapshot=cast(Path | None, args.line_filter_snapshot),
                 routing_cache=not cast(bool, args.no_routing_cache),
             )
         )

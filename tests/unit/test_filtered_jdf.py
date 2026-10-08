@@ -5,24 +5,83 @@ import json
 import zipfile
 from datetime import date
 from pathlib import Path
-from urllib.parse import parse_qs
 
 import pytest
 
 from obehy import filtered_jdf
 from obehy.pipeline.errors import PipelineError
 
-PORTAL_HTML = """
-<html><body>
-<table id="filtr"><tr><td>999999</td><td>x</td><td>not results</td></tr></table>
-<table id="vysledky">
-  <tr><th>Linka</th><th>IDS</th><th>Název</th><th>Dopravce</th></tr>
-  <tr><td>445017</td><td></td><td>Doubravka - Nová Hospoda</td><td>PMDP</td></tr>
-  <tr><td>100200</td><td>PID 200</td><td>Praha - Kladno</td><td>ARRIVA</td></tr>
-  <tr><td>n/a</td><td></td><td>ignored</td></tr>
-</table>
-</body></html>
-"""
+REFERENCE = date(2026, 10, 8)
+
+
+def _jdf_file(*rows: tuple[str, ...]) -> bytes:
+    text = "".join(",".join(f'"{value}"' for value in row) + ";\r\n" for row in rows)
+    return text.encode("cp1250")
+
+
+def _linky(
+    line: str, operator: str, valid_from: str, valid_to: str, distinction: str
+) -> tuple[str, ...]:
+    """A JDF 1.11 Linky.txt row; only the Altdop fixture operator uses distinction 2."""
+
+    operator_distinction = "2" if operator == "00000000" else "1"
+    flags = ("A", "A", "0", "0", "0", "0", "", "", "", "")
+    return (
+        line,
+        "Název",
+        operator,
+        *flags,
+        valid_from,
+        valid_to,
+        operator_distinction,
+        distinction,
+    )
+
+
+def _merged_jdf(
+    path: Path, *, with_idzk: bool = True, linext: list[tuple[str, ...]] | None = None
+) -> Path:
+    """A merged JDF: PID, IDS JMK and IDZK lines, operator and alternative-operator matches."""
+
+    linky = [
+        _linky("100200", "11111111", "14122025", "12122026", "1"),  # PID, preferred
+        _linky("500410", "11111111", "14122025", "12122026", "1"),  # PID only as secondary
+        _linky("737001", "22222222", "14122025", "12122026", "1"),  # IDS JMK
+        _linky("445017", "25220683", "01092026", "12122026", "1"),  # PMDP
+        _linky("000192", "00000000", "14122025", "12122026", "2"),  # FlixBus as Altdop
+        _linky("235003", "33333333", "05102026", "09102026", "3"),  # detour, no LinExt
+        _linky("235003", "33333333", "02112026", "30112026", "9"),  # later regular version
+        _linky("300001", "11111111", "01012026", "31012026", "1"),  # expired PID version
+    ]
+    if with_idzk:
+        linky.append(_linky("700001", "11111111", "14122025", "12122026", "1"))
+    linext = linext or [
+        ("100200", "1", "30001", "200", "1", "", "1"),
+        ("500410", "1", "30512", "410", "1", "", "1"),
+        ("500410", "2", "30001", "410", "0", "", "1"),
+        ("737001", "1", "30621", "1", "1", "", "1"),
+        ("235003", "1", "30001", "MHD 3", "1", "", "9"),
+        ("300001", "1", "30001", "1", "1", "", "1"),
+        ("700001", "1", "30722", "1", "1", "", "1"),
+    ]
+    dopravci = [
+        (ico, "", name, "1", "", "", "", "", "", "", "", "", distinction)
+        for ico, name, distinction in (
+            ("11111111", "ARRIVA STŘEDNÍ ČECHY s.r.o.", "1"),
+            ("22222222", "Dopravní podnik města Brna, a.s.", "1"),
+            ("25220683", "Plzeňské městské dopravní podniky, a.s.", "1"),
+            ("00000000", "Centrotrans - Eurolines d.d.", "2"),
+            ("00000001", "FlixBus DACH GmbH", "2"),
+            ("33333333", "OAD Kolín s.r.o.", "1"),
+        )
+    ]
+    altdop = [("000192", "0", "00000001", *[""] * 10, "2", "2")]
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("Linky.txt", _jdf_file(*linky))
+        archive.writestr("LinExt.txt", _jdf_file(*linext))
+        archive.writestr("Dopravci.txt", _jdf_file(*dopravci))
+        archive.writestr("Altdop.txt", _jdf_file(*altdop))
+    return path
 
 
 def _write(path: Path, header: str, *rows: str) -> None:
@@ -92,12 +151,47 @@ def _read(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(stream))
 
 
-def test_parse_portal_results_reads_only_result_table() -> None:
-    lines = filtered_jdf.parse_portal_results(PORTAL_HTML)
+def test_jdf_line_snapshot_matches_rules_from_merged_jdf(tmp_path: Path) -> None:
+    merged = _merged_jdf(tmp_path / "merged-jdf.zip")
 
-    assert [line.line for line in lines] == ["445017", "100200"]
-    assert lines[1].ids == "PID 200"
-    assert lines[0].name == "Doubravka - Nová Hospoda"
+    snapshot = filtered_jdf.jdf_line_snapshot(
+        merged, filtered_jdf.load_rules(), REFERENCE, tmp_path
+    )
+
+    value = json.loads(snapshot.read_text(encoding="utf-8"))
+    assert value["source"] == "jdf-linext"
+    assert value["reference_date"] == "2026-10-08"
+    assert {
+        query["value"]: query["lines"] for query in value["queries"] if query["kind"] == "ids"
+    } == {
+        "30001": ["100200", "235003"],
+        "30621": ["737001"],
+        "30722": ["700001"],
+    }
+    operators = next(query for query in value["queries"] if query["kind"] == "operators")
+    assert operators["lines"] == ["000192", "445017"]
+    assert filtered_jdf.snapshot_lines(snapshot) == {
+        "000192",
+        "100200",
+        "235003",
+        "445017",
+        "700001",
+        "737001",
+    }
+
+
+def test_rule_group_without_lines_fails(tmp_path: Path) -> None:
+    merged = _merged_jdf(tmp_path / "merged-jdf.zip", with_idzk=False)
+
+    with pytest.raises(PipelineError, match="no lines for ids=30722"):
+        filtered_jdf.jdf_line_snapshot(merged, filtered_jdf.load_rules(), REFERENCE, tmp_path)
+
+
+def test_unexpected_jdf_row_shape_fails(tmp_path: Path) -> None:
+    merged = _merged_jdf(tmp_path / "merged-jdf.zip", linext=[("100200", "1", "30001")])
+
+    with pytest.raises(PipelineError, match=r"LinExt\.txt row has 3 fields"):
+        filtered_jdf.jdf_line_snapshot(merged, filtered_jdf.load_rules(), REFERENCE, tmp_path)
 
 
 def test_filter_cascades_and_removes_calls_without_coordinates(tmp_path: Path) -> None:
@@ -130,52 +224,28 @@ def test_filter_cascades_and_removes_calls_without_coordinates(tmp_path: Path) -
     assert report["trips_removed_too_few_calls"] == 1
 
 
-def test_build_filtered_jdf_queries_portal_and_publishes(tmp_path: Path) -> None:
+def test_build_filtered_jdf_publishes_feed_snapshot_and_report(tmp_path: Path) -> None:
     source = _gtfs(tmp_path / "source")
     bundle = tmp_path / "bundle"
     bundle.mkdir()
     with zipfile.ZipFile(bundle / "gtfs.zip", "w") as archive:
         for path in sorted(source.iterdir()):
             archive.write(path, path.name)
-    requests: list[dict[str, list[str]]] = []
-
-    def post(url: str, body: bytes) -> bytes:
-        assert url == filtered_jdf.PORTAL_URL
-        requests.append(parse_qs(body.decode("ascii"), keep_blank_values=True))
-        return PORTAL_HTML.encode("utf-8")
-
     work = tmp_path / "work"
     work.mkdir()
+
     destination = filtered_jdf.build_filtered_jdf(
-        bundle, tmp_path / "published", reference=date(2026, 9, 28), work=work, post=post
+        bundle,
+        tmp_path / "published",
+        reference=REFERENCE,
+        work=work,
+        merged_jdf=_merged_jdf(tmp_path / "merged-jdf.zip"),
     )
 
-    rules = filtered_jdf.load_rules()
-    assert len(requests) == 1 + len(rules.ids_codes)
-    assert requests[0]["dopravci_ano[]"] == list(rules.operators)
-    assert requests[1]["koddopravy"] == ["30001"]
-    assert requests[1]["datum_od"] == ["2026-09-28"]
     report = json.loads((destination / "filter-report.json").read_text(encoding="utf-8"))
     assert report["trips_kept"] == 1
-    assert report["portal_lines"] == 2
+    assert report["matched_lines"] == 6
+    assert report["lines_removed"] == ["100200", "445017"]
+    assert (destination / "line-snapshot.json").is_file()
     with zipfile.ZipFile(destination / "gtfs.zip") as archive:
         assert "stop_times.txt" in archive.namelist()
-    replayed = filtered_jdf.build_filtered_jdf(
-        bundle,
-        tmp_path / "replayed",
-        reference=date(2026, 9, 28),
-        work=work,
-        line_snapshot=destination / "line-snapshot.json",
-        post=lambda _url, _body: pytest.fail("snapshot replay must not query the portal"),
-    )
-    assert (replayed / "gtfs.zip").read_bytes() == (destination / "gtfs.zip").read_bytes()
-
-
-def test_empty_portal_answer_fails(tmp_path: Path) -> None:
-    with pytest.raises(PipelineError, match="no lines"):
-        filtered_jdf.fetch_line_snapshot(
-            filtered_jdf.load_rules(),
-            date(2026, 9, 28),
-            tmp_path,
-            post=lambda _url, _body: b"<table id='vysledky'></table>",
-        )

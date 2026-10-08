@@ -35,6 +35,7 @@ from obehy.pipeline.files import (
     ZipCompression,
     deterministic_zip,
     file_digest,
+    link_or_copy,
     utc_now,
     write_json,
 )
@@ -92,6 +93,8 @@ class BuildConfig:
     reference_date: date | None = None
     # jrunify-ext-geodata/registry; None keeps JrUtil's merge-order stop numbers.
     stop_registry: Path | None = None
+    # A directory written by download_sources; None downloads the sources during the build.
+    source_snapshot: Path | None = None
 
 
 STOP_REGISTRY_FILES = ("stops.csv", "posts.csv", "overlay_places.csv")
@@ -573,18 +576,54 @@ def _plan(config: BuildConfig) -> _Plan:
     )
 
 
-def _download_sources(
-    download: DownloadFn, sources: Path, reporter: Reporter, clock: StageClock
+# (record name, URL, file name, stage) of the two national JDF exports.
+SOURCES = (
+    ("VLD", VLD_URL, "JDF_VLD.zip", "download-vld"),
+    ("dráhy", DRAHY_URL, "JDF_drahy.zip", "download-drahy"),
+)
+
+
+def download_sources(
+    download: DownloadFn,
+    sources: Path,
+    reporter: Reporter | None,
+    clock: StageClock | None = None,
 ) -> tuple[DownloadRecord, DownloadRecord]:
-    clock.start("download-vld")
-    vld = download(VLD_URL, sources / "JDF_VLD.zip", "VLD", reporter)
-    clock.start("download-drahy")
-    drahy = download(DRAHY_URL, sources / "JDF_drahy.zip", "dráhy", reporter)
+    """Download both national exports into ``sources`` and record them in sources.json."""
+
+    records: list[DownloadRecord] = []
+    for name, url, filename, stage in SOURCES:
+        if clock is not None:
+            clock.start(stage)
+        records.append(download(url, sources / filename, name, reporter))
+    vld, drahy = records
     write_json(
         sources / "sources.json",
         {"schema_version": 1, "sources": [asdict(vld), asdict(drahy)]},
     )
     return vld, drahy
+
+
+def _copy_source_snapshot(snapshot: Path, sources: Path) -> tuple[DownloadRecord, DownloadRecord]:
+    """Reuse sources fetched by download_sources after checking them against sources.json."""
+
+    manifest_path = snapshot / "sources.json"
+    if not manifest_path.is_file():
+        raise PipelineError(f"National JDF source snapshot is missing sources.json: {snapshot}")
+    manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
+    records = {
+        record.name: record for record in (DownloadRecord(**value) for value in manifest["sources"])
+    }
+    for name, _url, filename, _stage in SOURCES:
+        record = records.get(name)
+        payload = snapshot / filename
+        if record is None or not payload.is_file():
+            raise PipelineError(f"National JDF source snapshot is missing {filename}: {snapshot}")
+        if file_digest(payload) != record.sha256:
+            raise PipelineError(f"National JDF source snapshot changed: {payload}")
+        link_or_copy(payload, sources / filename)
+    link_or_copy(manifest_path, sources / "sources.json")
+    return records["VLD"], records["dráhy"]
 
 
 def _fix_arguments(
@@ -844,7 +883,11 @@ def build(
         f"run={staging.run_root}, staging={staging.stage}, output={staging.output}"
     )
     try:
-        vld, drahy = _download_sources(download, sources, reporter, clock)
+        if config.source_snapshot is not None:
+            clock.start("copy-source-snapshot")
+            vld, drahy = _copy_source_snapshot(config.source_snapshot, sources)
+        else:
+            vld, drahy = download_sources(download, sources, reporter, clock)
 
         clock.start("stage-national-batches")
         batches = work / "batches"

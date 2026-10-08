@@ -9,7 +9,9 @@ import zipfile
 from collections.abc import Sequence
 from dataclasses import asdict, replace
 from datetime import date
+from email.message import Message
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -21,6 +23,10 @@ from obehy.pipeline.errors import PipelineError
 from obehy.pipeline.files import deterministic_zip, file_digest
 from obehy.pipeline.process import CommandFailure, CommandResult, run_command
 from obehy.pipeline.reporting import BuildReporter, CommandProgress
+
+
+def _no_sleep(_seconds: float) -> None:
+    return
 
 
 def test_transport_mode_rules_exclude_liberec_replacement_buses() -> None:
@@ -724,10 +730,89 @@ def test_interrupted_download_retains_partial_file(
 
     monkeypatch.setattr(download, "urlopen", interrupted_urlopen)
 
-    with pytest.raises(OSError, match="connection lost"):
+    with pytest.raises(download.DownloadError, match=r"data failed after 1 attempt: .*lost"):
         download_file("https://example.invalid/data", tmp_path / "data", "data")
 
     assert (tmp_path / "data.part").read_bytes() == b"partial"
+
+
+def test_download_retries_transient_failures_and_logs_attempts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[int] = []
+    delays: list[float] = []
+
+    def flaky_urlopen(*_args: object, **_kwargs: object) -> _Response:
+        calls.append(1)
+        if len(calls) < 3:
+            raise URLError(TimeoutError("_ssl.c:1015: The handshake operation timed out"))
+        return _Response([b"payload"], 7)
+
+    monkeypatch.setattr(download, "urlopen", flaky_urlopen)
+    monkeypatch.setattr(download, "_sleep", delays.append)
+    reporter = _Reporter()
+
+    with download.fetch_log() as log:
+        record = download_file("https://example.invalid/data", tmp_path / "data", "data", reporter)
+    attempts = log.attempts
+
+    assert record.bytes == 7
+    assert delays == list(download.RETRY_DELAYS)
+    assert [attempt["outcome"] for attempt in attempts] == ["retry", "retry", "ok"]
+    assert "handshake operation timed out" in str(attempts[0]["error"])
+    assert any("retrying in 5s" in note for note in reporter.notes)
+
+
+def test_download_gives_up_with_a_named_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def timeout_urlopen(*_args: object, **_kwargs: object) -> _Response:
+        raise URLError(TimeoutError("handshake timed out"))
+
+    monkeypatch.setattr(download, "urlopen", timeout_urlopen)
+    monkeypatch.setattr(download, "_sleep", _no_sleep)
+
+    with pytest.raises(
+        download.DownloadError,
+        match=r"Download PID failed after 3 attempts: https://example.invalid/pid.zip: handshake",
+    ):
+        download_file("https://example.invalid/pid.zip", tmp_path / "pid.zip", "PID")
+
+
+def test_download_does_not_retry_client_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[int] = []
+
+    def missing_urlopen(url: object, *_args: object, **_kwargs: object) -> _Response:
+        calls.append(1)
+        raise HTTPError("https://example.invalid/data", 404, "Not Found", Message(), None)
+
+    monkeypatch.setattr(download, "urlopen", missing_urlopen)
+
+    with pytest.raises(download.DownloadError, match=r"after 1 attempt: .*HTTP 404 Not Found"):
+        download_file("https://example.invalid/data", tmp_path / "data", "data")
+    assert len(calls) == 1
+
+
+def test_source_snapshot_reuses_downloaded_exports(tmp_path: Path) -> None:
+    def fake_download(
+        url: str, destination: Path, name: str, _reporter: object = None
+    ) -> DownloadRecord:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(name.encode("utf-8"))
+        return _download_record(name, url, destination)
+
+    snapshot = tmp_path / "snapshot"
+    vld, drahy = national_jdf.download_sources(fake_download, snapshot, None)
+
+    copied = national_jdf._copy_source_snapshot(snapshot, tmp_path / "sources")  # pyright: ignore[reportPrivateUsage]
+
+    assert copied == (vld, drahy)
+    assert (tmp_path / "sources" / "JDF_drahy.zip").read_bytes() == "dráhy".encode()
+    (snapshot / "JDF_VLD.zip").write_bytes(b"changed")
+    with pytest.raises(PipelineError, match="source snapshot changed"):
+        national_jdf._copy_source_snapshot(snapshot, tmp_path / "again")  # pyright: ignore[reportPrivateUsage]
 
 
 def test_run_command_tees_raw_output_and_reports_failure(tmp_path: Path) -> None:

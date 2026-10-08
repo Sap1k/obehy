@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import uuid
 import zipfile
 from collections.abc import Generator
@@ -44,6 +45,16 @@ def atomic_output_path(destination: Path, suffix: str = ".part") -> Generator[Pa
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def link_or_copy(source: Path, destination: Path) -> None:
+    """Hard-link ``source`` to ``destination``, copying when the filesystem refuses links."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(source, destination)
+    except OSError:
+        shutil.copy2(source, destination)
 
 
 def write_json(path: Path, value: object) -> None:

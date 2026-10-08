@@ -14,6 +14,7 @@ import pytest
 
 from obehy import gvd, national_czptt
 from obehy.national_czptt import BuildConfig, RemoteObject, SourceRecord
+from obehy.pipeline import download, reporting
 from obehy.pipeline import jrutil as jrutil_runtime
 from obehy.pipeline.errors import PipelineError
 
@@ -43,6 +44,10 @@ def _configured_osm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         "validate_railway_locations",
         validate_railway_osm,
     )
+
+
+def _no_sleep(_seconds: float) -> None:
+    return
 
 
 def _xml(
@@ -259,6 +264,59 @@ def test_live_build_downloads_new_inventory_objects_until_stable(
     manifest = json.loads((sources / "sources.json").read_text(encoding="utf-8"))
     assert [item["relative_path"] for item in inventory["objects"]] == downloads
     assert [item["relative_path"] for item in manifest["objects"]] == downloads
+
+
+def test_snapshot_sources_writes_a_reusable_source_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    annual = RemoteObject("annual/JR2026.zip", "https://example.test/JR2026.zip", "annual_zip")
+    change = RemoteObject(
+        "changes/2026-01/one.xml.zip", "https://example.test/one.xml.zip", "monthly_gzip"
+    )
+    config, downloads, _roots = _live_inventory_fixture(
+        tmp_path, monkeypatch, [[annual, change], [annual, change]]
+    )
+
+    snapshot = national_czptt.snapshot_sources(
+        config, tmp_path / "snapshot", reporting.BuildReporter("off")
+    )
+
+    assert downloads == [annual.relative_path, change.relative_path]
+    assert (snapshot / "sr70" / "SR70.csv").is_file()
+    records = national_czptt._copy_snapshot(  # pyright: ignore[reportPrivateUsage]
+        snapshot, tmp_path / "copied"
+    )
+    assert [record.relative_path for record in records] == downloads
+
+
+def test_http_downloader_gives_up_with_a_named_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attempts: list[str] = []
+
+    class FailingConnection:
+        def __init__(self, _host: str, _port: int, *, timeout: int) -> None:
+            del timeout
+
+        def request(self, _method: str, target: str, *, headers: dict[str, str]) -> None:
+            del headers
+            attempts.append(target)
+            raise TimeoutError("handshake timed out")
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(national_czptt.http.client, "HTTPSConnection", FailingConnection)
+    monkeypatch.setattr(download, "_sleep", _no_sleep)
+    downloader = national_czptt._HttpSourceDownloader(  # pyright: ignore[reportPrivateUsage]
+        tmp_path
+    )
+
+    with pytest.raises(download.DownloadError, match=r"CZPTT changes/one.xml.zip failed after 3"):
+        downloader.download(
+            RemoteObject("changes/one.xml.zip", "https://example.test/one.xml.zip", "monthly_gzip")
+        )
+    assert len(attempts) == 3
 
 
 def test_live_build_fails_if_inventory_still_grows_after_five_download_passes(

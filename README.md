@@ -65,16 +65,19 @@ each); GTFS validator and MOTIS acceptance checks are still to run. Memory budge
 admission/spill targets; no process or .NET heap hard limit is configured. Measurements and
 remaining limitations are recorded in `PROGRESS.md`.
 
-Prepared OSM is the default. `--refresh-osm` updates it before source downloads. The command writes
+Prepared OSM is the default. `--refresh-osm` updates it before source downloads. Every network
+source (national JDF, CZPTT, PID and IDS JMK GTFS) is then fetched up front, with three attempts
+each, into `workdir/runs/production/<run-id>/sources` (`fetch-log.json` records every attempt);
+an unreachable source fails the run before any conversion. The command writes
 the two consumer packages to `artifact_root/releases/<run-id>/jdf` and `czptt`. It also writes a
 filtered JDF GTFS to `jdf-filtered/gtfs.zip`, following
 [gtfs-processor](https://github.com/0xaa55h/gtfs-processor): it is the pre-overlay national JDF
-without the lines portal.radekpapez.cz lists for FlixBus, PMDP, DPMO, PID, IDS JMK and IDZK, and
-without the line-number prefixes in `src/obehy/data/filtered-jdf/rules-v1.json`. It also drops
+without the lines of FlixBus, PMDP and DPMO (as operator or alternative operator) and of PID,
+IDS JMK and IDZK (preferred `LinExt.txt` row), read from the merged national JDF, and without the
+line-number prefixes in `src/obehy/data/filtered-jdf/rules-v1.json`. It also drops
 calls at stops without coordinates. Customs stops (JDF fixed code `$`) are made non-boardable
 earlier, by JrUtil, in every JDF output. Use
-`--skip-filtered-jdf` to omit it, or `--line-filter-snapshot PATH` to replay a saved portal
-snapshot. The command then switches
+`--skip-filtered-jdf` to omit it. The command then switches
 `artifact_root/current.json`. Failed runs leave the previous pointer unchanged and retain their
 logs, source descriptors, detailed diagnostics and failure report under
 `workdir/runs/production/<run-id>`.

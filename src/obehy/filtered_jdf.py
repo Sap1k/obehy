@@ -1,44 +1,40 @@
 """Filtered national JDF GTFS for consumers that merge it with regional feeds.
 
 The filter mirrors https://github.com/0xaa55h/gtfs-processor: it drops CIS lines that other feeds
-already publish (listed by portal.radekpapez.cz plus fixed line-number prefixes) and drops calls at
-stops without coordinates. Customs (JDF `$`) stops are already non-boardable in JrUtil's output.
+already publish and drops calls at stops without coordinates. The lines come from the merged
+national JDF itself: preferred `LinExt.txt` rows of the listed integrated systems, lines of the
+listed operators (`Dopravci.txt`), and fixed line-number prefixes. This reproduces the
+portal.radekpapez.cz queries gtfs-processor uses, which read the same JDF data. Customs (JDF `$`)
+stops are already non-boardable in JrUtil's output.
 """
 
 from __future__ import annotations
 
 import csv
-import hashlib
+import io
 import json
+import zipfile
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
-from html.parser import HTMLParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
-from urllib.parse import urlencode
 
 from obehy.national_jdf import verify_gtfs_stops
-from obehy.pipeline.download import read_url
 from obehy.pipeline.errors import PipelineError
 from obehy.pipeline.files import deterministic_zip, file_digest, utc_now, write_json
 from obehy.production_package import ProductionPackageError, extracted_gtfs
 
-PORTAL_URL = "https://portal.radekpapez.cz/"
 RULES = Path(__file__).with_name("data") / "filtered-jdf" / "rules-v1.json"
 
-PostFn = Callable[[str, bytes], bytes]
-
-
-@dataclass(frozen=True)
-class PortalLine:
-    line: str
-    ids: str
-    name: str
-    operator: str
+# JDF 1.11 field counts, as JrUtil's merger writes them.
+_LINKY_FIELDS = 17
+_LINEXT_FIELDS = 7
+_DOPRAVCI_FIELDS = 13
+_ALTDOP_FIELDS = 15
 
 
 @dataclass(frozen=True)
@@ -61,7 +57,7 @@ def load_rules(path: Path = RULES) -> FilterRules:
 
 
 def normalize_line(value: str) -> str:
-    """Return a six-digit CIS line number; the portal prints it without leading zeros."""
+    """Return a six-digit CIS line number."""
 
     text = value.strip()
     if not text.isdigit() or len(text) > 6:
@@ -69,130 +65,92 @@ def normalize_line(value: str) -> str:
     return text.zfill(6)
 
 
-class _ResultsParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.rows: list[list[str]] = []
-        self._table_depth = 0
-        self._row: list[str] | None = None
-        self._cell: list[str] | None = None
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "table":
-            if self._table_depth or dict(attrs).get("id") == "vysledky":
-                self._table_depth += 1
-        elif self._table_depth and tag == "tr":
-            self._row = []
-        elif self._table_depth and tag == "td" and self._row is not None:
-            self._cell = []
-
-    def handle_endtag(self, tag: str) -> None:
-        if not self._table_depth:
-            return
-        if tag == "table":
-            self._table_depth -= 1
-        elif tag == "td" and self._row is not None and self._cell is not None:
-            self._row.append(" ".join("".join(self._cell).split()))
-            self._cell = None
-        elif tag == "tr" and self._row is not None:
-            self.rows.append(self._row)
-            self._row = None
-
-    def handle_data(self, data: str) -> None:
-        if self._cell is not None:
-            self._cell.append(data)
+def _jdf_rows(archive: zipfile.ZipFile, name: str, fields: int) -> Iterator[list[str]]:
+    with (
+        archive.open(name) as raw,
+        io.TextIOWrapper(raw, encoding="cp1250", newline="") as stream,
+    ):
+        for raw_line in stream:
+            line = raw_line.rstrip("\r\n")
+            if line.endswith(";"):
+                line = line[:-1]
+            if not line:
+                continue
+            row = next(csv.reader([line]))
+            if len(row) != fields:
+                raise PipelineError(
+                    f"Merged JDF {name} row has {len(row)} fields, expected {fields}: {line[:80]}"
+                )
+            yield row
 
 
-def parse_portal_results(html: str) -> list[PortalLine]:
-    parser = _ResultsParser()
-    parser.feed(html)
-    lines: list[PortalLine] = []
-    for cells in parser.rows:
-        if len(cells) < 3:
-            continue
-        try:
-            line = normalize_line(cells[0])
-        except ValueError:
-            continue
-        operator = cells[3] if len(cells) > 3 else ""
-        lines.append(PortalLine(line=line, ids=cells[1], name=cells[2], operator=operator))
-    return lines
+def _jdf_date(value: str) -> date:
+    if len(value) != 8 or not value.isdigit():
+        raise PipelineError(f"Invalid JDF date: {value!r}")
+    return date(int(value[4:8]), int(value[2:4]), int(value[0:2]))
 
 
-def _form(
-    reference: date, *, operators: Iterable[str] = (), ids_code: int | None = None
-) -> list[tuple[str, str]]:
-    day = reference.isoformat()
-    fields: list[tuple[str, str]] = [("cislo", "")]
-    if ids_code is not None:
-        fields += [("check_koddopravy", "on"), ("koddopravy", str(ids_code))]
-    else:
-        fields.append(("koddopravy", ""))
-    fields += [("cisloids", ""), ("nazev", ""), ("check_dopravce_ano", "on")]
-    selected = list(operators)
-    fields += [("dopravci_ano[]", operator) for operator in selected or [""] * 5]
-    fields += [("dopravci_ne[]", "")] * 3
-    fields += [("zastavky[]", "")] * 5
-    fields += [
-        ("rezim", "AND"),
-        ("datum1", day),
-        ("datum2", day),
-        ("datum_od", day),
-        ("datum_do", day),
-        ("vyluka", "vse"),
-        ("hledani", "Hledat"),
-    ]
-    return fields
-
-
-def _post(url: str, body: bytes) -> bytes:
-    return read_url(url, data=body, headers={"Content-Type": "application/x-www-form-urlencoded"})
-
-
-def fetch_line_snapshot(
-    rules: FilterRules,
-    reference: date,
-    destination: Path,
-    *,
-    post: PostFn = _post,
+def jdf_line_snapshot(
+    merged_jdf: Path, rules: FilterRules, reference: date, destination: Path
 ) -> Path:
-    """Query the portal once per rule group and store raw responses plus parsed lines."""
+    """Write the lines matched by ``rules`` from the merged national JDF.
 
-    destination.mkdir(parents=True, exist_ok=True)
-    queries: list[tuple[str, str, list[tuple[str, str]]]] = []
+    Every line version still valid on or after ``reference`` counts, so a line whose current
+    version is a short detour still matches through its regular version. An operator matches
+    as the line's operator or as an alternative operator (`Altdop.txt`). An integrated system
+    matches only through the preferred `LinExt` row, as on the line portal, so a line that
+    merely also accepts another system's tariff is kept.
+    """
+
+    operator_names = set(rules.operators)
+    ids_codes = {str(code) for code in rules.ids_codes}
+    with zipfile.ZipFile(merged_jdf) as archive:
+        names = {
+            (row[0], row[12]): row[2]
+            for row in _jdf_rows(archive, "Dopravci.txt", _DOPRAVCI_FIELDS)
+        }
+        # (line, line distinction) -> {(IČ, operator distinction)}
+        operators: dict[tuple[str, str], set[tuple[str, str]]] = {}
+        if "Altdop.txt" in archive.namelist():
+            for row in _jdf_rows(archive, "Altdop.txt", _ALTDOP_FIELDS):
+                operators.setdefault((row[0], row[14]), set()).add((row[2], row[13]))
+        preferred: dict[tuple[str, str], set[str]] = {}
+        for row in _jdf_rows(archive, "LinExt.txt", _LINEXT_FIELDS):
+            if row[4] == "1":
+                preferred.setdefault((row[0], row[6]), set()).add(row[2])
+        by_operator: set[str] = set()
+        by_system: dict[str, set[str]] = {code: set() for code in ids_codes}
+        for row in _jdf_rows(archive, "Linky.txt", _LINKY_FIELDS):
+            if _jdf_date(row[14]) < reference:
+                continue
+            line = normalize_line(row[0])
+            version = (row[0], row[16])
+            line_operators = {(row[2], row[15])} | operators.get(version, set())
+            if any(names.get(operator) in operator_names for operator in line_operators):
+                by_operator.add(line)
+            for code in preferred.get(version, set()) & ids_codes:
+                by_system[code].add(line)
+
+    groups: list[tuple[str, str, set[str]]] = []
     if rules.operators:
-        queries.append(
-            ("operators", ";".join(rules.operators), _form(reference, operators=rules.operators))
-        )
-    for code in rules.ids_codes:
-        queries.append(("ids", str(code), _form(reference, ids_code=code)))
-    records: list[dict[str, Any]] = []
-    for index, (kind, value, fields) in enumerate(queries):
-        body = urlencode(fields).encode("ascii")
-        payload = post(PORTAL_URL, body)
-        raw = destination / f"query-{index:02d}-{kind}.html"
-        raw.write_bytes(payload)
-        lines = parse_portal_results(payload.decode("utf-8", errors="replace"))
+        groups.append(("operators", ";".join(rules.operators), by_operator))
+    groups += [("ids", str(code), by_system[str(code)]) for code in rules.ids_codes]
+    for kind, value, lines in groups:
         if not lines:
-            raise PipelineError(f"Line portal returned no lines for {kind}={value}")
-        records.append(
-            {
-                "kind": kind,
-                "value": value,
-                "response_file": raw.name,
-                "response_sha256": hashlib.sha256(payload).hexdigest(),
-                "lines": [line.__dict__ for line in lines],
-            }
-        )
+            raise PipelineError(f"Merged JDF has no lines for {kind}={value} from {reference}")
+    queries = [
+        {"kind": kind, "value": value, "lines": sorted(lines)} for kind, value, lines in groups
+    ]
     snapshot = destination / "line-snapshot.json"
     write_json(
         snapshot,
         {
-            "schema_version": 1,
-            "source_uri": PORTAL_URL,
-            "retrieved_at": utc_now(),
+            "schema_version": 2,
+            "source": "jdf-linext",
+            "merged_jdf_sha256": file_digest(merged_jdf),
+            "created_at": utc_now(),
             "reference_date": reference.isoformat(),
-            "queries": records,
+            "queries": queries,
         },
     )
     return snapshot
@@ -200,12 +158,12 @@ def fetch_line_snapshot(
 
 def snapshot_lines(snapshot: Path) -> set[str]:
     value = cast(dict[str, Any], json.loads(snapshot.read_text(encoding="utf-8")))
-    if value.get("schema_version") != 1:
+    if value.get("schema_version") != 2:
         raise PipelineError(f"Unsupported line snapshot: {snapshot}")
     return {
-        normalize_line(str(line["line"]))
+        normalize_line(str(line))
         for query in cast(list[dict[str, Any]], value["queries"])
-        for line in cast(list[dict[str, Any]], query["lines"])
+        for line in cast(list[str], query["lines"])
     }
 
 
@@ -400,17 +358,19 @@ def build_filtered_jdf(
     *,
     reference: date,
     work: Path,
+    merged_jdf: Path,
     rules_path: Path = RULES,
-    line_snapshot: Path | None = None,
-    post: PostFn = _post,
 ) -> Path:
-    """Write ``destination/gtfs.zip`` and ``filter-report.json`` from a national JDF bundle."""
+    """Write ``destination/gtfs.zip`` and ``filter-report.json`` from a national JDF bundle.
+
+    ``merged_jdf`` is the merged JDF the bundle was generated from; it decides which lines the
+    regional feeds already publish.
+    """
 
     rules = load_rules(rules_path)
-    if line_snapshot is None:
-        line_snapshot = fetch_line_snapshot(rules, reference, work / "line-portal", post=post)
-    removed_lines = snapshot_lines(line_snapshot)
     destination.mkdir(parents=True, exist_ok=False)
+    line_snapshot = jdf_line_snapshot(merged_jdf, rules, reference, destination)
+    removed_lines = snapshot_lines(line_snapshot)
     archive = bundle / "gtfs.zip"
     with (
         TemporaryDirectory(prefix="obehy-filtered-jdf-", dir=work) as temporary,
@@ -427,17 +387,15 @@ def build_filtered_jdf(
         if report["trips_kept"] == 0:
             raise PipelineError("Filtered JDF GTFS contains no trips")
         identity = deterministic_zip(filtered, destination / "gtfs.zip")
-    snapshot_copy = destination / "line-snapshot.json"
-    snapshot_copy.write_bytes(line_snapshot.read_bytes())
     write_json(
         destination / "filter-report.json",
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "created_at": utc_now(),
             "source_gtfs_sha256": file_digest(archive),
             "rules": {"path": rules_path.name, "sha256": file_digest(rules_path)},
-            "line_snapshot_sha256": file_digest(snapshot_copy),
-            "portal_lines": len(removed_lines),
+            "line_snapshot_sha256": file_digest(line_snapshot),
+            "matched_lines": len(removed_lines),
             "gtfs": {"bytes": identity.bytes, "sha256": identity.sha256},
             **report,
         },

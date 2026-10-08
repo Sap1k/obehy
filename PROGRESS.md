@@ -11,14 +11,16 @@ One command (`src/obehy/cli.py`) resolves the GVD year, validates or refreshes t
 snapshot, builds JrUtil once, and runs these stages. Production runs daily on GitHub Actions
 (`.github/workflows/build.yml`, `BASE_PLAN.md` section 15; not yet run there).
 
-1. **national-jdf** — download VLD and dráhy CIS JŘ archives → `fix-jdf` (stop matching,
+0. **fetch-sources** — VLD and dráhy CIS JŘ archives, CZPTT (inventory, KADR, SR70), PID and IDS
+   JMK GTFS, all before JrUtil is built; three attempts per source, `sources/fetch-log.json`.
+1. **national-jdf** — the fetched VLD and dráhy archives → `fix-jdf` (stop matching,
    coordinate estimation, `regional-adjacent` international policy) → `merge-jdf` (name-based
    stop reconciliation) → `jdf-to-bundle` → `validate-package`.
-2. **regional-snapshots / regional-overlay** — freeze PID and IDS JMK GTFS and overlay both onto
+2. **regional-overlay** — overlay the fetched PID and IDS JMK GTFS onto
    the national JDF package in one `regional-gtfs-overlay` pass.
 3. **filtered-jdf** — a plain GTFS derived from the pre-overlay national JDF, filtered like
    gtfs-processor (see Next steps §4).
-4. **national-czptt** — CZPTT annual + monthly changes, KADR, SR70 → `czptt-to-bundle`. By default
+4. **national-czptt** — the fetched CZPTT snapshot → `czptt-to-bundle`. By default
    operational (non-passenger) points go only to the Parquet sidecars.
 5. **validate & publish** — both production packages are validated and published atomically with
    `release.json` and an `artifact_root/current.json` pointer.
@@ -137,8 +139,9 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
 ### 4. Build outputs: filtered JDF + CZPTT sidecar mode
 
 - **Goal:** `obehy build` publishes JDF, CZPTT and a filtered JDF GTFS.
-- **Filtered feed:** drop lines found on portal.radekpapez.cz for FlixBus CZ/DACH/Polska, PMDP
-  and DPMO, and for IDS PID/IDS JMK/IDZK. Also drop the checked-in line-number prefixes. Remove
+- **Filtered feed:** drop lines of FlixBus CZ/DACH/Polska, PMDP and DPMO (operator or `Altdop`)
+  and of IDS PID/IDS JMK/IDZK (preferred `LinExt` row) in the merged national JDF, every version
+  valid on or after the build date. Also drop the checked-in line-number prefixes. Remove
   calls at stops without coordinates and keep `[?]` stops. Customs stops are handled in JrUtil, not
   in the filter.
 - **CZPTT:** operational points go to the sidecars only by default (`--czptt-operational-points
@@ -203,6 +206,21 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   §5.2: the CZPTT trip ↔ operational-call link is `trip_call` itself.
 
 ## Recent log
+
+- **2026-10-08** — Sources fetched up front; filtered JDF from LinExt instead of the line portal.
+  - Three CI builds failed ~45 min in on a TLS handshake timeout to portal.radekpapez.cz (no retry,
+    no source named). The portal's IDS query equals preferred `LinExt` rows (PID 1921/1921, IDS
+    JMK 1208/1208 on 2026-10-08); on that day's merged JDF the derived filter matches the portal
+    except 235005 (no LinExt row in any source version, accepted) and adds DPMO 895xxx, PMDP
+    446007 and six FlixBus-co-operated international lines (`Altdop`). `--line-filter-snapshot`
+    is gone.
+  - New `fetch-sources` stage before the JrUtil build (`build_sources.py`): national JDF and
+    CZPTT become source snapshots for their builders; every download retries 3× (5 s, 15 s) and
+    fails as `Download <source> failed after N attempts: <url>: <reason>`; `release.json` gains
+    `retrieval`. Validated: unit tests, ruff, pyright; live fetch of JDF/PID/IDS JMK (17.5 s) and a
+    refused host (named error after 26 s). CZPTT fetching only via unit tests; no CI run yet.
+  - Not done: LinExt is not in the serving contract; its secondary rows (another system's tariff
+    valid on a line) would need a `route_integration` relation for fares.
 
 - **2026-10-07** — Release mirror (§5.3, milestone C1 without fetch).
   - `src/obehy/release/`: migration runner (`control.schema_migration`, checksums), `control`

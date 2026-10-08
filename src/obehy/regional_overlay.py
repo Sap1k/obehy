@@ -31,10 +31,17 @@ class Source:
     descriptor: Path
 
 
-def download_gtfs(url: str, source_id: str, destination: Path, *, require_api: bool) -> Path:
+def download_gtfs(
+    url: str,
+    source_id: str,
+    destination: Path,
+    *,
+    require_api: bool,
+    reporter: Reporter | None = None,
+) -> Path:
     """Download one regional GTFS snapshot and write its checksum descriptor."""
 
-    record = download_file(url, destination, source_id)
+    record = download_file(url, destination, source_id, reporter)
     with zipfile.ZipFile(destination) as archive:
         names = {name.casefold() for name in archive.namelist() if not name.endswith("/")}
     required = {"agency.txt", "routes.txt", "trips.txt", "stops.txt", "stop_times.txt"}
@@ -58,6 +65,7 @@ def download_gtfs(url: str, source_id: str, destination: Path, *, require_api: b
 
 
 def snapshot_sources(directory: Path, downloader: DownloadGtfsFn = download_gtfs) -> list[Source]:
+    directory.mkdir(parents=True, exist_ok=True)
     pid = directory / "pid-gtfs.zip"
     jmk = directory / "ids-jmk-gtfs.zip"
     return [
