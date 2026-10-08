@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from obehy.national_jdf import route_rule_arguments
 from obehy.pipeline.download import download_file
 from obehy.pipeline.errors import PipelineError
 from obehy.pipeline.files import write_json
@@ -103,6 +104,8 @@ def run(
     command_runner: CommandFn,
     stop_registry: Path | None = None,
     stop_registry_candidates: Path | None = None,
+    overrides_root: Path | None = None,
+    route_rules: Path | None = None,
 ) -> None:
     command = [
         *runtime_command,
@@ -122,6 +125,9 @@ def run(
         command.append(f"--stop-registry={stop_registry}")
         if stop_registry_candidates is not None:
             command.append(f"--stop-registry-candidates={stop_registry_candidates}")
+    if overrides_root is not None:
+        command.append(f"--overrides-root={overrides_root}")
+    command += route_rule_arguments(route_rules, transport_modes=False)
     command += [f"--diagnostics-out={diagnostics}", str(base), str(output)]
     command_runner(
         command,

@@ -103,6 +103,10 @@ def _check_inputs(options: BuildOptions) -> Path:
     if not geodata.is_dir():
         raise PipelineError(f"Geodata directory does not exist: {geodata}")
     national_jdf.geodata_manifest(geodata)
+    national_jdf.require_route_rules(_route_rules(runtime))
+    for required in (_overlay_overrides(runtime), _filtered_jdf_rules(runtime)):
+        if not required.exists():
+            raise PipelineError(f"Geodata checkout is missing {required}")
     if not POLICY.is_file():
         raise PipelineError(f"Production overlay policy is missing: {POLICY}")
     if options.refresh_osm:
@@ -146,6 +150,18 @@ def _start_run(runtime: RuntimeConfig) -> tuple[_Run, int]:
     return run, lock_descriptor
 
 
+def _route_rules(runtime: RuntimeConfig) -> Path:
+    return runtime.jrunify_ext_geodata_dir / "routes"
+
+
+def _overlay_overrides(runtime: RuntimeConfig) -> Path:
+    return runtime.jrunify_ext_geodata_dir / "overlay"
+
+
+def _filtered_jdf_rules(runtime: RuntimeConfig) -> Path:
+    return runtime.jrunify_ext_geodata_dir / "filtered-jdf" / "rules-v1.json"
+
+
 def _stop_registry(runtime: RuntimeConfig) -> Path | None:
     """The geodata checkout's stop ID registry, once it has been created."""
 
@@ -179,6 +195,7 @@ def _jdf_config(
         gvd_year=options.gvd_year,
         reference_date=reference_date,
         stop_registry=_stop_registry(runtime),
+        route_rules=_route_rules(runtime),
         source_snapshot=source_snapshot,
     )
 
@@ -374,6 +391,7 @@ def build(
                 reference=reference_date,
                 work=filtered_work,
                 merged_jdf=run.jdf_output / "derived" / "merged-jdf.zip",
+                rules_path=_filtered_jdf_rules(runtime),
             )
             completed("filtered-jdf")
 
@@ -392,6 +410,8 @@ def build(
             command_runner=command_runner,
             stop_registry=_stop_registry(runtime),
             stop_registry_candidates=registry_review / "place-candidates.csv",
+            overrides_root=_overlay_overrides(runtime),
+            route_rules=_route_rules(runtime),
         )
         completed("regional-overlay")
 

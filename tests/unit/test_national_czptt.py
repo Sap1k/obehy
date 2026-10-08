@@ -753,26 +753,22 @@ def test_command_runtime_records_dll_hash_and_skips_checkout(tmp_path: Path) -> 
     assert files[0]["sha256"] == national_czptt.file_digest(dll)
 
 
-def test_foreign_unresolved_point_requires_reviewed_disposition(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_foreign_unresolved_point_fails(tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    (bundle / "diagnostics.json").write_text(
+    diagnostics = bundle / "diagnostics.json"
+    diagnostics.write_text(
         json.dumps({"coordinate_diagnostics": {"unresolvedPointIds": ["czptt:stop:DE:12345"]}}),
         encoding="utf-8",
     )
-    review = tmp_path / "review.json"
-    review.write_text('{"residual_dispositions": {}}\n', encoding="utf-8")
-    monkeypatch.setattr(national_czptt, "OSM_REVIEW_PATH", review)
 
-    with pytest.raises(PipelineError, match="reviewed residual disposition"):
+    with pytest.raises(PipelineError, match="lack coordinates"):
         national_czptt._verify_foreign_coordinate_acceptance(  # pyright: ignore[reportPrivateUsage]
             bundle
         )
 
-    review.write_text(
-        '{"residual_dispositions":{"czptt:stop:DE:12345":"reviewed:no-candidate"}}\n',
+    diagnostics.write_text(
+        json.dumps({"coordinate_diagnostics": {"unresolvedPointIds": ["czptt:stop:CZ:54321"]}}),
         encoding="utf-8",
     )
     national_czptt._verify_foreign_coordinate_acceptance(  # pyright: ignore[reportPrivateUsage]

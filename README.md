@@ -74,7 +74,7 @@ filtered JDF GTFS to `jdf-filtered/gtfs.zip`, following
 [gtfs-processor](https://github.com/0xaa55h/gtfs-processor): it is the pre-overlay national JDF
 without the lines of FlixBus, PMDP and DPMO (as operator or alternative operator) and of PID,
 IDS JMK and IDZK (preferred `LinExt.txt` row), read from the merged national JDF, and without the
-line-number prefixes in `src/obehy/data/filtered-jdf/rules-v1.json`. It also drops
+line-number prefixes in `jrunify-ext-geodata/filtered-jdf/rules-v1.json`. It also drops
 calls at stops without coordinates. Customs stops (JDF fixed code `$`) are made non-boardable
 earlier, by JrUtil, in every JDF output. Use
 `--skip-filtered-jdf` to omit it. The command then switches

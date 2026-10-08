@@ -12,6 +12,25 @@ from obehy import filtered_jdf
 from obehy.pipeline.errors import PipelineError
 
 REFERENCE = date(2026, 10, 8)
+# Mirrors jrunify-ext-geodata/filtered-jdf/rules-v1.json.
+RULES = {
+    "schema_version": 1,
+    "operators": [
+        "FlixBus CZ s.r.o.",
+        "FlixBus DACH GmbH",
+        "FlixBus Polska sp. z o.o.",
+        "Plzeňské městské dopravní podniky, a.s.",
+        "Dopravní podnik města Olomouce, a.s.",
+    ],
+    "ids_codes": [30001, 30621, 30722],
+    "line_prefixes": ["199", "205", "289", "445", "737", "755", "805", "825", "826", "835"],
+}
+
+
+def _rules(tmp_path: Path) -> Path:
+    path = tmp_path / "rules-v1.json"
+    path.write_text(json.dumps(RULES, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
 def _jdf_file(*rows: tuple[str, ...]) -> bytes:
@@ -155,7 +174,7 @@ def test_jdf_line_snapshot_matches_rules_from_merged_jdf(tmp_path: Path) -> None
     merged = _merged_jdf(tmp_path / "merged-jdf.zip")
 
     snapshot = filtered_jdf.jdf_line_snapshot(
-        merged, filtered_jdf.load_rules(), REFERENCE, tmp_path
+        merged, filtered_jdf.load_rules(_rules(tmp_path)), REFERENCE, tmp_path
     )
 
     value = json.loads(snapshot.read_text(encoding="utf-8"))
@@ -184,14 +203,18 @@ def test_rule_group_without_lines_fails(tmp_path: Path) -> None:
     merged = _merged_jdf(tmp_path / "merged-jdf.zip", with_idzk=False)
 
     with pytest.raises(PipelineError, match="no lines for ids=30722"):
-        filtered_jdf.jdf_line_snapshot(merged, filtered_jdf.load_rules(), REFERENCE, tmp_path)
+        filtered_jdf.jdf_line_snapshot(
+            merged, filtered_jdf.load_rules(_rules(tmp_path)), REFERENCE, tmp_path
+        )
 
 
 def test_unexpected_jdf_row_shape_fails(tmp_path: Path) -> None:
     merged = _merged_jdf(tmp_path / "merged-jdf.zip", linext=[("100200", "1", "30001")])
 
     with pytest.raises(PipelineError, match=r"LinExt\.txt row has 3 fields"):
-        filtered_jdf.jdf_line_snapshot(merged, filtered_jdf.load_rules(), REFERENCE, tmp_path)
+        filtered_jdf.jdf_line_snapshot(
+            merged, filtered_jdf.load_rules(_rules(tmp_path)), REFERENCE, tmp_path
+        )
 
 
 def test_filter_cascades_and_removes_calls_without_coordinates(tmp_path: Path) -> None:
@@ -240,6 +263,7 @@ def test_build_filtered_jdf_publishes_feed_snapshot_and_report(tmp_path: Path) -
         reference=REFERENCE,
         work=work,
         merged_jdf=_merged_jdf(tmp_path / "merged-jdf.zip"),
+        rules_path=_rules(tmp_path),
     )
 
     report = json.loads((destination / "filter-report.json").read_text(encoding="utf-8"))

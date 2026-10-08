@@ -60,7 +60,6 @@ from obehy.runtime_config import ConfigurationError, load_runtime_config
 
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
 DRAHY_URL = "https://portal.cisjr.cz/pub/draha/mestske/JDF.zip"
-TRANSPORT_MODE_RULES = Path(__file__).with_name("data") / "jdf_transport_mode_rules.csv"
 DEFAULT_POST_INFERENCE_POLICY = (
     Path(__file__).with_name("data") / "post-inference" / "learned-v1.json"
 )
@@ -93,11 +92,17 @@ class BuildConfig:
     reference_date: date | None = None
     # jrunify-ext-geodata/registry; None keeps JrUtil's merge-order stop numbers.
     stop_registry: Path | None = None
+    # jrunify-ext-geodata/routes (transport-mode corrections and presentation overrides);
+    # None applies no reviewed route rules.
+    route_rules: Path | None = None
     # A directory written by download_sources; None downloads the sources during the build.
     source_snapshot: Path | None = None
 
 
 STOP_REGISTRY_FILES = ("stops.csv", "posts.csv", "overlay_places.csv")
+TRANSPORT_MODE_RULES = "transport-modes.csv"
+ROUTE_PRESENTATION_RULES = "presentation.csv"
+ROUTE_RULE_FILES = (TRANSPORT_MODE_RULES, ROUTE_PRESENTATION_RULES)
 
 
 @dataclass(frozen=True)
@@ -261,6 +266,39 @@ def stop_registry_manifest(registry: Path) -> dict[str, Any]:
     }
 
 
+def require_route_rules(routes: Path) -> None:
+    missing = [name for name in ROUTE_RULE_FILES if not (routes / name).is_file()]
+    if missing:
+        raise PipelineError(f"Route rules directory {routes} is missing {missing}")
+
+
+def route_rules_manifest(routes: Path) -> dict[str, Any]:
+    """Identity of the reviewed route rule files a build applied."""
+
+    require_route_rules(routes)
+    return {
+        "repository": jrutil.git_identity(routes.parent),
+        "directory": str(routes.resolve()),
+        "files": [
+            {
+                "path": name,
+                "bytes": (routes / name).stat().st_size,
+                "sha256": file_digest(routes / name),
+            }
+            for name in ROUTE_RULE_FILES
+        ],
+    }
+
+
+def route_rule_arguments(routes: Path | None, *, transport_modes: bool = True) -> list[str]:
+    if routes is None:
+        return []
+    return [
+        *([f"--transport-mode-rules={routes / TRANSPORT_MODE_RULES}"] if transport_modes else []),
+        f"--route-presentation-rules={routes / ROUTE_PRESENTATION_RULES}",
+    ]
+
+
 def _stop_registry_arguments(config: BuildConfig, candidates: Path) -> list[str]:
     if config.stop_registry is None:
         return []
@@ -299,6 +337,8 @@ def _validate_build_config(config: BuildConfig) -> None:
             raise PipelineError(f"{label} must be an absolute path: {path}")
     if config.stop_registry is not None and not config.stop_registry.is_absolute():
         raise PipelineError(f"stop_registry must be an absolute path: {config.stop_registry}")
+    if config.route_rules is not None and not config.route_rules.is_absolute():
+        raise PipelineError(f"route_rules must be an absolute path: {config.route_rules}")
     if config.routing_cache_dir is not None and not config.routing_cache_dir.is_absolute():
         raise PipelineError(
             f"routing_cache_dir must be an absolute path: {config.routing_cache_dir}"
@@ -487,7 +527,7 @@ def _bundle_arguments(
         f"--jobs={_job_text(config.jobs)}",
         f"--memory-budget={config.memory_budget}",
         "--international-route-policy=regional-adjacent",
-        f"--transport-mode-rules={TRANSPORT_MODE_RULES}",
+        *route_rule_arguments(config.route_rules),
         f"--snapshot-descriptor={descriptor_path}",
         f"--converter-version={converter_version}",
         f"--gvd-year={gvd_year}",
@@ -740,10 +780,6 @@ def _conversion_manifest(config: BuildConfig, plan: _Plan) -> dict[str, object]:
         "stop_merge": "name",
         "strict": True,
         "international_route_policy": "regional-adjacent",
-        "transport_mode_rules": {
-            "path": "obehy/data/jdf_transport_mode_rules.csv",
-            "sha256": file_digest(TRANSPORT_MODE_RULES),
-        },
         "estimated_posts": plan.inferred_posts,
         "post_inference_policy": (
             str(policy) if (policy := effective_post_inference_policy(config)) is not None else None
@@ -761,6 +797,7 @@ def _run_manifest(
     routing_osm_file: Path | None,
     geodata: dict[str, Any],
     stop_registry: dict[str, Any] | None,
+    route_rules: dict[str, Any] | None,
     jrutil_identity: dict[str, Any],
     command_results: Mapping[str, CommandResult | None],
     clock: StageClock,
@@ -795,6 +832,7 @@ def _run_manifest(
         ),
         "geodata": geodata,
         "stop_registry": stop_registry,
+        "route_rules": route_rules,
         "jrutil": jrutil_identity,
         "conversion": _conversion_manifest(config, plan),
         "execution": {
@@ -906,8 +944,9 @@ def build(
         stop_registry = (
             None if config.stop_registry is None else stop_registry_manifest(config.stop_registry)
         )
-        if not TRANSPORT_MODE_RULES.is_file():
-            raise PipelineError(f"Transport mode rules are missing: {TRANSPORT_MODE_RULES}")
+        route_rules = (
+            None if config.route_rules is None else route_rules_manifest(config.route_rules)
+        )
 
         clock.start("build-jrutil")
         build_command = (
@@ -1008,6 +1047,7 @@ def build(
                 routing_osm_file=routing_osm_file,
                 geodata=geodata,
                 stop_registry=stop_registry,
+                route_rules=route_rules,
                 jrutil_identity=jrutil_identity,
                 command_results=command_results,
                 clock=clock,
@@ -1113,6 +1153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             jrutil_root=runtime.jrutil.directory,
             jrutil_command=runtime.jrutil.command,
             geodata_root=runtime.jrunify_ext_geodata_dir / "other",
+            route_rules=runtime.jrunify_ext_geodata_dir / "routes",
             keep_work=cast(bool, args.keep_work),
             progress=cast(ProgressMode, args.progress),
             jobs=cast(JobSetting, args.jobs),

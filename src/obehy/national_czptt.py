@@ -69,7 +69,6 @@ KADR_OPERATIONS = (
     "SeznamIDS",
     "SeznamPoznamkyKJR",
 )
-OSM_REVIEW_PATH = Path(__file__).with_name("data") / "czptt_osm_aliases.json"
 ProgressMode = Literal["auto", "rich", "plain", "off"]
 OperationalPointMode = Literal["gtfs", "sidecar"]
 
@@ -699,7 +698,6 @@ def _converter_command(
         f"--operational-points={config.operational_points}",
         f"--sr70={messages.parent.parent / 'sources' / 'sr70' / 'SR70.csv'}",
         f"--osm-pbf={config.osm_file}",
-        f"--osm-aliases={OSM_REVIEW_PATH}",
         f"--diagnostics-out={bundle.parent / 'diagnostics-detail'}",
         str(messages),
         str(bundle),
@@ -816,19 +814,9 @@ def _verify_foreign_coordinate_acceptance(bundle: Path) -> None:
         for value in cast(list[str], unresolved_values)
         if not value.startswith("czptt:stop:CZ:")
     )
-    review = cast(
-        dict[str, object],
-        json.loads(OSM_REVIEW_PATH.read_text(encoding="utf-8")),
-    )
-    dispositions_value = review.get("residual_dispositions", {})
-    if not isinstance(dispositions_value, dict):
-        raise PipelineError("CZPTT OSM residual_dispositions must be an object")
-    dispositions = cast(dict[str, object], dispositions_value)
-    missing = [value for value in foreign if not isinstance(dispositions.get(value), str)]
-    if missing:
+    if foreign:
         raise PipelineError(
-            "Passenger-referenced foreign CZPTT locations lack coordinates or a reviewed "
-            f"residual disposition: {missing}"
+            f"Passenger-referenced foreign CZPTT locations lack coordinates: {foreign}"
         )
 
 

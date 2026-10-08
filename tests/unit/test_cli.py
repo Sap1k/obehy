@@ -19,6 +19,14 @@ def _runtime(tmp_path: Path) -> RuntimeConfig:
     geodata = tmp_path / "geodata" / "other"
     geodata.mkdir(parents=True)
     (geodata / "municipalities.csv").write_text("Town,Stop,49,14,CZ\n", encoding="utf-8")
+    routes = tmp_path / "geodata" / "routes"
+    routes.mkdir()
+    for name in ("transport-modes.csv", "presentation.csv"):
+        (routes / name).write_text("header\n", encoding="utf-8")
+    (tmp_path / "geodata" / "overlay").mkdir()
+    filtered = tmp_path / "geodata" / "filtered-jdf"
+    filtered.mkdir()
+    (filtered / "rules-v1.json").write_text("{}\n", encoding="utf-8")
     jrutil = tmp_path / "jrutil"
     project = jrutil / "jrutil-multitool" / "jrutil-multitool.fsproj"
     project.parent.mkdir(parents=True)
@@ -237,6 +245,13 @@ def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None
     assert sum(item.startswith("--source=") for item in overlay) == 2
     assert "--memory-budget=auto" in overlay
     assert "--converter-version=fixture-version" in overlay
+    geodata = runtime.jrunify_ext_geodata_dir
+    assert jdf_config.route_rules == geodata / "routes"
+    assert f"--overrides-root={geodata / 'overlay'}" in overlay
+    presentation = geodata / "routes" / "presentation.csv"
+    assert f"--route-presentation-rules={presentation}" in overlay
+    assert not any(item.startswith("--transport-mode-rules=") for item in overlay)
+    assert filtered_calls[0][2]["rules_path"] == geodata / "filtered-jdf" / "rules-v1.json"
 
 
 @pytest.mark.parametrize("overlay_publishable,fail_czptt", [(False, False), (True, True)])

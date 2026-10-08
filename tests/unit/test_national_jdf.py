@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import hashlib
 import io
 import json
@@ -27,15 +26,6 @@ from obehy.pipeline.reporting import BuildReporter, CommandProgress
 
 def _no_sleep(_seconds: float) -> None:
     return
-
-
-def test_transport_mode_rules_exclude_liberec_replacement_buses() -> None:
-    with national_jdf.TRANSPORT_MODE_RULES.open(encoding="utf-8", newline="") as stream:
-        rules = list(csv.DictReader(stream))
-
-    liberec_routes = {row["route_id_from"] for row in rules if row["agency_id"] == "47311975"}
-    assert liberec_routes == {"545002", "545003", "545004", "545005", "545011"}
-    assert {"545902", "545903"}.isdisjoint(liberec_routes)
 
 
 def test_post_evidence_manifest_is_read_without_parquet_rescan(
@@ -235,6 +225,10 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     geodata_root = tmp_path / "jrunify-ext-geodata" / "other"
     geodata_root.mkdir(parents=True)
     (geodata_root / "fixture.csv").write_text("Town,Stop,49.0,14.0,CZ\n", encoding="utf-8")
+    route_rules = geodata_root.parent / "routes"
+    route_rules.mkdir()
+    for name in national_jdf.ROUTE_RULE_FILES:
+        (route_rules / name).write_text("header\n", encoding="utf-8")
 
     def fake_git_identity(_repository: Path) -> dict[str, object]:
         return {
@@ -384,6 +378,7 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
             routing_cache_dir=tmp_path / "workdir" / "cache" / "routing",
             gvd_year=2026,
             reference_date=date(2026, 9, 29),
+            route_rules=route_rules,
         ),
         fake_download,
         fake_command,
@@ -423,7 +418,8 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
     assert not any(argument.startswith("--cz-pbf=") for argument in merge_command)
     assert "--international-route-policy=regional-adjacent" in fix_command
     assert "--international-route-policy=regional-adjacent" in bundle_command
-    assert any(argument.startswith("--transport-mode-rules=") for argument in bundle_command)
+    assert f"--transport-mode-rules={route_rules / 'transport-modes.csv'}" in bundle_command
+    assert f"--route-presentation-rules={route_rules / 'presentation.csv'}" in bundle_command
     has_routing_pbf = any(argument.startswith("--routing-osm-pbf=") for argument in bundle_command)
     assert has_routing_pbf is estimated_posts
     assert ("--no-estimated-posts" in bundle_command) is not estimated_posts
@@ -456,10 +452,6 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "gvd_year": 2026,
         "reference_date": "2026-09-29",
         "international_route_policy": "regional-adjacent",
-        "transport_mode_rules": {
-            "path": "obehy/data/jdf_transport_mode_rules.csv",
-            "sha256": national_jdf.file_digest(national_jdf.TRANSPORT_MODE_RULES),
-        },
         "stop_merge": "name",
         "strict": True,
         "estimated_posts": estimated_posts,
@@ -490,6 +482,10 @@ def test_build_orchestrates_fix_merge_and_bundle_atomically(
         "status": [],
     }
     assert [file["path"] for file in run_manifest["geodata"]["files"]] == ["fixture.csv"]
+    assert [file["path"] for file in run_manifest["route_rules"]["files"]] == [
+        "transport-modes.csv",
+        "presentation.csv",
+    ]
     if estimated_posts:
         assert run_manifest["osm_jdf_routing_extract"] == {
             "path": str(routing_extract),

@@ -28,8 +28,6 @@ from obehy.pipeline.errors import PipelineError
 from obehy.pipeline.files import deterministic_zip, file_digest, utc_now, write_json
 from obehy.production_package import ProductionPackageError, extracted_gtfs
 
-RULES = Path(__file__).with_name("data") / "filtered-jdf" / "rules-v1.json"
-
 # JDF 1.11 field counts, as JrUtil's merger writes them.
 _LINKY_FIELDS = 17
 _LINEXT_FIELDS = 7
@@ -44,7 +42,7 @@ class FilterRules:
     line_prefixes: tuple[str, ...]
 
 
-def load_rules(path: Path = RULES) -> FilterRules:
+def load_rules(path: Path) -> FilterRules:
     value = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     prefixes = tuple(str(prefix) for prefix in value["line_prefixes"])
     if any(not prefix.isdigit() for prefix in prefixes):
@@ -359,7 +357,7 @@ def build_filtered_jdf(
     reference: date,
     work: Path,
     merged_jdf: Path,
-    rules_path: Path = RULES,
+    rules_path: Path,
 ) -> Path:
     """Write ``destination/gtfs.zip`` and ``filter-report.json`` from a national JDF bundle.
 

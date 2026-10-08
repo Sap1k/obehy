@@ -191,7 +191,7 @@ The compiler-internal CZPTT source metadata retains only source facts and typed 
 bridges:
 
 - `operational_points`: source location identity/name plus optional coordinate, source object, and
-  match method (`sz_sr70/country_primary_code`, `osm/ref_eu_plc`, `osm/reviewed_alias`, or
+  match method (`sz_sr70/country_primary_code`, `osm/ref_eu_plc`, or
   `osm/normalized_exact_name`);
 - `operational_calls`: source PA/sequence/location, passenger flag, source arrival/departure
   seconds, subsidiary evidence, and active line code;

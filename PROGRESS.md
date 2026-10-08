@@ -147,7 +147,7 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
 - **CZPTT:** operational points go to the sidecars only by default (`--czptt-operational-points
   gtfs` restores the old behavior).
 - **Status:** done. Implemented (`src/obehy/filtered_jdf.py`, rules in
-  `src/obehy/data/filtered-jdf/rules-v1.json`) and published by both live builds
+  `jrunify-ext-geodata/filtered-jdf/rules-v1.json`) and published by both live builds
   (`jdf-filtered/`, about 30 s). MobilityData validation of the filtered feed is not run.
 
 ### 5. Core runtime
@@ -206,6 +206,17 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   §5.2: the CZPTT trip ↔ operational-call link is `trip_call` itself.
 
 ## Recent log
+
+- **2026-10-08** — Reviewed Czech data moved to jrunify-ext-geodata; route presentation overrides.
+  - `routes/transport-modes.csv` (was `obehy/data/jdf_transport_mode_rules.csv`),
+    `overlay/pid-stop-overrides.csv` and `filtered-jdf/rules-v1.json` now live in the geodata
+    checkout; the run manifest records them under `route_rules`. The empty CZPTT OSM alias file and
+    JrUtil's `--osm-aliases` are gone: foreign passenger CZPTT points without coordinates fail.
+  - New `routes/presentation.csv` overrides route marking and colours by licence (exact, range,
+    prefix) and optional agency IČO; JrUtil applies it in `jdf-to-bundle` and again after
+    `regional-gtfs-overlay`, so it wins over PID/IDS JMK values. Route IDs are unaffected.
+  - Validated: JrUtil tests (313), obehy unit tests, ruff, pyright, geodata `test_routes`. No
+    real-data run yet; the rules file is still empty.
 
 - **2026-10-08** — Sources fetched up front; filtered JDF from LinExt instead of the line portal.
   - Three CI builds failed ~45 min in on a TLS handshake timeout to portal.radekpapez.cz (no retry,

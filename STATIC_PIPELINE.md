@@ -55,6 +55,13 @@ When `jrunify-ext-geodata/registry/stops.csv` exists, Oběhy passes the registry
 `stop-registry/` directory. Live source URLs and credentials never enter JrUtil inputs; sources
 reach it as checksum-pinned snapshots with descriptors.
 
+Reviewed Czech data lives in the same checkout. `routes/transport-modes.csv` and
+`routes/presentation.csv` go to `jdf-to-bundle` (`--transport-mode-rules`,
+`--route-presentation-rules`); the presentation rules go to `regional-gtfs-overlay` as well, which
+applies them last so they win over regional feed values. The overlay reads its policy override
+CSVs from `overlay/` (`--overrides-root`), and the filtered JDF feed reads
+`filtered-jdf/rules-v1.json`.
+
 ## Production package
 
 JrUtil's normative contract is `jrutil/docs/PRODUCTION_CONTRACT.md` (bundle version 3, serving
