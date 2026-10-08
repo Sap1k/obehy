@@ -106,9 +106,24 @@ widened by an hour on each side, overlaps the episode.
 - **DPmÚL:** DPmÚL publishes each line as up to nine parallel JDF versions (regular, weekday-only,
   weekend-only and one per Christmas special day, each nominally valid for a year). JrUtil's
   `merge-jdf` kept the wrong version for lines 46, 71, 74–76, 79, 83 and 89, so the weekday trips
-  the vehicles report were missing. Fixed in JrUtil `6a86278` (date-by-date version resolution);
-  the next release should resolve them like the other fleets. DPmÚL trip numbers are real JDF
-  numbers: `n` on weekdays and `300 + n` (`20xx`/`23xx` on some lines) on weekends.
+  the vehicles report were missing. Fixed in JrUtil `6a86278` (date-by-date version resolution).
+  DPmÚL trip numbers are real JDF numbers: `n` on weekdays and `300 + n` (`20xx`/`23xx` on some
+  lines) on weekends.
+- **DPmÚL after the fix:** replayed against packages built on 2026-10-08 with JrUtil `17179c9`,
+  1,573 of the 1,973 running episodes (79.7%) resolve to exactly one trip.
+  - The rest is mostly upstream behaviour, not a JDF error. 268 of the 275 episodes whose trip
+    does not run that day report a weekend number (`3xx`) on a weekday.
+  - Line 595200 shows the pattern. Both source versions (VLD batches 4312 and 10217) run
+    trips 2–220 on working days and 302–452 on weekends and holidays. Vehicle 300066 runs
+    the weekday trips all of Tuesday 2026-10-06, but at the loop terminus (Mírová, node
+    12057) it briefly reports the weekend number: `18` at 05:48, `310` for a single poll at
+    05:53, then `18` again at 05:59.
+  - Of the 268 such episodes, 150 lie between two resolved trips of the same vehicle (each
+    within 15 minutes) and 47 next to one. The other 71 are isolated, e.g. the first report
+    of the day (`302` at 04:20). They last 5.2 minutes at the median, against 34.7 for
+    resolved episodes.
+  - A short off-calendar key from a DPmÚL vehicle must therefore not rebind it to another
+    trip.
 - **Trains:** 19 episodes (18 train numbers) have CZPTT train-number keys, but no timetable
   for them runs that day; the rest are time mismatches.
 

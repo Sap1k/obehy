@@ -208,6 +208,14 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
 
 ## Recent log
 
+- **2026-10-08** — DPmÚL replay against the 2026-10-08 packages (JrUtil `17179c9`): 1,573 of
+  1,973 running episodes resolve (79.7%; 52.7% before the merge fix).
+  - Most of the rest is upstream, not a JrUtil bug: 268 of 275 off-calendar episodes are
+    weekend (`3xx`) trip numbers reported briefly on weekdays, mostly between two resolved
+    trips. Line 595200's JDF (batches 4312, 10217) and the release calendar agree.
+  - Inference must not rebind a vehicle on such keys. Details are in `duk.md`.
+  - The 7 DÚK-range losses are lines whose 2026-10-06 version is no longer in the release.
+
 - **2026-10-08** — `obehy rt replay` (§5 step 4, replay only).
   - `src/obehy/realtime/`: `decode` (DÚK/SŽ/Arriva payloads → rows: fleets, Teplice UTC
     and Arriva local-time fixes, SŽ TR keys), `release_index` (pyarrow indexes over the
