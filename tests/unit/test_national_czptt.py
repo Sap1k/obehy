@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import zipfile
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -183,8 +184,10 @@ def _live_inventory_fixture(
     monkeypatch.setattr(national_czptt, "discover_remote_inventory", discover)
 
     class FakeDownloader:
-        def __init__(self, sources: Path) -> None:
+        def __init__(self, sources: Path, cache: Path | None = None) -> None:
+            del cache
             self.sources = sources
+            self.cached = 0
             source_roots.append(sources)
 
         def download(self, item: RemoteObject) -> SourceRecord:
@@ -774,3 +777,132 @@ def test_foreign_unresolved_point_fails(tmp_path: Path) -> None:
     national_czptt._verify_foreign_coordinate_acceptance(  # pyright: ignore[reportPrivateUsage]
         bundle
     )
+
+
+class _CountingConnection:
+    """HTTPS fake serving ``payloads`` by request target and recording every request."""
+
+    payloads: ClassVar[dict[str, bytes]] = {}
+    requests: ClassVar[list[str]] = []
+
+    def __init__(self, _host: str, _port: int, *, timeout: int) -> None:
+        del timeout
+        self.target = ""
+
+    def request(self, _method: str, target: str, *, headers: dict[str, str]) -> None:
+        del headers
+        self.target = target
+        self.requests.append(target)
+
+    def getresponse(self) -> object:
+        payload = self.payloads[self.target]
+
+        class Response:
+            status = 200
+
+            def __init__(self) -> None:
+                self.payload = payload
+
+            def getheader(self, name: str) -> str | None:
+                return str(len(payload)) if name == "Content-Length" else None
+
+            def read(self, _size: int) -> bytes:
+                chunk, self.payload = self.payload, b""
+                return chunk
+
+            def close(self) -> None:
+                return
+
+        return Response()
+
+    def close(self) -> None:
+        return
+
+
+def _annual_payload() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("base.xml", _xml())
+    return buffer.getvalue()
+
+
+def test_http_downloader_reuses_cached_objects_across_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    change = gzip.compress(_xml(), mtime=0)
+    _CountingConnection.payloads = {"/JR2026.zip": _annual_payload(), "/one.xml.zip": change}
+    _CountingConnection.requests = []
+    monkeypatch.setattr(national_czptt.http.client, "HTTPSConnection", _CountingConnection)
+    items = [
+        RemoteObject("annual/JR2026.zip", "https://example.test/JR2026.zip", "annual_zip"),
+        RemoteObject(
+            "changes/2026-01/one.xml.zip", "https://example.test/one.xml.zip", "monthly_gzip"
+        ),
+    ]
+    cache = tmp_path / "cache"
+
+    first = national_czptt._HttpSourceDownloader(  # pyright: ignore[reportPrivateUsage]
+        tmp_path / "run-1", cache
+    )
+    first_records = [first.download(item) for item in items]
+    first.close()
+    second = national_czptt._HttpSourceDownloader(  # pyright: ignore[reportPrivateUsage]
+        tmp_path / "run-2", cache
+    )
+    second_records = [second.download(item) for item in items]
+    second.close()
+
+    assert _CountingConnection.requests == ["/JR2026.zip", "/one.xml.zip"]
+    assert (first.cached, second.cached) == (0, 2)
+    assert second_records == first_records
+    assert (tmp_path / "run-2" / "changes" / "2026-01" / "one.xml.zip").read_bytes() == change
+    assert not list(cache.rglob("*.part"))
+
+
+def test_http_downloader_replaces_a_corrupt_cache_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    change = gzip.compress(_xml(), mtime=0)
+    _CountingConnection.payloads = {"/one.xml.zip": change}
+    _CountingConnection.requests = []
+    monkeypatch.setattr(national_czptt.http.client, "HTTPSConnection", _CountingConnection)
+    cache = tmp_path / "cache"
+    corrupt = cache / "changes" / "2026-01" / "one.xml.zip"
+    corrupt.parent.mkdir(parents=True)
+    corrupt.write_bytes(b"not gzip")
+    downloader = national_czptt._HttpSourceDownloader(  # pyright: ignore[reportPrivateUsage]
+        tmp_path / "sources", cache
+    )
+
+    downloader.download(
+        RemoteObject(
+            "changes/2026-01/one.xml.zip", "https://example.test/one.xml.zip", "monthly_gzip"
+        )
+    )
+
+    assert _CountingConnection.requests == ["/one.xml.zip"]
+    assert downloader.cached == 0
+    assert corrupt.read_bytes() == change
+
+
+def test_source_cache_prune_keeps_only_the_current_inventory(tmp_path: Path) -> None:
+    cache = tmp_path / "cache"
+    kept = cache / "2026" / "changes" / "2026-01" / "kept.xml.zip"
+    stale = cache / "2026" / "changes" / "2025-12" / "stale.xml.zip"
+    old_year = cache / "2025" / "annual" / "JR2025.zip"
+    for path in (kept, stale, old_year):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+
+    national_czptt._prune_source_cache(  # pyright: ignore[reportPrivateUsage]
+        cache,
+        2026,
+        [RemoteObject("changes/2026-01/kept.xml.zip", "https://example.test/k", "monthly_gzip")],
+    )
+
+    assert [path.relative_to(cache).as_posix() for path in cache.rglob("*")] == [
+        "2026",
+        "2026/changes",
+        "2026/changes/2026-01",
+        "2026/changes/2026-01/kept.xml.zip",
+    ]

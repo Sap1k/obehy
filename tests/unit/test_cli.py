@@ -37,6 +37,7 @@ def _runtime(tmp_path: Path) -> RuntimeConfig:
         artifact_root=tmp_path / "artifacts",
         osm_file=tmp_path / "osm.pbf",
         routing_cache_dir=tmp_path / "work" / "cache" / "routing",
+        czptt_source_cache_dir=tmp_path / "work" / "cache" / "czptt-sources",
         jrunify_ext_geodata_dir=tmp_path / "geodata",
         jrutil=JrUtilRuntime(directory=jrutil, command=None),
     )
@@ -229,6 +230,7 @@ def test_build_publishes_exact_pair_and_switches_current(tmp_path: Path) -> None
     assert czptt_config.geodata_root == runtime.jrunify_ext_geodata_dir
     assert czptt_config.timetable_year == 2027
     assert czptt_config.build_jrutil is False
+    assert czptt_config.source_cache_dir == runtime.czptt_source_cache_dir
     assert czptt_config.memory_budget == "auto"
     assert czptt_config.operational_points == "sidecar"
     build_count = 0

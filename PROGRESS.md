@@ -207,6 +207,12 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
 
 ## Recent log
 
+- **2026-10-08** — CZPTT source cache and download concurrency.
+  - GH Actions spent 1h+ fetching ~170k sub-KB objects over 8 connections (round-trip bound).
+    Objects are now cached across runs (`cache/czptt-sources`, rolling Actions cache) and fetched
+    over 32 connections independent of `--jobs`. Unit tests, ruff, pyright pass; no live-portal or
+    GH run yet.
+
 - **2026-10-08** — Reviewed Czech data moved to jrunify-ext-geodata; route presentation overrides.
   - `routes/transport-modes.csv` (was `obehy/data/jdf_transport_mode_rules.csv`),
     `overlay/pid-stop-overrides.csv` and `filtered-jdf/rules-v1.json` now live in the geodata

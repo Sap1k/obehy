@@ -19,6 +19,10 @@ on:
         description: Rebuild the regional OSM snapshot even when cached
         type: boolean
         default: false
+      refresh_czptt:
+        description: Download every CZPTT source object even when cached
+        type: boolean
+        default: false
       publish:
         description: Publish a GitHub Release
         type: boolean
@@ -118,14 +122,24 @@ jobs:
           path: ${{ env.WORK }}/cache/routing
           key: routing-v1-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: routing-v1-
+      # CZPTT objects are published once and never rewritten; ~170k tiny files are round-trip
+      # bound from the runner, so a run only downloads what was published since the last one.
+      - name: Restore CZPTT source cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.WORK }}/cache/czptt-sources
+          key: czptt-sources-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: czptt-sources-v1-
 
       - name: Build
         working-directory: obehy
         env:
           REFRESH_OSM: ${{ steps.osm.outputs.cache-hit != 'true' || inputs.refresh_osm }}
+          REFRESH_CZPTT: ${{ inputs.refresh_czptt }}
         run: |
           args=(--estimated-posts --memory-budget "$MEMORY_BUDGET" --progress plain)
           if [ "$REFRESH_OSM" = "true" ]; then args+=(--refresh-osm); fi
+          if [ "$REFRESH_CZPTT" = "true" ]; then args+=(--no-czptt-source-cache); fi
           uv run --no-sync obehy build "${args[@]}"
 
       # Keep a fresh snapshot even when a later stage fails; a refresh costs a Geofabrik download.
@@ -148,6 +162,12 @@ jobs:
         with:
           path: ${{ env.WORK }}/cache/routing
           key: routing-v1-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save CZPTT source cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.WORK }}/cache/czptt-sources
+          key: czptt-sources-v1-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload run logs and diagnostics
         if: always()
@@ -202,6 +222,7 @@ jobs:
           while read -r key; do
             case "$key" in
               "routing-v1-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" | "osm-v1-$OSM_MONTH") ;;
-              routing-v1-* | osm-v1-*) gh cache delete "$key" ;;
+              "czptt-sources-v1-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT") ;;
+              routing-v1-* | osm-v1-* | czptt-sources-v1-*) gh cache delete "$key" ;;
             esac
           done

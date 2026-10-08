@@ -31,12 +31,16 @@ that manifest, `kadr/catalog.json`, and `sr70/SR70.csv`. JrUtil, JrUnify-Ext-Geo
 OSM PBF are mandatory absolute paths in the selected TOML configuration. There is no
 parent-directory fallback. `--sr70` selects a coordinate snapshot used only while creating a new live
 snapshot.
-`--jobs auto` means eight download workers.
-
 Discovery reads monthly HTTP directory listings concurrently and makes no per-object metadata
 requests. The downloaded bytes and their SHA-256 hashes form the authoritative snapshot. Downloads
-stream through eight persistent HTTP connections with bounded in-flight work and file-count
-progress. After each download pass, the build rechecks the inventory and downloads newly listed
+stream through `--download-connections` (default 32, independent of `--jobs`) persistent HTTP
+connections with bounded in-flight work and file-count progress. The ~170k change messages average
+under 1 KB, so the download is round-trip bound. Source objects are published once and never
+rewritten, so they are kept in a cross-run cache (`[paths] czptt_source_cache_dir`, default
+`<workdir>/cache/czptt-sources/<GVD year>/`): cached objects are linked instead of downloaded,
+cached entries without valid ZIP/gzip magic are re-fetched, and after the final pass the cache is
+pruned to the current inventory. `--no-source-cache` (`obehy build --no-czptt-source-cache`)
+downloads everything. After each download pass, the build rechecks the inventory and downloads newly listed
 objects. It stops when a recheck is stable, with at most five download passes total. The final
 inventory and all downloaded objects are recorded in the snapshot. The build fails if the listing
 still grows after the fifth pass, or if a discovered object disappears, cannot be downloaded

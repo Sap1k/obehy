@@ -60,6 +60,8 @@ from obehy.runtime_config import ConfigurationError, load_runtime_config
 
 DEFAULT_SOURCE_BASE_URL = "https://portal.cisjr.cz/pub/draha/celostatni/szdc"
 MAX_INVENTORY_DOWNLOAD_PASSES = 5
+# Change messages average under 1 KB, so downloads are round-trip bound, not bandwidth bound.
+DEFAULT_DOWNLOAD_CONNECTIONS = 32
 KADR_ENDPOINT = "https://provoz.spravazeleznic.cz/kadrws/ciselniky.asmx"
 KADR_OPERATIONS = (
     "SeznamSpolecnosti",
@@ -109,6 +111,10 @@ class BuildConfig:
     keep_work: bool = False
     progress: ProgressMode = "auto"
     build_jrutil: bool = True
+    # Source objects are published once and never rewritten, so a cache keyed by relative path
+    # lets a run download only the objects published since the previous one.
+    source_cache_dir: Path | None = None
+    download_connections: int = DEFAULT_DOWNLOAD_CONNECTIONS
 
 
 class _HrefParser(HTMLParser):
@@ -193,10 +199,17 @@ HttpConnection = http.client.HTTPConnection | http.client.HTTPSConnection
 
 
 class _HttpSourceDownloader:
-    """Stream source objects over per-worker persistent HTTP connections."""
+    """Stream source objects over per-worker persistent HTTP connections.
 
-    def __init__(self, sources: Path) -> None:
+    With a cache, objects already fetched by an earlier run are linked from it instead of being
+    downloaded, and newly downloaded objects are added to it.
+    """
+
+    def __init__(self, sources: Path, cache: Path | None = None) -> None:
         self.sources = sources
+        self.cache = cache
+        self.cached = 0
+        self._cached_lock = threading.Lock()
         self._local = threading.local()
         self._clients: list[HttpConnection] = []
         self._clients_lock = threading.Lock()
@@ -226,6 +239,38 @@ class _HttpSourceDownloader:
         self._local.connection = None
         self._local.origin = None
 
+    def _from_cache(self, item: RemoteObject, destination: Path) -> SourceRecord | None:
+        if self.cache is None:
+            return None
+        cached = self.cache / item.relative_path
+        if not cached.is_file():
+            return None
+        try:
+            _validate_object(cached, item.kind)
+        except PipelineError:
+            cached.unlink()
+            return None
+        destination.unlink(missing_ok=True)
+        link_or_copy(cached, destination)
+        with self._cached_lock:
+            self.cached += 1
+        return SourceRecord(
+            relative_path=item.relative_path,
+            url=item.url,
+            bytes=destination.stat().st_size,
+            sha256=file_digest(destination),
+            kind=item.kind,
+        )
+
+    def _store_in_cache(self, item: RemoteObject, destination: Path) -> None:
+        if self.cache is None:
+            return
+        cached = self.cache / item.relative_path
+        temporary = cached.with_name(cached.name + ".part")
+        temporary.unlink(missing_ok=True)
+        link_or_copy(destination, temporary)
+        os.replace(temporary, cached)
+
     def download(self, item: RemoteObject) -> SourceRecord:
         parsed = urlsplit(item.url)
         scheme = parsed.scheme.casefold()
@@ -236,6 +281,9 @@ class _HttpSourceDownloader:
         destination = self.sources / item.relative_path
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(destination.name + ".part")
+        cached = self._from_cache(item, destination)
+        if cached is not None:
+            return cached
 
         attempts = len(download.RETRY_DELAYS) + 1
         for attempt in range(1, attempts + 1):
@@ -277,6 +325,7 @@ class _HttpSourceDownloader:
                         f"{item.relative_path}; expected {expected} bytes, received {received}"
                     )
                 os.replace(temporary, destination)
+                self._store_in_cache(item, destination)
                 return SourceRecord(
                     relative_path=item.relative_path,
                     url=item.url,
@@ -309,6 +358,30 @@ class _HttpSourceDownloader:
             clients, self._clients = self._clients, []
         for connection in clients:
             connection.close()
+
+
+def _prune_source_cache(
+    cache: Path, timetable_year: int, inventory: Sequence[RemoteObject]
+) -> None:
+    """Drop cached objects outside the current inventory, including other timetable years."""
+
+    if not cache.is_dir():
+        return
+    year_root = cache / str(timetable_year)
+    for entry in cache.iterdir():
+        if entry != year_root:
+            if entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+    if not year_root.is_dir():
+        return
+    keep = {year_root / item.relative_path for item in inventory}
+    for path in sorted(year_root.rglob("*"), reverse=True):
+        if path.is_file() and path not in keep:
+            path.unlink()
+        elif path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
 
 
 def snapshot_kadr(destination: Path) -> Path:
@@ -842,6 +915,10 @@ def _validate_config(config: BuildConfig) -> None:
         raise PipelineError("--source-snapshot forbids SR70 overrides")
     if _jobs(config.jobs) <= 0:
         raise PipelineError("--jobs must be auto or a positive integer")
+    if config.download_connections <= 0:
+        raise PipelineError("--download-connections must be a positive integer")
+    if config.source_cache_dir is not None and not config.source_cache_dir.is_absolute():
+        raise PipelineError(f"source_cache_dir must be an absolute path: {config.source_cache_dir}")
 
 
 def _resolve_osm_snapshot(config: BuildConfig) -> tuple[Path, dict[str, Any]]:
@@ -869,8 +946,13 @@ def _download_sources(
     records: list[SourceRecord] = []
     to_download = inventory
     catalog: Path | None = None
-    downloader = _HttpSourceDownloader(sources)
-    worker_count = _jobs(config.jobs)
+    cache = (
+        config.source_cache_dir / str(timetable_year)
+        if config.source_cache_dir is not None
+        else None
+    )
+    downloader = _HttpSourceDownloader(sources, cache)
+    worker_count = config.download_connections
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
             for attempt in range(1, MAX_INVENTORY_DOWNLOAD_PASSES + 1):
@@ -880,6 +962,7 @@ def _download_sources(
                     total=len(to_download),
                     unit="files",
                 )
+                cached_before = downloader.cached
                 remaining = iter(to_download)
                 pending: set[concurrent.futures.Future[SourceRecord]] = set()
                 batch_records: list[SourceRecord] = []
@@ -905,7 +988,10 @@ def _download_sources(
                         item = next(remaining, None)
                         if item is not None:
                             pending.add(executor.submit(downloader.download, item))
-                reporter.finish(download_task, f"{len(to_download)} files")
+                reporter.finish(
+                    download_task,
+                    f"{len(to_download)} files ({downloader.cached - cached_before} cached)",
+                )
                 for record in batch_records:
                     _validate_object(sources / record.relative_path, record.kind)
 
@@ -944,6 +1030,8 @@ def _download_sources(
     finally:
         downloader.close()
     assert catalog is not None
+    if config.source_cache_dir is not None:
+        _prune_source_cache(config.source_cache_dir, timetable_year, inventory)
     records.sort(key=lambda value: value.relative_path)
     write_json(
         sources / "inventory.json",
@@ -1135,6 +1223,14 @@ def _parser() -> argparse.ArgumentParser:
     build_parser.add_argument("--source-snapshot", type=Path)
     build_parser.add_argument("--sr70", type=Path)
     build_parser.add_argument("--jobs", type=parse_jobs, default="auto")
+    build_parser.add_argument(
+        "--download-connections", type=int, default=DEFAULT_DOWNLOAD_CONNECTIONS
+    )
+    build_parser.add_argument(
+        "--no-source-cache",
+        action="store_true",
+        help="download every CZPTT source object instead of reusing the source cache",
+    )
     build_parser.add_argument("--memory-budget", type=parse_memory_budget, default="auto")
     build_parser.add_argument("--keep-work", action="store_true")
     build_parser.add_argument(
@@ -1163,6 +1259,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             memory_budget=cast(str, args.memory_budget),
             keep_work=cast(bool, args.keep_work),
             progress=cast(ProgressMode, args.progress),
+            source_cache_dir=(
+                None if cast(bool, args.no_source_cache) else runtime.czptt_source_cache_dir
+            ),
+            download_connections=cast(int, args.download_connections),
         )
         result = build(config)
     except (

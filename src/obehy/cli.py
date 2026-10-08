@@ -60,6 +60,7 @@ class BuildOptions:
     czptt_operational_points: national_czptt.OperationalPointMode = "sidecar"
     filtered_jdf: bool = True
     routing_cache: bool = True
+    czptt_source_cache: bool = True
 
 
 @dataclass(frozen=True)
@@ -220,6 +221,7 @@ def _czptt_config(
         keep_work=options.keep_work,
         progress=options.progress,
         build_jrutil=False,
+        source_cache_dir=(runtime.czptt_source_cache_dir if options.czptt_source_cache else None),
     )
 
 
@@ -281,6 +283,7 @@ def _release_record(
             "czptt_operational_points": options.czptt_operational_points,
             "filtered_jdf": options.filtered_jdf,
             "routing_cache": options.routing_cache,
+            "czptt_source_cache": options.czptt_source_cache,
         },
         "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
         "retrieval": fetched.retrieval,
@@ -463,6 +466,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="route every post-inference context instead of reusing the routing cache",
     )
+    command.add_argument(
+        "--no-czptt-source-cache",
+        action="store_true",
+        help="download every CZPTT source object instead of reusing the source cache",
+    )
     realtime = commands.add_parser("rt", help="realtime tools")
     realtime_commands = realtime.add_subparsers(dest="rt_command", required=True)
     recorder = realtime_commands.add_parser(
@@ -530,6 +538,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
                 filtered_jdf=not cast(bool, args.skip_filtered_jdf),
                 routing_cache=not cast(bool, args.no_routing_cache),
+                czptt_source_cache=not cast(bool, args.no_czptt_source_cache),
             )
         )
     except (
