@@ -65,6 +65,9 @@ recorded, because SŽ covers rail.
 
 ## Matching (replayed)
 
+Reproduce with `obehy rt replay --release <release-dir> --from <day> --to <day> --out <dir>`
+(`report.json` coverage per fleet, `episodes.parquet` one row per episode).
+
 Through the inference engine (`BASE_PLAN.md` section 19). The capture saw three lines, each with
 four vehicles: `580916` (Praha – Teplice), `157710` (Praha – Most – Litvínov) and `721341`
 (Brno – Olomouc). A vehicle's polls form an episode while plate, line and destination stay the

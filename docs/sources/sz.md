@@ -62,6 +62,9 @@ Names are Unicode (escaped in the JSON).
 
 ## Matching (replayed)
 
+Reproduce with `obehy rt replay --release <release-dir> --from <day> --to <day> --out <dir>`
+(`report.json` coverage per fleet, `episodes.parquet` one row per episode).
+
 `id` → `Tr:<company>:<core>:<variant>:<year>` (exact string transform) resolves through
 `source_key(namespace = czptt:tr)` to trips whose key validity covers the operating date in `id`
 and whose service runs on it; the result is counted per run (`trip.run_key`, the trip parts of

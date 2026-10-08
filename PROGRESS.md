@@ -172,10 +172,11 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
      11. Arriva Express with own GPS delay; 12. circulation learning.
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
-- **Status:** step 1 done (2026-10-06; the replay ran as exploratory scripts, not yet a repo
-  tool; recording continues). Step 2 done (§6). Step 3 done except `release fetch`, which waits
-  for the first GitHub Actions release (2026-10-07). Next: step 4, the realtime skeleton. Steps
-  5–12 are design only.
+- **Status:** step 1 done (2026-10-06; recording continues). Step 2 done (§6). Step 3 done
+  except `release fetch`, which waits for the first GitHub Actions release (2026-10-07).
+  Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
+  report) done 2026-10-08; the model, clock, core loop and `rt` migrations wait for the core
+  architecture decision. Steps 5–12 are design only.
 
 ### 6. Serving schema 5
 
@@ -206,6 +207,18 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   §5.2: the CZPTT trip ↔ operational-call link is `trip_call` itself.
 
 ## Recent log
+
+- **2026-10-08** — `obehy rt replay` (§5 step 4, replay only).
+  - `src/obehy/realtime/`: `decode` (DÚK/SŽ/Arriva payloads → rows: fleets, Teplice UTC
+    and Arriva local-time fixes, SŽ TR keys), `release_index` (pyarrow indexes over the
+    serving Parquet: keys, services, trip/run spans, calls), `episodes`, `resolve` (the
+    dossier rules, SŽ train-number fallback, Arriva next-stop scoring, stale-repeat
+    collapse), `replay` (`report.json` + `episodes.parquet`). No DB, no new dependencies.
+  - Validated: 6 new unit tests (134 total), ruff, pyright. The 25-hour capture against
+    `20261006T194555Z` reproduces every dossier table and is byte-identical across runs:
+    41 s, 2.5 GiB peak (all decoded rows are held in memory, so it grows with the range).
+  - Correction: the 19 unresolved DÚK train episodes have CZPTT train-number keys, but no
+    timetable for them runs that day (`duk.md` said they were missing from the package).
 
 - **2026-10-08** — CZPTT source cache and download concurrency.
   - GH Actions spent 1h+ fetching ~170k sub-KB objects over 8 connections (round-trip bound).
@@ -265,7 +278,7 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   CZPTT call features and stopless in-seat transfers (`b65cc9b`), and date-by-date JDF version
   resolution for DPmÚL's parallel versions (`6a86278`; bounded old/new merge comparison on 804
   urban-rail batches and 518 bus lines: no overlapping versions, only corrections). Validation:
-  JrUtil `dotnet test` 309/309. Remaining: the replay as a repo tool.
+  JrUtil `dotnet test` 309/309. The replay became a repo tool on 2026-10-08.
 
 - **2026-10-06** — Serving schema 5.0 implemented in JrUtil (§6): writer, `validate-package`
   enumeration/prefix/key-encoding/trip-part/GTFS-projection/source-digest checks, contract

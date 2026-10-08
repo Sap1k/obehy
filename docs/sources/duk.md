@@ -84,6 +84,9 @@ missing are mostly the 9xxx vehicles. It does not cover the `30xxxx` and `40xxxx
 
 ## Matching (replayed)
 
+Reproduce with `obehy rt replay --release <release-dir> --from <day> --to <day> --out <dir>`
+(`report.json` coverage per fleet, `episodes.parquet` one row per episode).
+
 A vehicle's polls are grouped into episodes: consecutive polls with the same `CISLineID` and
 `RouteID`, split after 30 minutes without one. Each episode resolves through
 `source_key(namespace = cis:line_trip, identifier = <6-digit line>:<trip>)` to trips whose service
@@ -106,7 +109,8 @@ widened by an hour on each side, overlaps the episode.
   the vehicles report were missing. Fixed in JrUtil `6a86278` (date-by-date version resolution);
   the next release should resolve them like the other fleets. DPmÚL trip numbers are real JDF
   numbers: `n` on weekdays and `300 + n` (`20xx`/`23xx` on some lines) on weekends.
-- **Trains:** 19 train numbers are not in the CZPTT package; the rest are time mismatches.
+- **Trains:** 19 episodes (18 train numbers) have CZPTT train-number keys, but no timetable
+  for them runs that day; the rest are time mismatches.
 
 Episodes in State 2 or 3 (before the trip starts) are mostly not time-compatible with the trip
 they report and must not bind a vehicle to a trip.
