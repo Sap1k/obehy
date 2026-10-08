@@ -6,7 +6,7 @@ name: build
 
 on:
   schedule:
-    - cron: "30 2 * * *"
+    - cron: "30 23 * * *"
   workflow_dispatch:
     inputs:
       jrutil_ref:
