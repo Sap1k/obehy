@@ -7,10 +7,11 @@
 - `BASE_PLAN.md` is the long-term architecture document. Do not rewrite it as a side effect of
   other work; change it deliberately when an architectural decision changes.
 
-## Current focus: static readiness, then the core runtime
+## Current focus: the core runtime
 
-- Read `PROGRESS.md` first. Its **Next steps** section is the working backlog: static feed
-  readiness, then the core runtime (release loader, realtime core) in `BASE_PLAN.md` order.
+- Read `PROGRESS.md` first. Its **Next steps** section is the working backlog: the realtime
+  core in `BASE_PLAN.md` section 34 order, with static acceptance waiting on the first GitHub
+  Actions build.
 - Production static compilation and overlays belong to JrUtil. `obehy build` runs on GitHub
   Actions, never on the application server. On the server, Oběhy fetches, loads and activates
   releases and runs the realtime core. Do not recreate PostgreSQL source reconciliation.
@@ -32,6 +33,55 @@
   step, update the matching status/next-step line and add at most a few lines to **Recent log**
   stating what changed, what was validated (including skipped checks) and what remains.
 
+## Realtime code rules
+
+These keep the realtime core small, testable and free of the midnight/DST bugs that sink Czech
+realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
+
+- **Layering.** `realtime/core.py`, `infer/`, `timeline/` and `model.py` import no database,
+  network or filesystem code; `sources/` (connectors) imports no `infer/` or `timeline/`. The
+  import-linter contract enforces this.
+- **No twin implementations.** Live operation and `obehy rt replay` run the same core. Analysis
+  is an `obehy rt …` subcommand or a script that imports `obehy`; never re-implement core rules
+  in a scratch script.
+- **Time.** Only `realtime/times.py` converts times. Use `Instant` (aware UTC) and `ServiceTime`
+  (service date + seconds after noon − 12 h). No naive datetimes. Key everything by service
+  date, never by calendar date. An instance's date is chosen once and never re-derived.
+- **IDs are opaque.** Never parse a public ID (for example the `yymmdd` in a trip ID); resolve
+  through `source_key`. History is keyed by journey `(feed, key namespace, key, service date)`
+  and never references `static.*`.
+- **Keyed sources are literal.** No reinterpretation heuristics in the core: a key whose trip
+  does not run is unmatched. Keyless inference stays in `infer/keyless/`.
+- **SQL for sets, Python for the hot path.** Logic over many rows at once (index building,
+  history aggregation, circulation learning, evaluation, API queries) is SQL in PostgreSQL. Only
+  the per-vehicle state machine is Python.
+- **Policy, not constants.** Thresholds, margins and tolerances live in versioned policy TOML
+  under `src/obehy/data/`, not as module constants.
+- **Connectors declare, the runtime executes.** A connector declares its channels and lookups
+  and implements only `fetch`, `decode` and `plan`. Scheduling, rate limits, budgets and
+  caching are the generic runtime's; the API never calls upstream.
+- **Public IDs are journey keys and `vehicle_id`s**, never `trip_id`. Rail journeys are train
+  number + service date, joined by `journey_link` where the number changes.
+- **Core state is partitioned by feed**; nothing in memory crosses `jdf` and `czptt`.
+- **Curated data is git-reviewed files + `obehy ref import`.** `ref.*` is a mirror. Private
+  datasets (the DÚK register) come from a local path and are never committed.
+- **Quirk ledger.** Every source quirk (a catch-22 of Czech data) gets an ID in its dossier's
+  **Quirks** section (`DUK-Q3`), is normalized in the connector, and has a scenario test named
+  after the ID.
+- Frozen, slotted dataclasses; pyright strict for `realtime/`; modules stay under about 500
+  lines; output is emitted in sorted, deterministic order; replay is golden-tested on pinned
+  corpora.
+
+## Documentation roles
+
+- `BASE_PLAN.md`: decisions and architecture only, no status.
+- `ARCHITECTURE.md`: the diagrams and cross-cutting contracts; keep it in step with
+  `BASE_PLAN.md`.
+- `PROGRESS.md`: status, backlog and a short recent log only.
+- `docs/sources/<source>.md`: source facts, replay results and the quirk ledger.
+- `README.md`: how to install and run; point to the other documents instead of repeating them.
+- `STATIC_PIPELINE.md`, `NATIONAL_CZPTT.md`, `JDF_SEMANTICS.md`: the static contracts.
+
 ## Database
 
 - PostgreSQL + PostGIS through psycopg 3 and raw SQL migrations (`src/obehy/release/migrations/`,
@@ -40,6 +90,8 @@
   hand, and add a new migration when the contract gains a minor.
 - `obehy release load|activate|status` (`src/obehy/release/`, `BASE_PLAN.md` section 16).
   Consumers read the `active.*` views only.
+- History tables carry `derivation` (core, policy, release) and are rebuildable by replay inside
+  the raw-archive window; every realtime row carries `release_id`.
 - DB tests live in `tests/db/` and run when `OBEHY_TEST_DATABASE_URL` names a database the user
   may create databases from (`compose.yaml` runs one); they are skipped otherwise.
 

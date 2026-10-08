@@ -13,14 +13,12 @@ one JrUtil invocation, and builds CZPTT using the same resolved GVD year. It pub
 after JrUtil validation and publication-eligibility checks pass.
 
 Source snapshots, orchestration manifests, process logs and detailed diagnostics remain outside the
-closed package trees. The release loader is the next step; the serving-v1 loader has been
-removed. MOTIS shape generation will be inserted between compilation and final
+closed package trees. The release loader (`obehy release load`, `src/obehy/release/`) mirrors the
+packages into PostgreSQL. MOTIS shape generation will be inserted between compilation and final
 validation when it is built.
 
-Two complete live releases have been published (2026-10-02 and 2026-10-03); formal acceptance
-(GTFS validator, MOTIS import check) is still to run. Memory budgets are soft admission/spill
-targets, with no process or .NET heap hard limit. Cross-representation content validation remains
-unfinished. See `PROGRESS.md` for measured results and the actual verification state.
+Memory budgets are soft admission/spill targets, with no process or .NET heap hard limit. See
+`PROGRESS.md` for measured results, acceptance and the actual verification state.
 
 ## Ownership and build protocol
 
@@ -64,55 +62,38 @@ CSVs from `overlay/` (`--overrides-root`), and the filtered JDF feed reads
 
 ## Production package
 
-JrUtil's normative contract is `jrutil/docs/PRODUCTION_CONTRACT.md` (bundle version 3, serving
-schema version 4). Oběhy accepts nothing else.
+JrUtil's normative contract is `jrutil/docs/PRODUCTION_CONTRACT.md` with
+`contracts/serving-v5.json` (bundle version 3, serving schema 5.0), vendored as
+`src/obehy/data/serving/serving-v5.json`. Oběhy accepts every minor of serving major 5 and
+nothing else.
 
 ```text
 package/
 ├── gtfs.zip
 ├── serving/
-│   ├── agency.parquet
-│   ├── location.parquet
-│   ├── route.parquet
-│   ├── service_calendar.parquet
-│   ├── service_exception.parquet
-│   ├── shape.parquet
-│   ├── shape_point.parquet
-│   ├── trip.parquet
-│   ├── trip_call.parquet
-│   ├── transfer.parquet
-│   ├── call_zone.parquet
-│   ├── location_zone.parquet
-│   ├── service_note.parquet
-│   ├── service_note_assignment.parquet
-│   ├── service_feature_assignment.parquet
-│   ├── location_feature.parquet
-│   ├── connection_claim.parquet
-│   ├── travel_restriction_assignment.parquet
-│   ├── operational_location.parquet
-│   ├── operational_journey.parquet
-│   ├── operational_call.parquet
-│   ├── source_entity_map.parquet
-│   ├── source_trip_map.parquet
-│   ├── source_call_map.parquet
-│   ├── source_trip_coverage.parquet
-│   ├── road_route_key.parquet
-│   ├── road_trip_key.parquet
-│   ├── rail_trip_key.parquet
-│   ├── route_stop.parquet
-│   └── route_stop_zone.parquet
+│   ├── agency.parquet               location.parquet          route.parquet
+│   ├── service_calendar.parquet     service_exception.parquet
+│   ├── trip.parquet                 trip_call.parquet
+│   ├── route_stop.parquet           route_stop_zone.parquet   call_zone.parquet
+│   ├── shape.parquet                shape_point.parquet       transfer.parquet
+│   ├── service_note.parquet         assignment.parquet
+│   ├── connection_claim.parquet     travel_restriction.parquet
+│   └── source_key.parquet           call_key.parquet
 ├── manifest.json
 └── diagnostics.json
 ```
 
-`gtfs.zip` is standard GTFS only; transfer waiting limits live in `transfer`. Zones are
-codes: a route stop slot holds them in `route_stop_zone` when all its calls agree, otherwise the
-calls carry them in `call_zone`; `location_zone` answers "zones of this stop" directly. `route_stop` is the
+`gtfs.zip` is a pure projection of the relations; transfer waiting limits live in `transfer`.
+`trip_call` is one call sequence per trip, including CZPTT railway points passed without stopping
+(`passenger_service = false`). Zones are codes: a route stop slot holds them in `route_stop_zone`
+when all its calls agree, otherwise the calls carry them in `call_zone`. `route_stop` is the
 merged, ordered stop list of each route direction (one slot per visit), and every
 `trip_call.route_stop_id` points at its slot, so line timetables need no pattern merging in Oběhy.
-Each relation has a fixed schema, Snappy compression, a unique primary key and resolving foreign
-keys. Rows are in deterministic generation order and are not sorted. Provenance is kept at trip and
-route level (`source_trip_map`, `source_entity_map`); field-level provenance is not recorded.
+`source_key` and `call_key` map source identifiers in documented namespaces (`cis:line_trip`,
+`czptt:tr`, `pid:gtfs_trip_id`, …) to public IDs; realtime resolves through them. Each relation
+has a fixed schema, Snappy compression, a unique primary key and resolving foreign keys; every ID
+carries its feed prefix. Rows are in deterministic generation order and are not sorted. Rows keep
+only `source_object_id`; source IDs and snapshot digests are in the manifest.
 
 The manifest inventories every payload with its size and SHA-256, declares every relation, and pins
 the build specification digest, source snapshots, compiler version, feed version and identity

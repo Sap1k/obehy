@@ -21,11 +21,10 @@ the core matching logic. Adding a realtime source should mean writing a connecto
 facts, a manifest and fixtures, not a new matcher.
 
 `PROGRESS.md` holds the current state and working backlog. The executable static contract is
-JrUtil's `docs/PRODUCTION_CONTRACT.md` together with `contracts/production-v3.json` and
-`contracts/serving-v4.json`. The target contract for the mirror and the realtime core is serving
-schema 5.0 (`contracts/serving-v5.json`, draft). Serving versions are `major.minor`: a minor
-version only adds relations, nullable fields, enumeration values or namespaces, and Oběhy accepts
-every minor of its major.
+JrUtil's `docs/PRODUCTION_CONTRACT.md` together with its `contracts/serving-v5.json` (serving
+schema 5.0, bundle v3), vendored in Oběhy as `src/obehy/data/serving/serving-v5.json`. Serving
+versions are `major.minor`: a minor version only adds relations, nullable fields, enumeration
+values or namespaces, and Oběhy accepts every minor of its major.
 
 ---
 
@@ -65,11 +64,16 @@ application server:
 
 ```text
 obehy release fetch|load|activate   one-shot, driven by a systemd timer
-obehy realtime                      long-running realtime worker
-obehy api                           FastAPI
+obehy ref import                    one-shot: curated reference datasets → ref.*
+obehy realtime                      long-running realtime worker; the only upstream I/O
+obehy jobs                          nightly set-wise SQL (vehicle days, circulations, retention)
+obehy api                           FastAPI; never calls upstream
 web                                 later: React + MapLibre static assets
 motis                               later: managed MOTIS instance
 ```
+
+`ARCHITECTURE.md` draws these processes, the connector contract, the vehicle and tour model and
+the public identity contracts as diagrams.
 
 There is no job queue, message broker or stream processor. PostgreSQL, the filesystem and one
 realtime process are enough for one machine. Revisit only when measurements show otherwise.
@@ -176,25 +180,39 @@ obehy/                         (this repository)
 │   ├── cli.py                 obehy build and the command entry points
 │   ├── pipeline/              shared static-build plumbing
 │   ├── national_jdf.py, national_czptt.py, regional_overlay.py, filtered_jdf.py, ...
-│   ├── release/               fetch.py, load.py, activate.py, migrations/
+│   ├── release/               commands, contract, ddl, load, activate, migrate, migrations/
+│   ├── reference/             importers/ (one per dataset), load (versioned snapshot → ref.*)
 │   ├── realtime/
-│   │   ├── model.py clock.py archive.py worker.py replay.py evaluate.py policy.py
-│   │   ├── connectors/        base.py, duk.py, sz_*.py, pid_*.py, arriva.py, ...
-│   │   ├── infer/             facts.py, scorers/, engine.py, index.py, dates.py, runs.py, binding.py
-│   │   ├── progress/          path.py, project.py, gps_delay.py, travel_time.py
-│   │   ├── timeline/          intervals.py, semantics.py, engine.py, propagate.py, arbitration.py
-│   │   ├── circulations/      build.py, model.py
-│   │   └── emit/              gtfsrt.py, state_table.py
-│   ├── api/                   app.py, static.py, realtime.py, debug.py
+│   │   ├── model.py           Observation, facts, instances, events (frozen dataclasses)
+│   │   ├── times.py           the only time conversions (section 19.3)
+│   │   ├── clock.py           injected clock
+│   │   ├── sources/           connectors: <source>.py + <source>.toml (channels, lookups)
+│   │   ├── runtime/           poll scheduler and lookup broker (section 18.2)
+│   │   ├── vehicles.py        vehicle resolve and vehicle state (section 27)
+│   │   ├── index/             in-memory release index built from active.* (section 18.3)
+│   │   ├── infer/             candidates, scorers, decide, dates, binding, runs; keyless/ apart
+│   │   ├── timeline/          intervals, propagate, progress, lifecycle, arbitrate
+│   │   ├── core.py            step(state, observation, ctx) → (state, effects)
+│   │   ├── emit/              gtfsrt, state_table, vehicles snapshot, history writer
+│   │   ├── worker.py          asyncio shell around core.py
+│   │   ├── record.py, archive.py, replay.py, evaluate.py
+│   │   └── sql/               set-wise jobs: vehicle_day, circulation_edge, punctuality
+│   ├── api/                   FastAPI app, /api/v1 routers, debug
 │   └── data/                  versioned rules, policies and connector manifests
+├── web/                       later: Vite + React + MapLibre frontend
 ├── config/                    obehy.example.toml, local config (not committed)
-├── docs/sources/              one dossier per realtime source
-├── tests/                     unit/, fixtures/, replay/
-├── infra/                     compose.yaml, systemd units
+├── docs/sources/              one dossier per realtime source, with its quirk ledger
+├── tests/                     unit/, db/, replay/
+├── compose.yaml               PostGIS for development and DB tests
 └── converters/
     ├── jrutil/                pinned submodule
     └── jrunify-ext-geodata/   pinned submodule (geodata and identity registry)
 ```
+
+Dependencies point inward: `core.py`, `infer/`, `timeline/` and `model.py` import no database,
+network or filesystem code; `sources/` imports no `infer/` or `timeline/`. An import-linter
+contract enforces this in CI. Live operation and replay run the same core; there is no
+replay-only twin of any core rule.
 
 JrUtil and JrUnify-Ext-GeoData are developed in their standalone checkouts and pinned here. The
 MOTIS route-shapes companion will live in `converters/motis-route-shapes/`, pinned to MOTIS
@@ -375,6 +393,16 @@ TripInstance = (feed, trip_id, service_date)        road
 RunInstance  = (train_number, operating_date)       rail; projects onto its trip parts
 ```
 
+The release-independent identity of an operating instance is the **journey**
+`(feed, key namespace, key, service date)` (section 29). For rail the key is the **train
+number**. A train that changes number en route (Os 8503 arriving at Nymburk as S31 and
+continuing as S2) is two journeys joined by a `journey_link` of kind `continues_as`; trains
+that split or join are linked with `splits_from` and `joins`. The CZPTT run (`run_key`) and the
+TR are attributes of the journey. Physical continuity across links comes from vehicle
+assignments and composition segments (sections 27–28), never from merging journeys. Several
+PAs under one train number on one date are a keyed candidate set like any other: unresolvable
+ones are quarantined.
+
 ---
 
 # 10. Trip calls
@@ -414,8 +442,8 @@ as checksum-pinned local snapshots; live URLs and credentials never enter its in
 The production package contains standard `gtfs.zip`, the typed Parquet serving relations with
 fixed schemas, unique keys and resolving foreign keys, a manifest with sizes, SHA-256 hashes,
 namespaces, source snapshots, feed version and identity contract, and bounded diagnostics. Bundle
-v3 carries serving schema 4 (30 relations). Serving schema 5.0 (draft, 19 relations) is the
-target: one call sequence per trip including rail pass-throughs, `source_key`/`call_key` lookups
+v3 carries serving schema 5.0 (19 relations): one call sequence per trip including rail
+pass-throughs, `source_key`/`call_key` lookups
 with documented identifier encodings, closed enumerations, feed-prefixed IDs, and the typed
 semantics in `service_note`, `assignment`, `connection_claim` and `travel_restriction`. `gtfs.zip`
 is a pure projection of the relations. `JDF_SEMANTICS.md` is the normative preservation addendum:
@@ -648,8 +676,12 @@ static claim arbitration.
 ```text
 control   release, package, load, publication (+ history), source health, configuration digests
 static    the serving relations per package load, plus derived helpers
-rt        realtime observations, events, conflicts, alerts, assignments, current-state projection
-history   later: archived events, vehicle day runs, circulation model
+ref       curated reference datasets (vehicles, models, bindings, rosters, media) per version;
+          a mirror of git-reviewed files, never a source of truth
+rt        realtime observations, events, conflicts, alerts, assignments, compositions,
+          lookups, current-state projection
+history   journeys with schedule snapshots, actual events, vehicle days, circulation model
+          (section 29); never references static.*
 ```
 
 All public IDs are unrestricted text. Migrations are raw SQL, versioned in
@@ -768,6 +800,15 @@ Every layer after the connector is a pure function of its inputs, the active rel
 injected clock. Connectors are the only part that performs I/O. That is what makes deterministic
 replay possible.
 
+The core is one function, `step(state, observation, ctx) → (state, effects)`, where `ctx` is the
+release index, the policy and the clock. The worker and `obehy rt replay` both drive it.
+
+**SQL versus Python.** Work over many rows at once is SQL in PostgreSQL: building the release
+index, departures and the API, history aggregation, punctuality, circulation learning and
+`rt evaluate`. Python holds only the per-vehicle hot path (binding, consistency checks, progress
+and interval updates). A database round trip per observation at 1–2k observations per second
+would be slower and much harder to test and replay.
+
 ## 18.2 Connectors
 
 **One connector per upstream system.** The boundary is a shared base URL, authentication, rate
@@ -775,13 +816,48 @@ limits, payload family and ID semantics. Inside it, **channels** are individual 
 polls with their own intervals (for example SŽ train positions versus SŽ station departure
 boards). Capabilities are a declared feature set of the connector, not separate connectors.
 
-Each connector has a manifest (code plus TOML):
+Each connector is code plus a TOML manifest (`realtime/sources/<source>.py`, `<source>.toml`).
+**The connector declares how it fetches; the generic connector runtime (`realtime/runtime/`)
+executes it.** No connector implements scheduling, rate limits, budgets or caching. Two kinds of
+operation exist:
 
-- **channels:** endpoint, poll interval, timeout, payload type;
-- **capabilities per channel:** `vehicle_position`, `trip_progress` (last/current/next stop),
-  `stop_event` (actual arrival/departure/passage), `delay`, `prediction` (per-call ETA/ETD),
-  `platform`, `vehicle_assignment`, `vehicle_attributes`, `occupancy`, `trip_status`
-  (cancelled/skipped/added/detour), `alert`, `composition`;
+- **channels** are polled: endpoint, poll strategy (interval, service hours, adaptive), backoff,
+  timeout, payload type and the feed each observation is routed to. A channel is
+  `fetch() → bytes → decode(bytes) → Observations`. Slow channels are ordinary channels: a
+  55p.cz-style vehicle-assignment batch every 30–60 minutes is one.
+- **lookups** are lazy details for APIs that must not be polled (compositions, vehicle or trip
+  detail). Each declares its kind, TTL, token-bucket rate, daily budget and prefetch rule, and is
+  three steps:
+
+  ```text
+  plan(subject, view) → UpstreamRequest | not_available     pure
+  fetch(request) → bytes                                     I/O, run by the broker under budget
+  decode(bytes, subject) → Observations                      pure; declares what the answer covers
+  ```
+
+  The subject is what the caller asks about (a journey, optionally from a call onward, or a
+  vehicle). The view is read-only context the worker holds: the journey's schedule snapshot,
+  live state (progress, next call, bound vehicle) and identifier crosswalks (`source_key`/
+  `call_key` namespaces such as SR70, `ref` mappings to the upstream's own IDs). That is how a
+  lookup asks for "the composition from the SR70 of the next passenger call". The cache key is
+  the connector's `request.cache_key`, so different questions that need the same upstream call
+  share one fetch.
+
+The **lookup broker** owns `rt.detail_cache` and `rt.lookup_request`: it coalesces identical
+requests, enforces rates and budgets and runs prefetch rules through the same `plan`. **The API
+never calls upstream**: on a missing or stale detail it inserts a lookup request and answers
+`pending` with `retry_after`. Every lookup response is archived like a poll.
+
+The manifest also declares:
+
+- **capabilities per channel or lookup:** `vehicle_position`, `trip_progress`
+  (last/current/next stop), `stop_event` (actual arrival/departure/passage), `delay`,
+  `prediction` (per-call ETA/ETD), `platform`, `vehicle_assignment`, `vehicle_attributes`,
+  `vehicle_media`, `occupancy`, `trip_status` (cancelled/skipped/added/detour), `alert`,
+  `composition`. Each fact goes to the component that consumes it (`ARCHITECTURE.md`,
+  capability table); a missing capability means that component never hears from the source. A
+  source giving only line, trip and delay minutes is `TripKey` plus a `Delay` of unknown
+  reference: one wide constraint and a TripUpdate only, with no special case;
 - **fact semantics:** which facts it supplies (section 19) and in which namespaces, whether it
   supplies an operating date, timezone;
 - **time and delay semantics** (section 20.2): granularity, rounding, signedness, reference
@@ -808,6 +884,9 @@ Observation
     raw_ref              pointer into the raw archive
 ```
 
+`rt.observation` stores `raw_ref`, `decoder_version`, `fact_schema_version` and the decoded facts
+as JSONB, so any observation inside the raw window can be decoded again.
+
 Every source gets a dossier in `docs/sources/<source>.md` before its connector is written:
 endpoints, terms and licence, identifier namespaces, delay rounding, sign and reference event,
 timestamp semantics, update rates and captured edge cases (midnight, regressions, platform
@@ -817,12 +896,24 @@ changes). Its manifest semantics must be backed by captured examples.
 
 - One asyncio process. Connector pollers push observations onto a queue; a single core loop
   applies them in `(received_at, source order)`, so state changes are deterministic.
+- **Core state is partitioned by feed.** No in-memory state crosses `jdf` and `czptt`; each
+  observation is routed to exactly one feed by its channel (DÚK buses go to `jdf`, DÚK trains
+  to `czptt`). Vehicle state is per feed as well; a vehicle seen in both feeds is joined only in
+  SQL. Sharding the core by feed later needs no redesign.
 - An emit tick (default 10 s) writes GTFS-RT `.pb` files per feed by atomic rename, upserts
   changed rows of the UNLOGGED `rt.trip_state_current` (joined by the API with static
   departures), and writes a state checkpoint.
-- The inference indexes for the active release are double-buffered and swapped between cycles
-  when `NOTIFY` announces a new publication. States are re-keyed by `(feed, trip_id, date)` where
-  unchanged; the rest are rebuilt from fresh observations. Releases activate at night.
+- The inference index is built in memory (plain dictionaries) from SQL queries over the
+  `active.*` views, so the realtime core and the API see exactly the same static data and the
+  same derived helpers (`service_date`). It is double-buffered and swapped between cycles when
+  `NOTIFY` announces a new publication. Instances are re-keyed through their timetable-stable
+  key and service date (section 9.3), never through `trip_id`. A file cache of the built index
+  keyed by `release_id` may be added if restarts are slow; it is a cache, never a source of
+  truth.
+- **Every realtime row and output carries `release_id`.** The API joins only realtime state
+  whose `release_id` matches the active publication, so a release swap never mixes releases.
+- Releases normally activate at night. A mid-day activation (a hotfix rerun) is allowed: every
+  journey is re-snapshotted against the new release (section 29).
 - Restart loads the checkpoint and today's `rt.stop_event`, then resumes polling.
 - Scale target: about 20k vehicles updating every 10–30 s, roughly 1–2k observations per second,
   handled by one Python process with in-memory indexes. Shard per feed only if measurements
@@ -840,7 +931,15 @@ changes). Its manifest semantics must be backed by captured examples.
 - `obehy rt record` archives sources without processing them, so replay corpora can be collected
   before a connector exists.
 - `obehy rt replay --release R --from --to [--sources]` runs archived payloads through the same
-  core with a simulated clock. Outputs are deterministic and golden-testable.
+  core with a simulated clock. Outputs are deterministic and golden-testable. When R is not one
+  of the retained database loads, replay loads it into a scratch database with the release
+  loader first. Lookups are replayed from the *recorded* request/response pairs at their
+  received time; replay never re-runs `plan`, so changed code cannot ask for data that was
+  never fetched.
+- Raw retention is a rolling window (default 3 months, per-source where a licence requires
+  less). **Pinned corpora** — the dossier captures, regression days, DST and holiday days — are
+  copied to a pinned archive kept indefinitely; they are the replay and golden test set. The
+  first one to pin is 2026-10-25 (DST fall-back).
 - `obehy rt evaluate` compares predictions against later actual events: MAE and p90 by lead time,
   source, method and mode. **Source priorities, inference thresholds and the choice between
   source delay and own GPS delay are set from these numbers.**
@@ -860,6 +959,13 @@ changes). Its manifest semantics must be backed by captured examples.
 These resolve through the `TripKey` index built from `source_key`. Only the operating date
 still has to be inferred (section 19.3).
 
+**A keyed source is taken literally.** If the reported key's trip does not run in an admissible
+window that day, the observation is `unmatched` (`not_active` or `wrong_time`) and the vehicle is
+shown as unmatched. The core never reinterprets a key ("it probably meant trip 18"): DPmÚL's
+weekend trip numbers reported on a weekday are different trips, and a stale key from yesterday
+does not extend yesterday's trip. Source-declared semantics are not reinterpretation and do
+apply: DÚK State 2/3 means the trip has not started, State 255 means off.
+
 **The long tail is handled, not special-cased.** Some sources are much poorer:
 
 - Arriva Express exposes line, destination, licence plate, last-position time, at-stop flag,
@@ -869,6 +975,12 @@ still has to be inferred (section 19.3).
 All of them go through one engine that takes whatever facts an observation carries and infers
 the trip instance. A `TripKey` is just a very strong fact, so sane sources pay almost nothing for
 the generality. Adding a source means emitting facts, not writing a matcher.
+
+Keyless inference is new territory and is kept apart: its scorers live in `infer/keyless/`
+with their own policy, accept only hard-filtered candidates with a unique time fit, and
+otherwise quarantine as `ambiguous`. It ships last (milestone R4) and emits nothing public until
+`rt evaluate` has measured it on replay. The keyed path is built and proven end to end first,
+with only the `TripKey`, operating-date and time-window scorers.
 
 Facts are typed and versioned. A new kind is added by registering a fact type and its scorer.
 
@@ -925,19 +1037,51 @@ Praha, Holešovice.
 - From then on the source's coarse "on time" is weak evidence; delay comes from GPS progress
   (section 21).
 
-## 19.3 Operating date
+## 19.3 Operating date and time
 
-Practically no provider sends the operating date, so date inference is core:
+Midnight, `24:xx+` times and DST are where Czech realtime projects break, so time handling is a
+set of fixed rules with one implementation.
+
+**One time module.** `realtime/times.py` is the only code that converts times. It has two types:
+
+```text
+Instant       timezone-aware UTC instant
+ServiceTime   (service_date, seconds after noon − 12 h local time of that date)
+```
+
+`ServiceTime` is exactly the contract's time encoding, so it is correct on DST days without
+special cases (on those days "noon − 12 h" is not midnight). Naive datetimes are banned
+(ruff `DTZ`).
+
+**Operating date.** Practically no provider sends the operating date, so date inference is core:
 
 1. Candidate service dates are local today − 1, today and today + 1. Yesterday covers trips past
    midnight and `24:xx+` schedule times; tomorrow covers a vehicle already standing at the origin
    at 23:55 for a 00:05 trip.
 2. Keep dates where the service is active (`service_date`) and the observation time falls in
-   `[S_start(d) − pre(mode), S_end(d) + max_delay(mode)]`. Scheduled instants are computed from
-   noon − 12 h in Europe/Prague, which handles DST days.
+   `[S_start(d) − pre(mode), S_end(d) + max_delay(mode)]`.
 3. If several dates survive, the time scorers decide; otherwise `ambiguous`.
-4. Once bound, an instance's date sticks. Continuity checks never re-guess the date, and the
-   midnight rollover never moves a running trip to the next day's service.
+4. **The date is chosen once per binding and never re-derived from the wall clock.** Continuity
+   checks never re-guess it, and the midnight rollover never moves a running trip to the next
+   day's service. A key still reported from yesterday's trip fails rule 2 for yesterday and is
+   `not_in_service`; it is today's trip only if that trip runs in an admissible window today.
+
+**Source local times.** A source time without an offset is resolved against `received_at`: the
+unique instant within ±12 h of reception that reads as that local time and is closest to
+`received_at`. This handles the repeated hour at the autumn change and the missing hour in
+spring. Mislabelled source timezones (Teplice `GPSPositionDT` is UTC labelled `+02:00`; Arriva
+`updated` is local time labelled UTC) are corrected in the connector and recorded in the
+dossier's quirk ledger.
+
+**Service date everywhere.** Instances, history partitions, `vehicle_day` and departure queries
+are keyed by service date, never by the UTC or local calendar date: a 00:30 night trip belongs to
+yesterday's service date. A vehicle's working day can cross midnight; `vehicle_day` is a chain of
+consecutive journeys split at gaps longer than a policy limit (default 3 h), dated by its first
+journey's service date.
+
+**Mandatory scenario table:** midnight crossings, `24:xx+` times, both DST changes, waiting at
+23:55 for a 00:05 trip, rollover of a running trip, yesterday's key reported in the morning, and
+each mislabelled source timezone.
 
 ## 19.4 Rail runs
 
@@ -963,8 +1107,11 @@ inside a source's area is distinguishable from leaving it.
 - Once bound, further observations of the vehicle get a **cheap consistency check** (position
   near the path at plausible progress, consistent next stop, not past the trip end plus grace)
   instead of full inference.
-- Full re-inference runs on contradiction (section 20.4), at trip end, or when line or
-  destination changes. At trip end the circulation prior or `block_key` proposes the next trip.
+- For a keyed source the binding is the key plus its service date: a new key is a new binding
+  (or an unmatched observation), never a heuristic rebind. Keyless bindings are re-inferred on
+  contradiction (section 20.4), at trip end, or when line or destination changes.
+- At trip end the circulation model or `block_key` proposes the next trip as a forecast only
+  (section 22); the next trip binds through its own key.
 
 ## 19.6 Untimed and stale data
 
@@ -1126,6 +1273,71 @@ policy may override per source and mode:
 A lower-ranked source may fill calls a better one does not cover. A final monotone repair keeps
 emitted times ordered, leaving the highest-confidence values fixed.
 
+### Several sources on one instance
+
+No source "owns" an instance. Each source contributes constraints and prediction candidates per
+capability, and each capability is arbitrated separately. The typical case is a train in the
+DÚK area, seen by SŽ nationwide and by DÚK GPS regionally:
+
+| Capability | Preferred | Why |
+|---|---|---|
+| position | DÚK GPS when fresh, else SŽ | denser and more precise; an SŽ entry changes in only ~16% of polls |
+| progress, current delay | both, intersected: SŽ actuals at points (minute precision) ∩ GPS progress (sub-minute) | both are true; GPS narrows inside SŽ's minute |
+| actual events | SŽ point events, then GPS-derived crossings | infrastructure truth at points |
+| forward prediction | anchor from the best current estimate, shape from the best predictor | below |
+| coverage | DÚK inside Ústecký kraj only, SŽ nationwide | DÚK silence outside its scope is not staleness |
+
+**Anchor plus predicted change.** SŽ knows things the core cannot see, such as a train waiting
+for an oncoming train on single track, while the core's current delay from GPS is usually more
+precise than SŽ's. The prediction applies SŽ's expected change in delay to the better anchor:
+
+```text
+pred(next) = S(next) + own_delay_now + (sz_predicted_delay(next) − sz_delay_now)
+```
+
+Calls beyond `next` propagate from `pred(next)` with slack recovery (section 20.5). Whether this
+beats SŽ's own prediction or plain propagation is decided per mode and source by `rt evaluate`,
+and policy is set from the result. A handover between sources never switches state: the same
+interval mechanism takes the new evidence.
+
+## 20.7 Trip lifecycle
+
+Each call has separate `A_arr` and `A_dep` intervals: arrival and departure are different events.
+The first call has only a departure, the last only an arrival, and a passage has `arr = dep`.
+
+```text
+forecast → pre_trip → running → finished          flags: off_route, stale
+```
+
+- **Forecast:** proposed by a circulation edge or `block_key` (section 22), before any
+  observation binds the trip.
+- **Pre-trip:** DÚK State 2/3, or a vehicle at the origin before `S_dep(first)`. Forecast
+  assignment only: no progress and no events. A vehicle driving empty to its start may pass the
+  trip's later stops; nothing fires.
+- **Departure from the origin:** progress leaves the first call's offset window, or the source
+  reports it. A vehicle still standing at the origin after `S_dep` has an open departure
+  (`A_dep ≥ t`): its departure delay grows; it is not a late arrival.
+- **Running:** entering a call's offset window gives `A_arr`; leaving it, or the next fix past
+  it, gives `A_dep`. DÚK `ArrivalDT` is arrival-only evidence. SŽ `rr = 1` with `cr` is an
+  arrival; moving with `cr` is a departure or passage.
+- **Finished:** `A_arr(last)` or progress at the last call. Later observations with the same key
+  are `layover`, never progress, and the vehicle is free for its next binding.
+- Departure boards show departure delay, arrival boards arrival delay; they are never merged into
+  one number.
+
+**Off-route with grace.** Until real shapes exist the path is the stop-to-stop polyline, so
+deviations are expected and some are correct.
+
+- Tolerance per segment is `max(base(mode), k × segment_length)`: a straight line between
+  distant stops strays further from the road than a short urban hop. Policy defaults: base
+  150 m urban, 400 m regional, `k ≈ 0.15`.
+- Outside tolerance for less than `T` (default 3 min): hold. No progress, binding kept.
+- Outside tolerance for longer: set `off_route` (detour or diversion). A keyed binding is never
+  dropped for geometry. GPS progress pauses and the source's delay is the fallback.
+- On rejoining, windowed forward projection resumes (section 20.4). Calls are skipped only with
+  evidence — a source event or a sustained run of fixes beyond them — and skipped calls are
+  `unvisited`, not departed.
+
 ---
 
 # 21. Own delay from GPS and travel-time providers
@@ -1189,36 +1401,80 @@ availability of actual events.
 
 An **oběh** is the chain of trips one vehicle works in a day. Static data rarely contains it: JDF
 has no blocks, and only CZPTT and some GTFS sources supply `block_key`. Oběhy learns circulations
-from history wherever a source provides a stable vehicle identifier: DÚK `vhc_id`, Arriva
-licence plates, PID vehicle IDs, later cross-source vehicles (section 27) and train sets
-(section 28).
+from history wherever a source provides a stable vehicle identifier: DÚK `ID`, Arriva licence
+plates, PID vehicle IDs, later cross-source vehicles (section 27) and train sets (section 28).
 
-- **Observed runs.** A nightly `obehy rt circulations build` reads the day's vehicle assignments.
-  It uses only confirmed, non-suspect assignments — a `TripKey` match, or an inferred match later
-  confirmed by continuity — so weak inferences cannot feed their own prior. Per vehicle it
-  writes an ordered `vehicle_day_run`: instances with actual start and end, layovers and gaps.
-- **Timetable-stable keys.** Learning uses keys that survive timetable versions (CIS line + CIS
-  trip, train number, source binding key), not trip IDs, together with a day class (weekday,
-  Saturday, Sunday/holiday, school holiday) from the service calendar.
-- **Model.** A successor graph rather than whole-sequence clustering:
-  `circulation_edge(prev_key, next_key, day_class, support, trials, last_seen, layover stats)`,
-  weighted toward recent days so it adapts to timetable and roster changes. Full patterns are
-  derived from high-support chains for display. Edges whose trips no longer exist in the active
-  release are retired.
-- **Uses:**
-  1. **Matching prior.** When a bound vehicle finishes trip A, a strong learned successor B
-     enters inference as a `CirculationPrior` fact and is published as a forecast assignment
-     (`predicted:circulation`) before B starts. It never overrides a `TripKey` or a
-     contradiction; the explanation shows the edge's support.
-  2. **Knock-on delay.** `pred_start(B) = max(S_dep(B, first), A_arr(A, last) + min_layover)`,
-     with `min_layover` learned per edge. This is a cross-trip anchor for section 20.5.
-  3. **Vehicle forecasts.** The API shows the expected vehicle and its features (low floor, air
-     conditioning) for upcoming departures, flagged as a forecast with its confidence.
-  4. **Static feedback (optional, later).** High-confidence patterns may be exported as a
-     reviewed candidate block file for JrUtil. They never become identity.
-- **Guardrails.** Circulation evidence is a prior and never produces actual stop events.
-  Thresholds are versioned policy. `rt evaluate` measures the forecast hit rate and delay error
-  with and without circulation anchors before the prior is enabled for a source.
+Circulation knowledge comes from four sources:
+
+| Source | Keyed by | Kind |
+|---|---|---|
+| static `block_key` (CZPTT, some GTFS) | release trips | static fact |
+| imported rosters (operator rotation plans, `ref.roster`) | train number + validity + day mask; each step may name a unit, a vehicle type or nothing | plan |
+| learned circulation edges (below) | literal timetable-stable keys + day class | prior |
+| observed `vehicle_day` (below) | journeys | fact, after the day |
+
+Forecast precedence for "what runs next and with which vehicle" is static block > roster valid
+that day > learned edge; a learned edge is shown only where the roster is silent, and
+`rt evaluate` tracks how often rosters are wrong. Observed actuals always win for history.
+Rosters resolve to the active release through `source_key(czptt:train_number)` on activation.
+
+The learned and observed layers never depend on release-scoped trip IDs.
+
+**Observed layer (facts).** A nightly SQL job (`obehy rt circulations build`) writes
+`history.vehicle_day` from the day's confirmed vehicle assignments: keyed bindings of a source
+`vehicle_key`, and `vehicle_assignment` facts from sources that name which vehicle works which
+train numbers (section 28). For each vehicle and service
+date (section 19.3) it records the ordered journeys (section 29), with actual start and end times
+and locations, layovers and gaps. Weak inferences never enter it, so they cannot feed their own
+prior.
+
+**Learned layer (successor edges).** Each edge reads "after journey key A, this vehicle usually
+does key B next":
+
+```text
+circulation_edge
+    feed, prev_key, next_key, day_class       keys are literal timetable-stable keys
+                                              (cis:line_trip, czptt:train_number)
+    support          decayed count of days a vehicle did A and then B
+    trials           decayed count of days A was observed with any successor
+    last_seen, layover_p10, layover_p50, same_stop_share
+    prev_fingerprint, next_fingerprint        at learning time
+    status           active | dormant
+```
+
+- **Learning** is one `INSERT … SELECT` over consecutive `vehicle_day` pairs where B starts
+  within 90 minutes of A's end. Counts decay with a half-life of about 14 days, so the model
+  follows roster and timetable changes. `p = support / trials`.
+- **Day class** (working day, Saturday, Sunday or holiday, school holiday) comes from the
+  service calendar.
+- **Fingerprints guard validity; they never match.** A fingerprint is `(line, origin location,
+  destination location, S_dep(origin))`.
+  - If a release keeps key A but A's fingerprint changes (the number now names a different
+    journey), the edge becomes `dormant`. It is re-learned in a few days; nothing is carried
+    over fuzzily.
+  - Edges whose keys vanish from the active release also go dormant. They revive when the key
+    returns (seasonal and holiday versions).
+  - Each activation runs this check as one SQL statement.
+- CZPTT and GTFS `block_key` are used directly where present; they are static, not learned.
+
+Uses:
+
+1. **Forecast assignment.** When a bound vehicle finishes A and an edge has `p ≥ 0.8` and
+   `support ≥ 5` (policy), publish "expected next: B, vehicle V" as a forecast with `p` before B
+   starts. It is never a binding: B binds only through its own key.
+2. **Knock-on delay.** `pred_start(B) = max(S_dep(B, first), pred_arr(A, last) + layover_p10)`,
+   a cross-trip anchor for section 20.5.
+3. **Vehicle forecasts** in the API: the expected vehicle and its features (low floor, air
+   conditioning from the DÚK register), flagged as a forecast with its confidence.
+4. **Static feedback (optional, later).** High-confidence patterns may be exported as a reviewed
+   candidate block file for JrUtil. They never become identity.
+
+DÚK's first capture already gives a usable signal: 90% of consecutive links start at the stop
+where the previous trip ended, with a median layover of 15 minutes.
+
+**Guardrails.** Circulation evidence is a prior and never produces actual stop events.
+Thresholds are versioned policy. Before the prior is enabled for a source, `rt evaluate` measures
+the forecast hit rate and delay error with and without circulation anchors.
 
 ---
 
@@ -1236,8 +1492,8 @@ scoped, sequence-scoped and freshness-limited.
 | Vehicle identity | Operator or IDS vehicle registry |
 | Current position | Freshest spatially plausible AVL/GPS observation |
 | Road delay | Own GPS progress where GPS is good; else the best source delay |
-| Rail delay | Infrastructure events and operator delays, then GPS |
-| Per-stop ETA | Validated source prediction, own propagation, or an enabled travel-time provider |
+| Rail delay | Infrastructure events intersected with GPS progress (section 20.6), then operator delays |
+| Per-stop ETA | Own anchor plus a validated source's predicted change (section 20.6), own propagation, or an enabled travel-time provider |
 | Coarse scalar delay | Fallback |
 | Alerts | Preserve and deduplicate; no universal winner |
 | Composition | Most authoritative permitted source |
@@ -1342,37 +1598,37 @@ are expectations to be confirmed by the dossier.
 
 ## 26.1 DÚK
 
-Dossier: `docs/sources/duk.md` (draft from a sample payload, checked against a release). The
-vehicle list gives per vehicle (3–4 digit DÚK `ID`s and `40`-prefixed Teplice city buses; `20xxx`
-train entries are dropped):
+Dossier: `docs/sources/duk.md` (25-hour capture replayed against a v5 release; quirks DUK-Q1–Q12).
+The vehicle list covers DÚK-range buses (3–4 digit `ID`s), DPmÚL (`30xxxx`) and Teplice
+(`40xxxx`) city buses, and trains in the DÚK area (`20xxx`, keyed by train number):
 
-- the CIS line (as an integer without leading zeros, zero-padded by the connector) and the CIS
-  trip number → `TripKey(cis_line_id, cis_trip_id)`. In the sample, 148 of 149 vehicles resolve
-  to exactly one `jdf` line and trip; the miss is a line absent from the CIS export and falls back
-  to `LineRef` inference;
-- the public line, a predicted delay in whole minutes, the actual arrival at the last stop and
-  its timetabled departure (which identifies the call without stop mapping), and a vehicle
-  state: off, running, at a stop, waiting before the trip, or running to the trip's first stop.
-  The two pre-trip states give forecast assignments only and never advance the trip;
+- the CIS line (zero-padded by the connector) and the CIS trip number →
+  `TripKey(cis:line_trip)`, taken literally (section 19.1). In the capture 99.1% of DÚK-range
+  and 96.7% of Teplice running episodes resolve to exactly one trip. DPmÚL resolves 79.7%; most of
+  the rest are weekend trip numbers reported on weekdays, which stay unmatched;
+- the public line, a signed delay in whole minutes, the actual arrival at the last stop and its
+  timetabled departure (which identifies the call without stop mapping), and a vehicle state:
+  off, running, at a stop, waiting before the trip, or running to the trip's first stop. The two
+  pre-trip states give forecast assignments only and never advance the trip (section 20.7);
 - GPS position, bearing and fix time, last activity time, low-floor flag.
 
-This is a timed source with explicit arrival evidence. Its delay is rounded, never negative and
-mixes arrival- and departure-based values, so it jumps by the dwell slack: it is weak evidence
-spanning both events, and own GPS-derived delay is DÚK's delay source. DÚK stop node/post IDs
-are not used: trips match by key and progress comes from GPS. Vehicle `ID`s are the fleet
-numbers printed on the buses, stable across trips and days, so DÚK history seeds the
-circulation model. DÚK trains are not used; rail realtime comes from SŽ.
+This is a timed source with explicit arrival evidence. Its delay mixes arrival- and
+departure-based values and jumps by the dwell slack: it is weak evidence spanning both events,
+and own GPS-derived delay is DÚK's delay source. DÚK stop node/post IDs are not used: trips match
+by key and progress comes from GPS. Bus `ID`s are the fleet numbers printed on the buses, stable
+across trips and days, so DÚK history seeds the circulation model. DÚK train entries (95.3% of
+running episodes resolve to one CZPTT run) add a dense GPS position and delay to the run that SŽ
+also describes (section 20.6).
 
 ## 26.2 SŽ
 
-Dossier: `docs/sources/sz.md` (one sample payload checked against a release, plus the upstream
-JrUtil scraper `SzMapa.fs`). The SŽ train map (`mapy.spravazeleznic.cz`, layer `OsVlaky`)
-returns all trains as GeoJSON with a response timestamp. Per train:
+Dossier: `docs/sources/sz.md` (25-hour capture replayed against a v5 release; quirks
+SZ-Q1–Q9). The SŽ train map (`mapy.spravazeleznic.cz`, layer `OsVlaky`) returns all trains as
+GeoJSON with a response timestamp. Per train:
 
 - an ID `TR/<company>/<core>/<variant>/<year>/<date>`: the CZPTT TR identity and the operating
-  date → `TripKey(czptt_tr_id)` + `OperatingDate`. With binding and trip calendars applied,
-  468 of 469 sample trains resolve to exactly one CZPTT timetable; the remaining one is
-  quarantined unless position or next-stop facts separate its candidates;
+  date → `TripKey(czptt:tr)` + `OperatingDate`. 99.7% of train-days resolve to exactly one run;
+  a TR with two timetables active that day falls back to the train number;
 - position in S-JTSK/Křovák (EPSG:5514, transformed to WGS84) and bearing;
 - train category, number and name, origin and destination;
 - the last point by name, with timetabled and actual `HH:mm` times and a "standing there" flag →
@@ -1381,10 +1637,11 @@ returns all trains as GeoJSON with a response timestamp. Per train:
   the next passenger stop (5-digit SR70) with timetabled and predicted times;
 - operator, rail-replacement and diversion flags.
 
-Times carry no date and are recovered from the response timestamp. Last-point names map to SR70
-through the SR70 catalogue, then to the run's calls at or after current progress. SŽ anchors rail
-runs strongly but does not override a fresher, spatially more precise GPS position. Platforms
-come from station departure boards, a separate channel still to be investigated.
+Times carry no date and are recovered from the response timestamp (section 19.3). Last-point
+names map to SR70 through the SR70 catalogue, then to the run's calls at or after current
+progress. SŽ anchors rail runs strongly and supplies the forward prediction shape (section 20.6),
+but does not override a fresher, spatially more precise GPS position. Platforms come from station
+departure boards, a separate channel still to be investigated.
 
 ## 26.3 PID
 
@@ -1398,41 +1655,90 @@ occupancy and vehicle identity.
 ## 26.4 Arriva Express and long-tail sources
 
 Dossier: `docs/sources/arriva-express.md`. Arriva's fleet-wide location feed is filtered to
-Arriva Express only. Per vehicle it gives the CIS line, destination and last stop names, an
-at-stop flag, a signed delay in minutes, GPS with bearing, the licence plate and a report time
-(apparently local time mislabelled as UTC); no trip number, next stop or date. It is the
-reference long-tail source: inferred matching by line, destination, last stop, time and GPS
-(section 19.2; both express vehicles in the sample resolve to exactly one trip), continuity by
-plate, own GPS delay (section 21), and later a travel-time provider on long motorway segments. DPKV-style sources (line, trip, delay, untimed GPS) use the exact `TripKey` path with
-untimed-GPS handling (section 19.6). Each further source is a connector, a manifest, a dossier and
+Arriva Express only. Per vehicle it gives the CIS line, the destination and the **next** stop
+name (labelled `lastStopName`), an at-stop flag, a signed truncated delay in minutes, GPS with
+bearing, the licence plate and a report time (local time mislabelled as UTC); no trip number and
+no date (quirks ARRIVA-Q1–Q7). It is the reference keyless source: inferred matching by line,
+destination, next-stop changes, time and GPS (section 19.2; 61 of 61 scoreable episodes of the
+capture resolve to exactly one trip), continuity by plate, own GPS delay (section 21), and later a
+travel-time provider on long motorway segments. DPKV-style sources (line, trip, delay, untimed
+GPS) use the exact `TripKey` path with untimed-GPS handling (section 19.6). Each further source is a connector, a manifest, a dossier and
 fixtures.
 
 ---
 
 # 27. Vehicle registry
 
-A source vehicle ID binds to a vehicle:
+Vehicle data comes from upstream (DÚK `HasLowfloor`, an image URL) and from curated lists keyed
+by source vehicle ID (the DÚK register). Curated lists are **git-reviewed files loaded by
+`obehy ref import`** into versioned `ref.*` snapshots; `ref` is a mirror, never a source of
+truth. Public lists live in `jrunify-ext-geodata/vehicles/`; private ones (the DÚK register is
+not public) use the same format from a path in `obehy.local.toml` and are never committed.
+
+A vehicle is identified at one of three levels:
 
 ```text
-vehicle                    vehicle_id, operator_id, fleet_number, public_label
-vehicle_source_binding     source_id, source_vehicle_id, vehicle_id, valid_from, valid_to
-vehicle_attribute          vehicle_id, attribute, value, source_id, valid_from, valid_to
+exact vehicle   (source, source_vehicle_id) → vehicle_id through a curated binding
+vehicle type    vehicle_model_id (Iveco Crossway LE 12M, ČD 814, Bmz 245)
+category only   attributes without an entity ("low-floor bus")
 ```
 
-A fleet dataset can supply model, manufacturing year, low-floor status, air conditioning, USB,
-Wi-Fi and other features. Keep provenance per attribute because sources disagree. The vehicle API
-indicates the source of current position, current trip, public label, model and features.
+- `vehicle_id` is opaque, minted in the curated files and never recycled. Bindings carry
+  validity ranges because fleet numbers are reused and plates change. EVN/UIC numbers are the
+  natural binding for rail vehicles. An operator move changes a binding or attribute, not the
+  vehicle.
+- Bindings are only ever curated, never inferred, also across sources.
+- A source vehicle without a binding still gets history and state under
+  `{source}:{source_vehicle_id}` and re-attaches when a binding is curated.
+
+```text
+vehicle                     vehicle_id, operator_id, vehicle_model_id, fleet_number, public_label
+vehicle_source_binding      source_id, source_vehicle_id, vehicle_id, valid_from, valid_to
+vehicle_model               vehicle_model_id, manufacturer, model, mode
+vehicle_attribute           vehicle_id, attribute, value, dataset_version, valid_from, valid_to
+model_attribute             vehicle_model_id, attribute, value, dataset_version
+vehicle_attribute_observed  (rt) vehicle key, attribute, value, source_id, first_seen, last_seen
+vehicle_media               vehicle_id | vehicle_model_id, url, licence, attribution, source
+```
+
+- **Attributes** use a closed vocabulary (`data/vehicles/attributes.toml`: low floor, air
+  conditioning, USB, Wi-Fi, contactless payment, fuel, manufacturer, model, year, capacity, …).
+  Each source maps its raw fields onto it; unmapped fields are kept as `raw:<source>:<field>`.
+- Live upstream attributes are written only on change, with `last_seen`.
+- **The effective value is a SQL view**, per attribute: curated per vehicle > live upstream >
+  model default > unknown. Disagreements are flagged for review, never averaged. The API reads
+  only the view and shows the source of each value.
+- Media: whether an image is cached or linked is decided by its source licence; attribution is
+  always shown.
 
 ---
 
-# 28. Train compositions
+# 28. Compositions and vehicle assignments
 
-Compositions attach to `train number + operating date`:
+Two different facts, kept apart:
+
+- **`vehicle_assignment`**: which vehicle works a journey. It comes from keyed bindings of a
+  source `vehicle_key`, or from sources that publish assignments, such as a 55p.cz-style batch
+  every 30–60 minutes naming the vehicle of each train number. Assignments feed `vehicle_day`,
+  so trains get observed tours too (section 22).
+- **Composition**: the formation of a train, which may name exact vehicles, only vehicle
+  types, or neither.
 
 ```text
-train_composition           train_number, operating_date, observed_at, source_id
-train_composition_vehicle   sequence, vehicle_number, vehicle_type, passenger_label, features
+composition        journey, from (location_id, visit_n), to (location_id, visit_n) | open,
+                   observed_at, source_id, raw_ref
+composition_unit   composition, sequence, vehicle_id?, vehicle_model_id?, passenger_label,
+                   features
 ```
+
+- A composition is a **segment of a journey**: formations change en route. Composition APIs
+  usually answer "from station S onward", so an answer is open-ended from S until a later answer
+  from a later station closes it; adjacent identical answers merge.
+- A unit may name a vehicle, a type, both or neither; a type-only unit still gets features from
+  the model.
+- Composition sources are **lookups** (section 18.2): fetched on demand or by bounded
+  prefetch, never polled for every train. Their `plan` picks the station from the schedule and
+  live state, for example the next passenger call.
 
 Order: the ČD source first; 55p.cz only after explicit permission covering retrieval, storage,
 display, redistribution and caching duration. The project API is the rich source of truth;
@@ -1442,23 +1748,59 @@ GTFS-RT carriage details are populated only where suitable.
 
 # 29. History
 
-Keep distinct: scheduled event, source prediction, project prediction, source-reported actual
-event, GPS-inferred actual event.
+History must survive JrUtil reruns, timetable versions and release retention. The mirror keeps
+only the active release and two predecessors, so history **never references `static.*`**: it is
+self-describing.
+
+**Journey.** The history key of an operating instance is
+
+```text
+journey = (feed, key_namespace, key, service_date)
+          e.g. jdf | cis:line_trip | 582492:143 | 2026-10-08
+               czptt | czptt:train_number | 6608 | 2026-10-08
+```
+
+`trip_id` and `release_id` are attributes of a journey, never its key.
+
+**Schedule snapshot.** When a journey is first bound, its planned calls are copied:
+
+```text
+journey_schedule    journey, revision, release_id, trip_id, route and headsign text
+journey_call        journey, revision, ordinal, location_id, visit_n, passenger_service,
+                    scheduled_arrival, scheduled_departure, location name
+```
+
+Stop and rail-location IDs are registry-stable; names are copied for display. `visit_n` counts
+visits of a location within the journey, so A → B → A has two distinct calls at A.
+
+**Events attach to `(journey, location_id, visit_n)`.** They never attach to `trip_call.sequence`
+or an ordinal, because those can shift between versions. Keep these distinct: scheduled event,
+source prediction, project prediction, source-reported actual event, GPS-inferred actual event.
 
 ```text
 actual_stop_event
-    instance, call_sequence, event_type (arrival | departure | passage),
+    journey, location_id, visit_n, revision, event_type (arrival | departure | passage),
     event_time, interval, method (source | progress | interpolated_crossing),
-    confidence, source_ids
+    confidence, source_ids, derivation
 ```
+
+**Mid-day activation.** A new release re-snapshots every journey as a new revision; old
+revisions are kept. Events re-attach by `(location_id, visit_n)`. An event whose call no longer
+exists stays with the revision it was recorded under and is flagged `orphaned`. It is never
+deleted and never moved to another stop. The revision diff is logged.
+
+**Derivation.** Every history row carries `derivation = (core_version, policy_version,
+release_id)`. Inside the raw-archive window (section 18.4), history is a rebuildable cache:
+`obehy rt replay --write-history --from --to` regenerates days after a fix. Outside the window it
+is frozen and kept as recorded, which is why the snapshot must be complete.
 
 Retention on one machine:
 
-- partition high-volume tables by date;
+- partition high-volume tables by service date;
 - keep high-resolution observations for a limited period;
-- keep derived actual events, vehicle day runs and the circulation model long term;
+- keep journeys, actual events, vehicle days and the circulation model long term;
 - downsample or export old trajectories to Parquet;
-- keep raw payloads only for each source's debugging and licensing period.
+- keep raw payloads for the rolling window, and pinned corpora indefinitely.
 
 ---
 
@@ -1470,18 +1812,50 @@ PID, DÚK, SŽ or another provider.
 ```text
 /gtfs/jdf.zip, /gtfs/czptt.zip, /gtfs/manifest.json, /gtfs/versions/<run-id>/…
 /gtfs-rt/{jdf,czptt}/{vehicle-positions,trip-updates,alerts}.pb
+/tiles/<run-id>/{stops,routes}.pmtiles
 
-/api/stops?bbox=…
-/api/stop-places/<id>/departures         both feeds; scheduled + realtime + forecasts
-/api/trips/<id>?date=…                   calls, typed features, notes, realtime state
-/api/vehicles?bbox=…                     includes flagged unmatched vehicles
-/api/vehicles/<id>
-/api/alerts
+/api/v1/stops?bbox=…
+/api/v1/stop-places/<id>/departures         both feeds; scheduled + realtime + forecasts
+/api/v1/journeys/<feed>/<namespace>/<key>/<service_date>
+                                            calls, typed features, notes, realtime state
+/api/v1/journeys/…/composition?from=<location>   pending | fresh | stale (section 28)
+/api/v1/vehicles?bbox=…[&include=unmatched,not_in_service]
+/api/v1/vehicles/<vehicle_id>               or <source>:<source_vehicle_id> when unbound
+/api/v1/alerts
 
-/api/debug/realtime/instances/<instance> evidence, intervals, inference explanation
-/api/debug/realtime/sources              health per source and channel
-/api/debug/realtime/unmatched            unmatched and ambiguous observations with candidates
+/api/v1/debug/realtime/instances/<instance> evidence, intervals, inference explanation
+/api/v1/debug/realtime/sources              health per source and channel
+/api/v1/debug/realtime/unmatched            unmatched and ambiguous observations with candidates
 ```
+
+- **Public IDs are journey keys and vehicle IDs, never `trip_id`.** A `trip_id` changes with
+  every timetable version and JrUtil rerun; responses carry it, with the `release_id`, as an
+  attribute only. Bookmarks, links and caches stay valid across releases.
+- **The public realtime model** is, per call: `estimate`, `status` (`scheduled`, `predicted`,
+  `actual`, `no_realtime`, `cancelled`) and `source_class`. Intervals, confidence and
+  provenance stay in the debug API. Public fields are only ever added.
+- `obehy api` is FastAPI. Its OpenAPI schema generates the frontend's TypeScript types.
+- The frontend lives in `web/` (Vite, React, MapLibre GL JS) with its own toolchain.
+- Stops and routes are PMTiles, generated per release and served as static files. The base map
+  needs no tile server and puts no load on the database.
+- The emit tick writes a vehicles snapshot file next to the GTFS-RT files; the API filters it by
+  bounding box.
+- Departures join `active.*` with `rt.trip_state_current` on the active `release_id`, and drop
+  each trip's final passenger call.
+
+**Vehicles without an active trip.** Every vehicle has a `state`:
+
+| State | Meaning | Default in `/vehicles` |
+|---|---|---|
+| `running` | bound and running | shown |
+| `positioning` | pre-trip or empty run to the start; carries the forecast next trip | shown |
+| `layover` | finished a trip, waiting; carries the next trip from a circulation edge | shown |
+| `unmatched` | its key does not resolve today; carries the reported line | `include=unmatched` |
+| `not_in_service` | parked, yesterday's key, or DÚK State 255 | `include=not_in_service` |
+
+Positions older than the source's maximum age appear only in the debug API. All of these vehicles
+stay in the observation log. GTFS-RT VehiclePositions and TripUpdates contain matched vehicles
+only.
 
 Initial frontend: nationwide stops and routes, current vehicles, scheduled and realtime
 departures, vehicle details, alerts, stale-data state, and a source/confidence indicator in debug
@@ -1531,6 +1905,9 @@ fresh | stale | unmatched | ambiguous | suspect | suppressed_by_better_source
 - delay semantics → intervals;
 - interval propagation and the timeline engine;
 - progress gating: A → B → A both variants, out-and-back roads, naive source reports, loops;
+- lifecycle: pre-trip empty runs past later stops, open departure at the origin, layover after
+  the last call, off-route hold and `off_route` with rejoin;
+- every quirk-ledger entry of every dossier, as a test named after its ID;
 - rail source handover: a source entering mid-run, leaving at its coverage edge, and silence
   inside its coverage;
 - arbitration and monotone repair;
@@ -1548,7 +1925,7 @@ packages, failed-load cleanup.
 
 Recorded payloads replayed deterministically against a fixed release, for connector parsing,
 inference, arbitration, alert mapping, arrival inference and output stability. Replay output is
-golden-tested.
+golden-tested on the pinned corpora (section 18.4).
 
 ## Invariants
 
@@ -1560,6 +1937,9 @@ Every assigned platform ID exists in the active release.
 Every passenger stop_time references a passenger location.
 Operational points never leak into passenger stop_times or TripUpdates.
 Progress of an instance is monotonic in emitted output.
+Every realtime row and output names its release_id; outputs never mix releases.
+An instance's service date never changes after binding.
+History rows never reference static.*.
 ```
 
 Real-data checks run on bounded subsets; full national builds are not a test tool.
@@ -1571,7 +1951,10 @@ Real-data checks run on bounded subsets; full national builds are not a test too
 ## Done or obsolete
 
 - National JDF and CZPTT compilation, PID + IDS JMK overlays, typed serving package (bundle v3,
-  serving schema v4), `obehy build` with atomic release publication.
+  serving schema 5.0), `obehy build` with atomic release publication.
+- Release mirror without `fetch` (`obehy db migrate`, `obehy release load|activate|status`).
+- `obehy rt record` and `obehy rt replay` (archive → episodes → trips of a release), with the
+  DÚK, SŽ and Arriva Express dossiers.
 - The provisional `v0` identity phase and the identity-registry service are dropped; identity is
   section 6.
 
@@ -1645,21 +2028,27 @@ propagation without circulations.
 
 # 34. Next implementation tickets
 
-1. `obehy rt record` and source dossiers for DÚK, SŽ and Arriva Express; record several days.
-2. Serving schema 5 in JrUtil: writer, validation, GTFS projection; Oběhy accepts only v5.
-3. Database foundation: compose file, generated static DDL, `control` schema, migration runner.
-4. `obehy release fetch|load|activate --rollback` with derived helpers.
-5. Realtime skeleton: model, clock, archive, core loop, `rt` migrations, replay.
-6. Inference engine: facts, scorers, decision rule, explanations, date inference, vehicle
-   binding, rail runs.
-7. Timeline engine: intervals, delay semantics, propagation, progress integrity, conflicts,
-   predictions, arbitration, monotone repair.
-8. DÚK connector and per-feed GTFS-RT emitters with debug endpoints.
-9. SŽ connectors and rail fusion.
-10. Project API with realtime departures and vehicles.
-11. PID: Golemio APIs and GTFS-RT alerts.
-12. Arriva Express: inferred matching, own GPS delay, travel-time provider interface.
-13. Circulation learning v1.
+Done: recorder and dossiers, serving schema 5, database foundation, `release load|activate
+--rollback`, replay over Parquet. Next:
+
+1. `realtime/times.py` (section 19.3) with its scenario table; the replay resolver moves onto it,
+   which fixes its midnight-based counting on DST days.
+2. Release index from `active.*` in PostgreSQL; `rt replay --release` loads a non-retained
+   release into a scratch database. Import-linter layering contract in CI.
+3. Realtime skeleton: model, clock, `core.step`, worker shell, checkpoint file, `rt` and
+   `history` migrations, `release_id` on every row.
+4. Keyed inference: `TripKey`, operating-date and time-window scorers, decision rule,
+   explanations, rail runs.
+5. Timeline engine: intervals, delay semantics, propagation, lifecycle and off-route (section
+   20.7), progress integrity, conflicts, predictions, arbitration, monotone repair.
+6. DÚK connector and per-feed GTFS-RT emitters with debug endpoints; journey snapshots and
+   actual events in `history`.
+7. SŽ connectors and rail fusion with DÚK (section 20.6).
+8. `release fetch`; project API with realtime departures and vehicles.
+9. PID: Golemio APIs and GTFS-RT alerts.
+10. Arriva Express: keyless inference, own GPS delay, travel-time provider interface.
+11. Circulation learning v1 (`vehicle_day`, `circulation_edge`).
+12. Frontend in `web/` with per-release PMTiles.
 
 The first end-to-end success is:
 
@@ -1714,6 +2103,9 @@ discovery.
 # 36. Decisions intentionally deferred
 
 - WebSockets versus polling;
+- human input (sightings, corrections, a stop-coordinate or post-fixing portal): none for now;
+  the app is read-only, and any future portal would produce reviewed files like other curated
+  data;
 - scaling beyond one realtime process;
 - the permanent high-resolution position retention period;
 - exact source priorities and inference thresholds before replay benchmarking;

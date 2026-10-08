@@ -127,6 +127,20 @@ and operational points), `delay`, `prediction` (next stop), `trip_status` (repla
 diversion). Platforms are not in this endpoint; station departure boards are a separate channel,
 still to be investigated.
 
+## Quirks
+
+| ID | Quirk | Handling |
+|---|---|---|
+| SZ-Q1 | positions in S-JTSK / Křovák (EPSG:5514) | connector transforms to WGS84 |
+| SZ-Q2 | `cp`, `cr`, `nst`, `nsp` are bare `HH:mm`; `md` is local time without an offset | `md` resolved against `received_at` (`BASE_PLAN.md` 19.3, which covers the repeated autumn hour); a time > 12 h after `md` belongs to the previous day |
+| SZ-Q3 | `cr` is the arrival while `rr = 1` and the departure after the train leaves the same `cna` | arrival and departure kept apart (section 20.7) |
+| SZ-Q4 | `cna` is name-only (SR70 20-character names); `zst_sr70` has 6 digits with check digit, `nsn70` 5 without | map names through the SR70 catalogue to the run's calls at or after progress; normalize both codes |
+| SZ-Q5 | RegioJet R 1011xx: one TR with two timetables active the same day | fall back to `tn`; quarantine only if that is ambiguous too |
+| SZ-Q6 | an entry changes in only 16% of polls; unchanged entries carry no new information | not counted as fresh fixes; never makes a train look stationary |
+| SZ-Q7 | `nna` can be a track location, block post or junction | an operational point, not a stop |
+| SZ-Q8 | bearing `a` is `""` when standing; `pde` is the string `"N min"` or `""` | parsed in the connector |
+| SZ-Q9 | TRs absent from CZPTT, or present but not running that day | unmatched, shown as such |
+
 ## Open questions
 
 - Confirm `e` = ETCS supervision with SŽ.

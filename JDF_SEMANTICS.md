@@ -22,29 +22,25 @@ a subset into GTFS or the conversion bundle:
 | `@`, `{` on a trip | Projected to `wheelchair_accessible` | The distinction between fully and partly accessible vehicles is collapsed. Absence is currently emitted as not accessible rather than unknown. |
 | `O` on a trip | Correctly projected to `bikes_allowed=1`; absence becomes `bikes_allowed=2` | The Czech closed-world allowed/forbidden meaning survives in GTFS, but conditions from `Caskody`, exact source code, and provenance are not typed or linked. |
 | `x`, `T`, `!`, `(`, `)` at a stop/call | Usefully approximated through GTFS pickup/drop-off values | `phone_before` makes on-demand service discoverable in GTFS, but cannot preserve the distinction between passenger order, an external operating condition, and their exact trip/call scope or instructions. |
-| `§`, `A`, `B`, `C` | Existing restriction sidecar | The group is retained, but serving v1 must keep the original route-stop versus trip-call scope without expanding it. |
+| `§`, `A`, `B`, `C` | Existing restriction sidecar | The group is retained; `travel_restriction` keeps the original route-stop versus trip-call scope without expanding it. |
 | `R`, `#`, `[`, `%` and the remaining trip facilities | Mostly dropped or left as text | Reservation availability/requirement, luggage, and refreshments are not machine-readable final facts. |
 | Stop codes `@`, `%`, `W`, `w`, `x`, `~`, `$`, `}`, `t`, `v`, `b`, `U`, `S`, `J`, `P` | Mostly dropped | Accessibility, WC, request-stop, CLO, MHD/rail/line/metro interchange, port, airport, and P+R facts cannot be reconstructed. |
 | `Navaznosti` `m`/`M` | Compact source sidecar | Direction and supplied columns/text survive, but no typed distinction exists between structured targets, targets parsed from the specification-defined note form, and final resolution. |
 
 GTFS alone is therefore **not** sufficient for lossless JDF-to-NeTEx export.
 
-### Status in the 2026-10-03 release (serving schema 4)
+### Status in the 2026-10-06 release (serving schema 5.0)
 
-The typed relations below exist and carry `source_code` and provenance, so no listed fact is
-lost: `service_feature_assignment` (796k rows), `location_feature` (6.3k), `service_note` (44.5k)
-with its assignments, `connection_claim` (118k) and `travel_restriction_assignment` (3.6k).
-What is still missing for the NeTEx gate:
+Release `20261006T194555Z` carries every listed fact in typed relations with `source_code` and
+`source_object_id`: `assignment` (842k rows over trip, route and location scope), `service_note`
+(43.6k), `connection_claim` (117k) and `travel_restriction` (3.6k; trip-call and route-stop scope
+kept apart). Every JDF code has a typed `assignment.kind`, from `calendar_designation` and
+`wheelchair_accessible_vehicle` to `on_request`, `conditional`, `luggage_transport` and the stop
+interchange and facility kinds. `location.district_code` is populated (null on 702 of 124k
+locations). What is still missing for the NeTEx gate:
 
-- **Typed kinds.** Only wheelchair (`@`, `{`), reservation (`R`, `#`), bicycle (`O`) and stop
-  wheelchair access (`@`) have dedicated kinds. Every other code (for example `T`, `!`, `[`,
-  `%`, `I`, the calendar codes `X`, `+`, `1`–`7`, and stop codes `~`, `v`, `W`, `w`, `x`, `}`,
-  `b`, `U`) is kept only as a generic `jdf_trip_attribute` / `jdf_stop_attribute` row with its
-  source code.
-- **Connections.** All 118,090 claims are `jdf_structured` and `unresolved`; note-form parsing
-  and final target resolution are not implemented.
-- **District code.** Null in the 2026-10-03 release; fixed in JrUtil `d26bf0b` (okres →
-  `location.district_code`) for the next build.
+- **Connections.** All 116,711 claims are `structured` and `unresolved`; note-form parsing and
+  final target resolution are not implemented.
 
 ## Required typed sidecars
 

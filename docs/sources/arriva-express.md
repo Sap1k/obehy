@@ -110,6 +110,18 @@ trip.
 - A vehicle at its destination with a negative delay has simply arrived early; the trip ends
   there.
 
+## Quirks
+
+| ID | Quirk | Handling |
+|---|---|---|
+| ARRIVA-Q1 | `updated` is local time labelled `+00:00` (the real offset changes at DST) | connector reinterprets it as Europe/Prague, resolved against `received_at` in the repeated autumn hour (`BASE_PLAN.md` 19.3) |
+| ARRIVA-Q2 | `lastStopName` is the **next** stop; it changes when the bus departs the previous one | `NextStop`; a change is a departure from the preceding call |
+| ARRIVA-Q3 | `delay` is signed, truncated, measured at the departure from the previous stop | `rounding = floor`, `reference = departure from the previous stop` |
+| ARRIVA-Q4 | no trip number, no operating date, none requestable | keyless inference only (`infer/keyless/`) |
+| ARRIVA-Q5 | `spz` is right-padded with spaces | trimmed in the connector |
+| ARRIVA-Q6 | destination names keep empty JDF parts and differ in comma spacing | compared without commas and spaces, against the candidate's own calls only |
+| ARRIVA-Q7 | the response is the whole fleet; a batch request without `referer` fails | request headers as above; only Arriva Express entries are kept |
+
 ## Open questions
 
 - Terms of use.

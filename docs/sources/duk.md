@@ -185,6 +185,26 @@ the trip's later stops, and must not trigger events for them.
   events: `[min(S_arr(k), S_dep(k)) + 60d − 30 s, max(S_arr(k), S_dep(k)) + 60d + 29 s]`. It is
   weak evidence; own GPS delay is DÚK's delay source.
 
+## Quirks
+
+Each quirk is handled where stated and has a scenario test named after its ID
+(`AGENTS.md`, quirk ledger).
+
+| ID | Quirk | Handling |
+|---|---|---|
+| DUK-Q1 | Teplice `40xxxx`: `GPSPositionDT` is UTC labelled `+02:00` | connector corrects it to UTC |
+| DUK-Q2 | `ArrivalDT` = `1970-01-01T02:00:00+02:00` means "none" | connector drops it |
+| DUK-Q3 | DPmÚL weekend numbers (`300 + n`) reported briefly on weekdays | taken literally: a different trip; unmatched when it does not run; no reinterpretation |
+| DUK-Q4 | vehicles keep the previous trip's key while parked or positioning, overnight too | yesterday's instance fails the date window: `not_in_service`; never extends the old trip |
+| DUK-Q5 | State 2/3: the trip has not started; an empty run may pass the trip's later stops | pre-trip: forecast assignment only, no progress or events |
+| DUK-Q6 | `Delay` mixes arrival and departure reference and jumps by the dwell slack; ≤ −30 is garbage; `30xxxx`/`40xxxx` are unsigned | weak constraint spanning both events; values ≤ −30 discarded |
+| DUK-Q7 | `30`/`40` prefixes cannot be stripped to a register number | the prefixed `ID` is the vehicle key |
+| DUK-Q8 | `20xxx` entries are trains: `ID` names a train, `CISLineID = 0`, `RouteID` = train number | `TripKey(czptt:train_number)`; not a vehicle for circulations |
+| DUK-Q9 | `CISLineID` is an integer without leading zeros | connector pads it to 6 digits |
+| DUK-Q10 | lines missing from the national export (`522588`, `599894`, `626`) | unmatched, shown as such; a static data gap, not a matching problem |
+| DUK-Q11 | one trip claimed by two vehicles at once (mostly PID `100xxx` detour trips) | both bind the instance (section 19.5); one position per feed by arbitration |
+| DUK-Q12 | DPmÚL and Teplice vehicles never send `ArrivalDT` | arrivals come from GPS progress only |
+
 ## Open questions
 
 - Terms of use.

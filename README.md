@@ -10,7 +10,8 @@ inference from sources of very different quality, delay estimation, learned vehi
 public IDs come from its identity rules and the reviewed registry in `jrunify-ext-geodata`.
 PostgreSQL is never the static compiler.
 
-See [BASE_PLAN.md](BASE_PLAN.md) for the architecture, [STATIC_PIPELINE.md](STATIC_PIPELINE.md)
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagrams, [BASE_PLAN.md](BASE_PLAN.md) for the
+architecture decisions, [STATIC_PIPELINE.md](STATIC_PIPELINE.md)
 for the static boundary, and [PROGRESS.md](PROGRESS.md) for the current state and next steps.
 
 ## Development
@@ -60,10 +61,9 @@ uv run obehy build --estimated-posts
 uv run obehy build --refresh-osm
 ```
 
-Two complete live builds have been published (2026-10-02 and 2026-10-03, about 40 minutes
-each); GTFS validator and MOTIS acceptance checks are still to run. Memory budgets are soft
-admission/spill targets; no process or .NET heap hard limit is configured. Measurements and
-remaining limitations are recorded in `PROGRESS.md`.
+A complete build takes about 40 minutes. Memory budgets are soft admission/spill targets; no
+process or .NET heap hard limit is configured. Build status, measurements and limitations are in
+`PROGRESS.md`.
 
 Prepared OSM is the default. `--refresh-osm` updates it before source downloads. Every network
 source (national JDF, CZPTT, PID and IDS JMK GTFS) is then fetched up front, with three attempts
@@ -187,28 +187,32 @@ IDS serving relations):
 uv run obehy-national-czptt build --output C:\data\obehy-national-czptt
 ```
 
-Known, valid, unambiguous SŽ SR70 coordinates are authoritative. OSM fills only missing,
-invalid, or conflicting SR70 identities; an OSM disagreement is diagnosed while SR70 remains
-unchanged. CZPTT reads only tagged station/halt/stop nodes—never ways, relations, or station
-geometry. Candidate lookup is indexed by PLC/object/name. Name matching is deliberately eager:
-normalized exact names, railway suffix/qualifier-stripped names, and then close fuzzy names are
-matched globally. Fuzzy matching may not discard distinguishing locality/direction tokens such as
-`Ost`, `West`, `Nord`, `Süd`, `Mitte`, or their Czech/Slovak/Polish equivalents. An OSM country tag
-ranks otherwise equivalent candidates but never excludes a name match. A candidate is rejected
-only when every usable timetable occurrence makes it impossible at 150 km/h plus 2 km slack; the
-converter then tries the next match method. Missing passenger locations are estimated from the
-locally densest real-coordinate service occurrence. Pure timing points are never estimated: when
-they have no SR70/OSM coordinate, they remain in operational Parquet but are omitted from GTFS.
-
-By default, internal timing points appear only in the operational Parquet sidecars. Use
-`--operational-points gtfs` (or `obehy build --czptt-operational-points gtfs`) to also emit those
-with real coordinates as non-boardable/non-alightable GTFS rows. Synthesized fallback route labels use municipalities rather than
-station/facility names. See [NATIONAL_CZPTT.md](NATIONAL_CZPTT.md) for source snapshots, GVD year
-selection, bundle schemas, line changes, platform handling, IDS zones, and diagnostics.
+SŽ SR70 coordinates are authoritative and OSM fills gaps. Internal timing points go only to the
+operational Parquet sidecars unless `--operational-points gtfs` (or `obehy build
+--czptt-operational-points gtfs`) is given. See [NATIONAL_CZPTT.md](NATIONAL_CZPTT.md) for
+coordinate matching, source snapshots, GVD year selection, bundle schemas, line changes, platform
+handling, IDS zones and diagnostics.
 
 ## Serving database
 
-There is no database code yet. JrUtil writes `jrutil-production` packages (bundle version 3,
-serving schema version 4; see `STATIC_PIPELINE.md`). The release loader and realtime core described
-in `BASE_PLAN.md` sections 16 and 18–23 are the next work. `JDF_SEMANTICS.md` records the JDF
-preservation gaps that block calling GTFS plus the current sidecars a lossless semantic export.
+JrUtil writes `jrutil-production` packages (bundle 3, serving schema 5.0; see
+`STATIC_PIPELINE.md`). They load into a PostgreSQL + PostGIS mirror (`BASE_PLAN.md` section 16):
+
+```powershell
+docker compose up -d                       # PostGIS 17 for development and DB tests
+$env:OBEHY_DATABASE_URL = "postgresql://..."
+uv run obehy db migrate
+uv run obehy release load <release-dir>
+uv run obehy release activate <run-id>     # or --rollback
+uv run obehy release status
+```
+
+Readers query the `active.*` views only. `release fetch` is not written yet. DB tests in
+`tests/db/` run when `OBEHY_TEST_DATABASE_URL` is set.
+
+## Replaying realtime payloads
+
+`obehy rt replay --release <release-dir> --from <day> --to <day> --out <dir>` resolves archived
+payloads against a release and writes `report.json` and `episodes.parquet`; the source dossiers in
+`docs/sources/` record its results. The realtime core itself (`BASE_PLAN.md` sections 18–22) is
+the current work.

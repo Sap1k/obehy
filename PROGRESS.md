@@ -1,7 +1,7 @@
 # Oběhy progress
 
-Short status of the static feeds and the working backlog. Earlier dated handoffs (July–September
-2026) are in git history; `BASE_PLAN.md` holds the long-term architecture.
+Short status and the working backlog. Log entries before 2026-10-01 are in git history;
+`BASE_PLAN.md` holds the long-term architecture.
 
 ## Current state
 
@@ -87,8 +87,8 @@ heap hard limit is configured; memory figures are telemetry.
 
 ## Next steps
 
-Work order: §6 (serving schema 5) first, then §5 (core runtime) against it. The rest of §2 and §3
-waits on the first GitHub Actions build; §5.1 needs no database and continues in parallel.
+Work order: §5 (core runtime) in `BASE_PLAN.md` section 34 order. §1, §4 and §6 are done; the
+rest of §2 and §3 and static acceptance wait on the first GitHub Actions build.
 
 ### 1. Stop coordinates and easy `[?]` clusters
 
@@ -175,8 +175,16 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
 - **Status:** step 1 done (2026-10-06; recording continues). Step 2 done (§6). Step 3 done
   except `release fetch`, which waits for the first GitHub Actions release (2026-10-07).
   Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
-  report) done 2026-10-08; the model, clock, core loop and `rt` migrations wait for the core
-  architecture decision. Steps 5–12 are design only.
+  report) done 2026-10-08. The core architecture is decided (2026-10-08, `BASE_PLAN.md`
+  sections 5, 18–22, 29–30); the next tickets are `BASE_PLAN.md` section 34 items 1–3:
+  - `realtime/times.py` with its scenario table. Known bug it fixes: `resolve.py`
+    `seconds_after_midnight` counts from midnight instead of noon − 12 h, so replay matching is
+    off by an hour on DST-change days;
+  - release index from `active.*` in PostgreSQL instead of pyarrow over Parquet, and
+    `rt replay --release` loading a non-retained release into a scratch database;
+  - model, clock, `core.step`, worker shell, checkpoint, `rt`/`history` migrations.
+- **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
+  corpus.
 
 ### 6. Serving schema 5
 
@@ -207,6 +215,42 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   §5.2: the CZPTT trip ↔ operational-call link is `trip_call` itself.
 
 ## Recent log
+
+- **2026-10-08** — `ARCHITECTURE.md` (Mermaid diagrams) and the remaining long-lived decisions
+  (docs only).
+  - Connector contract: polled channels and lazy lookups (`plan` → `fetch` → `decode`), run by
+    a generic scheduler and lookup broker; the API never calls upstream.
+  - Capability routing, including minimal "line + trip + delay" sources.
+  - Vehicles: identity levels, minted `vehicle_id`, curated files via `obehy ref import`, the
+    effective-attribute view, media.
+  - Compositions as journey segments, separate from `vehicle_assignment`.
+  - Four circulation sources with their precedence (§22, §27–28).
+  - Fixed now:
+    - rail journey = train number + date with `journey_link`;
+    - core partitioned by feed;
+    - observation envelope and lookup replay;
+    - journey-key public URLs and a minimal public realtime model;
+    - no human input.
+  - Validated: diagrams previewed in light and dark mode, `git diff --check`; no code changed.
+
+- **2026-10-08** — Core runtime architecture decided (docs only).
+  - `BASE_PLAN.md`:
+    - module layout with an import-linter layering rule; `core.step` shared by worker and
+      replay; SQL for set-wise work;
+    - release index built from `active.*` in PostgreSQL, `release_id` on every realtime row;
+    - literal keyed matching, with keyless inference isolated;
+    - time rules in one `times.py` (§19.3);
+    - multi-source arbitration with the "anchor plus predicted change" rule (§20.6);
+    - trip lifecycle and off-route grace (§20.7);
+    - circulation edges keyed by literal keys, with a fingerprint validity guard (§22);
+    - journey-keyed, self-describing, revisioned history (§29);
+    - API v1, PMTiles and vehicle states (§30);
+    - rolling raw window plus pinned corpora (§18.4).
+  - `AGENTS.md` gains realtime code rules and documentation roles. The dossiers gain quirk
+    ledgers (DUK-Q1–Q12, SZ-Q1–Q9, ARRIVA-Q1–Q7).
+  - Stale v4 references fixed in README, STATIC_PIPELINE and JDF_SEMANTICS (v5 counts from
+    `20261006T194555Z`).
+  - Validated: `git diff --check` and review only; no code changed.
 
 - **2026-10-08** — DPmÚL replay against the 2026-10-08 packages (JrUtil `17179c9`): 1,573 of
   1,973 running episodes resolve (79.7%; 52.7% before the merge fix).
@@ -381,107 +425,3 @@ waits on the first GitHub Actions build; §5.1 needs no database and continues i
   - Validation: JrUtil Release 274, post-scorer 26, Oběhy unit 70, ruff and pyright clean.
     Golden gate `learned` → `cuts`: GTFS, serving and diagnostics identical in all four
     packages; only compiler provenance and build-spec hashes differ.
-
-- **2026-09-30** — Refactor of JrUtil and Oběhy before optimisation work.
-  - JrUtil: dead upstream code, v1 packages, CZ extensions, field-level provenance, staging
-    directories and relation sorting removed; bundle v2 / serving schema v3. Removed options
-    include `--stop-ids-cis`, `--international-route-overrides` and `--sr70-name20`. The overlay
-    takes `--converter-version` (Oběhy passes the base package's). God-modules split
-    (JdfBundle, JdfToGtfs, CzPttToGtfs, PackageWriter, Utils, overlay Support, multitool).
-  - Oběhy: serving-v1 stack removed; shared `obehy.pipeline` package (errors, files, reporting,
-    process, download, jrutil, args, staging); JrUtil runs as the built DLL everywhere; one
-    User-Agent; one `failure.json` at the staging root; overlay stage in `regional_overlay.py`.
-  - Validated: JrUtil 278/278, Oběhy 76/76 with ruff/pyright. The bounded golden semantic
-    comparison against the pre-refactor baseline shows only the allow-listed contract changes in
-    every stage. Peak private memory is lower in every stage; overlay wall time -47%, CZPTT -13%.
-    Single-sample JDF fix/merge/routing times moved +8-31% with unchanged code and worker plans;
-    earlier runs of identical code spread by up to 35%, so a repeated benchmark should confirm.
-
-- **2026-09-29** — JDF output: one route per line, detour routes, GVD-bounded validity.
-  - `merge-jdf` requires `--gvd-year`/`--reference-date`. It drops expired and next-GVD
-    versions and clamps the rest to the GVD, so bogus "forever" international validity ends
-    at the cutover. `jdf-to-bundle --gvd-year` records `service_horizon`, and the overlay
-    rejects a base from another GVD. `obehy build` passes both values.
-  - Merged versions collapse to `jdf:route:<line>`, plus `jdf:route:<line>:detour` for
-    výluka timetables with amber text (`ffd23f`, or `7a3500` on light colours). Other
-    semantics get a hashed suffix. Serving `route.timetable_kind` is `regular`/`detour`.
-    Route-stop keys carry the version. The overlay attaches source trips to the regular route
-    and keeps detour colours.
-  - Validated: JrUtil 304/304, Python unit tests, and a subset run (36 dráhy + 4
-    international VLD batches, PID GTFS cut to 8 tram lines). Unmatched PID trips on those
-    lines fell from 3,488 to 1,307, and additions now land on the CIS routes. The full
-    feed was not run.
-
-- **2026-09-29** — JdfMerger: open-ended detour versions no longer suppress later versions.
-  - CIS publishes PID tram detours open-ended (same end as regular versions). An older detour
-    used to delete every later regular version: 255 removals on 181 lines, including trams 12,
-    13, 18, 19 and 24, so about 40 % of the unmatched PID overlay trips were projected instead
-    of matched. Bounded detours keep their priority.
-  - Validated: new JdfMerger unit tests (fail before the fix), and a merge-jdf run on 36 dráhy
-    batches, where every affected line chain ends on its current version. A PID overlay
-    re-run is still needed (it requires a full base bundle). The rest of the PID gap is a CIS
-    data gap: temporary lines 32/40/X*/XS*, P1/P2, and diversions missing from the CIS export.
-
-- **2026-09-28** — Post estimator: learned scorer for terminals where bays lost to a
-  lower-penalty street post (Most/Litvínov, nádraží).
-  - Model: two-stage conditional logit (`jrutil/scripts/post-scorer`) trained on PID + IDS JMK
-    GTFS posts (about 140k labelled contexts), traffic-weighted. OSM `route_ref` is not used.
-  - Results on held-out stops (weighted precision / share of contexts placed):
-    PID 0.885 / 78% vs policy 0.846 / 20%; JMK 0.839 / 74% vs 0.787 / 19%.
-  - JrUtil port: policy schema v3 embeds the model (`JdfPostScorer.fs`, new `Area`
-    resolution) via `repo/src/obehy/data/post-inference/learned-v1.json`. Python/F# parity:
-    0 decision differences in 261k Ústecký contexts. Also: region-restricted capture,
-    `jdf-export-post-features`, OSM `local_ref` in evidence tags.
-  - Fixes found on the way:
-    - overlay transfer conflicts merged or quarantined;
-    - growth-gated memory reclaim;
-    - `route_stop` published at the stop place, not a post (national estimated-posts
-      builds crashed on it);
-    - `obehy build` now passes absolute policy/evidence paths and gives CZPTT the geodata
-      root (`SR70.csv` was not found).
-  - National run with `learned-v1.json`: JDF bundle (57 min, post evaluation 13 min), overlay
-    (16 min) and package validation passed. CZPTT stopped on the SR70 path before the fix;
-    CZPTT was not rerun.
-  - Validation: JrUtil Release 293 passed; post-scorer 26; Oběhy unit 96, ruff clean.
-    Pyright: 4 errors, all in `test_national_czptt.py`, also present without these changes.
-  - Remaining:
-    - ~~make `learned-v1.json` the default~~ (done 2026-09-30);
-    - noisy JMK bus-station labels;
-    - posts off the evidence router's corridor are never chosen (e.g. the highway post at
-      Teplice, Zámecká zahrada).
-
-- **2026-09-28** — Docs refocused on static-feed readiness; old PROGRESS entries left to git
-  history.
-- **2026-09-28** — `obehy build` gained a `filtered-jdf` stage that publishes
-  `release/jdf-filtered/{gtfs.zip,filter-report.json,line-snapshot.json}` and
-  `current.json:jdf_filtered`. Flags: `--skip-filtered-jdf` and `--line-filter-snapshot` (offline
-  replay). CZPTT now defaults to `sidecar`.
-  - Standalone run against the retained 2026-09-16 national JDF bundle with a live portal query:
-    70 s. It removed 4,442 of 12,734 routes (1,717 lines; 1,587 from the portal) and kept 309,200
-    trips and 50,298 stops. It removed no calls for missing coordinates (the six `0,0` stops are
-    on removed PID lines).
-  - The output passed `verify_gtfs_stops`. Unit suite 96 passed; Ruff clean. Pyright is clean on
-    the changed files; the four errors left in `test_national_czptt.py` predate this change.
-  - MobilityData validation of the filtered feed and a complete live build have not been run.
-- **2026-09-28** — JrUtil JDF→GTFS: timed calls at stops with fixed code `$` (border/customs
-  stop, e.g. `Varnsdorf,CLO`, `Neugersdorf,ZOLL`) are kept with `pickup_type=1`/`drop_off_type=1`.
-  Previously JrUtil ignored `$`, so these calls were boardable.
-  - Why CLO/ZOLL stops look missing: on regional lines such as 001401, the source marks every
-    CLO/ZOLL call `|` (passes) or `<` (not served), so GTFS has no stop there. This is correct.
-  - Of the 205 lines with timed `$` calls in the 2026-09-16 merged JDF, 203 are rejected whole by
-    the `regional-adjacent` international policy. Only 000297 and 000326 reach the bundle.
-  - New regression test in `JdfToGtfsTests`; the full JrUtil Release suite passes (278). No
-    national rebuild yet.
-- **2026-09-25** — CZPTT: flagged inconsistent interior times are forced monotonic when bounded
-  (fixes the 29 rejected R10 replacement PAs in a direct replay). Live acquisition rechecks the
-  inventory until stable (max five passes). No national rebuild yet.
-- **2026-09-20** — CZPTT split-trip edges get GTFS-only approximate times. NAD transfers are
-  limited to the same station. KADR agency names drop ` - ` qualifiers.
-- **2026-09-19** — National finalization is bounded, 4.07 GiB peak on replay. `obehy build`
-  forwards `--jobs`/`--memory-budget`.
-- **2026-09-17** — CZPTT gains notes/accessibility/bicycle/request-stop semantics, NAD modelling
-  with transfers, and cancellation ordering by source timestamp. The regional overlay's quadratic
-  coverage stall is fixed (~3 min package validation vs ~18 min).
-- **2026-09-15** — Streaming JDF compiler: 179 s / 2.88 GB. Optimization was stopped at the
-  user's request.
-- **2026-09-14** — Two-package `obehy build` with atomic `current.json` publication.
