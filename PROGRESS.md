@@ -176,13 +176,17 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
   except `release fetch`, which waits for the first GitHub Actions release (2026-10-07).
   Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
   report) done 2026-10-08. The core architecture is decided (2026-10-08, `BASE_PLAN.md`
-  sections 5, 18–22, 29–30). The first slice (DÚK buses with history, warm-replay restart) is
-  fixed in `docs/R1_SLICE.md`; the next tickets are `BASE_PLAN.md` section 34 items 1–3:
-  - `realtime/times.py` with the T1–T15 table. Schedule times are wall-clock; JrUtil's
-    `serving-v5.json` time description still says noon − 12 h and needs correcting;
-  - `model.py`, the test timetable builder and the import-linter contract;
-  - release index from `active.*` in PostgreSQL, and `rt replay --release` loading a
-    non-retained release into a scratch database.
+  sections 5, 18–22, 29–30). The first slice (DÚK buses with history, warm-replay restart,
+  `docs/R1_SLICE.md`) is implemented (2026-10-09): times, model, lazy index, keyed binding,
+  progress as map matching, history, DÚK connector, worker, warm replay and replay on the core.
+  On the pinned 25 h corpus the match rate is DÚK 99.4%, Teplice 99.1%, DPmÚL 54.7% and the
+  GTFS-RT consistency check is clean. Open for R1 acceptance (§6 there): determinism and
+  `--write-history` re-runs on the final code, golden digests, the warm-restart comparison on
+  the corpus, and the MobilityData GTFS-RT validator (needs a `read:packages` token).
+  Predictions follow `BASE_PLAN.md` 20.5 (dwell recovery, early running carried over, no
+  uncertainty); per-stop holding and knock-on to the next trip of a tour wait for history
+  learning and circulations (section 22). JrUtil's
+  `serving-v5.json` time description still says noon − 12 h and needs correcting.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -216,6 +220,25 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — Realtime through reception gaps: predictions use the tracker's GPS lateness
+  (source delay as fallback) and hold it through gaps; a silent journey loses its position
+  after `stale_after_s` and its predictions after `predict_without_data_s` (per mode, longer
+  for rail), counted on the reception clock; calls passed in a gap get an ex-post `inferred`
+  time but no history event. Tracking: lateness against the dwell window (waiting at a stop is
+  not early), off-path option instead of killing a reading, chord sigma capped, speed slack
+  is GPS jitter only, commit agreement among non-negligible readings, crossing times placed by
+  timetable time. 522586:107 checked tick by tick (frozen GPS clock at the origin, loop off
+  the chord, gap before Vejprty).
+- **2026-10-09** — Progress rebuilt as map matching (`timeline/progress.py`): beam of
+  hypotheses, commit only events all hypotheses agree on (same bracketing fixes), events over
+  `max_event_interval_s` dropped, DUK-Q13 (Azimut 0 = no bearing). 12 scenario tests + real
+  závlek traces (001521:104, 522586:103/107/111, 522591:112) pass. Not yet re-run: full replay
+  GTFS-RT check on this commit, history replay, golden digests (`tests/golden` uncommitted).
+- **2026-10-09** — Progress redesigned (docs): greedy per-fix projection could not handle
+  *závleky*, loops, stops passed before being served, corner-cutting chords and reception gaps
+  (001521:104 skipped a branch; 522586:103 jumped across one after a gap). Replaced in
+  `BASE_PLAN.md` 20.4 / `docs/R1_SLICE.md` 9 by map matching over the trip's path with a beam
+  of hypotheses and commit-when-all-agree. Implementation next.
 - **2026-10-09** — Realtime speed: 290 → 85 µs per observation (25 h DÚK replay 7m17s → 2m20s):
   projection only within reachable distance of current progress (policy `max_speed_mps`; full
   scan after gaps), shapes simplified to ~5 m, out-of-tolerance segments skipped, estimates only

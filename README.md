@@ -220,7 +220,7 @@ is not there yet; no activation is needed):
 
 ```powershell
 uv run obehy rt replay --release <release-dir|run-id> --from 2026-10-05 --to 2026-10-06 `
-  --archive ..t-datat-raw --out workeplay --gtfs-rt-every 60 [--write-history]
+  --archive ../rt-data/rt-raw --out ../work/replay --gtfs-rt-every 60 [--write-history]
 ```
 
 It writes `report.json` (results by reason and, per DÚK fleet, the share of running key groups

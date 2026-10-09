@@ -1,0 +1,8495 @@
+{
+"release_id": "20261006T194555Z-06c0829d89aa",
+"feed": "jdf",
+"keys": [
+[
+[
+"cis:line_trip",
+"522586:103"
+],
+[
+[
+"jdf:trip:522586:251214:103",
+"2025-12-15",
+"2026-12-11"
+]
+]
+],
+[
+[
+"cis:line",
+"522586"
+],
+[
+[
+"jdf:route:522586",
+"2025-12-15",
+"2026-12-11"
+]
+]
+]
+],
+"trips": [
+{
+"trip_id": "jdf:trip:522586:251214:103",
+"route_id": "jdf:route:522586",
+"route_name": "586",
+"mode": "bus",
+"service_id": "overlay:service:441246c8c7f7a005",
+"headsign": "Vejprty,aut.st.",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:29311",
+1,
+true,
+24300,
+24300
+],
+[
+2,
+"jdf:stop:27495",
+1,
+true,
+24480,
+24480
+],
+[
+3,
+"jdf:stop:23046",
+1,
+true,
+24540,
+24540
+],
+[
+4,
+"jdf:stop:11945",
+1,
+true,
+25200,
+25200
+],
+[
+5,
+"jdf:stop:31497",
+1,
+true,
+25380,
+25380
+],
+[
+6,
+"jdf:stop:21831",
+1,
+true,
+25440,
+25440
+],
+[
+7,
+"jdf:stop:1271",
+1,
+true,
+25500,
+25500
+],
+[
+8,
+"jdf:stop:21917",
+1,
+true,
+25740,
+25740
+],
+[
+10,
+"jdf:stop:30896",
+1,
+true,
+26280,
+26280
+],
+[
+11,
+"jdf:stop:5734",
+1,
+true,
+26400,
+26400
+],
+[
+12,
+"jdf:stop:30896",
+2,
+true,
+26520,
+26520
+],
+[
+13,
+"jdf:stop:10203",
+1,
+true,
+26820,
+26820
+],
+[
+14,
+"jdf:stop:29766",
+1,
+true,
+27000,
+27000
+],
+[
+15,
+"jdf:stop:11143",
+1,
+true,
+27120,
+27120
+],
+[
+16,
+"jdf:stop:21136",
+1,
+true,
+27240,
+27240
+]
+]
+}
+],
+"service_dates": {
+"overlay:service:441246c8c7f7a005": [
+"2026-10-05",
+"2026-10-06",
+"2026-10-07"
+]
+},
+"loaded_dates": [
+"2026-10-05",
+"2026-10-06",
+"2026-10-07"
+],
+"locations": [
+[
+"jdf:stop:10203",
+"Černý Potok",
+13.0782205712261,
+50.4897517135047
+],
+[
+"jdf:stop:11143",
+"Vejprty,Přísečnická",
+13.037005616287,
+50.4931338120737
+],
+[
+"jdf:stop:11945",
+"Křimov,Celná",
+13.2740360501789,
+50.4820509013077
+],
+[
+"jdf:stop:1271",
+"Výsluní,Třebíška,rozc.",
+13.2321711364402,
+50.4638530835206
+],
+[
+"jdf:stop:21136",
+"Vejprty,aut.st.",
+13.0320097616835,
+50.4918385928563
+],
+[
+"jdf:stop:21831",
+"Výsluní",
+13.2376683862057,
+50.4662310771933
+],
+[
+"jdf:stop:21917",
+"Výsluní,Volyně,rozc.",
+13.178439548432,
+50.4518866764492
+],
+[
+"jdf:stop:23046",
+"Chomutov,Černovická",
+13.3902409569512,
+50.4578262830201
+],
+[
+"jdf:stop:27495",
+"Chomutov,V Alejích",
+13.4006200001193,
+50.4584487767009
+],
+[
+"jdf:stop:29311",
+"Chomutov,aut.nádr.",
+13.40857,
+50.459816
+],
+[
+"jdf:stop:29766",
+"Vejprty,háj.",
+13.0433528724993,
+50.4909551011981
+],
+[
+"jdf:stop:30896",
+"Kryštofovy Hamry,přehrada",
+13.1279751189064,
+50.4882453353867
+],
+[
+"jdf:stop:31497",
+"Výsluní,Kýšovice",
+13.2547719047643,
+50.4726496086805
+],
+[
+"jdf:stop:5734",
+"Kryštofovy Hamry",
+13.1364439646946,
+50.5001027593823
+]
+],
+"shapes": [],
+"observations": [
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:40:14.571089+00:00",
+"observed_at": "2026-10-06T04:40:01+00:00",
+"sha256": "3232d4e25bb21da301f0c2f04097ab4fe53876ca53462c6ff73288ac8ccae3bb",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45641,
+"lon": 13.39955,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:40:29.580785+00:00",
+"observed_at": "2026-10-06T04:40:23+00:00",
+"sha256": "6886d5861552bedee99402abef83974f7951efcde3ceab4a9e75f139d362427b",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45642,
+"lon": 13.39955,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:40:44.584665+00:00",
+"observed_at": "2026-10-06T04:40:35+00:00",
+"sha256": "8968c5f2cba6ed1646c6cc408fef31db036a5ffde95c84c5e6b6ccabadf32b0f",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45644,
+"lon": 13.39953,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:40:59.583436+00:00",
+"observed_at": "2026-10-06T04:40:44+00:00",
+"sha256": "3077540cc0dc284310eddc3adf57a48b999c1c5894ef98f2a4d35688e3683e1c",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45644,
+"lon": 13.39953,
+"bearing": 35.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:41:14.583755+00:00",
+"observed_at": "2026-10-06T04:41:00+00:00",
+"sha256": "5e20ef5818f5848319a138b87e2ce4a5830ae70b0917794c83c115ba13261716",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45642,
+"lon": 13.39954,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:41:29.579714+00:00",
+"observed_at": "2026-10-06T04:41:04+00:00",
+"sha256": "0860cff1f2a2ba05e10c8b96e59f7b85c292d870a3bb08f90abd19ca4e5241b5",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45642,
+"lon": 13.39954,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:41:44.583318+00:00",
+"observed_at": "2026-10-06T04:41:04+00:00",
+"sha256": "f7c7f172a44bbc1c936aa2beee85c15973b930443ebb565dc4da5ee10ec4953e",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45642,
+"lon": 13.39954,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:41:59.576113+00:00",
+"observed_at": "2026-10-06T04:41:04+00:00",
+"sha256": "053a49d40e1d502709be21ad611a3ea3333ae8b687a9d42def839fb16234cd76",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45642,
+"lon": 13.39954,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:42:14.575451+00:00",
+"observed_at": "2026-10-06T04:42:05+00:00",
+"sha256": "d055f1b48423de5fda4f652e6fab41ee2d2e9d4eb418b45c80e3ca39f06eee0c",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:42:29.582227+00:00",
+"observed_at": "2026-10-06T04:42:05+00:00",
+"sha256": "a10ed5bec9030ec12244cbe8b9bf182e03e3943752b59822df8a063249d3e5e1",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:42:44.578890+00:00",
+"observed_at": "2026-10-06T04:42:05+00:00",
+"sha256": "b509583f50799996ccfac59c5f1761b9cc74f7d65075daf767d86881808d4d5a",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:42:59.582241+00:00",
+"observed_at": "2026-10-06T04:42:46+00:00",
+"sha256": "bce8fd2405f13771c77707acbb18d1b1aaa292329686e5369c8a786305221030",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45638,
+"lon": 13.3996,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:43:14.584236+00:00",
+"observed_at": "2026-10-06T04:42:46+00:00",
+"sha256": "e0c0d09bd28e4c2c337d0e596661f1159cc62b3057dd856f4316155c7abb05c9",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45638,
+"lon": 13.3996,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:43:33.008519+00:00",
+"observed_at": "2026-10-06T04:43:26+00:00",
+"sha256": "82800547531785295f7287a67253b354e7deff487dd2b9af746ac73a2571df82",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": 60.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:43:45.102218+00:00",
+"observed_at": "2026-10-06T04:43:34+00:00",
+"sha256": "07bab01ebc1dbedd6e0ffb7810eb2b71def215a28e1f0b9d724bb1a7e0a24bd8",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45641,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:43:59.981586+00:00",
+"observed_at": "2026-10-06T04:43:38+00:00",
+"sha256": "f02616e90b1588e034fe5bf30a424e00f25711466deec3d6ece85781f6d3c6fa",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:44:14.569443+00:00",
+"observed_at": "2026-10-06T04:43:38+00:00",
+"sha256": "f37e46de58adf9a1f122efe59791c0beb287e4e4d2d2171b6e83fe2e3d053e6c",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:44:29.580720+00:00",
+"observed_at": "2026-10-06T04:43:38+00:00",
+"sha256": "939533b28ee867beb81f514788bfcde1a5d9f0a331bc795bb6e2e64c6f3d52b0",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:44:44.572363+00:00",
+"observed_at": "2026-10-06T04:43:38+00:00",
+"sha256": "eb60439948353c7a648ce85da6e8620b78a81451cd887390538b03c16e0f5cb7",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4564,
+"lon": 13.39958,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:44:59.587878+00:00",
+"observed_at": "2026-10-06T04:44:47+00:00",
+"sha256": "da5cb5fdf03d7cdee1eb361c685f316af3686b7b201e3713dab1281049d2d3f3",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45625,
+"lon": 13.39935,
+"bearing": 211.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:45:14.589115+00:00",
+"observed_at": "2026-10-06T04:45:03+00:00",
+"sha256": "26f58a7aa673ac4e54bf7cf7f774aa76bf908bfc656c9274bfaaf60820a6a87d",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45646,
+"lon": 13.40015,
+"bearing": 58.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:45:29.584284+00:00",
+"observed_at": "2026-10-06T04:45:11+00:00",
+"sha256": "35ec8a4c1d72ae4f4b3178e3f48657d0b0be7bbaaaab731532d590d1b340752c",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45679,
+"lon": 13.40071,
+"bearing": 60.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:45:47.941176+00:00",
+"observed_at": "2026-10-06T04:45:43+00:00",
+"sha256": "c3e0ee5e9a42f562f4981ddbf7d10ac0f3944a51a995b8beaaf11d96abf6e939",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45798,
+"lon": 13.40437,
+"bearing": 68.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:46:02.475947+00:00",
+"observed_at": "2026-10-06T04:45:51+00:00",
+"sha256": "55cd898cc79fbbe48f3045e5fd13f414cf60746b5461a0a3af4aca0c7a2fc8ea",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45838,
+"lon": 13.40524,
+"bearing": 49.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:46:14.970475+00:00",
+"observed_at": "2026-10-06T04:46:15+00:00",
+"sha256": "a1c361e846680862336b6281894c51272cdd97dccb2a1bd7409b3ebe1feccc90",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45966,
+"lon": 13.40763,
+"bearing": 51.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:46:29.583460+00:00",
+"observed_at": "2026-10-06T04:46:15+00:00",
+"sha256": "c683f2fc0dd341c6a3d89aff73c78fbf85b6875a78c35ce31ff4945573d058e5",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45966,
+"lon": 13.40763,
+"bearing": 51.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "pre_trip"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:46:44.568349+00:00",
+"observed_at": "2026-10-06T04:46:27+00:00",
+"sha256": "6e5f2cba266f72b6cff5c34e6c3ca3d3c1d432923bab22c050afe5aa7152b47f",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45987,
+"lon": 13.40846,
+"bearing": 43.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:46:59.579714+00:00",
+"observed_at": "2026-10-06T04:46:43+00:00",
+"sha256": "99eda65f3108cffcfe01690d19b3f23d9bb4215a14233654dd2cac719c07d0cc",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4601,
+"lon": 13.40879,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:47:14.581463+00:00",
+"observed_at": "2026-10-06T04:46:43+00:00",
+"sha256": "29534bdd3034340bbd939ba57e2f2276c20f33f5e124a86208cde37154ec366e",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4601,
+"lon": 13.40879,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:47:29.583510+00:00",
+"observed_at": "2026-10-06T04:46:43+00:00",
+"sha256": "e278fe1ae4c09cc12180258df150cd7052e1376c3ef3b254557e45856a140fb1",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4601,
+"lon": 13.40879,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:47:45.045377+00:00",
+"observed_at": "2026-10-06T04:47:42+00:00",
+"sha256": "47e41c8d8d0e3f21a3d530685a413e009713a1b325cd14aea226e66a6b2580b5",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46075,
+"lon": 13.40933,
+"bearing": 324.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:47:59.585366+00:00",
+"observed_at": "2026-10-06T04:47:46+00:00",
+"sha256": "3a522801b938473bb05f41f6160b9c1d4c7753d4d9f9ea2b53601202513b8e4f",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46095,
+"lon": 13.40924,
+"bearing": 346.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:48:14.570585+00:00",
+"observed_at": "2026-10-06T04:48:02+00:00",
+"sha256": "96205926e3804970fc7e157b8a146b390676a9b8a8e14f4886fe5387b6c37fa6",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46122,
+"lon": 13.40941,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:48:29.582364+00:00",
+"observed_at": "2026-10-06T04:48:26+00:00",
+"sha256": "27fefdf36bb5db8d255ea64b56563c491cfab577e2fe514f1c9f3154f4abc00b",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46152,
+"lon": 13.41001,
+"bearing": 355.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:48:44.578990+00:00",
+"observed_at": "2026-10-06T04:48:30+00:00",
+"sha256": "a67277389293b6d4fc476d368ae069a95e086c90b23e9aa88112fd869583d7a6",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46175,
+"lon": 13.40982,
+"bearing": 301.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:48:59.583592+00:00",
+"observed_at": "2026-10-06T04:48:38+00:00",
+"sha256": "ba00d88c903b6554b5b524c7d671928d9f20337823e06181fc4a6dbd0ef88ffd",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46161,
+"lon": 13.40909,
+"bearing": 245.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:49:14.579540+00:00",
+"observed_at": "2026-10-06T04:49:02+00:00",
+"sha256": "71219f591549d5f0069da30fb757fd40abf024d1c61a958ef852918c599126d5",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46264,
+"lon": 13.40622,
+"bearing": 327.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:49:29.583896+00:00",
+"observed_at": "2026-10-06T04:49:10+00:00",
+"sha256": "01e7c31e6f13eceb7a70e82a40cc227815257f754e02755a31f03d78e4b69f00",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46341,
+"lon": 13.40537,
+"bearing": 316.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:49:44.958261+00:00",
+"observed_at": "2026-10-06T04:49:34+00:00",
+"sha256": "c532afee0855ee11749968cc3c8839455dd5d3b33b2801252a9612b9a05e2f6d",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46473,
+"lon": 13.40478,
+"bearing": 146.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:49:59.586099+00:00",
+"observed_at": "2026-10-06T04:49:42+00:00",
+"sha256": "fe07921eac60bd955ffaa9b97fe44f8e10a0dc1afd105ac54dc04067dcf61b9b",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46413,
+"lon": 13.4045,
+"bearing": 208.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:50:14.577286+00:00",
+"observed_at": "2026-10-06T04:49:42+00:00",
+"sha256": "81b1adfe41688391987f2806692f17400e394fbe8d2ffbc2767a9bea83d9edfb",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46413,
+"lon": 13.4045,
+"bearing": 208.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:50:29.582287+00:00",
+"observed_at": "2026-10-06T04:50:22+00:00",
+"sha256": "869aecbde5479e2ab572f743154b256840431eaee73e6b160c40b9625bb7b4e9",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45927,
+"lon": 13.40197,
+"bearing": 220.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:50:44.944032+00:00",
+"observed_at": "2026-10-06T04:50:30+00:00",
+"sha256": "fe15994180105757f5dfe5efed2c8eb065149fa29f081783929398f883041cb3",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45863,
+"lon": 13.40071,
+"bearing": 237.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:50:59.585447+00:00",
+"observed_at": "2026-10-06T04:50:42+00:00",
+"sha256": "9fb4608ea66305430c6798bb3797dcfb50c33efc167a8b4ad62aa9d60645e119",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45848,
+"lon": 13.40036,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:51:14.586596+00:00",
+"observed_at": "2026-10-06T04:50:42+00:00",
+"sha256": "90832261a737be14fcdb9444a97ff9f88d208a32e577f7d75d51dbe468c706e6",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45848,
+"lon": 13.40036,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:51:29.583901+00:00",
+"observed_at": "2026-10-06T04:50:42+00:00",
+"sha256": "b49c48a3bf261bc252e0b10efe955faf2236b935bfa9c0309f6c99e77a45549d",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45848,
+"lon": 13.40036,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:51:44.585721+00:00",
+"observed_at": "2026-10-06T04:51:18+00:00",
+"sha256": "043152dd99d6378986e5cd73affb97a56a4dadee9639d220d4a7541261a39571",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45834,
+"lon": 13.40013,
+"bearing": 236.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:51:59.588752+00:00",
+"observed_at": "2026-10-06T04:51:46+00:00",
+"sha256": "f6c5f7837a43ea719f1b3b79fa12635c5cacebe36df9c353466964b7c3639ffc",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45787,
+"lon": 13.39598,
+"bearing": 269.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:52:14.580776+00:00",
+"observed_at": "2026-10-06T04:51:54+00:00",
+"sha256": "c8c45e6ad3f83dc5acb3b1c4de70a83dc9ce9a36c6c69fd1d99792b3060cfff6",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45787,
+"lon": 13.39546,
+"bearing": 273.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:52:29.581660+00:00",
+"observed_at": "2026-10-06T04:52:18+00:00",
+"sha256": "b7f1a8face6327e467ba8ab4029a23ccd3d0f0aeeac2cbc77691b92151d157f8",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45786,
+"lon": 13.39307,
+"bearing": 271.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:52:48.077598+00:00",
+"observed_at": "2026-10-06T04:52:34+00:00",
+"sha256": "99192bc18501a8a81c0ff9065e0caa84df437d06b1d9f69cb9eb66367dfefc26",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45787,
+"lon": 13.39006,
+"bearing": 270.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:53:03.005966+00:00",
+"observed_at": "2026-10-06T04:52:54+00:00",
+"sha256": "88240840ed4e71afdb26c638ee637e73b95e6e0f81651fd64f89223b6884b8ea",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45786,
+"lon": 13.38912,
+"bearing": 251.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:53:14.574885+00:00",
+"observed_at": "2026-10-06T04:53:06+00:00",
+"sha256": "bdc5b19bc38ca21e9752e0a04b9a88334b5e62cc4134e4b3dc507d79ef7746f3",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45787,
+"lon": 13.38778,
+"bearing": 271.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:53:29.582620+00:00",
+"observed_at": "2026-10-06T04:53:14+00:00",
+"sha256": "343c3af086eb69d8bd1e37bbadfd05b340c2072e88e0d2af59387d586a5c6592",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45788,
+"lon": 13.38639,
+"bearing": 268.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:53:44.582505+00:00",
+"observed_at": "2026-10-06T04:53:38+00:00",
+"sha256": "8b72a404f9e2dce5c473caa475caa7b57f8c810201626a181c0398a295e3b54c",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45789,
+"lon": 13.38344,
+"bearing": 270.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:53:59.585218+00:00",
+"observed_at": "2026-10-06T04:53:54+00:00",
+"sha256": "f739daa753237926f108e0e312a5b3dc9d4cbc75472635884d6c1401f14ae6c7",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45788,
+"lon": 13.38092,
+"bearing": 271.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:54:14.578974+00:00",
+"observed_at": "2026-10-06T04:54:02+00:00",
+"sha256": "6ec205abc4b66bd2ca85c3f8c45495f0a30c23b0987f478403dd7b4962a5e4cc",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45786,
+"lon": 13.38087,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:54:29.584056+00:00",
+"observed_at": "2026-10-06T04:54:16+00:00",
+"sha256": "3c077e6b41c762d2ffb711ecb8c7c94fa91e4f8763df6875c572c60b6be9473d",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45786,
+"lon": 13.38086,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:54:44.583261+00:00",
+"observed_at": "2026-10-06T04:54:24+00:00",
+"sha256": "52ec74e3f31c842d56e573d9997ee4da0dc6209290bfcb9c9ec18b8de1d8a0a4",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45788,
+"lon": 13.38088,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:54:59.574480+00:00",
+"observed_at": "2026-10-06T04:54:28+00:00",
+"sha256": "bbe716a6c8217825b1d2d27b45120659d068e45ff18da63bc9a28c875ab1bf16",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45787,
+"lon": 13.38073,
+"bearing": 264.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:55:14.583150+00:00",
+"observed_at": "2026-10-06T04:54:36+00:00",
+"sha256": "e25c005a8f785b2dae70327c666e679ffa5bf3805aae0c4ede1c396dbac4b760",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45781,
+"lon": 13.37996,
+"bearing": 256.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:55:29.583224+00:00",
+"observed_at": "2026-10-06T04:55:20+00:00",
+"sha256": "dfd7d796cc4d5863d00b230478d1d1d8b54d5e742c880b18f67ec2fd4ff91960",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45619,
+"lon": 13.37483,
+"bearing": 315.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:55:44.565881+00:00",
+"observed_at": "2026-10-06T04:55:32+00:00",
+"sha256": "7352f335b1a72830aec79eff79035fdfa8bc1cb1508e3a1197516b1b76b59f2e",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45712,
+"lon": 13.37392,
+"bearing": 330.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:55:59.584528+00:00",
+"observed_at": "2026-10-06T04:55:44+00:00",
+"sha256": "93682a4d771c985973a16b701416bf0f60822ab8d825342bff96647967bb024d",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4586,
+"lon": 13.37293,
+"bearing": 343.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:56:14.582109+00:00",
+"observed_at": "2026-10-06T04:55:52+00:00",
+"sha256": "22d0c1ef871542584ee4c333742f3f81f18e35e298bf6267bceb289f6e7c68ad",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45987,
+"lon": 13.37254,
+"bearing": 350.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:56:29.583787+00:00",
+"observed_at": "2026-10-06T04:56:24+00:00",
+"sha256": "106191e86dbc34383770736605c3bbc4997fa5424746f5363e369a419af098f0",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46511,
+"lon": 13.37307,
+"bearing": 19.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:56:44.574557+00:00",
+"observed_at": "2026-10-06T04:56:36+00:00",
+"sha256": "11f7507ce169e8aa263b6cc74def6ffa39c10187103625051033e00215d50ad5",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46699,
+"lon": 13.37401,
+"bearing": 16.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:56:59.581972+00:00",
+"observed_at": "2026-10-06T04:56:44+00:00",
+"sha256": "b112e94a90b3f82460488ae14e5c80d5bdcbae94908c31ca666a094cd0954359",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46825,
+"lon": 13.37416,
+"bearing": 355.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:57:14.579520+00:00",
+"observed_at": "2026-10-06T04:56:52+00:00",
+"sha256": "2981490bda082ad6432772578b7fc1b71f0b1665973d148b9a7159402857c086",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4694,
+"lon": 13.37366,
+"bearing": 334.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:57:30.386384+00:00",
+"observed_at": "2026-10-06T04:57:24+00:00",
+"sha256": "6f32dc1207359a839253d977ab197b356bd51a3a462fd58afcf4db65624c02b5",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47118,
+"lon": 13.36723,
+"bearing": 254.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:57:45.098078+00:00",
+"observed_at": "2026-10-06T04:57:32+00:00",
+"sha256": "59b64bcf90fded183040f6a7c8b639bb479fc78b698e69dacf24b4e1dcc620bc",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47071,
+"lon": 13.36515,
+"bearing": 250.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:57:59.582340+00:00",
+"observed_at": "2026-10-06T04:57:56+00:00",
+"sha256": "fa4dbfea785d949695561eb3c62adbbed56f9ece7a3308ea9eb71b3364d55409",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4713,
+"lon": 13.35895,
+"bearing": 305.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:58:15.076116+00:00",
+"observed_at": "2026-10-06T04:58:04+00:00",
+"sha256": "c676afae124e8d414706fac154b8ab3d89f1e4243479b86086351474d9b97dfd",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47203,
+"lon": 13.35766,
+"bearing": 320.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:58:29.581702+00:00",
+"observed_at": "2026-10-06T04:58:28+00:00",
+"sha256": "918fe8f8a238f8107347b49c9a4c16b315e7b65d98db30cf5e402d8324135c84",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47479,
+"lon": 13.35462,
+"bearing": 315.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:58:44.977058+00:00",
+"observed_at": "2026-10-06T04:58:36+00:00",
+"sha256": "b59d091a838630d399c3e8da6da569a6b7f05a229d5f5f2045887b3830fae55d",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47549,
+"lon": 13.35319,
+"bearing": 298.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:58:59.576875+00:00",
+"observed_at": "2026-10-06T04:58:44+00:00",
+"sha256": "7f33a71c274bd7d5eb429f5ecb30e05d07abaa17197338b7bf22187b1bb578d8",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47605,
+"lon": 13.35148,
+"bearing": 292.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:59:14.584476+00:00",
+"observed_at": "2026-10-06T04:59:08+00:00",
+"sha256": "f72f0e46fd047dcb8c513c20d487fcee4529d09d10d3a8e0013447560c36d410",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47713,
+"lon": 13.34525,
+"bearing": 283.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:59:29.571878+00:00",
+"observed_at": "2026-10-06T04:59:16+00:00",
+"sha256": "8f0ae939c65711765737bf3e698decbc5e021f52e1e3c763ea78b38fdedd9190",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47735,
+"lon": 13.34295,
+"bearing": 275.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:59:44.582728+00:00",
+"observed_at": "2026-10-06T04:59:24+00:00",
+"sha256": "1921a3fc978ea0dca2a850f343e61a896cb19a0134582fd35075fc3579a22f86",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47744,
+"lon": 13.3404,
+"bearing": 269.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T04:59:59.585105+00:00",
+"observed_at": "2026-10-06T04:59:40+00:00",
+"sha256": "e89f0dc91d22391a4c8f9cf1ef037ef34fa7a70043786f924461b31393be07b3",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47709,
+"lon": 13.33559,
+"bearing": 257.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:00:17.911703+00:00",
+"observed_at": "2026-10-06T05:00:04+00:00",
+"sha256": "52a5c6fb1004566f18c4267052390117a36b9128f7fe66b84496833491fab013",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47614,
+"lon": 13.32836,
+"bearing": 277.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:00:32.928069+00:00",
+"observed_at": "2026-10-06T05:00:20+00:00",
+"sha256": "47eeb4358ae643437c49c97414d93a5bbd89e0d5ab6edda189e02a9d1736f3d0",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47774,
+"lon": 13.32415,
+"bearing": 323.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:00:45.054363+00:00",
+"observed_at": "2026-10-06T05:00:36+00:00",
+"sha256": "d438cb27027225a7ac03cee3df29d8516ff8070036c5a2d8681d726fa681402f",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48064,
+"lon": 13.32201,
+"bearing": 334.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:00:59.941706+00:00",
+"observed_at": "2026-10-06T05:00:52+00:00",
+"sha256": "d65b5dccf96cc8b586bd26e68a29dd9de1b118c9141cc6c15de3c7c0bbb6d87b",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48287,
+"lon": 13.31834,
+"bearing": 295.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:01:14.979131+00:00",
+"observed_at": "2026-10-06T05:01:00+00:00",
+"sha256": "22a22068e30120b592712b7d61dd489348c8db7d3d723dbe0783b5b549ea83d5",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48337,
+"lon": 13.31603,
+"bearing": 282.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:01:29.923713+00:00",
+"observed_at": "2026-10-06T05:01:16+00:00",
+"sha256": "98a0feb0c7d8259d3fa16bc5f9489e30b1c67ce80a4b0a2dc88b500ace1ad427",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48344,
+"lon": 13.31169,
+"bearing": 261.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:01:45.049208+00:00",
+"observed_at": "2026-10-06T05:01:32+00:00",
+"sha256": "5c59a7dc12b728adb94c9c4dfd3848c6b0318cc2209e8eaeed8c2c3ad8dc11a9",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48293,
+"lon": 13.30724,
+"bearing": 258.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:01:59.583883+00:00",
+"observed_at": "2026-10-06T05:01:40+00:00",
+"sha256": "1f84bcc7d8ae63c8b0e1955040820ee403ffb312262a128b427fb5ebe7c8764b",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48263,
+"lon": 13.30484,
+"bearing": 260.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:02:14.586065+00:00",
+"observed_at": "2026-10-06T05:01:56+00:00",
+"sha256": "75bd78d7d773ff079923c92cd535e7d4e326a53f266ad2c907ebd9caa5a03e40",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48312,
+"lon": 13.29988,
+"bearing": 300.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:02:29.585381+00:00",
+"observed_at": "2026-10-06T05:02:20+00:00",
+"sha256": "6f863c4e4d7794d97354ffa070b261dd3af311def89ba5dd3c35db1a1f64eed6",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48564,
+"lon": 13.29335,
+"bearing": 300.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:02:44.580694+00:00",
+"observed_at": "2026-10-06T05:02:36+00:00",
+"sha256": "0517741cae650977221d48dd861fb875ba69b3f044cdaa792c1c3932f79e870d",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48686,
+"lon": 13.28874,
+"bearing": 275.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:02:59.576812+00:00",
+"observed_at": "2026-10-06T05:02:44+00:00",
+"sha256": "095023fc6da335d85d876c10cf96c98bb0676b1d3fdee48c7a1ebbf8e4030a85",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4867,
+"lon": 13.2862,
+"bearing": 256.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:03:14.569702+00:00",
+"observed_at": "2026-10-06T05:02:52+00:00",
+"sha256": "35fbd55a2fb6c22f3938f04f1260ee8f2b2f8ebcae50923c2574bd71b067a673",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48636,
+"lon": 13.28381,
+"bearing": 262.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:03:29.581253+00:00",
+"observed_at": "2026-10-06T05:03:24+00:00",
+"sha256": "98fed6adc1798efca03aabfb1006df9048f0c85bec42ede33a2c258c8224c106",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48565,
+"lon": 13.28025,
+"bearing": 197.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:03:44.572290+00:00",
+"observed_at": "2026-10-06T05:03:32+00:00",
+"sha256": "8bd45ab2a8ef195dba991a3669745e2dd0b3786ce710a45e401a5fadfd0ac821",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48498,
+"lon": 13.27933,
+"bearing": 227.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:03:59.582643+00:00",
+"observed_at": "2026-10-06T05:03:40+00:00",
+"sha256": "aba2d839bb00b16a65c1e9a9ed31bf14067f78bbd829c4636c2ff3550e82943c",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4843,
+"lon": 13.27821,
+"bearing": 227.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:04:14.581870+00:00",
+"observed_at": "2026-10-06T05:03:56+00:00",
+"sha256": "8966a1b3c0d770f2f4049d2f732b2fdaf7282c114e43f1a886bbc017f8a6fb25",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48312,
+"lon": 13.27572,
+"bearing": 231.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:04:29.600330+00:00",
+"observed_at": "2026-10-06T05:04:12+00:00",
+"sha256": "8ed2986d6989837b49607a4dfd5bf8f9e88a29e8627519c1b4d5f7f14b388fba",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48186,
+"lon": 13.27334,
+"bearing": 242.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:04:47.947107+00:00",
+"observed_at": "2026-10-06T05:04:44+00:00",
+"sha256": "57c80f971ebda488db34c4b3a0b46240caac22cb9a4ef5343de6a8c6cf8b8225",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47981,
+"lon": 13.27196,
+"bearing": 263.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:04:59.579485+00:00",
+"observed_at": "2026-10-06T05:04:44+00:00",
+"sha256": "ab3fe4aa19e211bc0048363136354a6a9ade9a562228c5242823696a2250adc4",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47981,
+"lon": 13.27196,
+"bearing": 263.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:05:14.567147+00:00",
+"observed_at": "2026-10-06T05:05:00+00:00",
+"sha256": "8e5aeca8813b112ba39d1511ef9533ecfc5db155bbbabc71f97815c02dd7e241",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48091,
+"lon": 13.27059,
+"bearing": 332.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:05:29.588800+00:00",
+"observed_at": "2026-10-06T05:05:12+00:00",
+"sha256": "b655e2f63e80fcfe3841acb4f8f62c061598dafdc544bce424bf47feeb328279",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48165,
+"lon": 13.26897,
+"bearing": 310.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:05:44.588576+00:00",
+"observed_at": "2026-10-06T05:05:12+00:00",
+"sha256": "9fe6cb4b4badf0d468fdc50845cb3bd1f5154340c84dc3ce3c06763d981189ef",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48165,
+"lon": 13.26897,
+"bearing": 310.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:05:59.585512+00:00",
+"observed_at": "2026-10-06T05:05:44+00:00",
+"sha256": "4a258a30b6c2006d3baba9f0a3698e07353653269522dfc74d6943f2b89e2d21",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47983,
+"lon": 13.2684,
+"bearing": 207.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:06:14.585294+00:00",
+"observed_at": "2026-10-06T05:06:00+00:00",
+"sha256": "655cd59f332b4b89696f0749f832b0f3032a67f4e3dbdc0ac83403fe4948e4b4",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47865,
+"lon": 13.26622,
+"bearing": 213.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:06:29.583463+00:00",
+"observed_at": "2026-10-06T05:06:16+00:00",
+"sha256": "2649b574489144d633e3c7febe35c231bdfd2f04d67153e5b102351f86b0ab1e",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47717,
+"lon": 13.26412,
+"bearing": 229.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:06:44.595549+00:00",
+"observed_at": "2026-10-06T05:06:24+00:00",
+"sha256": "906789d3397661b296b9172862e9e2ca7a58046ef7a33e579b4edb75a7d1a979",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47632,
+"lon": 13.26275,
+"bearing": 225.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:06:59.581492+00:00",
+"observed_at": "2026-10-06T05:06:48+00:00",
+"sha256": "29014ad862d193fb53c332b6f233f37107d6cd1254052bd7c90b8c890e844f57",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47357,
+"lon": 13.25794,
+"bearing": 239.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:07:14.585474+00:00",
+"observed_at": "2026-10-06T05:06:56+00:00",
+"sha256": "418f9d6ffa05e31cd96299bdd5e25df5f3c6a5a3e4ac3a238353db121eb7e2f2",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47286,
+"lon": 13.2557,
+"bearing": 248.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:07:29.578720+00:00",
+"observed_at": "2026-10-06T05:07:12+00:00",
+"sha256": "c96b63701a524fab79b98181244bebe7d632869abd75a716df80459ac66f4945",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47145,
+"lon": 13.25125,
+"bearing": 232.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:07:44.952739+00:00",
+"observed_at": "2026-10-06T05:07:36+00:00",
+"sha256": "cc2c9dbd034019c7a4e5488a94a3069d07fd8442fffae13450b8ed602b442082",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46896,
+"lon": 13.24504,
+"bearing": 240.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:07:59.579046+00:00",
+"observed_at": "2026-10-06T05:07:40+00:00",
+"sha256": "a00f655ed7e9906eb7ad7dba47b7b0acdafeec8f2834a20d3719a9c75e98ca1d",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46858,
+"lon": 13.24399,
+"bearing": 243.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:08:14.576549+00:00",
+"observed_at": "2026-10-06T05:08:00+00:00",
+"sha256": "703511346dee9dd7350fb174fbe34b5d9494fa514f675e3d124cac4257329599",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4669,
+"lon": 13.2393,
+"bearing": 234.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:08:29.581278+00:00",
+"observed_at": "2026-10-06T05:08:21+00:00",
+"sha256": "af66b3fdd1f0757df5f386277f4d10c115310629200fc6c67ead3c179c708185",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46615,
+"lon": 13.23699,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:08:44.589664+00:00",
+"observed_at": "2026-10-06T05:08:33+00:00",
+"sha256": "841630e08b9dc083c833086ca0de82cd6226963d2ab448eb9d11f80be483fe94",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46608,
+"lon": 13.23683,
+"bearing": 236.0
+},
+{
+"t": "delay",
+"s": 300,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:08:59.569659+00:00",
+"observed_at": "2026-10-06T05:08:49+00:00",
+"sha256": "cde3f4e873abb1f944f89575786c36501a6baca3f7a83ae192bdb4c9fd33856c",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46508,
+"lon": 13.23476,
+"bearing": 232.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:09:14.577078+00:00",
+"observed_at": "2026-10-06T05:08:57+00:00",
+"sha256": "512678481989148e9959a648973483b741be48277efc255845330eff11f97d6f",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46422,
+"lon": 13.23301,
+"bearing": 232.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:09:29.584115+00:00",
+"observed_at": "2026-10-06T05:09:13+00:00",
+"sha256": "d0be146cd3f78941766df7bcefb899fb12f9f3dba332317245d107a3a00228d3",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46285,
+"lon": 13.22909,
+"bearing": 246.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:09:44.578567+00:00",
+"observed_at": "2026-10-06T05:09:37+00:00",
+"sha256": "19dda6a76c24cbe43fb1ba64494ab63348d5090aacd659ee3b3f40d8ecde7ebf",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46131,
+"lon": 13.22431,
+"bearing": 241.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:09:59.651721+00:00",
+"observed_at": "2026-10-06T05:09:45+00:00",
+"sha256": "2a3e707c834daa97264faf0bf2e9751e0464f259fdd30dfec1ee2770202dbf50",
+"item": 228,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4608,
+"lon": 13.22279,
+"bearing": 242.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:10:17.904606+00:00",
+"observed_at": "2026-10-06T05:10:09+00:00",
+"sha256": "3e0396a92ca0319d7c23c37bfc4a1acf6f3be93605fcbf11b96ed09fe980efac",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46048,
+"lon": 13.21677,
+"bearing": 272.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:10:32.562008+00:00",
+"observed_at": "2026-10-06T05:10:21+00:00",
+"sha256": "884e6595d325dfadcb7d42cbc729b1600def3e93717724805e7a4e0d80401508",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46025,
+"lon": 13.21327,
+"bearing": 260.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:10:44.581361+00:00",
+"observed_at": "2026-10-06T05:10:21+00:00",
+"sha256": "50850458624a399c4be4fd374cc8966c838834dba9c8c0bb3760ac88db14e0de",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46025,
+"lon": 13.21327,
+"bearing": 260.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:10:59.586830+00:00",
+"observed_at": "2026-10-06T05:10:57+00:00",
+"sha256": "9e5a8d37cef649fc6b1cffdb4676bcd9313dd08df434052f2189c3d0a2628687",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45872,
+"lon": 13.20222,
+"bearing": 252.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:11:14.579724+00:00",
+"observed_at": "2026-10-06T05:11:05+00:00",
+"sha256": "0ed14022a8c8544804b539e3613bdd43a5f243a5086df145ca4aad274bf357f9",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45827,
+"lon": 13.20002,
+"bearing": 253.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:11:29.582119+00:00",
+"observed_at": "2026-10-06T05:11:09+00:00",
+"sha256": "0126be59fcbe5e13ac5c63d4d862e19396de89aa5bdd1b3f8831138342d96c54",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45809,
+"lon": 13.199,
+"bearing": 253.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:11:44.583703+00:00",
+"observed_at": "2026-10-06T05:11:29+00:00",
+"sha256": "e99daf5cc6d3c2813bb9235f065b667931f7361ebc0fe535259de7edb42df4a6",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45684,
+"lon": 13.19463,
+"bearing": 242.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:11:59.583362+00:00",
+"observed_at": "2026-10-06T05:11:37+00:00",
+"sha256": "e5dcc2b2b32f5df0b2d177eba207135abb08ea024ee80164e9429fd5dc17ce0b",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45623,
+"lon": 13.19283,
+"bearing": 242.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:12:14.567276+00:00",
+"observed_at": "2026-10-06T05:11:53+00:00",
+"sha256": "3112e60c25fe9f0fbfd9390a585448ca699ceb33b8ef8ab0c0e152b842357f2a",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45498,
+"lon": 13.18899,
+"bearing": 243.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:12:29.582305+00:00",
+"observed_at": "2026-10-06T05:12:25+00:00",
+"sha256": "c33ec83018dc39c5e0b9210196f49c574f27d9c4b33c64b7347622887799373f",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45232,
+"lon": 13.1806,
+"bearing": 247.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:12:44.579376+00:00",
+"observed_at": "2026-10-06T05:12:33+00:00",
+"sha256": "2305590ceb2a9bb64dd110d41963209514cdf2771a2e34fa89761e95e1685de9",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45193,
+"lon": 13.17851,
+"bearing": 259.0
+},
+{
+"t": "delay",
+"s": 240,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:12:59.584623+00:00",
+"observed_at": "2026-10-06T05:12:49+00:00",
+"sha256": "0fcb9e5c6b3cbf13837c6a1533f871bf20cdd49ecf32544b69ab20b30119f93b",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45095,
+"lon": 13.17476,
+"bearing": 225.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:13:14.579614+00:00",
+"observed_at": "2026-10-06T05:12:53+00:00",
+"sha256": "a99e9ce102123b04756f72e22beca7d00b5c9972e30df3df5feec21466e85a01",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45063,
+"lon": 13.17412,
+"bearing": 246.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:13:29.593113+00:00",
+"observed_at": "2026-10-06T05:13:05+00:00",
+"sha256": "3c380ef319bec56b7a9aae6c6b484e99c4428ad5de88d574d111f19bc4faf3d9",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4515,
+"lon": 13.17278,
+"bearing": 337.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:13:47.842196+00:00",
+"observed_at": "2026-10-06T05:13:37+00:00",
+"sha256": "04eac2c4849a1a7d52fe9c94878a902456ad07b09a8c59ac7d8d475af1cf22b5",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45304,
+"lon": 13.16401,
+"bearing": 282.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:14:02.768603+00:00",
+"observed_at": "2026-10-06T05:13:53+00:00",
+"sha256": "b9a315c05303c7684fd3311731025f828a2e208cc2548d782ef479e54ddbebd4",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45387,
+"lon": 13.15969,
+"bearing": 271.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:14:14.566497+00:00",
+"observed_at": "2026-10-06T05:14:09+00:00",
+"sha256": "63ae727bdec4ac88b51c6e2cf243008da4d4b93058f05df07105f8f45d18ee3e",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45414,
+"lon": 13.15536,
+"bearing": 292.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:14:29.574585+00:00",
+"observed_at": "2026-10-06T05:14:17+00:00",
+"sha256": "1567bf5d9e26d1ef1e9e58fafde4a851593e13336a3593c7fc7208db5537384d",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45493,
+"lon": 13.15367,
+"bearing": 312.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:14:47.927262+00:00",
+"observed_at": "2026-10-06T05:14:33+00:00",
+"sha256": "fb529bc5c6f4dfe81bd512ab54697dc065faf05a43135b9f4c600c45187462e2",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45662,
+"lon": 13.15035,
+"bearing": 288.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:15:02.770381+00:00",
+"observed_at": "2026-10-06T05:14:49+00:00",
+"sha256": "d20ad52c81fc3db50a41f6c0e6b77d36b20fcb33b4c23c5b7034244503ca849f",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45667,
+"lon": 13.14607,
+"bearing": 267.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:15:14.580166+00:00",
+"observed_at": "2026-10-06T05:15:06+00:00",
+"sha256": "39ab261d75ba93a0ee6cacc82a926036d22541ed0c17922682746e1433606d13",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45652,
+"lon": 13.14114,
+"bearing": 266.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:15:29.580153+00:00",
+"observed_at": "2026-10-06T05:15:14+00:00",
+"sha256": "a1b2e0223e7fb92e6f4ff7e51210b9fb736161798c8e41b3698cead4fea2c14d",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45644,
+"lon": 13.13883,
+"bearing": 266.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:15:44.582578+00:00",
+"observed_at": "2026-10-06T05:15:38+00:00",
+"sha256": "4bcecd456e4cc5efd60ed2cd9192e2206a9304eed1170a47f7440f64a83681f9",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.45884,
+"lon": 13.13353,
+"bearing": 332.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:15:59.581274+00:00",
+"observed_at": "2026-10-06T05:15:46+00:00",
+"sha256": "7fd6630c23e44e38a315877c6942081fcd083f90380ee964dbfc132ead87fed0",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46014,
+"lon": 13.1324,
+"bearing": 326.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:16:14.581715+00:00",
+"observed_at": "2026-10-06T05:15:54+00:00",
+"sha256": "96dc9a7bc6eabc6cd65a8fb9156ad160187048bb43b7c5c113691a5d9a8934d3",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46095,
+"lon": 13.1306,
+"bearing": 288.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:16:29.580145+00:00",
+"observed_at": "2026-10-06T05:16:02+00:00",
+"sha256": "9441bfa7e0a34b9eef3ac9a154fce81f5b512f7fac7461b40b96b2748086dde5",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4612,
+"lon": 13.12843,
+"bearing": 279.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:16:44.932711+00:00",
+"observed_at": "2026-10-06T05:16:34+00:00",
+"sha256": "010b02bf998b44a6b7a090aff8afca53a3a0f5b08ca5247dbfb9442e246a9e19",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.46607,
+"lon": 13.12617,
+"bearing": 6.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:17:03.036049+00:00",
+"observed_at": "2026-10-06T05:16:58+00:00",
+"sha256": "42dfdb489af68a0b31d880bc049d865a13278bf583ee8f8e4c78a23cdcd929be",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47021,
+"lon": 13.12315,
+"bearing": 317.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:17:14.578623+00:00",
+"observed_at": "2026-10-06T05:16:58+00:00",
+"sha256": "0c624bffeddc94ce2e074d80314a730295d39f68b3acf3c2c378917719fdfe48",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47021,
+"lon": 13.12315,
+"bearing": 317.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:17:32.916549+00:00",
+"observed_at": "2026-10-06T05:17:14+00:00",
+"sha256": "a9efc27937f4bfc30be84adb1b537a7a09d578dfb866ea6ce808aa8d70a57c78",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47259,
+"lon": 13.11953,
+"bearing": 309.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:17:45.028697+00:00",
+"observed_at": "2026-10-06T05:17:22+00:00",
+"sha256": "e30af35be6b74704709987d74d8194b02cb3efa1bcdd61ab6ddd406228de68c6",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47339,
+"lon": 13.1173,
+"bearing": 291.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:17:59.584444+00:00",
+"observed_at": "2026-10-06T05:17:22+00:00",
+"sha256": "549764b2877040b3c7645322b2d69ce541bdb256f5cb581134659b500c45db8b",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47339,
+"lon": 13.1173,
+"bearing": 291.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:18:17.923232+00:00",
+"observed_at": "2026-10-06T05:17:22+00:00",
+"sha256": "35f4997dff7fdf36c98c5921354af6fd012b95855f0a25c5244425e5ef6ddc11",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.47339,
+"lon": 13.1173,
+"bearing": 291.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:18:29.583225+00:00",
+"observed_at": "2026-10-06T05:18:18+00:00",
+"sha256": "dd327eebd301a349ced5e144dfab55acf738ef0b881b930ce08564bd6b47e7e5",
+"item": 232,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48223,
+"lon": 13.10869,
+"bearing": 352.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:18:44.585631+00:00",
+"observed_at": "2026-10-06T05:18:26+00:00",
+"sha256": "fc6cd5a4c9b5161a24420b2c4f50b7fae38f06c48b55506e0306921d6dc5cf3d",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48393,
+"lon": 13.10826,
+"bearing": 351.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:18:59.578968+00:00",
+"observed_at": "2026-10-06T05:18:38+00:00",
+"sha256": "88349a4c6cc294510aaa305170bcbf943e67ae4b3b1c1b02224bffdede4e08dc",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48597,
+"lon": 13.10746,
+"bearing": 329.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:19:14.583006+00:00",
+"observed_at": "2026-10-06T05:18:58+00:00",
+"sha256": "7315dc568dc7104653ca5e83af7e7851f12a1b234aa458e1875423f963d7d8a8",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48612,
+"lon": 13.10962,
+"bearing": 115.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:19:29.576561+00:00",
+"observed_at": "2026-10-06T05:19:22+00:00",
+"sha256": "ee99d5eaefed44187ad24efc3d64772d31f9892040218d2e2394d0d86a2ed334",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48531,
+"lon": 13.11472,
+"bearing": 83.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:19:44.567922+00:00",
+"observed_at": "2026-10-06T05:19:38+00:00",
+"sha256": "85c08d057ae9d07cd989c904bcf5ca7c0fc8f682eb8b7af6b1a28750ad5d190e",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48565,
+"lon": 13.11824,
+"bearing": 81.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:19:59.581760+00:00",
+"observed_at": "2026-10-06T05:19:46+00:00",
+"sha256": "96dfd9ff19fd1298d68466e1bdb450e99740a0dd0a5ed4b581602d5ba08b8f72",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48582,
+"lon": 13.11999,
+"bearing": 81.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:20:14.572514+00:00",
+"observed_at": "2026-10-06T05:19:46+00:00",
+"sha256": "3c8c7a0e356a82c9c99117ae20b08b9c0e3dbdc4947114031e8faaeaef4befe3",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48582,
+"lon": 13.11999,
+"bearing": 81.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:20:29.937678+00:00",
+"observed_at": "2026-10-06T05:20:18+00:00",
+"sha256": "515167da0b8e13c35c5c450ae5bb4b5cb36f1c1fabb655e721525adcd6bd8969",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48773,
+"lon": 13.12661,
+"bearing": 59.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:20:44.584240+00:00",
+"observed_at": "2026-10-06T05:20:26+00:00",
+"sha256": "9452e63454ea3d5aca63ce949c9b0093ec0c9ee2803f7c0a0b4ad7b905f5c827",
+"item": 231,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48828,
+"lon": 13.12815,
+"bearing": 60.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:20:59.672957+00:00",
+"observed_at": "2026-10-06T05:20:42+00:00",
+"sha256": "bba657c61c7b56390a4f1038d97438ecd0e51de46fe8500d0329c2e1778e56fe",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49016,
+"lon": 13.12958,
+"bearing": 347.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:21:14.585604+00:00",
+"observed_at": "2026-10-06T05:20:58+00:00",
+"sha256": "b0f568e6e4d26da1ebb248767b0b1aeba28d2ec7081e6c6e29b012c50b2c66bb",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49234,
+"lon": 13.12858,
+"bearing": 355.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:21:29.579274+00:00",
+"observed_at": "2026-10-06T05:21:14+00:00",
+"sha256": "4d7194b8409fcba974cf9024d3c6eb9e3492a234b8518c736ab893c7d9495dc3",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4938,
+"lon": 13.13047,
+"bearing": 47.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:21:44.576955+00:00",
+"observed_at": "2026-10-06T05:21:22+00:00",
+"sha256": "7ee79353c5f0efe06dede694b5c982fa1b71dcede4c0009ce0c8647beac30fef",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49464,
+"lon": 13.13134,
+"bearing": 27.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:21:59.582062+00:00",
+"observed_at": "2026-10-06T05:21:54+00:00",
+"sha256": "e543eccba662f32a3940bf4d2eea44e963250cb0691f4802f1f7d655439f03cb",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4981,
+"lon": 13.13487,
+"bearing": 37.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:22:14.579411+00:00",
+"observed_at": "2026-10-06T05:22:02+00:00",
+"sha256": "224a71d7a358017913161e7e18e50f518cb698cc442a075d93dacf11036fef4d",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49883,
+"lon": 13.13568,
+"bearing": 39.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:22:29.580381+00:00",
+"observed_at": "2026-10-06T05:22:19+00:00",
+"sha256": "1cdc493a712cbc8d5f6d69e5372976462bf639b1714f438d1fa83dd62553f273",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49973,
+"lon": 13.13627,
+"bearing": 5.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:22:44.584660+00:00",
+"observed_at": "2026-10-06T05:22:19+00:00",
+"sha256": "fc606781944d0886060643f205ce664e005b319f107a93cd414b7347d58a330c",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49973,
+"lon": 13.13627,
+"bearing": 5.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:22:59.586102+00:00",
+"observed_at": "2026-10-06T05:22:35+00:00",
+"sha256": "17d832e9a2b764c72bccafad4c89384f3d3ff5b5bb357528689d28b4fe3c4d03",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.50009,
+"lon": 13.13654,
+"bearing": null
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:23:14.577564+00:00",
+"observed_at": "2026-10-06T05:22:52+00:00",
+"sha256": "25d1c02151c4f955beba3ba0d6dac30a253f710d4d1a6e4306e2b2f4b4b341bc",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.50016,
+"lon": 13.13665,
+"bearing": 21.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:23:29.580272+00:00",
+"observed_at": "2026-10-06T05:23:08+00:00",
+"sha256": "791e969cc03be5f1e45478e81ad02567c23b7194e4905b67d186cdbd599c91e8",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49947,
+"lon": 13.13621,
+"bearing": 186.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:23:44.577197+00:00",
+"observed_at": "2026-10-06T05:23:21+00:00",
+"sha256": "4df732188cc9aab3b4a6c09ee5d46eb283879a9c54201da551907a0b86a976da",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4986,
+"lon": 13.13545,
+"bearing": 215.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:24:02.942436+00:00",
+"observed_at": "2026-10-06T05:23:57+00:00",
+"sha256": "963b11e0ed06e77cd39199d3f85f4709f62cf477ad11e2744381a10cbc874382",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49501,
+"lon": 13.13161,
+"bearing": 207.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:24:15.171665+00:00",
+"observed_at": "2026-10-06T05:24:05+00:00",
+"sha256": "6651888c8b9c45ee9083420fb0c8d06236a96651fa3ed366812fed8b4e686137",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49412,
+"lon": 13.13085,
+"bearing": 214.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:24:29.648168+00:00",
+"observed_at": "2026-10-06T05:24:13+00:00",
+"sha256": "cdef40d937f88046e40ca8ca8c9a536077c0a17609556fd44f61de8ce06b92b1",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49347,
+"lon": 13.12972,
+"bearing": 232.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:24:44.578845+00:00",
+"observed_at": "2026-10-06T05:24:29+00:00",
+"sha256": "9026ae37e84bbb0a2741b657631b9ad754d40785416ebe235c2286b28d8c1d0a",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.49165,
+"lon": 13.12875,
+"bearing": 164.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:24:59.576704+00:00",
+"observed_at": "2026-10-06T05:24:45+00:00",
+"sha256": "ab1ae3b891726034ee657bf8f108327e2efb9acfe061de7a732a117c0ec7e069",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48933,
+"lon": 13.12961,
+"bearing": 194.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:25:14.581723+00:00",
+"observed_at": "2026-10-06T05:25:09+00:00",
+"sha256": "e16db04ae954b7117e66fb1ec6c0d47faaf5bbf0049bf1f8a1521c2b7ef108ee",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48723,
+"lon": 13.12524,
+"bearing": 241.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:25:29.585920+00:00",
+"observed_at": "2026-10-06T05:25:17+00:00",
+"sha256": "2c08feb137bcf3c44b9304217b9cf5b793f6cb38c6c7f21014bdb9b25f55eb57",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48659,
+"lon": 13.12354,
+"bearing": 240.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:25:44.583163+00:00",
+"observed_at": "2026-10-06T05:25:33+00:00",
+"sha256": "cd3639efae1f4ebac69f4099a12923b393fb879cdd7a41d175987e3bda543dd9",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4858,
+"lon": 13.1195,
+"bearing": 262.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:25:59.579258+00:00",
+"observed_at": "2026-10-06T05:25:49+00:00",
+"sha256": "5990d52d1b6fee6c891293b0b989395e6ea0fd0f7cae2b03b2bdc9614a20eb3e",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48536,
+"lon": 13.11511,
+"bearing": 260.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:26:14.579483+00:00",
+"observed_at": "2026-10-06T05:25:57+00:00",
+"sha256": "7987a9e1c826226b8dfa7f2742137b9eab8149cbbc60b2157ff331d0a5e8372b",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48518,
+"lon": 13.11295,
+"bearing": 266.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:26:29.959753+00:00",
+"observed_at": "2026-10-06T05:26:13+00:00",
+"sha256": "5b72847a07c3c86f8330ab49e35a426d4e496d52d686c54bb71aa818fe9908e9",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48621,
+"lon": 13.10924,
+"bearing": 289.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:26:44.587022+00:00",
+"observed_at": "2026-10-06T05:26:29+00:00",
+"sha256": "5bf97acd21308b630bfe9cf0ffae12d029599c0a2970deec30659a851b310f5a",
+"item": 230,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4868,
+"lon": 13.10577,
+"bearing": 286.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:26:59.581432+00:00",
+"observed_at": "2026-10-06T05:26:41+00:00",
+"sha256": "af9d8a1909fad2cc70ec115cba8e7771a82652ca4ae5888197f515bc03c57674",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.4872,
+"lon": 13.10315,
+"bearing": 271.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:27:14.569190+00:00",
+"observed_at": "2026-10-06T05:27:09+00:00",
+"sha256": "08f14d0aa6434ff22e4c0978053a98b552648f92a7262fa8c96c1a304c388132",
+"item": 229,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48789,
+"lon": 13.09658,
+"bearing": 300.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:27:29.567658+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "ec5c55ceaa920add7a039a715696975c1ee3c463d5ba0884eddd8d3bf78ed545",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:27:44.586754+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "4318a3f7f0338f1faee726abefb83e0918a24e07a4c0d966c3cfb67b3d294577",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:27:59.582071+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "018fac4e11c37d649a3d9cd097d2efb06411180d9327296a40e2e67448676d7d",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:28:14.588496+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "e952d64c16e9cd2e93c9205a3af0c03497151e50d78ad1850a3cdd2dbce6ed84",
+"item": 227,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:28:29.571317+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "71fa5aa6686ad707bee1d1e902c180649c5461bb28228b6b60d332f0f988a54f",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:28:44.579043+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "f275a628094bb1a9ab82a447ccd2a0c9888d8b9cd33ba0e316d5a70dc474a4a0",
+"item": 226,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:28:59.579309+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "b047c95523815f100087d75d712ecaecc039564c3ac899e2e12d902333351d1f",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:29:14.571017+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "485d47122419ddf81227edbd445770543aef5c57f4ccf3b300ed3feb94be8cdd",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:29:29.579181+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "6efb775e9a9e691b3f7dd87470f8ae33d316199c65eb68ba176b1e68802d4fce",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:29:44.578626+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "da0ca0861f0b8e7ee611eaafd212fd9bf153afe1e03f04fe241e4f47c7e03af6",
+"item": 225,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:29:59.584139+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "3d8e30a3cc1926b3f7cb867fe23f4f6aaea2b24968f8c334e1f2f2064188034f",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:30:14.579248+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "010efdbf8b6d9fa6c02c5bac40554f68c9cb0c98a2d6e31638df7f0e2db572a6",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:30:29.570484+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "72d7da67832a2d343471b8df241f42ee21a218b20b6cfd4a72fa5549f43d0268",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:30:44.664653+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "ca861394df7d86928b379d5cb7dc976e0e79959153f004cb47786f3d97fd1fa7",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:30:59.578515+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "dd6c377b78436000f68bfd9c87dca94bb7c7bb42d9a1ee7892639f1166848a23",
+"item": 224,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:31:14.575677+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "5482feacd9c40bf61466c57b6b17f452eb805cdbd85f56ba992f7f5555df2f5b",
+"item": 223,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:31:32.913949+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "4f80f08b50914df22b77eaeb364f0b5ce68d927eba11e097911df6a0122ae7b9",
+"item": 223,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:31:44.985312+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "2ad5f32284ac7cc1ef216c3a256c43df391b29338446124ca5045a8db12f5ac3",
+"item": 222,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:31:59.584569+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "bd29e614dbca94bea7d9461b2d5a73f6b40788162e462e6278957e66c6c02df4",
+"item": 221,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:32:14.584362+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "19cd0239c86f75ce16928c1150830d7bac82ee5783ea1512b165aefd1fa0d4d2",
+"item": 221,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:32:29.583101+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "b9e50039ef19c96631662519d868af6fb10f6b0df75275259270e6def04969ce",
+"item": 221,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+},
+{
+"source": "duk",
+"channel": "vehicles",
+"feed": "jdf",
+"received_at": "2026-10-06T05:32:44.581234+00:00",
+"observed_at": "2026-10-06T05:27:13+00:00",
+"sha256": "a7d8a1b260121f9747c84066d6dbaf5e62b326176f480ddc882a523e946fa01e",
+"item": 221,
+"decoder_version": 1,
+"facts": {
+"v": 1,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "209"
+},
+{
+"t": "trip_key",
+"ns": "cis:line_trip",
+"key": "522586:103"
+},
+{
+"t": "position",
+"lat": 50.48824,
+"lon": 13.09571,
+"bearing": 302.0
+},
+{
+"t": "delay",
+"s": 180,
+"ref": "unknown"
+},
+{
+"t": "source_state",
+"code": "running"
+}
+]
+}
+}
+]
+}

@@ -101,23 +101,25 @@ class Runner:
         state = runtime.state
         vehicle = vehicle_of(observation)
         before = state.vehicles.get(vehicle) if vehicle is not None else None
-        old_progress = None
+        old_committed = None
         if before is not None and before.binding is not None:
             instance = state.instances.get(before.binding.journey)
-            old_progress = None if instance is None else instance.progress
+            if instance is not None and instance.track is not None:
+                old_committed = instance.track.committed_m
         effects = step(state, observation, runtime.ctx)
         after = state.vehicles.get(vehicle) if vehicle is not None else None
         if before is None or before.binding is None or after is None or after.binding is None:
             return effects
         old, new = before.binding, after.binding
         if old.journey == new.journey:
-            progress = state.instances[new.journey].progress
+            # The live position may be revised between hypotheses; committed progress never.
+            track = state.instances[new.journey].track
             if (
-                old_progress is not None
-                and progress is not None
-                and progress.distance_m < old_progress.distance_m
+                old_committed is not None
+                and track is not None
+                and track.committed_m < old_committed
             ):
-                raise InvariantError(f"progress of {new.journey} went back")
+                raise InvariantError(f"committed progress of {new.journey} went back")
         elif old.journey.namespace == new.journey.namespace and old.journey.key == new.journey.key:
             trip = runtime.ctx.index.trip(old.trip_id)
             match = Match(old.journey, trip, *span(trip, old.journey))

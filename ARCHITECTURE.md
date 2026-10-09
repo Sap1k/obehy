@@ -337,7 +337,7 @@ These are fixed now because changing them later breaks history or consumers.
   `/api/v1/journeys/{feed}/{namespace}/{key}/{service_date}` and
   `/api/v1/vehicles/{vehicle_id}`; `trip_id` and `release_id` are attributes in responses.
 - **The public realtime model is the same for every call.** A call has an `estimate`, a
-  `status` (`scheduled`, `predicted`, `actual`, `no_realtime` or `cancelled`) and a
+  `status` (`scheduled`, `predicted`, `actual`, `inferred`, `no_realtime` or `cancelled`) and a
   `source_class`. Intervals, confidence and provenance are in the debug API only. Public
   fields are only ever added.
 

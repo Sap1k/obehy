@@ -24,9 +24,9 @@ Fact          VehicleKey(source_vehicle_id) | TripKey(namespace, key)
               | SourceState(code) | StopEvent(call_ref, kind, at) | NextStop(call_ref)
 JourneyKey    feed, namespace, key, service_date          public and history identity
 Binding       vehicle_key → JourneyKey, method, bound_at; service_date fixed once
-Instance      JourneyKey, release_id, trip_id, lifecycle, flags {off_route, stale},
-              progress (last call visit, fraction), timeline (per call: arrival and departure
-              intervals, estimate, status, source_class)
+Instance      JourneyKey, release_id, trip_id, mode, lifecycle, flags {off_route, stale, lost},
+              progress (last call visit, fraction), timeline (per call: recorded arrival and
+              departure intervals, passed times (realtime only), estimate, status, source_class)
 VehicleState  vehicle_key, binding?, last observation, position?,
               state: running | positioning | layover | unmatched | not_in_service
 Effect        EmitTripUpdate | EmitPosition | WriteEvent | SnapshotJourney | LogUnmatched | …
@@ -140,7 +140,8 @@ key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" }
 | Section | Values |
 |---|---|
 | `[time]` | date window `pre(mode)` and `max_delay(mode)`; vehicle-day gap 3 h; `max_clock_skew` (proposed 20 min) |
-| `[lifecycle]` | stale after N s; off-route base 150 m urban / 400 m regional, k = 0.15, hold T = 180 s |
+| `[lifecycle]` | stale and lost after N s (by mode); trigger radius and margin; finished grace; forget after |
+| `[progress]` | the progress model of section 9 (geometry trust, speed, lateness change, beam, commit lag, off-route hold) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | hours = 4 |
 
@@ -205,3 +206,86 @@ different oběh every day, and a mid-day swap changes only the live binding.
     first journey changes (for example at a timetable change).
 - The nightly job sets `history.vehicle_day.tour_id` with `tour_match_share`, the share of the
   day's journeys that follow the tour. "Which vehicle ran oběh X each day" is then one query.
+
+## 9. Progress model (`timeline/progress.py`)
+
+The design is `BASE_PLAN.md` section 20.4: map matching over the trip's own path, decoded online
+with a small beam of hypotheses; events committed when all surviving hypotheses agree. This
+section fixes the concrete shape.
+
+**Per journey state** (`Instance.track`):
+
+```text
+Hypothesis   along_m, at (last fix placed on the path), lateness_s, log_p, off_path_since,
+             history since the commit point: ((along_m, at), ...)
+Track        hypotheses (≤ beam), committed_m (frontier), unmatched_since, seen_at (newest
+             fix time used; a fix no newer is skipped and does not keep the journey fresh)
+```
+
+**Per fix**, for a running journey with a timed position newer than the last one used:
+
+1. Candidates: one projection per path segment with lateral ≤ `reach_sigmas × σ`, where
+   `σ = √(gps_sigma² + σ_geom²)` and `σ_geom` is `shape_sigma` on a real shape and
+   `min(chord_max, max(chord_min, chord_k × length))` on a stop-to-stop chord.
+2. Emission: `−½(lateral/σ)² − ln σ`, plus `−½(Δθ/bearing_sigma)²` when the fix has a bearing.
+3. Transition from each hypothesis to each candidate: impossible if `b < a − jitter` or if
+   `b − a − jitter` exceeds `max_speed(mode) × Δt`; otherwise `−½(ΔL/σ_L)²` with `ΔL` the
+   change of lateness and `σ_L = base + rate × Δt`, using the `loss` parameters when time is
+   lost and the `gain` ones when it is gained. Lateness is measured against the timetable
+   window of the place (BASE_PLAN.md section 20.4): 0 inside a call's dwell, never early while
+   waiting at the origin.
+4. Off path: every hypothesis also holds unchanged at `off_path_log_p`, as if the fix were
+   missing (`off_path_since` set).
+5. Every candidate keeps its best predecessor (Viterbi); the beam keeps the `beam` most likely,
+   dropping any more than `prune` below the best. The most likely hypothesis holding off path
+   for `off_route_hold_s` makes the journey `off_route`; a first fix with no candidate at all
+   is unmatched.
+6. Commit: every trigger with distance ≤ the smallest `along_m` of the hypotheses within
+   `agree_within` of the best, bracketed by the same two fixes in all of them, is committed;
+   the crossing time is interpolated between the fixes by timetable time; hypotheses below
+   `agree_within` that are behind the new commit point are dropped and histories are cut at
+   it. A decision open longer than `max_commit_lag_s` commits the best hypothesis and
+   drops the rest.
+
+The live position (`Instance.progress`, estimates, GTFS-RT) is the most likely hypothesis.
+
+**Policy** (`[progress]` in `policy-v1.toml`, replacing the off-route base/k/cap, reach window
+and backtrack tolerance): `gps_sigma_m`, `shape_sigma_m`, `chord_min_sigma_m`, `chord_k`,
+`chord_max_sigma_m`, `reach_sigmas`, `bearing_sigma_deg`, `jitter_m`, `off_path_log_p`,
+`max_speed_mps` (by mode), `agree_within`,
+`loss_sigma_base_s`, `loss_sigma_rate`, `gain_sigma_base_s`, `gain_sigma_rate`,
+`start_lateness_sigma_s`, `beam`, `prune`, `max_commit_lag_s`, `max_event_interval_s` (a crossing
+bracketed by fixes further apart is not known well enough for history: no event, but realtime
+gets its time interpolated between those fixes, status `inferred`), `off_route_hold_s`.
+
+**Reception gaps in realtime.** Predictions use the lateness the tracker measures from GPS
+(BASE_PLAN.md section 21.1), else the source's delay. Through a gap the last lateness holds; the
+vehicle is never assumed back on time. A journey without observations is `stale` after
+`stale_after_s` (its vehicle position is withdrawn, another claimant may lead) and `lost` after
+`predict_without_data_s` (its trip update is withdrawn too); both are per mode, longer for rail,
+and count on the reception clock from the last observation bringing a new fix, so a vehicle
+clock offset does not matter and a GPS time frozen while payloads keep coming is a gap.
+
+**Scenario suite** (`tests/unit/realtime/test_progress.py`), one test each:
+
+| Case | Expectation |
+|---|---|
+| straight run | events in order, finished at the last call |
+| *závlek* out and back | every call of the branch in visit order |
+| *závlek* with no reception inside it | branch committed only after the gap, in order |
+| loop A → B → A | events attach to the right visit |
+| stop passed on the way out, served on the way back | no event on the first pass |
+| first fix inside a *závlek* (restart) | resolved by the following fixes |
+| bus 10 min early from the start, and one losing 15 min | both followed; never rejected for lateness |
+| reception gap of 20 min on a plain road | progress resumes; passed calls get no history event but an `inferred` realtime time |
+| reception gap while late | predictions keep the last lateness, not the timetable |
+| waiting at the origin with a frozen GPS clock, then a loop off the chord (522586:107) | departure shown on time while waiting, late once it leaves; no stop claimed passed early |
+| jitter around a stop | no backward move, no duplicate events |
+| real detour off the path | off-route after the hold, resumes on rejoining |
+| stops 50 m apart | event times in call order |
+| chord far from the road (corner cut) | matched within chord trust, no jump ahead |
+
+Real traces as regression fixtures, cut from the pinned corpus (`tests/realtime/traces/`):
+`001521:104` on 2026-10-06 (Hora Sv. Kateřiny *závlek*) and `522586:103` on 2026-10-06
+(Kryštofovy Hamry *závlek* with poor reception): every call of each branch committed in visit
+order with plausible times.

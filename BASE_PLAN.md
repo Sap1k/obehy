@@ -1206,45 +1206,88 @@ confirmed    source actual, or a derived event confirmed by later progress
 The point estimate is the value preferred by the highest-ranked evidence, otherwise the interval
 clipped toward schedule plus the last anchored delay.
 
-## 20.4 Progress integrity and backtracking
+## 20.4 Progress along the path: a tracked hypothesis
 
-**Trip progress never jumps around, and delay progression stays sane.** Two route shapes must
-work:
+**Where a vehicle is along its trip is decided by a sequence of fixes, never by one fix.** A
+single fix often cannot say which visit it belongs to. The trip's path can overlap itself: a
+*závlek* (a side branch driven out and back), a loop, or a stop passed on the way out and served
+on the way back. Geometry may be poor: straight stop-to-stop chords cut corners until real shapes
+exist. Reception may drop for minutes. Only the following fixes resolve these cases, so progress
+is estimated as map matching over the trip's own path: a hidden Markov model decoded online
+(Newson & Krumm style), specialised to one trip whose position only moves forward.
 
-- **A → B → A, stopping at A both times.** A is call `i` and call `k > i`; a fix or a source
-  "last stop A" matches both.
-- **A → B → A, stopping only the second time.** The bus passes A on the way out without a call
-  there; A is only call `k` after B. Naively, passing A fires "arrived at A", jumps progress past
-  B and produces an absurd early delay.
+**Candidates.** For each fix, every segment of the path within reach of the fix gives one
+candidate position (its projection). On a *závlek* the way in and the way out each give one; on
+a loop every pass does. Nothing is chosen at this step.
 
-The path also overlaps itself on the out-and-back road, so one fix projects onto both the
-outbound and the inbound leg.
+**Fit of a fix to a candidate** (emission), as log-likelihoods:
 
-Rules, for GPS-derived and source-reported progress alike:
+- *Lateral distance* against the combined uncertainty of the fix and of the geometry there:
+  `σ = √(σ_gps² + σ_geom²)`. A real shape is trusted to tens of metres; a chord between stops
+  much less, growing with its length up to a cap
+  (`σ_geom = min(chord_max, max(chord_min, chord_k × length))`). Better geometry from the static
+  build raises the trust with no code change. Candidates beyond a few σ are not considered.
+- *Off the path.* A fix the geometry does not explain (a detour, a road winding far from a long
+  chord) says nothing about where along the trip the vehicle is. Every hypothesis may also hold
+  as if that fix were missing, at a fixed cost about that of a fit at the edge of reach. A
+  reading is never killed by one fix the path cannot explain; it loses to a reading that
+  explains the fixes. Holding longer than `T` is off-route (section 20.7).
+- *Heading*, when the source sends a bearing: the angle to the segment's direction. Opposite
+  legs of a *závlek* or an out-and-back road are told apart by this alone.
 
-1. **Calls are identified by sequence and path offset, never by stop identity or coordinates
-   alone.** A source stop reference resolves to the first matching call at or after current
-   progress that is reachable under rule 3. A fix near A means "at call j" only if progress is
-   inside call j's offset window.
-2. **Windowed forward projection.** A fix is projected only onto
-   `[progress − ε, progress + max_advance]`, where `max_advance = v_max(mode) · Δt` plus
-   accuracy. The earliest admissible projection wins, not the globally nearest one. Where fixes
-   or the source give a bearing, heading must agree with the path direction, which separates
-   outbound and inbound legs.
-3. **Sequential gating.** Progress cannot pass an unvisited intermediate call without evidence of
-   visiting it: a fix inside its offset window, or a time-plausible run of fixes beyond it. In the
-   second scenario, passing A on the way out lies in the path before B, not in call k's window,
-   so nothing fires.
-4. **Delay plausibility.** An update is rejected and logged as `jump` when it implies early
-   running beyond the mode's bound (for example more than 3 minutes early for a bus) or a delay
-   change larger than physically possible since the last accepted state
-   (`|Δdelay| > Δt + slack`). This also catches a naive source reporting the second A early.
-5. **Hold, don't jump.** A rejected update leaves progress and delay unchanged and widens the
-   uncertainty with time. Only consistent evidence moves the state; a gap or one bad fix never
-   produces a sawtooth delay.
+**Plausibility of a move** (transition) from a hypothesis at path distance `a` (time `t₀`) to a
+candidate at `b` (time `t₁`):
 
-Contradictions that survive these rules show up as an **empty interval**, for example a
-high-ranked "last stop k−2" after an accepted "last stop k":
+- *Forward only.* `b < a` beyond a small jitter allowance is impossible; jitter counts as no
+  movement.
+- *Speed.* `(b − a) / (t₁ − t₀)` above the mode's maximum is impossible. Only GPS jitter is
+  slack here: a loose chord widens where a fix may lie, not how far a vehicle may travel.
+- *Change of lateness, never lateness itself.* The timetable gives each place a window
+  `S(x) = [earliest, latest]`: at a call (between its arrival and departure triggers) the dwell
+  `[arrival, departure]`, with no earliest time at the origin; between calls one instant,
+  interpolated by distance. Lateness at a fix is how far `t` lies outside `S(x)`, 0 inside it: a
+  bus waiting at a stop before its departure is not early, one still there after it is late.
+  The move changes lateness by `ΔL`. Losing time (traffic, dwell) is common and gaining time is
+  limited, so the penalty is asymmetric and its spread grows with the time between fixes. A bus
+  running far early or late is never penalised for being so, only for implausibly sudden
+  changes. Long gaps need no special case: the longer the gap, the larger the plausible change.
+
+**Decoding.** Each journey keeps a small beam of the most likely histories (hypotheses), each
+extended by every fix with the best plausible candidate; unlikely ones are pruned. A first fix,
+including one in the middle of a trip after a restart, starts one hypothesis per candidate with a
+broad, non-binding prior on absolute lateness; the next fixes decide.
+
+**Commit when all agree.** Events come from the trigger points of section 20.7 (arrival before a
+call, departure after it, never past the midpoint to the neighbouring call).
+
+- An event is committed — written to history, `actual` in the public model — only when every
+  hypothesis that is not negligible (within `agree_within` of the most likely) has passed its
+  trigger between the same two fixes; negligible ones that disagree are dropped. Its interval
+  is bounded by those fixes. Its time inside them follows the timetable's pace, not distance:
+  lateness drifts between fixes, so the crossing is placed in proportion to timetable time
+  between them (a vehicle that waited at a stop and drove on is placed by the dwell).
+- At a *závlek* junction both readings live on until the bus drives into or past the branch;
+  then one needs a backward move and dies, and the branch's events resolve correctly. Inside a
+  reception gap the decision waits for the fixes after it instead of guessing.
+- Live output (current position, GTFS-RT estimates) uses the most likely hypothesis and never
+  waits. If a decision stays open longer than `max_commit_lag`, the most likely hypothesis is
+  committed and the others are dropped, so history never lags without bound.
+- The committed frontier only moves forward (an invariant checked in replay); the live position
+  may be revised while hypotheses compete.
+
+**Unmatched fixes and off-route.** A fix with no candidate within reach of any segment matches
+nothing: hypotheses keep their state and age. Unmatched fixes for longer than `T` set `off_route`
+(section 20.7). The keyed binding is kept and the next matching fix resumes decoding; the larger
+time step simply widens what is plausible.
+
+**One model, no special cases.** Out-and-back branches, loops, stops passed before being served,
+corner-cutting chords, reception gaps, mid-trip starts, early and late running, jitter and
+detours are all handled by the same three terms (geometry fit, forward speed, change of lateness)
+and the one commit rule; each has a scenario test (`docs/R1_SLICE.md`). Source-reported progress
+(SŽ events, Arriva next stop) enters later as further evidence on the same hypotheses.
+
+**Contradictions between sources** that survive this model show up as an **empty interval**, for
+example a high-ranked "last stop k−2" after an accepted "last stop k":
 
 1. Rank the conflicting evidence by policy priority for the capability, method (source actual >
    confirmed derived > progress > coarse delay > tentative), precision and recency. The weaker
@@ -1259,17 +1302,27 @@ high-ranked "last stop k−2" after an accepted "last stop k":
 
 ## 20.5 Predictions
 
-Project propagation runs from the latest anchored event:
+Project propagation runs call by call from the current lateness (own GPS where tracked, else
+the source's delay):
 
 ```text
-pred(j) = S(j) + delay_anchor − recoverable_slack(anchor → j)
+pred_arr(j) = S_arr(j) + L
+pred_dep(j) = max(S_dep(j), pred_arr(j) + min_dwell)   when L > 0 and S_dep(j) > S_arr(j)
+            = S_dep(j) + L                               otherwise
+L          ← pred_dep(j) − S_dep(j)
 ```
 
-- Slack is the dwell slack (`S_dep − S_arr − min_dwell`) plus configured running-time recovery
-  per mode (default 0; learned from history later).
-- The no-early-departure clamp applies; arrivals may be early only with precise signed evidence.
-- Uncertainty widens with lead time and with the anchor's interval width.
-- Never propagate one scalar delay unchanged through a long trip; maintain per-call predictions.
+- A late vehicle recovers time only in a real timetabled dwell, down to the minimum dwell
+  (policy: about a minute, two in long dwells). Buses mostly have none (arrival = departure);
+  trains often do. Running-time recovery per mode is 0 until learned from history.
+- Early running is carried over unchanged. Officially a bus may leave at most 59 s early and
+  should wait, but in practice it waits only at some stops (a busy stop where it is usually
+  early) and not at others; that is a habit, not a rule, so there is no blanket
+  no-early-departure clamp. Per-stop holding is learned from history later and then applied
+  where it is observed. Showing a vehicle that is early as on time would be wrong.
+- Each estimate is the single best prediction; no uncertainty is published.
+- A vehicle standing at a call gets a predicted departure; monotone repair keeps every estimate
+  at or after the last fix and the previous call.
 - Across trips of one vehicle, the circulation anchor (section 22) gives the knock-on start of
   the next trip.
 
@@ -1322,7 +1375,7 @@ Each call has separate `A_arr` and `A_dep` intervals: arrival and departure are 
 The first call has only a departure, the last only an arrival, and a passage has `arr = dep`.
 
 ```text
-forecast → pre_trip → running → finished          flags: off_route, stale
+forecast → pre_trip → running → finished          flags: off_route, stale, lost
 ```
 
 - **Forecast:** proposed by a circulation edge or `block_key` (section 22), before any
@@ -1344,15 +1397,24 @@ forecast → pre_trip → running → finished          flags: off_route, stale
 **Off-route with grace.** Until real shapes exist the path is the stop-to-stop polyline, so
 deviations are expected and some are correct.
 
-- Tolerance per segment is `max(base(mode), k × segment_length)`: a straight line between
-  distant stops strays further from the road than a short urban hop. Policy defaults: base
-  150 m urban, 400 m regional, `k ≈ 0.15`.
-- Outside tolerance for less than `T` (default 3 min): hold. No progress, binding kept.
-- Outside tolerance for longer: set `off_route` (detour or diversion). A keyed binding is never
-  dropped for geometry. GPS progress pauses and the source's delay is the fallback.
-- On rejoining, windowed forward projection resumes (section 20.4). Calls are skipped only with
-  evidence — a source event or a sustained run of fixes beyond them — and skipped calls are
-  `unvisited`, not departed.
+- How far a fix may lie from the path is the geometry trust of section 20.4: a straight line
+  between distant stops is trusted less than a short urban hop or a real shape.
+- Fixes matching no segment for less than `T` (default 3 min): hold. No progress, binding kept.
+- For longer: set `off_route` (detour or diversion). A keyed binding is never dropped for
+  geometry. GPS progress pauses and the source's delay is the fallback.
+- On rejoining, decoding resumes (section 20.4). Calls passed without matching fixes get no
+  event and are shown as passed without realtime, never as departed.
+
+**Reception gaps.** History records only what was observed: a call crossed between fixes further
+apart than `max_event_interval_s` gets no event. Realtime still shows it passed, at a time
+interpolated between those fixes (`inferred`). Predictions hold the last measured lateness
+through the gap and never fall back to the timetable as if the vehicle were on time. Without
+observations a journey is `stale` after `stale_after_s` (position withdrawn) and `lost` after
+`predict_without_data_s` (predictions withdrawn); both are per mode, longer for rail.
+
+**Trigger points.** Arrival triggers `arrival_radius` before a call, departure
+`departure_margin` after it, but never past the midpoint to the neighbouring call, so for stops
+closer together than the two margins event times still follow call order.
 
 ---
 
@@ -1372,12 +1434,12 @@ Once a vehicle is bound:
 
 - **Path:** the trip's shape with stop offsets when available (source shape, or MOTIS shapes),
   otherwise the stop-to-stop polyline of its calls. No router runs in the realtime core.
-- **Progress:** each fix is projected under the windowed, gated rules of section 20.4, giving a
-  distance along the path and the gap `(i, i+1)`. Fixes far from the path, frozen or implausible
-  in speed are rejected for progress; repeated rejects mark the binding `suspect`.
-- **Stop events from path offsets, not proximity:** the vehicle arrives at call j when progress
-  enters j's offset window and dwells while it stays there. Events are tentative until the next
-  accepted fix is past the call. They are the strongest road anchors.
+- **Progress:** decoded from the sequence of fixes as in section 20.4 (map matching over the
+  trip's own path), giving a distance along the path and the gap `(i, i+1)`. Distances always
+  come from the geometry; feed-provided `shape_dist_traveled` is never used (its unit varies).
+- **Stop events from path offsets, not proximity:** arrival and departure trigger points per
+  call (section 20.7); an event is committed when every surviving hypothesis has passed it.
+  Committed events are the strongest road anchors.
 - **Between stops:** `t − S(position)` is the current delay, where `S(position)` interpolates the
   schedule between `S_dep(i)` and `S_arr(i+1)` along the path. It enters the timeline as a
   `gps_derived` constraint with uncertainty from fix age and accuracy.
@@ -1855,7 +1917,7 @@ PID, DÚK, SŽ or another provider.
   every timetable version and JrUtil rerun; responses carry it, with the `release_id`, as an
   attribute only. Bookmarks, links and caches stay valid across releases.
 - **The public realtime model** is, per call: `estimate`, `status` (`scheduled`, `predicted`,
-  `actual`, `no_realtime`, `cancelled`) and `source_class`. Intervals, confidence and
+  `actual`, `inferred`, `no_realtime`, `cancelled`) and `source_class`. Intervals, confidence and
   provenance stay in the debug API. Public fields are only ever added.
 - `obehy api` is FastAPI. Its OpenAPI schema generates the frontend's TypeScript types.
 - The frontend lives in `web/` (Vite, React, MapLibre GL JS) with its own toolchain.

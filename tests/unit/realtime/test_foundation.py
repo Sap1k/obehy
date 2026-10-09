@@ -15,7 +15,7 @@ def test_policy_loads_and_resolves_modes() -> None:
     assert policy.version == "1"
     assert policy.time.max_delay_s("rail") == 14400
     assert policy.time.max_delay_s("bus") == 7200
-    assert policy.lifecycle.off_route_base_m("tram") == 150
+    assert policy.progress.max_speed_mps("rail") == 45
 
 
 def test_policy_without_a_value_does_not_load() -> None:
@@ -24,8 +24,8 @@ def test_policy_without_a_value_does_not_load() -> None:
     from obehy.realtime.policy import POLICY
 
     document: dict[str, Any] = tomllib.loads(POLICY.read_text(encoding="utf-8"))
-    del document["lifecycle"]["off_route_k"]
-    with pytest.raises(PolicyError, match=r"lifecycle\.off_route_k"):
+    del document["progress"]["chord_k"]
+    with pytest.raises(PolicyError, match=r"progress\.chord_k"):
         parse_policy(document)
 
 

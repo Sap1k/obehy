@@ -11,20 +11,67 @@ vehicle_day_gap_s = 10800
 max_clock_skew_s = 1200
 
 [lifecycle]
-stale_after_s = 180
-off_route_base_m = { default = 400, tram = 150, trolleybus = 150, metro = 150 }
-off_route_k = 0.15
-# Upper bound of k x segment length, so one very long chord cannot make the tolerance huge.
-off_route_max_m = 1000
-off_route_hold_s = 180
-# Fastest plausible travel between fixes; bounds where along the path a fix is searched.
-max_speed_mps = { default = 30, rail = 45 }
-backtrack_tolerance_m = 80
+# Without observations a journey's vehicle position is withdrawn (and another vehicle claiming
+# the journey may take over) after stale_after_s; its predictions continue from the last
+# lateness through the reception gap until predict_without_data_s. Trains go without GPS longer.
+stale_after_s = { default = 300, rail = 900 }
+predict_without_data_s = { default = 1800, rail = 3600 }
 arrival_radius_m = 60
 departure_margin_m = 40
 finished_grace_s = 300
 # Vehicles unseen and journeys untouched this long are dropped from memory (history keeps them).
 forget_after_s = 7200
+
+[progress]
+# Map matching over the trip's path (BASE_PLAN.md 20.4, docs/R1_SLICE.md 9).
+# Geometry trust: how far a fix may lie from the path, as one standard deviation.
+gps_sigma_m = 20
+shape_sigma_m = 25
+chord_min_sigma_m = 80
+chord_k = 0.15
+# A chord is never trusted less than this: a road far from a long chord is explained by the
+# off-path option below, not by a tolerance so wide that any fix fits anywhere along it.
+chord_max_sigma_m = 300
+# Segments further than this many sigmas from a fix give it no candidate.
+reach_sigmas = 4
+# Heading fit, only for fixes that carry a bearing; chords follow the road less closely.
+bearing_sigma_deg = 45
+chord_bearing_sigma_deg = 70
+# Backward moves up to this are GPS noise (no movement); beyond, impossible.
+jitter_m = 40
+# Log-likelihood of a fix the geometry does not explain (detour, road far from a chord): the
+# reading holds as if the fix were missing. About a fix at the reach (4.4 sigma) of a short chord.
+off_path_log_p = -13
+max_speed_mps = { default = 30, rail = 45 }
+# Change of lateness between fixes: spread = base + rate x seconds elapsed. Losing time is
+# common (traffic, dwell), gaining it is limited. Absolute lateness is never penalised.
+loss_sigma_base_s = 120
+loss_sigma_rate = 0.5
+gain_sigma_base_s = 60
+gain_sigma_rate = 0.2
+# Broad prior for the first fix of a journey (also mid-trip after a restart).
+start_lateness_sigma_s = 900
+beam = 8
+# Hypotheses this far (log-likelihood) below the best are dropped.
+prune = 15
+# An open decision is forced (best hypothesis wins) after this long.
+# A commit needs the agreement of every hypothesis within this of the best (log-likelihood);
+# below it (e.g. a reading holding through one off-path fix) it is negligible and does not block.
+agree_within = 7
+max_commit_lag_s = 900
+# A crossing bracketed by fixes further apart than this was not observed: no event, the call
+# is passed without realtime (e.g. inside a reception gap).
+max_event_interval_s = 300
+off_route_hold_s = 180
+
+[prediction]
+# Propagation (BASE_PLAN.md 20.5). A late vehicle recovers time only in a real timetabled dwell
+# (departure after arrival): it needs min_dwell_s there, or min_long_dwell_s in a dwell of at
+# least long_dwell_s, and never leaves before the scheduled departure. Early running carries
+# over unchanged.
+min_dwell_s = { default = 60 }
+long_dwell_s = { default = 300 }
+min_long_dwell_s = { default = 120 }
 
 [delay]
 discard_below_s = -1800

@@ -39,13 +39,8 @@ class TimePolicy:
 
 @dataclass(frozen=True, slots=True)
 class LifecyclePolicy:
-    stale_after_s: int
-    off_route_base_m: ByMode
-    off_route_k: float
-    off_route_max_m: float
-    off_route_hold_s: int
-    max_speed_mps: ByMode
-    backtrack_tolerance_m: float
+    stale_after_s: ByMode
+    predict_without_data_s: ByMode
     arrival_radius_m: float
     departure_margin_m: float
     finished_grace_s: int
@@ -53,10 +48,45 @@ class LifecyclePolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class ProgressPolicy:
+    gps_sigma_m: float
+    shape_sigma_m: float
+    chord_min_sigma_m: float
+    chord_k: float
+    chord_max_sigma_m: float
+    reach_sigmas: float
+    bearing_sigma_deg: float
+    chord_bearing_sigma_deg: float
+    jitter_m: float
+    off_path_log_p: float
+    max_speed_mps: ByMode
+    loss_sigma_base_s: float
+    loss_sigma_rate: float
+    gain_sigma_base_s: float
+    gain_sigma_rate: float
+    start_lateness_sigma_s: float
+    beam: int
+    prune: float
+    agree_within: float
+    max_commit_lag_s: int
+    max_event_interval_s: int
+    off_route_hold_s: int
+
+
+@dataclass(frozen=True, slots=True)
+class PredictionPolicy:
+    min_dwell_s: ByMode
+    long_dwell_s: ByMode
+    min_long_dwell_s: ByMode
+
+
+@dataclass(frozen=True, slots=True)
 class Policy:
     version: str
     time: TimePolicy
     lifecycle: LifecyclePolicy
+    progress: ProgressPolicy
+    prediction: PredictionPolicy
     delay_discard_below_s: int
     warm_replay_hours: int
     emit_tick_s: int
@@ -109,6 +139,8 @@ def parse_policy(document: dict[str, Any]) -> Policy:
     root = _Table(document, "")
     time = root.table("time")
     lifecycle = root.table("lifecycle")
+    progress = root.table("progress")
+    prediction = root.table("prediction")
     return Policy(
         version=root.text("policy_version"),
         time=TimePolicy(
@@ -118,17 +150,41 @@ def parse_policy(document: dict[str, Any]) -> Policy:
             max_clock_skew=timedelta(seconds=time.integer("max_clock_skew_s")),
         ),
         lifecycle=LifecyclePolicy(
-            stale_after_s=lifecycle.integer("stale_after_s"),
-            off_route_base_m=lifecycle.by_mode("off_route_base_m"),
-            off_route_k=lifecycle.number("off_route_k"),
-            off_route_max_m=lifecycle.number("off_route_max_m"),
-            off_route_hold_s=lifecycle.integer("off_route_hold_s"),
-            max_speed_mps=lifecycle.by_mode("max_speed_mps"),
-            backtrack_tolerance_m=lifecycle.number("backtrack_tolerance_m"),
+            stale_after_s=lifecycle.by_mode("stale_after_s"),
+            predict_without_data_s=lifecycle.by_mode("predict_without_data_s"),
             arrival_radius_m=lifecycle.number("arrival_radius_m"),
             departure_margin_m=lifecycle.number("departure_margin_m"),
             finished_grace_s=lifecycle.integer("finished_grace_s"),
             forget_after_s=lifecycle.integer("forget_after_s"),
+        ),
+        progress=ProgressPolicy(
+            gps_sigma_m=progress.number("gps_sigma_m"),
+            shape_sigma_m=progress.number("shape_sigma_m"),
+            chord_min_sigma_m=progress.number("chord_min_sigma_m"),
+            chord_k=progress.number("chord_k"),
+            chord_max_sigma_m=progress.number("chord_max_sigma_m"),
+            reach_sigmas=progress.number("reach_sigmas"),
+            bearing_sigma_deg=progress.number("bearing_sigma_deg"),
+            chord_bearing_sigma_deg=progress.number("chord_bearing_sigma_deg"),
+            jitter_m=progress.number("jitter_m"),
+            off_path_log_p=progress.number("off_path_log_p"),
+            max_speed_mps=progress.by_mode("max_speed_mps"),
+            loss_sigma_base_s=progress.number("loss_sigma_base_s"),
+            loss_sigma_rate=progress.number("loss_sigma_rate"),
+            gain_sigma_base_s=progress.number("gain_sigma_base_s"),
+            gain_sigma_rate=progress.number("gain_sigma_rate"),
+            start_lateness_sigma_s=progress.number("start_lateness_sigma_s"),
+            beam=progress.integer("beam"),
+            prune=progress.number("prune"),
+            agree_within=progress.number("agree_within"),
+            max_commit_lag_s=progress.integer("max_commit_lag_s"),
+            max_event_interval_s=progress.integer("max_event_interval_s"),
+            off_route_hold_s=progress.integer("off_route_hold_s"),
+        ),
+        prediction=PredictionPolicy(
+            min_dwell_s=prediction.by_mode("min_dwell_s"),
+            long_dwell_s=prediction.by_mode("long_dwell_s"),
+            min_long_dwell_s=prediction.by_mode("min_long_dwell_s"),
         ),
         delay_discard_below_s=root.table("delay").integer("discard_below_s"),
         warm_replay_hours=root.table("warm_replay").integer("hours"),

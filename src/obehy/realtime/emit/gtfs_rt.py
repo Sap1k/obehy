@@ -40,9 +40,9 @@ def feed_message(state: FeedState, now: Instant) -> rt.FeedMessage:
             vehicles_of[current.binding.journey].append(vehicle)
 
     for journey, instance in sorted(state.instances.items()):
-        if instance.lifecycle not in LIVE or instance.stale:
-            continue
-        updates = [c for c in instance.calls if c.status in ("actual", "predicted")]
+        if instance.lifecycle not in LIVE or instance.lost:
+            continue  # a stale journey keeps its predictions through a reception gap
+        updates = [c for c in instance.calls if c.status in ("actual", "inferred", "predicted")]
         if not updates:
             continue
         entity = message.entity.add()

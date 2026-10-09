@@ -204,6 +204,7 @@ Each quirk is handled where stated and has a scenario test named after its ID
 | DUK-Q10 | lines missing from the national export (`522588`, `599894`, `626`) | unmatched, shown as such; a static data gap, not a matching problem |
 | DUK-Q11 | one trip claimed by two vehicles at once (mostly PID `100xxx` detour trips) | both bind the instance (section 19.5); one position per feed by arbitration |
 | DUK-Q12 | DPmÚL and Teplice vehicles never send `ArrivalDT` | arrivals come from GPS progress only |
+| DUK-Q13 | `Azimut` is exactly 0 in about 5 % of entries, often while the vehicle moves | 0 is read as no bearing; progress uses bearing only when present |
 
 ## Open questions
 

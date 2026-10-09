@@ -14,6 +14,7 @@ from obehy.realtime.model import (
     WriteEvent,
 )
 from obehy.realtime.policy import load_policy
+from obehy.realtime.times import Instant
 from tests.realtime.builder import ORIGIN, STEP_LON, timetable, with_unknown
 from tests.realtime.observations import local, observe
 
@@ -70,6 +71,14 @@ def between(a: str, b: str) -> Interval:
     return Interval(local(f"2026-10-08 {a}"), local(f"2026-10-08 {b}"))
 
 
+def near(value: Instant | None, clock: str, slack_s: int = 5) -> bool:
+    """Within a few seconds: the test geometry is metres-approximate."""
+
+    return (
+        value is not None and abs((value - local(f"2026-10-08 {clock}")).total_seconds()) <= slack_s
+    )
+
+
 def test_events_follow_progress_and_the_trip_finishes() -> None:
     run = (
         Run()
@@ -113,20 +122,46 @@ def test_off_route_holds_progress_then_flags_then_rejoins() -> None:
     assert run.state.vehicles[VehicleId("duk", "1001")].binding is not None
 
 
-def test_minor_deviation_inside_tolerance_counts_as_on_route() -> None:
-    run = Run().at("08:00", east(0)).at("08:02", north_of(300, 250))
+def test_minor_deviation_from_a_stop_to_stop_chord_counts_as_on_route() -> None:
+    index = (
+        timetable()
+        .trip(
+            "582492:143",
+            days=[DAY],
+            calls=[("A", "08:00"), ("B", "08:05"), ("C", "08:10")],
+            shape=False,
+        )
+        .index()
+    )
+    run = Run()
+    run.ctx = Context(index, POLICY)
+    run.at("08:00", east(0)).at("08:02", north_of(300, 250))
     assert run.instance.off_route_since is None
     progress = run.instance.progress
     assert progress is not None and abs(progress.distance_m - 300) < 5
 
 
-def test_source_delay_predicts_the_calls_ahead() -> None:
-    run = Run().at("08:01", east(0), delay=120)
+def test_source_delay_predicts_the_calls_ahead_without_gps() -> None:
+    run = Run().at("08:01", None, delay=120)
     calls = run.instance.calls
     assert [c.status for c in calls] == ["predicted"] * 3
     assert calls[1].estimated_arrival == local("2026-10-08 08:07")
     assert calls[2].estimated_arrival == local("2026-10-08 08:12")
     assert {c.source_class for c in calls} == {"source"}
+
+
+def test_gps_lateness_predicts_ahead_of_the_source_delay() -> None:
+    run = Run().at("08:00", east(0)).at("08:04", east(500), delay=120)  # 90 s late at 500 m
+    calls = run.instance.calls
+    assert [c.status for c in calls] == ["actual", "predicted", "predicted"]
+    assert near(calls[1].estimated_arrival, "08:06:30")
+    assert near(calls[2].estimated_arrival, "08:11:30")
+    assert calls[2].source_class == "gps"
+
+
+def test_without_any_delay_the_measured_lateness_still_predicts() -> None:
+    run = Run().at("08:00", east(0)).at("08:06", east(500))  # no source delay: 210 s late
+    assert near(run.instance.calls[2].estimated_arrival, "08:13:30")
 
 
 def test_duk_q6_garbage_negative_delay_is_discarded() -> None:
@@ -157,7 +192,7 @@ def test_binding_mid_trip_marks_passed_calls_without_realtime() -> None:
     statuses = [c.status for c in run.instance.calls]
     assert statuses == ["no_realtime", "no_realtime", "predicted"]
     assert run.events() == []
-    assert run.instance.calls[2].estimated_arrival == local("2026-10-08 08:11")
+    assert near(run.instance.calls[2].estimated_arrival, "08:10:40")  # 40 s late at 1100 m
 
 
 def test_a_loop_attaches_events_to_the_right_visit() -> None:
@@ -207,11 +242,20 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
     update = message.entity[0].trip_update
     assert (update.trip.trip_id, update.trip.start_date) == ("jdf:t1", "20261008")
     assert [s.stop_sequence for s in update.stop_time_update] == [1, 2, 3]
-    assert update.stop_time_update[1].arrival.time == int(local("2026-10-08 08:06").timestamp())
+    expected = local("2026-10-08 08:05:30").timestamp()  # 30 s late at 500 m
+    assert abs(update.stop_time_update[1].arrival.time - expected) <= 5
     assert feed_message(run.state, now).SerializeToString(deterministic=True) == raw
 
-    refresh(run.state, local("2026-10-08 08:10"), POLICY)  # stale after 180 s
-    assert len(feed_message(run.state, local("2026-10-08 08:10")).entity) == 0
+    # Stale after 300 s: the position goes, the predictions stay through a reception gap...
+    later = local("2026-10-08 08:10")
+    refresh(run.state, later, POLICY)
+    assert [e.id for e in feed_message(run.state, later).entity] == [
+        "trip:cis:line_trip:582492:143:2026-10-08"
+    ]
+    # ...until nothing has been heard for predict_without_data_s.
+    lost = local("2026-10-08 08:34")
+    refresh(run.state, lost, POLICY)
+    assert len(feed_message(run.state, lost).entity) == 0
 
 
 def test_duk_q11_only_the_lead_vehicle_drives_the_timeline() -> None:
@@ -222,7 +266,7 @@ def test_duk_q11_only_the_lead_vehicle_drives_the_timeline() -> None:
     assert progress is not None and abs(progress.distance_m - 600) < 5
     assert run.instance.lead == VehicleId("duk", "1001")
     assert run.state.vehicles[VehicleId("duk", "1002")].binding is not None
-    run.at("08:07:00", east(1900), vehicle="1002")  # the lead went stale: 1002 takes over
+    run.at("08:08:30", east(1900), vehicle="1002")  # the lead went stale: 1002 takes over
     assert run.instance.lead == VehicleId("duk", "1002")
 
 
@@ -293,3 +337,51 @@ def test_a_zavlek_is_driven_not_skipped() -> None:
     ]
     arrivals = [(stop, visit) for stop, visit, kind in order if kind == "arrival"]
     assert arrivals == [("B", 1), ("C", 1), ("D", 1), ("C", 2), ("B", 2), ("E", 1)]
+
+
+def _dwell_run() -> Run:
+    """A-B-C with a real five-minute dwell at B (arrive 08:05, leave 08:10)."""
+
+    index = (
+        timetable()
+        .trip(
+            "582492:143",
+            days=[DAY],
+            calls=[("A", "08:00"), ("B", "08:05", "08:10"), ("C", "08:15")],
+        )
+        .index()
+    )
+    run = Run()
+    run.ctx = Context(index, POLICY)
+    return run
+
+
+def test_a_late_bus_recovers_in_a_real_dwell() -> None:
+    run = _dwell_run().at("08:00", east(0)).at("08:04", east(250))  # ~165 s late
+    b, c = run.instance.calls[1:]
+    assert near(b.estimated_arrival, "08:07:45")
+    assert b.estimated_departure == local("2026-10-08 08:10")  # 2 min dwell fits: on time
+    assert c.estimated_arrival == local("2026-10-08 08:15")
+
+
+def test_a_dwell_absorbs_lateness_only_down_to_the_minimum_dwell() -> None:
+    run = _dwell_run().at("08:00", east(0)).at("08:07:15", east(250))  # ~6 min late
+    b, c = run.instance.calls[1:]
+    assert near(b.estimated_arrival, "08:11")
+    assert near(b.estimated_departure, "08:13")  # arrival + 2 min (long dwell)
+    assert near(c.estimated_arrival, "08:18")
+
+
+def test_early_running_is_carried_through_a_dwell_unchanged() -> None:
+    run = _dwell_run().at("08:00", east(0)).at("08:00:45", east(500))  # ~105 s early
+    b, c = run.instance.calls[1:]
+    assert near(b.estimated_departure, "08:08:15")  # not clamped to the timetable
+    assert near(c.estimated_arrival, "08:13:15")
+
+
+def test_a_bus_standing_at_a_stop_gets_a_predicted_departure() -> None:
+    run = _dwell_run().at("08:00", east(0)).at("08:06", east(500)).at("08:08", east(1000))
+    run.at("08:08:30", east(1005))  # the arrival commits once the readings agree
+    b = run.instance.calls[1]
+    assert b.status == "actual" and b.estimated_arrival is not None
+    assert b.estimated_departure == local("2026-10-08 08:10")  # waits for its time

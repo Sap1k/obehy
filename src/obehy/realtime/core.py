@@ -118,29 +118,38 @@ def estimate_all(state: FeedState, ctx: Context) -> None:
         if instance is None:
             continue
         trip = ctx.index.trip(instance.trip_id)
-        state.instances[journey] = estimate(
-            instance, ctx.paths.scheduled(trip, journey.service_date)
-        )
+        plan = ctx.paths.plan(trip, journey.service_date, ctx.index, ctx.policy)
+        state.instances[journey] = estimate(instance, plan.scheduled, ctx.policy.prediction)
     state.dirty.clear()
 
 
 def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
-    """Emit-tick housekeeping: flag stale journeys, forget long-unseen vehicles and journeys."""
+    """Emit-tick housekeeping: flag stale and lost journeys, forget long-unseen vehicles and
+    journeys."""
 
-    stale_after = timedelta(seconds=policy.lifecycle.stale_after_s)
+    # Each entry is decided on its own, so iteration order cannot change the result.
     forget = timedelta(seconds=policy.lifecycle.forget_after_s)
-    for vehicle, current in sorted(state.vehicles.items()):
+    for vehicle, current in list(state.vehicles.items()):
         if now - current.last_seen > forget:
             del state.vehicles[vehicle]
     bound = {v.binding.journey for v in state.vehicles.values() if v.binding is not None}
-    for journey, instance in sorted(state.instances.items()):
-        idle = now - instance.updated_at
+    limits: dict[str, tuple[timedelta, timedelta]] = {}
+    for journey, instance in list(state.instances.items()):
+        idle = now - instance.heard_at
         if idle > forget and journey not in bound:
             del state.instances[journey]
             continue
-        stale = instance.lifecycle != "finished" and idle > stale_after
-        if stale != instance.stale:
-            state.instances[journey] = replace(instance, stale=stale)
+        mode = instance.mode
+        if mode not in limits:
+            limits[mode] = (
+                timedelta(seconds=policy.lifecycle.stale_after_s(mode)),
+                timedelta(seconds=policy.lifecycle.predict_without_data_s(mode)),
+            )
+        stale_after, lost_after = limits[mode]
+        live = instance.lifecycle != "finished"
+        stale, lost = live and idle > stale_after, live and idle > lost_after
+        if (stale, lost) != (instance.stale, instance.lost):
+            state.instances[journey] = replace(instance, stale=stale, lost=lost)
 
 
 def _leads(
@@ -151,7 +160,8 @@ def _leads(
 
     if instance.lead is None or instance.lead == vehicle or instance.lead_seen is None:
         return True
-    return observation.at - instance.lead_seen > timedelta(seconds=policy.lifecycle.stale_after_s)
+    stale_after = timedelta(seconds=policy.lifecycle.stale_after_s(instance.mode))
+    return observation.at - instance.lead_seen > stale_after
 
 
 def _continued(
@@ -182,9 +192,11 @@ def _open(state: FeedState, match: Match, ctx: Context, observation: Observation
         journey=match.journey,
         release_id=ctx.index.release_id,
         trip_id=trip.trip_id,
+        mode=trip.mode,
         lifecycle="pre_trip",
         calls=tuple(CallState(c.sequence, c.location_id, c.visit_n) for c in trip.calls),
         updated_at=observation.at,
+        heard_at=observation.received_at,
     )
     return [snapshot(match.journey, ctx.index, trip.trip_id, observation.at)]
 
@@ -282,6 +294,7 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
             trip_id=trip.trip_id,
             calls=calls,
             progress=None,
+            track=None,
         )
         moved[journey] = trip.trip_id
         state.dirty.add(journey)

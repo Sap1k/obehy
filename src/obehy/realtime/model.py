@@ -156,7 +156,7 @@ class Binding:
 # --- instance state ----------------------------------------------------------------------------
 
 Lifecycle = Literal["forecast", "pre_trip", "running", "finished"]
-CallStatus = Literal["scheduled", "predicted", "actual", "no_realtime", "cancelled"]
+CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
 SourceClass = Literal["gps", "source", "propagated"]
 
 
@@ -177,6 +177,11 @@ class CallState:
     estimated_departure: Instant | None = None
     status: CallStatus = "scheduled"
     source_class: SourceClass | None = None
+    # When progress crossed the call's triggers, interpolated between the fixes either side.
+    # Set for every committed crossing, also one inside a reception gap that `arrival` and
+    # `departure` (recorded events, the only ones history gets) leave out: realtime only.
+    passed_arrival: Instant | None = None
+    passed_departure: Instant | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,18 +194,55 @@ class Progress:
 
 
 @dataclass(frozen=True, slots=True)
+class Hypothesis:
+    """One reading of where the vehicle is along the path (BASE_PLAN.md section 20.4)."""
+
+    along_m: float
+    at: Instant
+    lateness_s: float
+    log_p: float
+    # (along_m, at) of each fix since the commit point, oldest first, ending at the last fix
+    # this reading placed on the path.
+    history: tuple[tuple[float, Instant], ...]
+    # Since when the fixes have been off the path for this reading (held, as if missing).
+    off_path_since: Instant | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Track:
+    """The live hypotheses of a journey and how far events are committed."""
+
+    hypotheses: tuple[Hypothesis, ...]
+    committed_m: float
+    unmatched_since: Instant | None = None
+    # The newest fix time used; a fix no newer (repeated or out of order) is skipped.
+    seen_at: Instant | None = None
+    # Time of the last committed crossing: crossings are committed in path order, so their
+    # times never decrease.
+    crossed_at: Instant | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Instance:
     journey: JourneyKey
     release_id: str
     trip_id: str
+    mode: str  # the route mode, for per-mode policy values
     lifecycle: Lifecycle
     calls: tuple[CallState, ...]
     updated_at: Instant
+    # When the last observation bringing anything new was received (reception clock, so a
+    # vehicle clock offset or a frozen GPS time does not matter); staleness counts from here.
+    heard_at: Instant
     progress: Progress | None = None
+    track: Track | None = None
     delay_s: int | None = None
     off_route_since: Instant | None = None
     off_route: bool = False
+    # No observation for `stale_after_s`: the position is withdrawn, predictions continue.
     stale: bool = False
+    # No observation for `predict_without_data_s`: predictions are withdrawn too.
+    lost: bool = False
     # The one vehicle whose observations drive the timeline when several claim the journey
     # (DUK-Q11); it changes only when the lead goes stale.
     lead: VehicleId | None = None
