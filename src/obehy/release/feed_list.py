@@ -1,7 +1,7 @@
 """``obehy release feed-list``: the public list of the active release's feeds.
 
-Caddy serves each static feed under a stable name straight from ``releases/active``
-(``deploy/Caddyfile``), so the URLs never change; this writes the page that lists them, with
+nginx serves each static feed under a stable name straight from ``releases/active``
+(``deploy/nginx.conf``), so the URLs never change; this writes the page that lists them, with
 sizes and the release they come from, as ``index.html`` and ``feeds.json``.
 """
 
