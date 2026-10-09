@@ -180,9 +180,11 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
   `docs/R1_SLICE.md`) is implemented (2026-10-09): times, model, lazy index, keyed binding,
   progress as map matching, history, DÚK connector, worker, warm replay and replay on the core.
   On the pinned 25 h corpus the match rate is DÚK 99.4%, Teplice 99.1%, DPmÚL 54.7% and the
-  GTFS-RT consistency check is clean. Open for R1 acceptance (§6 there): determinism and
-  `--write-history` re-runs on the final code, golden digests, the warm-restart comparison on
-  the corpus, and the MobilityData GTFS-RT validator (needs a `read:packages` token).
+  GTFS-RT consistency check is clean. Replay is deterministic (byte-identical snapshots across
+  runs; golden digests in `tests/golden`, `tests/db/test_corpus.py` with `OBEHY_PINNED_ROOT`).
+  Open for R1 acceptance (§6 there): history rebuilt twice and the warm-restart comparison on
+  the real corpus (both pass as DB tests on fixtures; the corpus run was stopped, slow over the
+  LAN), and the MobilityData GTFS-RT validator (needs a `read:packages` token).
   Predictions follow `BASE_PLAN.md` 20.5 (dwell recovery, early running carried over, no
   uncertainty); per-stop holding and knock-on to the next trip of a tour wait for history
   learning and circulations (section 22). JrUtil's
