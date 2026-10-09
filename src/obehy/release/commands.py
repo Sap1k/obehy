@@ -11,10 +11,13 @@ from typing import Any, cast
 import psycopg
 
 from obehy.release import activate as activation
+from obehy.release import fetch as fetching
 from obehy.release.contract import load_contract
 from obehy.release.load import PACKAGES, LoadError, load_release
 from obehy.release.migrate import MigrationError, migrate
-from obehy.runtime_config import ConfigurationError, load_database_url
+from obehy.runtime_config import ConfigurationError, default_config_path, load_database_url
+
+DEFAULT_RELEASES = default_config_path().parents[1] / "data" / "releases"
 
 
 def add_parsers(commands: Any) -> None:
@@ -25,6 +28,25 @@ def add_parsers(commands: Any) -> None:
 
     release = commands.add_parser("release", help="load and activate releases in the database")
     release_commands = release.add_subparsers(dest="release_command", required=True)
+    fetcher = release_commands.add_parser(
+        "fetch",
+        help="download, verify and unpack a published release; prints its directory",
+    )
+    fetcher.add_argument("run_id", nargs="?", help="the run to fetch (default: the newest build)")
+    fetcher.add_argument(
+        "--into",
+        type=Path,
+        default=DEFAULT_RELEASES,
+        help="directory of fetched releases (default: data/releases)",
+    )
+    fetcher.add_argument("--repository", default=fetching.DEFAULT_REPOSITORY)
+    fetcher.add_argument(
+        "--keep",
+        type=int,
+        default=fetching.DEFAULT_KEEP,
+        help="fetched release directories to keep, newest first (default: 3)",
+    )
+
     loader = release_commands.add_parser("load", help="verify and load a release directory")
     loader.add_argument("release_dir", type=Path)
     loader.add_argument(
@@ -54,6 +76,25 @@ def add_parsers(commands: Any) -> None:
     _connection_arguments(reporter)
 
 
+def _fetch(args: argparse.Namespace) -> int:
+    into = cast(Path, args.into)
+    try:
+        published = fetching.find_release(cast(str, args.repository), cast(str | None, args.run_id))
+        directory, new = fetching.fetch_release(published, into, report=_progress)
+    except (fetching.FetchError, OSError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    _progress(f"fetched {published.run_id}" if new else f"{published.run_id} is already fetched")
+    for run in fetching.prune(into, cast(int, args.keep), published.run_id):
+        _progress(f"deleted the fetched release {run}")
+    print(directory)
+    return 0
+
+
+def _progress(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
 def _connection_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", type=Path)
     parser.add_argument("--database-url", help="overrides OBEHY_DATABASE_URL and the config")
@@ -69,6 +110,8 @@ def _report(message: str) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.command == "release" and args.release_command == "fetch":
+        return _fetch(args)
     try:
         with _connect(args) as connection:
             if args.command == "db":

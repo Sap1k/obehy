@@ -202,6 +202,7 @@ JrUtil writes `jrutil-production` packages (bundle 3, serving schema 5.0; see
 docker compose up -d                       # PostGIS 17 for development and DB tests
 $env:OBEHY_DATABASE_URL = "postgresql://..."
 uv run obehy db migrate
+uv run obehy release fetch                 # newest build -> data/releases/<run-id>; prints the dir
 uv run obehy release load <release-dir>
 uv run obehy release activate <run-id>     # or --rollback
 uv run obehy release status
@@ -209,7 +210,10 @@ uv run obehy release status
 
 The database may run on another host (start `compose.yaml` there); instead of the environment
 variable, set `[database] url` in `config/obehy.local.toml`. Readers query the `active.*` views
-only. `release fetch` is not written yet. DB tests in `tests/db/` run when
+only. `release fetch` downloads the newest `build-*` GitHub release (or the given run id),
+checks every asset against the digest GitHub records and every package against `release.json`
+and its manifest, and keeps the three newest release directories (`--keep`). `GITHUB_TOKEN`
+raises the API rate limit but is not needed. DB tests in `tests/db/` run when
 `OBEHY_TEST_DATABASE_URL` or `[database] test_url` names a database that may create databases.
 
 ## Replaying realtime payloads
