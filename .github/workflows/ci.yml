@@ -9,11 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgis/postgis:17-3.5
-        # Authenticated pulls: runners share IPs and hit Docker Hub's anonymous limit.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        # Google's Docker Hub mirror: runners share IPs, so Docker Hub rate-limits and times out.
+        image: mirror.gcr.io/postgis/postgis:17-3.5
         env:
           POSTGRES_DB: obehy_test
           POSTGRES_USER: obehy
