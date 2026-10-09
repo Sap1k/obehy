@@ -1,6 +1,7 @@
 # The Oběhy server: PostGIS, the realtime worker, hourly release updates, nightly jobs and
-# Caddy in front of the GTFS-RT output. Put POSTGRES_PASSWORD (URL-safe), OBEHY_DOMAIN and
-# optionally OBEHY_TAG and GITHUB_TOKEN in .env next to this file.
+# Caddy serving the GTFS-RT output over plain HTTP to your reverse proxy. Put POSTGRES_PASSWORD
+# (URL-safe) and optionally OBEHY_HTTP_PORT (8080), OBEHY_TAG and GITHUB_TOKEN in .env next to
+# this file.
 name: obehy
 
 x-app: &app
@@ -56,20 +57,13 @@ services:
   caddy:
     image: caddy:2.10
     restart: unless-stopped
-    environment:
-      OBEHY_DOMAIN: ${OBEHY_DOMAIN:-localhost}
+    # Plain HTTP for the reverse proxy in front, which terminates TLS.
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${OBEHY_HTTP_PORT:-8080}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - data:/srv:ro
-      - caddy-data:/data
-      - caddy-config:/config
 
 volumes:
   data:
   pgdata:
-  caddy-data:
-  caddy-config:

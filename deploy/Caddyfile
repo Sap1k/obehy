@@ -1,5 +1,10 @@
-# Serves the GTFS-RT feed and the static GTFS of the active release from the data volume.
-{$OBEHY_DOMAIN:localhost} {
+# Serves the GTFS-RT feed and the static GTFS of the active release from the data volume, over
+# plain HTTP: TLS and the public hostname belong to the reverse proxy in front.
+{
+	auto_https off
+}
+
+:80 {
 	encode zstd gzip
 
 	handle /gtfs-rt/*.pb {

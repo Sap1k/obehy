@@ -225,12 +225,13 @@ and points `data/releases/active` at what it activated.
 CI publishes `ghcr.io/sap1k/obehy:latest` (and `:sha-<commit>`) from the `Dockerfile` for
 every green push to main. `deploy/compose.yaml` runs the server from it: PostGIS, migrations,
 an hourly release update, the realtime worker, the nightly jobs and Caddy serving
-`/gtfs-rt/jdf.pb` and the active release's `/gtfs/jdf.zip`. Copy `deploy/` to the server and
-next to it write `.env`:
+`/gtfs-rt/jdf.pb` and the active release's `/gtfs/jdf.zip` over plain HTTP to your reverse
+proxy, which owns TLS and the hostname. Copy `deploy/` to the server and next to it write
+`.env`:
 
 ```bash
 POSTGRES_PASSWORD=...     # URL-safe characters only; it goes into the database URL
-OBEHY_DOMAIN=rt.example.cz
+OBEHY_HTTP_PORT=8080      # where Caddy listens (plain HTTP) for your reverse proxy
 ```
 
 ```bash
