@@ -253,4 +253,6 @@ The worker needs an active release. It rebuilds its state from the last hours of
 observations (warm replay), polls and archives every channel, runs the DÚK connector through
 the core, writes `data/gtfs-rt/<feed>.pb` every emit tick and history continuously, and rebases
 live journeys when a new release is activated. `obehy jobs vehicle-day --from DAY` builds the
-vehicles' working days. The design is in `docs/R1_SLICE.md`.
+vehicles' working days; `obehy jobs nightly` (`deploy/systemd/obehy-jobs.timer`, 03:30 Prague)
+rebuilds them for the last two service dates and drops `rt.observation` days older than
+`[retention] observation_days` (30). The raw archive is not pruned yet. The design is in `docs/R1_SLICE.md`.

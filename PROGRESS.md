@@ -223,6 +223,9 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — `obehy jobs nightly` (vehicle days of the last two service dates, then drop
+  `rt.observation` days older than 30, policy `[retention]`) with a 03:30 Prague systemd timer
+  in `deploy/`. DB test for the drop; raw-archive retention is still missing.
 - **2026-10-09** — `release activate --if-newer` (newer than every release published before, so a
   rollback sticks) and `deploy/` systemd service + hourly timer running fetch → load → activate.
   DB test added; the units are not yet installed on a server.

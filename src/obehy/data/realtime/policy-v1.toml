@@ -81,3 +81,8 @@ hours = 4
 
 [emit]
 tick_s = 10
+
+[retention]
+# Daily rt.observation partitions older than this are dropped by `obehy jobs nightly`. Warm
+# replay reads only the last hours; history is rebuilt from the raw archive, not from here.
+observation_days = 30

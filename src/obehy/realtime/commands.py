@@ -8,7 +8,7 @@ import contextlib
 import shutil
 import sys
 import tomllib
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -17,10 +17,11 @@ import psycopg
 from obehy.realtime import record, replay
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError
-from obehy.realtime.jobs import vehicle_day
+from obehy.realtime.jobs import drop_observations, vehicle_day
 from obehy.realtime.manifest import ManifestError, select_channels
 from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
+from obehy.realtime.times import instant, local_date
 from obehy.realtime.worker import WorkerOptions, run_worker
 from obehy.runtime_config import ConfigurationError, load_database_url
 
@@ -108,6 +109,11 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     days.add_argument("--from", dest="start", type=date.fromisoformat, required=True)
     days.add_argument("--to", dest="end", type=date.fromisoformat)
     _database(days)
+    nightly = job_commands.add_parser(
+        "nightly",
+        help="vehicle days of the last two service dates, then drop expired observations",
+    )
+    _database(nightly)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -196,14 +202,24 @@ def _worker(args: argparse.Namespace) -> int:
 
 
 def _jobs(args: argparse.Namespace) -> int:
-    start = cast(date, args.start)
-    end = cast(date | None, args.end) or start
     policy = load_policy()
+    now = instant(datetime.now(UTC))
+    if args.job_command == "nightly":
+        # Yesterday's service date may still have had journeys running; redo it tomorrow.
+        today = local_date(now)
+        start, end = today - timedelta(days=2), today - timedelta(days=1)
+    else:
+        start = cast(date, args.start)
+        end = cast(date | None, args.end) or start
     with psycopg.connect(_url(args), autocommit=True) as connection:
         day = start
         while day <= end:
             print(f"{day}: {vehicle_day(connection, day, policy)} vehicle days")
             day += timedelta(days=1)
+        if args.job_command == "nightly":
+            cutoff = now.date() - timedelta(days=policy.observation_retention_days)
+            dropped = drop_observations(connection, cutoff)
+            print(f"dropped {len(dropped)} observation partitions before {cutoff}")
     return 0
 
 
