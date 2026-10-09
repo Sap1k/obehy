@@ -8,7 +8,15 @@ from typing import Any
 
 import pytest
 
-from obehy.realtime.model import Delay, Observation, Position, SourceState, TripKey, VehicleKey
+from obehy.realtime.model import (
+    Delay,
+    Observation,
+    Position,
+    SourceDeparture,
+    SourceState,
+    TripKey,
+    VehicleKey,
+)
 from obehy.realtime.sources import duk
 from obehy.realtime.times import instant
 
@@ -68,6 +76,15 @@ def test_duk_q2_1970_means_no_time() -> None:
 def test_duk_q5_states_two_and_three_are_pre_trip(state: int, code: str) -> None:
     (obs,) = decode(entry(State=state))
     assert obs.first(SourceState) == SourceState(code)
+
+
+def test_duk_q18_the_planned_departure_is_kept() -> None:
+    (obs,) = decode(entry(State=3, TODepartureDT="2026-10-11T00:54:00+02:00"))
+    assert obs.first(SourceDeparture) == SourceDeparture(
+        instant(datetime(2026, 10, 10, 22, 54, tzinfo=UTC))
+    )
+    (obs,) = decode(entry(TODepartureDT="1970-01-01T00:00:00"))
+    assert obs.first(SourceDeparture) is None
 
 
 def test_vehicles_that_are_off_are_skipped() -> None:

@@ -8,7 +8,9 @@ that journey, and its service date is never re-derived, until the time leaves th
 admissible window. Then the binding ends, and only a new admissible journey for the key binds
 again (DUK-Q4: yesterday's key in the morning is `not_in_service`, never an extended trip).
 A key reported before departure after the trip's scheduled end is stale (DUK-Q15): the journey
-never started and the delay window for late running does not apply.
+never started and the delay window for late running does not apply. A vehicle on its trip's
+path past the first stop counts as departed while the source has already moved on to a later
+run of the same trip (DUK-Q18: the onboard unit missed the departure).
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ from obehy.realtime.model import (
     Reason,
     ScheduledCall,
     SnapshotJourney,
+    SourceDeparture,
     SourceState,
     TripKey,
     VehicleId,
@@ -45,7 +48,8 @@ from obehy.realtime.model import (
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.estimate import estimate
 from obehy.realtime.timeline.plan import PlanCache
-from obehy.realtime.times import Instant
+from obehy.realtime.timeline.progress import past_first_stop
+from obehy.realtime.times import PRAGUE, Instant
 
 CORE_VERSION = "r1.0"
 
@@ -102,7 +106,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     instance = state.instances[binding.journey]
     if _leads(instance, vehicle, observation, ctx.policy):
         instance = replace(instance, lead=Lead(vehicle, observation.at))
-        instance = _lifecycle(instance, observation, span(trip, binding.journey)[0])
+        instance = _lifecycle(instance, trip, observation, span(trip, binding.journey)[0], ctx)
         instance, timeline_effects = timeline.advance(
             instance, trip, observation, ctx.index, ctx.policy, ctx.plans
         )
@@ -259,15 +263,40 @@ def snapshot(journey: JourneyKey, index: IndexView, trip_id: str, at: Instant) -
     )
 
 
-def _lifecycle(instance: Instance, observation: Observation, start: Instant) -> Instance:
+def _lifecycle(
+    instance: Instance, trip: Trip, observation: Observation, start: Instant, ctx: Context
+) -> Instance:
     """`pre_trip` becomes `running` when the source says so, or, for a source without trip
-    states, once the scheduled start has passed. A pre-trip source state (DUK-Q5) holds it."""
+    states, once the scheduled start has passed. A pre-trip source state (DUK-Q5) holds it,
+    unless the source has moved on to a later run of the trip (DUK-Q18)."""
 
     if instance.lifecycle != "pre_trip":
         return instance
     source = observation.first(SourceState)
-    started = source.code == SOURCE_RUNNING if source is not None else observation.at >= start
+    if source is None:
+        started = observation.at >= start
+    else:
+        started = source.code == SOURCE_RUNNING or _missed_departure(
+            instance, trip, observation, start, ctx
+        )
     return replace(instance, lifecycle="running") if started else instance
+
+
+def _missed_departure(
+    instance: Instance, trip: Trip, observation: Observation, start: Instant, ctx: Context
+) -> bool:
+    """DUK-Q18: after the scheduled start, the source plans the same departure on a later day
+    and the vehicle is on the trip's path past its first stop."""
+
+    planned = observation.first(SourceDeparture)
+    position = observation.first(Position)
+    if planned is None or position is None or observation.at < start:
+        return False
+    later, scheduled = planned.at.astimezone(PRAGUE), start.astimezone(PRAGUE)
+    if later.date() <= scheduled.date() or later.time() != scheduled.time():
+        return False
+    plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)
+    return past_first_stop(plan, position, ctx.policy.progress)
 
 
 def _set_vehicle(

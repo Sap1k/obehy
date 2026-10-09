@@ -65,6 +65,13 @@ class SourceState:
     code: str
 
 
+@dataclass(frozen=True, slots=True)
+class SourceDeparture:
+    """The departure the source plans for the run of the trip it reports (DÚK `TODepartureDT`)."""
+
+    at: Instant
+
+
 EventKind = Literal["arrival", "departure", "passage"]
 
 
@@ -80,7 +87,9 @@ class NextStop:
     call_ref: str
 
 
-Fact = VehicleKey | TripKey | Position | Delay | SourceState | StopEvent | NextStop
+Fact = (
+    VehicleKey | TripKey | Position | Delay | SourceState | SourceDeparture | StopEvent | NextStop
+)
 
 
 @dataclass(frozen=True, slots=True)

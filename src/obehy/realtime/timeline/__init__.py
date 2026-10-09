@@ -19,6 +19,7 @@ from obehy.realtime.model import (
     Instance,
     Observation,
     Position,
+    SourceState,
     WriteEvent,
 )
 from obehy.realtime.policy import Policy
@@ -66,16 +67,15 @@ def advance(
 def _note(instance: Instance, observation: Observation, policy: Policy, *, fresh: bool) -> Instance:
     """Record the observation's time and source delay; only new information keeps it fresh.
 
-    Before departure the source delay is ignored: DÚK reports the time since the scheduled
-    departure there, growing while the vehicle stands in the depot (DUK-Q14)."""
+    Before departure, or while the source still says so (DUK-Q18), the source delay is ignored:
+    DÚK reports the time since the scheduled departure there, growing while the vehicle stands
+    in the depot (DUK-Q14)."""
 
     delay = observation.first(Delay)
+    source = observation.first(SourceState)
+    before = instance.lifecycle == "pre_trip" or (source is not None and source.code == "pre_trip")
     delay_s = instance.delay_s
-    if (
-        delay is not None
-        and instance.lifecycle != "pre_trip"
-        and delay.seconds > policy.delay_discard_below_s
-    ):
+    if delay is not None and not before and delay.seconds > policy.delay_discard_below_s:
         delay_s = delay.seconds
     freshness = replace(instance.freshness, updated_at=observation.at)
     if fresh:

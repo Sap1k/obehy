@@ -16,6 +16,7 @@ from obehy.realtime.model import (
     Fact,
     NextStop,
     Position,
+    SourceDeparture,
     SourceState,
     StopEvent,
     TripKey,
@@ -42,6 +43,8 @@ def fact_to_json(fact: Fact) -> Json:
             return {"t": "delay", "s": seconds, "ref": reference}
         case SourceState(code):
             return {"t": "source_state", "code": code}
+        case SourceDeparture(at):
+            return {"t": "source_departure", "at": at.isoformat()}
         case StopEvent(call_ref, kind, at):
             return {"t": "stop_event", "call": call_ref, "kind": kind, "at": at.isoformat()}
         case NextStop(call_ref):
@@ -63,6 +66,8 @@ def fact_from_json(data: Json) -> Fact:
             return Delay(int(data["s"]), cast(DelayReference, data["ref"]))
         case "source_state":
             return SourceState(str(data["code"]))
+        case "source_departure":
+            return SourceDeparture(instant(datetime.fromisoformat(str(data["at"]))))
         case "stop_event":
             return StopEvent(
                 str(data["call"]),

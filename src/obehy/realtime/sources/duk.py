@@ -4,7 +4,8 @@ Quirks normalized here: DUK-Q1 (Teplice GPS time is UTC whatever its label), DUK
 none), DUK-Q5 (states 2/3 are pre-trip), DUK-Q7 (the prefixed ID is the vehicle key), DUK-Q8
 (`CISLineID = 0` entries are trains keyed by train number), DUK-Q9 (CIS line padded to 6
 digits), DUK-Q13 (an Azimut of 0 is no bearing). Source times further than the policy skew
-from reception are dropped (T15).
+from reception are dropped (T15). `TODepartureDT` is kept as the source's planned departure
+(DUK-Q18).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from obehy.realtime.model import (
     Observation,
     Position,
     RawRef,
+    SourceDeparture,
     SourceState,
     TripKey,
     VehicleKey,
@@ -28,7 +30,7 @@ from obehy.realtime.times import Instant, instant, read_digits_as_utc, within_sk
 
 SOURCE = "duk"
 CHANNEL = "vehicles"
-DECODER_VERSION = 1
+DECODER_VERSION = 2
 
 OFF = 255
 PRE_TRIP_STATES = frozenset({2, 3})
@@ -112,6 +114,9 @@ def _entry(
     if isinstance(delay, int) and not isinstance(delay, bool):
         facts.append(Delay(delay * 60, "unknown"))
     facts.append(SourceState("pre_trip" if state in PRE_TRIP_STATES else "running"))
+    departure = _time(entry.get("TODepartureDT"), digits_are_utc=False)
+    if departure is not None:
+        facts.append(SourceDeparture(departure))
     return Observation(
         source=SOURCE,
         channel=CHANNEL,

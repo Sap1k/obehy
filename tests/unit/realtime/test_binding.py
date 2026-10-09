@@ -17,7 +17,7 @@ from obehy.realtime.model import (
     VehicleId,
 )
 from obehy.realtime.policy import load_policy
-from tests.realtime.builder import days_between, timetable, with_unknown
+from tests.realtime.builder import ORIGIN, STEP_LON, days_between, timetable, with_unknown
 from tests.realtime.observations import observe
 
 POLICY = load_policy()
@@ -167,3 +167,28 @@ def test_duk_q15_a_running_vehicle_keeps_the_late_running_window() -> None:
         index.index(), {"at": "2026-10-09 23:52", "key": "582480:140", "state": "running"}
     )
     assert results(effects) == [(JourneyKey("jdf", NS, "582480:140", D9), None)]
+
+
+def test_duk_q18_a_missed_departure_runs_once_past_the_first_stop() -> None:
+    # Vehicle 177, 2026-10-10: State 3 all through 803/206 of 00:54, TODepartureDT already the
+    # next night's 00:54, the bus on the route a few minutes late.
+    d10 = date(2026, 10, 10)
+    index = timetable().trip(
+        "582803:206", days=[d10], calls=[("A", "00:54"), ("B", "01:00"), ("C", "01:06")]
+    )
+    journey = JourneyKey("jdf", NS, "582803:206", d10)
+    at_a, past_b = ORIGIN, (ORIGIN[0] + 1.5 * STEP_LON, ORIGIN[1])
+    waiting = {"key": "582803:206", "state": "pre_trip", "delay": 0}
+    tomorrow = {**waiting, "departure": "2026-10-11 00:54"}
+
+    def lifecycle(*observations: dict[str, object]) -> str:
+        state, _ = run(index.index(), *observations)
+        return state.instances[journey].lifecycle
+
+    assert lifecycle({"at": "2026-10-10 01:02", "position": past_b, **tomorrow}) == "running"
+    # Each condition alone holds it: the source still plans tonight's run, the vehicle has not
+    # left the first stop, the scheduled start has not come.
+    tonight = {**waiting, "departure": "2026-10-10 00:54"}
+    assert lifecycle({"at": "2026-10-10 01:02", "position": past_b, **tonight}) == "pre_trip"
+    assert lifecycle({"at": "2026-10-10 01:02", "position": at_a, **tomorrow}) == "pre_trip"
+    assert lifecycle({"at": "2026-10-10 00:50", "position": past_b, **tomorrow}) == "pre_trip"

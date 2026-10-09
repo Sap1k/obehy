@@ -11,6 +11,7 @@ from obehy.realtime.model import (
     Observation,
     Position,
     RawRef,
+    SourceDeparture,
     SourceState,
     TripKey,
     VehicleKey,
@@ -33,10 +34,12 @@ def observe(
     state: str | None = None,
     delay: int | None = None,
     position: tuple[float, float] | None = None,
+    departure: str | None = None,
     source: str = "duk",
     feed: Feed = "jdf",
 ) -> Observation:
-    """An observation at local time `at`; `position` is (lon, lat)."""
+    """An observation at local time `at`; `position` is (lon, lat); `departure` is the source's
+    planned departure, local time."""
 
     facts: list[Fact] = []
     if vehicle is not None:
@@ -49,5 +52,7 @@ def observe(
         facts.append(Delay(delay, "unknown"))
     if state is not None:
         facts.append(SourceState(state))
+    if departure is not None:
+        facts.append(SourceDeparture(local(departure)))
     when = local(at)
     return Observation(source, "vehicles", feed, when, when, RawRef("0" * 64, 0), 1, tuple(facts))
