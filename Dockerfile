@@ -1,8 +1,8 @@
 # The Oběhy server image: the realtime worker, release updates and nightly jobs
 # (deploy/compose.yaml). Static builds run on GitHub Actions, not from this image.
-# uv's image of the official python:3.13-slim-bookworm, from GHCR: CI runners hit Docker
-# Hub's anonymous pull limit.
-FROM ghcr.io/astral-sh/uv:0.12.7-python3.13-bookworm-slim
+# uv's build of the official python:3.13-slim (Debian trixie), from GHCR, so the image build
+# does not depend on Docker Hub.
+FROM ghcr.io/astral-sh/uv:0.12.7-python3.13-trixie-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/*

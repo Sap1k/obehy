@@ -47,17 +47,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: obehy
           submodules: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: Sap1k/jrutil
           ref: ${{ inputs.jrutil_ref || 'main' }}
           path: jrutil
           lfs: true
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: Sap1k/jrunify-ext-geodata
           ref: ${{ inputs.geodata_ref || 'main' }}
@@ -78,13 +78,13 @@ jobs:
           sudo apt-get install -y -q osmium-tool
           osmium --version
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Restore JrUtil
         run: dotnet restore jrutil/jrutil-multitool/jrutil-multitool.fsproj
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
         with:
           python-version: "3.13"
           enable-cache: true
@@ -112,12 +112,12 @@ jobs:
       # The merged regional snapshot and its derived extracts, refreshed once a month.
       - name: Restore OSM snapshot
         id: osm
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.WORK }}/osm
           key: osm-v1-${{ env.OSM_MONTH }}
       - name: Restore routing cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.WORK }}/cache/routing
           key: routing-v1-${{ github.run_id }}-${{ github.run_attempt }}
@@ -125,7 +125,7 @@ jobs:
       # CZPTT objects are published once and never rewritten; ~170k tiny files are round-trip
       # bound from the runner, so a run only downloads what was published since the last one.
       - name: Restore CZPTT source cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.WORK }}/cache/czptt-sources
           key: czptt-sources-v1-${{ github.run_id }}-${{ github.run_attempt }}
@@ -153,25 +153,25 @@ jobs:
           fi
       - name: Save OSM snapshot
         if: always() && steps.osm-built.outputs.exists == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.WORK }}/osm
           key: osm-v1-${{ env.OSM_MONTH }}
       - name: Save routing cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.WORK }}/cache/routing
           key: routing-v1-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save CZPTT source cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.WORK }}/cache/czptt-sources
           key: czptt-sources-v1-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload run logs and diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-run-${{ github.run_id }}
           path: ${{ env.WORK }}/runs/production
