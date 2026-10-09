@@ -13,6 +13,7 @@ import psycopg
 from obehy.release import activate as activation
 from obehy.release import fetch as fetching
 from obehy.release.contract import load_contract
+from obehy.release.feed_list import write_feed_list
 from obehy.release.load import PACKAGES, LoadError, load_release
 from obehy.release.migrate import MigrationError, migrate
 from obehy.runtime_config import ConfigurationError, default_config_path, load_database_url
@@ -40,6 +41,13 @@ def add_parsers(commands: Any) -> None:
         help="directory of fetched releases (default: data/releases)",
     )
     fetcher.add_argument("--repository", default=fetching.DEFAULT_REPOSITORY)
+    lister = release_commands.add_parser(
+        "feed-list", help="write the public feed list (index.html, feeds.json) of releases/active"
+    )
+    lister.add_argument("--into", type=Path, default=DEFAULT_RELEASES, help="fetched releases")
+    lister.add_argument(
+        "--out", type=Path, default=DEFAULT_RELEASES.parent / "public", help="default: data/public"
+    )
     fetcher.add_argument(
         "--keep",
         type=int,
@@ -96,6 +104,16 @@ def _fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _feed_list(args: argparse.Namespace) -> int:
+    active = cast(Path, args.into) / "active"
+    if not (active / "release.json").is_file():
+        print(f"error: {active} names no fetched release", file=sys.stderr)
+        return 1
+    listing = write_feed_list(active, cast(Path, args.out))
+    print(f"listed {len(listing['feeds'])} feeds of {listing['run_id']} in {args.out}")
+    return 0
+
+
 def _progress(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
@@ -117,6 +135,8 @@ def _report(message: str) -> None:
 def run(args: argparse.Namespace) -> int:
     if args.command == "release" and args.release_command == "fetch":
         return _fetch(args)
+    if args.command == "release" and args.release_command == "feed-list":
+        return _feed_list(args)
     try:
         with _connect(args) as connection:
             if args.command == "db":

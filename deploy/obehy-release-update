@@ -3,7 +3,8 @@
 # Every step is idempotent: a fetched release is not downloaded again, a loaded package is not
 # loaded again, and a release no newer than those activated before is left alone, so this can
 # run often and a failed step is simply retried on the next run. After an activation,
-# data/releases/active points at the release, so its gtfs.zip is served beside the GTFS-RT.
+# data/releases/active points at the release, whose feeds nginx serves under /get-feeds/, and
+# the feed list there is rewritten.
 set -eu
 
 obehy() {
@@ -15,4 +16,7 @@ run_id=$(basename "$release_dir")
 obehy release load "$release_dir"
 if obehy release activate --if-newer "$run_id" | tee /dev/stderr | grep -q '^activated '; then
     ln -sfn "$run_id" "$(dirname "$release_dir")/active"
+fi
+if [ -e "$(dirname "$release_dir")/active" ]; then
+    obehy release feed-list
 fi
