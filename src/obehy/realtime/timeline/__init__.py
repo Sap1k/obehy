@@ -16,11 +16,9 @@ from obehy.realtime.model import (
     Instance,
     Observation,
     Position,
-    SourceClass,
     WriteEvent,
 )
 from obehy.realtime.policy import Policy
-from obehy.realtime.timeline.estimate import estimate
 from obehy.realtime.timeline.path import PathCache
 from obehy.realtime.timeline.progress import move
 
@@ -38,10 +36,8 @@ def advance(
     effects: list[Effect] = []
     delay = observation.first(Delay)
     delay_s = instance.delay_s
-    delay_class: SourceClass | None = "source" if delay_s is not None else None
     if delay is not None and delay.seconds > policy.delay_discard_below_s:
         delay_s = delay.seconds
-        delay_class = "source"
     instance = replace(instance, updated_at=observation.at, delay_s=delay_s)
 
     position = observation.first(Position)
@@ -84,4 +80,4 @@ def advance(
             off_route=movement.off_route,
             lifecycle="finished" if finished else instance.lifecycle,
         )
-    return estimate(instance, trip, delay_class), effects
+    return instance, effects

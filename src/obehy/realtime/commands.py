@@ -17,7 +17,7 @@ import psycopg
 from obehy.realtime import record, replay
 from obehy.realtime.index_sql import IndexLoadError
 from obehy.realtime.jobs import vehicle_day
-from obehy.realtime.manifest import ManifestError, load_channels, select_channels
+from obehy.realtime.manifest import ManifestError, select_channels
 from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
 from obehy.realtime.worker import run_worker
@@ -147,7 +147,7 @@ def _record(args: argparse.Namespace) -> int:
 
 def _replay(args: argparse.Namespace) -> int:
     channels = select_channels(
-        load_channels(cast(Path, args.manifest)),
+        record.load_channels(cast(Path, args.manifest)),
         cast(list[str] | None, args.sources) or list(replay.SOURCES),
     )
     options = replay.ReplayOptions(

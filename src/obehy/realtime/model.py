@@ -223,6 +223,8 @@ class FeedState:
     feed: Feed
     vehicles: dict[VehicleId, VehicleState] = field(default_factory=dict[VehicleId, VehicleState])
     instances: dict[JourneyKey, Instance] = field(default_factory=dict[JourneyKey, Instance])
+    # Journeys whose per-call estimates are out of date; `core.estimate_all` refreshes them.
+    dirty: set[JourneyKey] = field(default_factory=set[JourneyKey])
 
 
 # --- effects ------------------------------------------------------------------------------------

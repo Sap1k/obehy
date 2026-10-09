@@ -13,7 +13,7 @@ from datetime import timedelta
 
 from obehy.realtime.model import EventKind, Interval, Position, Progress
 from obehy.realtime.policy import Policy
-from obehy.realtime.timeline.path import Path, Projection, project_all
+from obehy.realtime.timeline.path import Path, Projection, project_near
 from obehy.realtime.times import Instant
 
 
@@ -25,17 +25,9 @@ class Movement:
     crossed: tuple[tuple[int, EventKind, Interval], ...]  # (call index, kind, when)
 
 
-def tolerance_m(projection: Projection, mode: str, policy: Policy) -> float:
-    lifecycle = policy.lifecycle
-    return max(lifecycle.off_route_base_m(mode), lifecycle.off_route_k * projection.segment_m)
-
-
-def _choose(
-    projections: list[Projection], previous: float | None, mode: str, policy: Policy
-) -> Projection | None:
+def _choose(near: list[Projection], previous: float | None, policy: Policy) -> Projection | None:
     """The on-route projection closest ahead of current progress (loops visit a place twice)."""
 
-    near = [p for p in projections if p.lateral_m <= tolerance_m(p, mode, policy)]
     if not near:
         return None
     if previous is None:
@@ -76,12 +68,22 @@ def move(
 ) -> Movement:
     if len(path.points) < 2:
         return Movement(previous, None, False, ())
-    chosen = _choose(
-        project_all(path, position.lon, position.lat),
-        None if previous is None else previous.distance_m,
-        mode,
-        policy,
-    )
+    lifecycle = policy.lifecycle
+    base, k = lifecycle.off_route_base_m(mode), lifecycle.off_route_k
+    chosen = None
+    if previous is not None:
+        # Only where the vehicle can be: from just behind progress to as far as it could have
+        # driven since the last fix. After a long gap nothing fits and the whole path is used.
+        reach = lifecycle.max_speed_mps(mode) * max(0.0, (at - previous.at).total_seconds())
+        window = (
+            previous.distance_m - lifecycle.backtrack_tolerance_m,
+            previous.distance_m + reach + base,
+        )
+        near = project_near(path, position.lon, position.lat, base, k, window)
+        chosen = _choose(near, previous.distance_m, policy)
+    if chosen is None:
+        near = project_near(path, position.lon, position.lat, base, k)
+        chosen = _choose(near, None if previous is None else previous.distance_m, policy)
     if chosen is None:
         since = off_route_since or at
         held = at - since >= timedelta(seconds=policy.lifecycle.off_route_hold_s)

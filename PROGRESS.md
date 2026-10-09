@@ -216,6 +216,14 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — Realtime speed: 290 → 85 µs per observation (25 h DÚK replay 7m17s → 2m20s):
+  projection only within reachable distance of current progress (policy `max_speed_mps`; full
+  scan after gaps), shapes simplified to ~5 m, out-of-tolerance segments skipped, estimates only
+  at emit time, scheduled instants cached, replay prefetches keys 40 polls ahead. Bindings
+  unchanged (identical reasons and rates); 3 % of trip updates changed, because a fix can no
+  longer snap several stops ahead at once. Real replay of 2026-10-05/06 on release
+  20261006T194555Z: running key groups bound DÚK 99.4 %, Teplice 99.1 %, DPmÚL 54.7 % (old
+  resolver 99.1 / 96.7 / 52.7 % on the same release).
 - **2026-10-09** — R1 pipeline complete in code: per-connector manifests
   (`realtime/sources/*.toml`, recorder unchanged in behaviour), DÚK connector with quirk tests,
   shared scheduler, `Runner` (lazy index, invariants), `obehy rt replay` rebuilt on it

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import psycopg
 
-from obehy.realtime.core import Context, rebase, refresh, step, vehicle_of
+from obehy.realtime.core import Context, estimate_all, rebase, refresh, step, vehicle_of
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.gtfs_rt import feed_message, write_feed
 from obehy.realtime.index import KeyRef
@@ -54,6 +54,21 @@ class Runner:
             self.runtimes[feed] = FeedRuntime(
                 loader, FeedState(feed), Context(loader.index, self.policy)
             )
+
+    def prefetch(self, observations: Sequence[Observation]) -> None:
+        """Load the static data of the observations' keys ahead of processing them."""
+
+        refs: dict[Feed, set[KeyRef]] = defaultdict(set)
+        days: dict[Feed, set[date]] = defaultdict(set)
+        for observation in observations:
+            if observation.feed not in self.runtimes:
+                continue
+            key = observation.first(TripKey)
+            if key is not None:
+                refs[observation.feed].add((key.namespace, key.key))
+            days[observation.feed].update(candidate_service_dates(observation.at))
+        for feed in sorted(days):
+            self.runtimes[feed].loader.ensure(refs[feed], days[feed])
 
     def process(self, observations: Sequence[Observation]) -> list[Effect]:
         by_feed: dict[Feed, list[Observation]] = defaultdict(list)
@@ -115,6 +130,8 @@ class Runner:
 
         for feed, runtime in sorted(self.runtimes.items()):
             refresh(runtime.state, now, self.policy)
+            if emit:
+                estimate_all(runtime.state, runtime.ctx)
             if emit and self.gtfs_rt_dir is not None:
                 write_feed(self.gtfs_rt_dir / f"{feed}.pb", feed_message(runtime.state, now))
         if emit and self.writer is not None:

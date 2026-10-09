@@ -39,6 +39,7 @@ from obehy.realtime.model import (
     VehicleStatus,
 )
 from obehy.realtime.policy import Policy
+from obehy.realtime.timeline.estimate import estimate
 from obehy.realtime.timeline.path import PathCache
 from obehy.realtime.times import Instant
 
@@ -98,6 +99,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         instance, trip, observation, ctx.index, ctx.policy, ctx.paths
     )
     state.instances[binding.journey] = instance
+    state.dirty.add(binding.journey)
     effects.extend(timeline_effects)
     status = "positioning" if instance.lifecycle in ("forecast", "pre_trip") else "running"
     if instance.lifecycle == "finished":
@@ -105,6 +107,20 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     _set_vehicle(state, observation, vehicle, status, key, binding, None)
     effects.append(ObservationResult(observation, binding.journey, None))
     return effects
+
+
+def estimate_all(state: FeedState, ctx: Context) -> None:
+    """Bring per-call estimates of changed journeys up to date (before emitting state)."""
+
+    for journey in sorted(state.dirty):
+        instance = state.instances.get(journey)
+        if instance is None:
+            continue
+        trip = ctx.index.trip(instance.trip_id)
+        state.instances[journey] = estimate(
+            instance, ctx.paths.scheduled(trip, journey.service_date)
+        )
+    state.dirty.clear()
 
 
 def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
@@ -256,6 +272,7 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
             progress=None,
         )
         moved[journey] = trip.trip_id
+        state.dirty.add(journey)
         effects.append(snapshot(journey, index, trip.trip_id, instance.updated_at))
     for vehicle, current in sorted(state.vehicles.items()):
         binding = current.binding

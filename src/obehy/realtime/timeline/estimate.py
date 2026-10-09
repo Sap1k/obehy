@@ -11,85 +11,74 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import timedelta
 
-from obehy.realtime.index import Trip
-from obehy.realtime.model import CallState, Instance, Interval, SourceClass
-from obehy.realtime.times import Instant, ServiceTime
+from obehy.realtime.model import CallState, CallStatus, Instance, Interval, SourceClass
+from obehy.realtime.timeline.path import Scheduled
+from obehy.realtime.times import Instant
 
 
 def _middle(interval: Interval) -> Instant:
     return Instant(interval.lo + (interval.hi - interval.lo) / 2)
 
 
-def estimate(instance: Instance, trip: Trip, delay_class: SourceClass | None) -> Instance:
-    day = instance.journey.service_date
+def _call(
+    state: CallState,
+    arrival: Instant | None,
+    departure: Instant | None,
+    status: CallStatus,
+    source_class: SourceClass | None,
+) -> CallState:
+    return CallState(
+        state.sequence,
+        state.location_id,
+        state.visit_n,
+        state.arrival,
+        state.departure,
+        arrival,
+        departure,
+        status,
+        source_class,
+    )
+
+
+def estimate(instance: Instance, scheduled: Scheduled) -> Instance:
+    """Per-call estimates; computed when state is emitted, not on every fix."""
+
+    delay_class: SourceClass | None = "source" if instance.delay_s is not None else None
     delay = None if instance.delay_s is None else timedelta(seconds=instance.delay_s)
     reached = instance.progress.call_index if instance.progress is not None else -1
     floor: Instant | None = instance.progress.at if instance.progress is not None else None
+    finished = instance.lifecycle == "finished"
     calls: list[CallState] = []
-    for i, (state, call) in enumerate(zip(instance.calls, trip.calls, strict=True)):
+    for i, (state, (sched_arr, sched_dep)) in enumerate(
+        zip(instance.calls, scheduled, strict=True)
+    ):
         arrival = state.arrival
         departure = state.departure
         if arrival is not None or departure is not None:
             est_arr = _middle(arrival) if arrival is not None else None
             est_dep = _middle(departure) if departure is not None else None
-            calls.append(
-                replace(
-                    state,
-                    estimated_arrival=est_arr,
-                    estimated_departure=est_dep,
-                    status="actual",
-                    source_class="gps",
-                )
-            )
+            calls.append(_call(state, est_arr, est_dep, "actual", "gps"))
             last = est_dep or est_arr
             floor = last if floor is None or (last is not None and last > floor) else floor
-            continue
-        if i <= reached or instance.lifecycle == "finished":
-            calls.append(
-                replace(
-                    state,
-                    estimated_arrival=None,
-                    estimated_departure=None,
-                    status="no_realtime",
-                    source_class=None,
-                )
-            )
-            continue
-        if delay is None:
-            calls.append(
-                replace(
-                    state,
-                    estimated_arrival=None,
-                    estimated_departure=None,
-                    status="scheduled",
-                    source_class=None,
-                )
-            )
-            continue
-        est_arr = _shifted(day, call.arrival, delay, floor)
-        if est_arr is not None:
-            floor = est_arr
-        est_dep = _shifted(day, call.departure, delay, floor)
-        if est_dep is not None:
-            floor = est_dep
-        calls.append(
-            replace(
-                state,
-                estimated_arrival=est_arr,
-                estimated_departure=est_dep,
-                status="predicted",
-                source_class=delay_class,
-            )
-        )
+        elif i <= reached or finished:
+            calls.append(_call(state, None, None, "no_realtime", None))
+        elif delay is None:
+            calls.append(_call(state, None, None, "scheduled", None))
+        else:
+            est_arr = _shifted(sched_arr, delay, floor)
+            if est_arr is not None:
+                floor = est_arr
+            est_dep = _shifted(sched_dep, delay, floor)
+            if est_dep is not None:
+                floor = est_dep
+            calls.append(_call(state, est_arr, est_dep, "predicted", delay_class))
     return replace(instance, calls=tuple(calls))
 
 
-def _shifted(
-    day: date, seconds: int | None, delay: timedelta, floor: Instant | None
-) -> Instant | None:
-    if seconds is None:
+def _shifted(scheduled: Instant | None, delay: timedelta, floor: Instant | None) -> Instant | None:
+    if scheduled is None:
         return None
-    value = Instant(ServiceTime(day, seconds).instant() + delay)
+    value = Instant(scheduled + delay)
     return floor if floor is not None and value < floor else value

@@ -19,6 +19,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from itertools import batched
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +27,7 @@ import psycopg
 
 from obehy.pipeline.files import atomic_output_path
 from obehy.realtime.archive import ArchivedPoll, iter_polls
-from obehy.realtime.core import CORE_VERSION
+from obehy.realtime.core import CORE_VERSION, estimate_all
 from obehy.realtime.emit.db import Writer, clear_observations
 from obehy.realtime.emit.gtfs_rt import feed_message
 from obehy.realtime.index_sql import ReleaseLoads, ensure_release
@@ -46,6 +47,7 @@ from obehy.realtime.sources import duk
 from obehy.realtime.times import Instant, instant, local_date
 
 REPORT_SCHEMA_VERSION = 2
+LOOKAHEAD_POLLS = 40
 SOURCES = ("duk",)
 
 Decoder = Callable[[bytes, str, Instant, timedelta], list[Observation]]
@@ -120,43 +122,30 @@ def replay(
     next_snapshot: Instant | None = None
     last: Instant | None = None
 
-    for received, source, channel, poll in _polls(options):
-        at = instant(received)
-        if options.until is not None and at >= options.until:
-            break
-        if options.since is not None and at < options.since:
-            continue
-        name = f"{source}/{channel}"
-        stats[name].polls += 1
-        if next_tick is None:
-            next_tick = _next_tick(at, tick_s)
-            if options.gtfs_rt_every_s:
-                next_snapshot = _next_tick(at, options.gtfs_rt_every_s)
-        while next_tick <= at:
-            runner.tick(next_tick, emit=False)
-            if next_snapshot is not None and next_snapshot <= next_tick:
-                _snapshot(options, runner, next_snapshot)
-                next_snapshot = instant(
-                    next_snapshot + timedelta(seconds=options.gtfs_rt_every_s or 0)
-                )
-            next_tick = instant(next_tick + timedelta(seconds=tick_s))
-        body = poll.body()
-        status = poll.entry.get("status")
-        if body is None or poll.entry.get("error") or not isinstance(status, int) or status >= 300:
-            stats[name].failed_polls += 1
-            continue
-        try:
-            observations = DECODERS[(source, channel)](
-                body, str(poll.entry["sha256"]), at, policy.time.max_clock_skew
-            )
-        except ValueError:
-            stats[name].bad_payloads += 1
-            continue
-        stats[name].observations += len(observations)
-        _count(runner.process(observations), groups, reasons)
-        last = at
+    for chunk in batched(_decoded(options, policy, stats), LOOKAHEAD_POLLS, strict=False):
+        # Load the static data of the next polls' keys in one round trip set.
+        runner.prefetch([o for _, observations in chunk for o in observations or ()])
+        for at, observations in chunk:
+            if next_tick is None:
+                next_tick = _next_tick(at, tick_s)
+                if options.gtfs_rt_every_s:
+                    next_snapshot = _next_tick(at, options.gtfs_rt_every_s)
+            while next_tick <= at:
+                runner.tick(next_tick, emit=False)
+                if next_snapshot is not None and next_snapshot <= next_tick:
+                    _snapshot(options, runner, next_snapshot)
+                    next_snapshot = instant(
+                        next_snapshot + timedelta(seconds=options.gtfs_rt_every_s or 0)
+                    )
+                next_tick = instant(next_tick + timedelta(seconds=tick_s))
+            if observations is None:
+                continue
+            _count(runner.process(observations), groups, reasons)
+            last = at
     if last is not None:
         runner.tick(last, emit=False)
+        for runtime in runner.runtimes.values():
+            estimate_all(runtime.state, runtime.ctx)
         if writer is not None:
             writer.write_state({feed: r.state for feed, r in runner.runtimes.items()})
     document = _report(loads, options, stats, groups, reasons, runner.skipped)
@@ -164,6 +153,37 @@ def replay(
     with atomic_output_path(options.out / "report.json") as temporary:
         temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", "utf-8")
     return document
+
+
+def _decoded(
+    options: ReplayOptions, policy: Policy, stats: dict[str, _Stats]
+) -> Iterator[tuple[Instant, list[Observation] | None]]:
+    """Each poll in the window, decoded; None for a failed or undecodable poll."""
+
+    for received, source, channel, poll in _polls(options):
+        at = instant(received)
+        if options.until is not None and at >= options.until:
+            return
+        if options.since is not None and at < options.since:
+            continue
+        name = f"{source}/{channel}"
+        stats[name].polls += 1
+        body = poll.body()
+        status = poll.entry.get("status")
+        if body is None or poll.entry.get("error") or not isinstance(status, int) or status >= 300:
+            stats[name].failed_polls += 1
+            yield at, None
+            continue
+        try:
+            observations = DECODERS[(source, channel)](
+                body, str(poll.entry["sha256"]), at, policy.time.max_clock_skew
+            )
+        except ValueError:
+            stats[name].bad_payloads += 1
+            yield at, None
+            continue
+        stats[name].observations += len(observations)
+        yield at, observations
 
 
 def _writer(
@@ -187,6 +207,7 @@ def _writer(
 
 def _snapshot(options: ReplayOptions, runner: Runner, at: Instant) -> None:
     for feed, runtime in sorted(runner.runtimes.items()):
+        estimate_all(runtime.state, runtime.ctx)
         path = options.out / "gtfs-rt" / feed / f"{at:%Y%m%dT%H%M%SZ}.pb"
         path.parent.mkdir(parents=True, exist_ok=True)
         message = feed_message(runtime.state, at)

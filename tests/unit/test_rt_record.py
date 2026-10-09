@@ -248,3 +248,30 @@ def test_record_once_writes_one_poll_per_channel(tmp_path: Path) -> None:
 def test_cli_rejects_unknown_source(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["rt", "record", "--once", "--sources", "pid"]) == 1
     assert "Unknown source" in capsys.readouterr().err
+
+
+def test_replay_cli_reads_the_shipped_manifests(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OBEHY_DATABASE_URL", raising=False)
+    # No database configured: the command must get past manifest loading to fail on the URL.
+    code = cli.main(
+        [
+            "rt",
+            "replay",
+            "--release",
+            "x",
+            "--from",
+            "2026-10-05",
+            "--to",
+            "2026-10-05",
+            "--out",
+            str(tmp_path),
+            "--config",
+            str(tmp_path / "missing.toml"),
+        ]
+    )
+    assert code == 1
+    error = capsys.readouterr().err
+    assert "database" in error.lower() or "missing.toml" in error
+    assert "filter" not in error

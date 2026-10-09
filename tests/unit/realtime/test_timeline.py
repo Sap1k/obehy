@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from obehy.realtime.core import Context, step
+from obehy.realtime.core import Context, estimate_all, step
 from obehy.realtime.model import (
     Effect,
     FeedState,
@@ -54,6 +54,7 @@ class Run:
 
     @property
     def instance(self) -> Instance:
+        estimate_all(self.state, self.ctx)
         (value,) = self.state.instances.values()
         return value
 
@@ -194,6 +195,7 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
     run.at("08:03", None, vehicle="2002", key="999999:1")  # unmatched: never in GTFS-RT
     now = local("2026-10-08 08:03:10")
     refresh(run.state, now, POLICY)
+    estimate_all(run.state, run.ctx)
     raw = feed_message(run.state, now).SerializeToString(deterministic=True)
     message = rt.FeedMessage()
     message.ParseFromString(raw)
