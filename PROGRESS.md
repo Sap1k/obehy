@@ -216,6 +216,10 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — `realtime/times.py` (T1, T6–T12, T14, T15 pass) and its SQL twin
+  `control.obehy_instant` (migration 0004; agrees with Python on the DST cases against the remote
+  dev database). ruff `DTZ` on, with ignores only for the legacy `decode.py` and its test. DB tests
+  read `[database] test_url` from the local config.
 - **2026-10-09** — `docs/R1_SLICE.md`: core types, time scenario table T1–T14, `rt`/`history`
   DDL sketch, connector manifest and policy shapes, fixtures, R1 acceptance. Restart by warm
   replay replaces the checkpoint; stable `tour_id` added to section 22. Docs only. Schedule times

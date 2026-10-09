@@ -120,7 +120,12 @@ def test_serving_v4_package_is_rejected(tmp_path: Path) -> None:
 
 
 def test_shipped_migrations_are_contiguous() -> None:
-    assert [migration.name for migration in discover()] == ["foundation", "control", "static"]
+    assert [migration.name for migration in discover()] == [
+        "foundation",
+        "control",
+        "static",
+        "functions",
+    ]
 
 
 def test_pending_migrations_detect_edits_and_unknown_versions() -> None:
