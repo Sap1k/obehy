@@ -1,0 +1,12 @@
+[Unit]
+Description=Oběhy: check for a new static release every hour
+
+[Timer]
+# The nightly build finishes at an unpredictable time; a check without a new release is one
+# GitHub API request.
+OnCalendar=hourly
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

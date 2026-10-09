@@ -144,6 +144,7 @@ key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" }
 | `[progress]` | the progress model of section 9 (geometry trust, speed, lateness change, beam, commit lag, off-route hold) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | hours = 4 |
+| `[retention]` | observation_days = 30 (dropped by `obehy jobs nightly`) |
 
 The file carries `policy_version`, which goes into `derivation`. Code holds no defaults for
 policy values: a missing key is a load error.

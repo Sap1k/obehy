@@ -11,7 +11,7 @@ import pytest
 
 from obehy.realtime.core import CORE_VERSION, Context, snapshot, step
 from obehy.realtime.emit.db import Writer
-from obehy.realtime.jobs import vehicle_day
+from obehy.realtime.jobs import drop_observations, vehicle_day
 from obehy.realtime.model import (
     AssignVehicle,
     Derivation,
@@ -164,3 +164,18 @@ def test_t13_vehicle_day_crosses_midnight_and_splits_at_long_gaps(
     ).fetchall()
     assert rows == [(D8, 1, 2, None), (D9, 1, 1, None)]
     assert vehicle_day(connection, D8, POLICY) == 1  # idempotent
+
+
+def test_retention_drops_only_observation_days_before_the_cutoff(
+    connection: psycopg.Connection,
+) -> None:
+    writer = _writer(connection)
+    for day in (date(2026, 9, 8), date(2026, 9, 9), D9):
+        writer._observation_partition(day)  # pyright: ignore[reportPrivateUsage]
+
+    assert drop_observations(connection, date(2026, 9, 9)) == ["observation_20260908"]
+    remaining = connection.execute(
+        "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid"
+        " WHERE i.inhparent = 'rt.observation'::regclass ORDER BY 1"
+    ).fetchall()
+    assert remaining == [("observation_20260909",), ("observation_20261009",)]

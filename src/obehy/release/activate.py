@@ -120,6 +120,23 @@ def activate(connection: psycopg.Connection, contract: Contract, run_id: str) ->
         )
 
 
+def activate_if_newer(
+    connection: psycopg.Connection, contract: Contract, run_id: str
+) -> Publication | None:
+    """Activate a release only if it is newer than every release published before.
+
+    Run ids start with their UTC build time, so they order by age. Comparing with the whole
+    history, not the active release, keeps a scheduled update from undoing a rollback."""
+
+    with connection.transaction():
+        _current(connection, lock=True)
+        row = connection.execute("SELECT max(run_id) FROM control.publication_history").fetchone()
+        newest = cast(str | None, row[0] if row else None)
+        if newest is not None and run_id <= newest:
+            return None
+        return activate(connection, contract, run_id)
+
+
 def rollback(connection: psycopg.Connection, contract: Contract) -> Publication:
     """Return to the publication that preceded the current one (stack semantics)."""
 

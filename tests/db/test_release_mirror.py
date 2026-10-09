@@ -160,6 +160,23 @@ def test_rollback_restores_the_previous_release(
     assert actions == [("run-a", "activate"), ("run-b", "activate"), ("run-a", "rollback")]
 
 
+def test_activate_if_newer_skips_older_releases_and_respects_a_rollback(
+    connection: psycopg.Connection, tmp_path: Path
+) -> None:
+    for run_id in ("20261008T000000Z-a", "20261009T000000Z-b", "20261007T000000Z-c"):
+        _load(connection, write_release(tmp_path, run_id))
+
+    first = activation.activate_if_newer(connection, CONTRACT, "20261008T000000Z-a")
+    assert first is not None and first.run_id == "20261008T000000Z-a"
+    assert activation.activate_if_newer(connection, CONTRACT, "20261008T000000Z-a") is None
+    assert activation.activate_if_newer(connection, CONTRACT, "20261007T000000Z-c") is None
+    assert activation.activate_if_newer(connection, CONTRACT, "20261009T000000Z-b") is not None
+    activation.rollback(connection, CONTRACT)
+
+    assert activation.activate_if_newer(connection, CONTRACT, "20261009T000000Z-b") is None
+    assert _scalar(connection, "SELECT run_id FROM control.publication") == "20261008T000000Z-a"
+
+
 def test_activate_requires_both_packages(connection: psycopg.Connection, tmp_path: Path) -> None:
     _load(connection, write_release(tmp_path, "run-a"), packages=("jdf",))
     with pytest.raises(activation.ActivationError, match="no loaded czptt"):

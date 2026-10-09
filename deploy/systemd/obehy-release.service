@@ -1,0 +1,16 @@
+[Unit]
+Description=Oběhy: fetch, load and activate the newest static release
+Documentation=file:///opt/obehy/README.md
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=obehy
+Group=obehy
+WorkingDirectory=/opt/obehy
+# Database URL from config/obehy.local.toml ([database] url) or OBEHY_DATABASE_URL here.
+EnvironmentFile=-/etc/obehy/release.env
+ExecStart=/opt/obehy/deploy/obehy-release-update
+Nice=10
+IOSchedulingClass=idle

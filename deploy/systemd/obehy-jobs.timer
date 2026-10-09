@@ -1,0 +1,10 @@
+[Unit]
+Description=Oběhy: run the nightly jobs at 03:30 Prague time
+
+[Timer]
+# After the last night journeys of the previous service date have finished.
+OnCalendar=*-*-* 03:30 Europe/Prague
+Persistent=true
+
+[Install]
+WantedBy=timers.target

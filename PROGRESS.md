@@ -48,8 +48,8 @@ heap hard limit is configured; memory figures are telemetry.
 - **Mirror:** `obehy db migrate`, `obehy release load <release-dir>`, `obehy release activate
   <run-id>|--rollback`, `obehy release status` (`src/obehy/release/`). One LIST partition per
   package load, built and checked standalone and attached in one transaction; readers use the
-  `active.*` views. Derived: `service_date`, location `geom`, `shape_line`. `release fetch` is
-  not written yet.
+  `active.*` views. Derived: `service_date`, location `geom`, `shape_line`. `obehy release
+  fetch` downloads the newest GitHub build release into `data/releases/<run-id>`, verified.
 
 ### Last validation evidence
 
@@ -173,7 +173,8 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
 - **Status:** step 1 done (2026-10-06; recording continues). Step 2 done (§6). Step 3 done
-  except `release fetch`, which waits for the first GitHub Actions release (2026-10-07).
+  (`release fetch` 2026-10-09; the hourly systemd timer for fetch → load → `activate
+  --if-newer` is in `deploy/`, not yet installed on a server).
   Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
   report) done 2026-10-08. The core architecture is decided (2026-10-08, `BASE_PLAN.md`
   sections 5, 18–22, 29–30). The first slice (DÚK buses with history, warm-replay restart,
@@ -222,6 +223,16 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — `obehy jobs nightly` (vehicle days of the last two service dates, then drop
+  `rt.observation` days older than 30, policy `[retention]`) with a 03:30 Prague systemd timer
+  in `deploy/`. DB test for the drop; raw-archive retention is still missing.
+- **2026-10-09** — `release activate --if-newer` (newer than every release published before, so a
+  rollback sticks) and `deploy/` systemd service + hourly timer running fetch → load → activate.
+  DB test added; the units are not yet installed on a server.
+- **2026-10-09** — `obehy release fetch`: newest (or named) `build-*` GitHub release, assets
+  checked against GitHub's digests while streaming, packages against `release.json` and their
+  manifests, unpacked atomically, three newest kept. Unit-tested with a fake GitHub; the real
+  `20261009T030215Z-8cf199243726` (800 MB) fetched and verified in 43 s, a re-run skips it.
 - **2026-10-09** — Realtime through reception gaps: predictions use the tracker's GPS lateness
   (source delay as fallback) and hold it through gaps; a silent journey loses its position
   after `stale_after_s` and its predictions after `predict_without_data_s` (per mode, longer

@@ -94,6 +94,7 @@ class Policy:
     delay_discard_below_s: int
     warm_replay_hours: int
     emit_tick_s: int
+    observation_retention_days: int
 
 
 class _Table:
@@ -164,6 +165,7 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         delay_discard_below_s=root.table("delay").integer("discard_below_s"),
         warm_replay_hours=root.table("warm_replay").integer("hours"),
         emit_tick_s=root.table("emit").integer("tick_s"),
+        observation_retention_days=root.table("retention").integer("observation_days"),
     )
 
 
