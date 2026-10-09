@@ -76,6 +76,10 @@ source_modules = [
     "obehy.realtime.index",
     "obehy.realtime.geo",
     "obehy.realtime.times",
+    "obehy.realtime.core",
+    "obehy.realtime.infer",
+    "obehy.realtime.timeline",
+    "obehy.realtime.policy",
 ]
 forbidden_modules = [
     "psycopg",

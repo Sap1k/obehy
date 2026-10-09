@@ -216,6 +216,9 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — `core.step` with keyed binding (`infer/keyed.py`: date rule of §19.3,
+  binding continuity, reason codes), vehicle states and the pre-trip lifecycle; scenario tests
+  T2–T5, DUK-Q3, DUK-Q4, DUK-Q11 pass. The timeline is still a stub that only tracks delay.
 - **2026-10-09** — Realtime foundation: `model.py` (facts, journeys, state, effects, JSON
   round-trip), `policy-v1.toml` + loader, `index.py`, the test timetable builder and the
   import-linter purity contract; `index_sql.IndexLoader` fills the index lazily by source key from
