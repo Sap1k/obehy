@@ -227,6 +227,8 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-10** — The feed list page and `feeds.json` name the realtime sources and what they
+  cover (DÚK vehicle positions → `cz-jdf-gtfs-rt.pb`).
 - **2026-10-10** — The server stack serves feeds with stock nginx instead of Caddy, for its
   per-download `limit_rate` (about 100 Mbit/s); the legacy `/gtfs-rt/jdf.pb` route is gone,
   the realtime feed is `/get-feeds/cz-jdf-gtfs-rt.pb`. Config not run here (no Docker).

@@ -35,6 +35,24 @@ STATIC_FEEDS = (
 REALTIME_FEEDS = (Feed("cz-jdf-gtfs-rt.pb", "", "Buses (JDF), GTFS-RT, updated every 10 s"),)
 
 
+@dataclass(frozen=True)
+class RealtimeSource:
+    name: str
+    feed: str  # the GTFS-RT file it feeds
+    covers: str
+
+
+# What the worker currently runs (realtime/sources/*.toml with feeds=jdf); update with it.
+REALTIME_SOURCES = (
+    RealtimeSource(
+        "DÚK vehicle positions (Ústecký kraj)",
+        "cz-jdf-gtfs-rt.pb",
+        "DÚK regional buses, Teplice city buses; Ústí nad Labem city buses (DPmÚL) only in "
+        "part. Positions, and delays measured from GPS against the timetable.",
+    ),
+)
+
+
 def _built(completed_at: object) -> str:
     """The build time in Prague, as people read it; the raw value if it is not a timestamp."""
 
@@ -79,6 +97,10 @@ def feed_list(release_dir: Path) -> dict[str, Any]:
         "run_id": release["run_id"],
         "completed_at": release.get("completed_at"),
         "feeds": feeds,
+        "realtime_sources": [
+            {"name": source.name, "feed": source.feed, "covers": source.covers}
+            for source in REALTIME_SOURCES
+        ],
     }
 
 
@@ -91,6 +113,14 @@ def _html(listing: dict[str, Any]) -> str:
             size=_size(feed["size_bytes"]) if "size_bytes" in feed else "live",
         )
         for feed in listing["feeds"]
+    )
+    sources = "\n".join(
+        '<li><strong>{name}</strong> → <a href="{feed}">{feed}</a>: {covers}</li>'.format(
+            name=html.escape(source["name"]),
+            feed=html.escape(source["feed"], quote=True),
+            covers=html.escape(source["covers"]),
+        )
+        for source in listing["realtime_sources"]
     )
     return f"""<!doctype html>
 <html lang="en">
@@ -105,6 +135,7 @@ table {{ border-collapse: collapse; width: 100%; }}
 td, th {{ padding: .35rem .6rem; border-bottom: 1px solid #8884; text-align: left; }}
 td:last-child, th:last-child {{ text-align: right; white-space: nowrap; }}
 small {{ opacity: .7; }}
+h2 {{ font-size: 1.1rem; margin-top: 2rem; }}
 </style>
 </head>
 <body>
@@ -119,6 +150,10 @@ small {{ opacity: .7; }}
 {rows}
 </tbody>
 </table>
+<h2>Realtime sources</h2>
+<ul>
+{sources}
+</ul>
 </body>
 </html>
 """

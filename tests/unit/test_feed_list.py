@@ -29,3 +29,5 @@ def test_feed_list_names_every_feed_of_the_release(tmp_path: Path) -> None:
     assert '<a href="cz-czptt-gtfs.zip">cz-czptt-gtfs.zip</a>' in page
     assert "2.5 MB" in page and release.name in page
     assert "built 9. 10. 2026 05:51" in page
+    assert stored["realtime_sources"][0]["feed"] == "cz-jdf-gtfs-rt.pb"
+    assert "<h2>Realtime sources</h2>" in page and "DÚK vehicle positions" in page
