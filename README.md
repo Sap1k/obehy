@@ -207,8 +207,10 @@ uv run obehy release activate <run-id>     # or --rollback
 uv run obehy release status
 ```
 
-Readers query the `active.*` views only. `release fetch` is not written yet. DB tests in
-`tests/db/` run when `OBEHY_TEST_DATABASE_URL` is set.
+The database may run on another host (start `compose.yaml` there); instead of the environment
+variable, set `[database] url` in `config/obehy.local.toml`. Readers query the `active.*` views
+only. `release fetch` is not written yet. DB tests in `tests/db/` run when
+`OBEHY_TEST_DATABASE_URL` or `[database] test_url` names a database that may create databases.
 
 ## Replaying realtime payloads
 

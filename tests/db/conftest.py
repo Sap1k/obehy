@@ -1,12 +1,11 @@
 """PostgreSQL fixtures: one migrated template per session, one fresh database per test.
 
-Set ``OBEHY_TEST_DATABASE_URL`` to a database the user may create databases from; the tests
-are skipped without it.
+Set ``OBEHY_TEST_DATABASE_URL`` or ``[database] test_url`` in ``config/obehy.local.toml`` to a
+database the user may create databases from; the tests are skipped without it.
 """
 
 from __future__ import annotations
 
-import os
 import uuid
 from collections.abc import Iterator
 
@@ -15,8 +14,7 @@ import pytest
 from psycopg import conninfo, sql
 
 from obehy.release.migrate import migrate
-
-TEST_DATABASE_URL_ENV = "OBEHY_TEST_DATABASE_URL"
+from obehy.runtime_config import load_test_database_url
 
 
 def _url(base: str, database: str) -> str:
@@ -40,9 +38,9 @@ def _drop(base: str, database: str) -> None:
 
 @pytest.fixture(scope="session")
 def admin_url() -> str:
-    url = os.environ.get(TEST_DATABASE_URL_ENV)
+    url = load_test_database_url()
     if not url:
-        pytest.skip(f"{TEST_DATABASE_URL_ENV} is not set")
+        pytest.skip("no test database: set OBEHY_TEST_DATABASE_URL or [database] test_url")
     return url
 
 

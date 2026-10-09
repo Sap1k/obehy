@@ -56,6 +56,7 @@ def _absolute_path(table: dict[str, Any], key: str, source: Path) -> Path:
 
 
 DATABASE_URL_ENV = "OBEHY_DATABASE_URL"
+TEST_DATABASE_URL_ENV = "OBEHY_TEST_DATABASE_URL"
 
 
 def load_database_url(path: Path | None = None) -> str:
@@ -83,6 +84,27 @@ def load_database_url(path: Path | None = None) -> str:
     url = _table(document, "database").get("url")
     if not isinstance(url, str) or not url.strip():
         raise ConfigurationError(f"Missing non-empty 'url' in [database] of {source}")
+    return os.path.expandvars(url.strip())
+
+
+def load_test_database_url(path: Path | None = None) -> str | None:
+    """The DB-test admin URL: ``OBEHY_TEST_DATABASE_URL`` or ``[database] test_url``, if any."""
+
+    environment = os.environ.get(TEST_DATABASE_URL_ENV, "").strip()
+    if environment:
+        return environment
+    source = (path or default_config_path()).resolve()
+    if not source.is_file():
+        return None
+    try:
+        with source.open("rb") as stream:
+            document = tomllib.load(stream)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigurationError(f"Invalid TOML in {source}: {error}") from error
+    database = document.get("database")
+    url = cast(dict[str, Any], database).get("test_url") if isinstance(database, dict) else None
+    if not isinstance(url, str) or not url.strip():
+        return None
     return os.path.expandvars(url.strip())
 
 

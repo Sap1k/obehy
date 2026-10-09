@@ -16,3 +16,5 @@ directory = "D:/src/jrutil"
 # Release mirror database (obehy db / obehy release). OBEHY_DATABASE_URL overrides it.
 # [database]
 # url = "postgresql://obehy:PASSWORD@localhost:45873/obehy"
+# Admin database for tests/db (OBEHY_TEST_DATABASE_URL overrides it); the server may be remote.
+# test_url = "postgresql://obehy:PASSWORD@localhost:45873/obehy_test"
