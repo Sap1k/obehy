@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_type_hints
 
 POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v1.toml"
 
@@ -34,7 +34,11 @@ class TimePolicy:
     pre_trip_s: ByMode
     max_delay_s: ByMode
     vehicle_day_gap_s: int
-    max_clock_skew: timedelta
+    max_clock_skew_s: int
+
+    @property
+    def max_clock_skew(self) -> timedelta:
+        return timedelta(seconds=self.max_clock_skew_s)
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,58 +138,29 @@ class _Table:
         )
         return ByMode(default, overrides)
 
+    def section[T](self, key: str, cls: type[T]) -> T:
+        """A policy section: every field of `cls` read by name and type; no key may be missing
+        and none may be unknown, so a typo in the file is an error, not a silent default."""
+
+        table = self.table(key)
+        hints = get_type_hints(cls)
+        names = [f.name for f in fields(cast(Any, cls))]
+        unknown = sorted(set(table.data) - set(names))
+        if unknown:
+            raise PolicyError(f"unknown {table.path}{unknown[0]}")
+        readers = {"float": table.number, "int": table.integer, "ByMode": table.by_mode}
+        values = {name: readers[hints[name].__name__](name) for name in names}
+        return cls(**values)
+
 
 def parse_policy(document: dict[str, Any]) -> Policy:
     root = _Table(document, "")
-    time = root.table("time")
-    lifecycle = root.table("lifecycle")
-    progress = root.table("progress")
-    prediction = root.table("prediction")
     return Policy(
         version=root.text("policy_version"),
-        time=TimePolicy(
-            pre_trip_s=time.by_mode("pre_trip_s"),
-            max_delay_s=time.by_mode("max_delay_s"),
-            vehicle_day_gap_s=time.integer("vehicle_day_gap_s"),
-            max_clock_skew=timedelta(seconds=time.integer("max_clock_skew_s")),
-        ),
-        lifecycle=LifecyclePolicy(
-            stale_after_s=lifecycle.by_mode("stale_after_s"),
-            predict_without_data_s=lifecycle.by_mode("predict_without_data_s"),
-            arrival_radius_m=lifecycle.number("arrival_radius_m"),
-            departure_margin_m=lifecycle.number("departure_margin_m"),
-            finished_grace_s=lifecycle.integer("finished_grace_s"),
-            forget_after_s=lifecycle.integer("forget_after_s"),
-        ),
-        progress=ProgressPolicy(
-            gps_sigma_m=progress.number("gps_sigma_m"),
-            shape_sigma_m=progress.number("shape_sigma_m"),
-            chord_min_sigma_m=progress.number("chord_min_sigma_m"),
-            chord_k=progress.number("chord_k"),
-            chord_max_sigma_m=progress.number("chord_max_sigma_m"),
-            reach_sigmas=progress.number("reach_sigmas"),
-            bearing_sigma_deg=progress.number("bearing_sigma_deg"),
-            chord_bearing_sigma_deg=progress.number("chord_bearing_sigma_deg"),
-            jitter_m=progress.number("jitter_m"),
-            off_path_log_p=progress.number("off_path_log_p"),
-            max_speed_mps=progress.by_mode("max_speed_mps"),
-            loss_sigma_base_s=progress.number("loss_sigma_base_s"),
-            loss_sigma_rate=progress.number("loss_sigma_rate"),
-            gain_sigma_base_s=progress.number("gain_sigma_base_s"),
-            gain_sigma_rate=progress.number("gain_sigma_rate"),
-            start_lateness_sigma_s=progress.number("start_lateness_sigma_s"),
-            beam=progress.integer("beam"),
-            prune=progress.number("prune"),
-            agree_within=progress.number("agree_within"),
-            max_commit_lag_s=progress.integer("max_commit_lag_s"),
-            max_event_interval_s=progress.integer("max_event_interval_s"),
-            off_route_hold_s=progress.integer("off_route_hold_s"),
-        ),
-        prediction=PredictionPolicy(
-            min_dwell_s=prediction.by_mode("min_dwell_s"),
-            long_dwell_s=prediction.by_mode("long_dwell_s"),
-            min_long_dwell_s=prediction.by_mode("min_long_dwell_s"),
-        ),
+        time=root.section("time", TimePolicy),
+        lifecycle=root.section("lifecycle", LifecyclePolicy),
+        progress=root.section("progress", ProgressPolicy),
+        prediction=root.section("prediction", PredictionPolicy),
         delay_discard_below_s=root.table("delay").integer("discard_below_s"),
         warm_replay_hours=root.table("warm_replay").integer("hours"),
         emit_tick_s=root.table("emit").integer("tick_s"),

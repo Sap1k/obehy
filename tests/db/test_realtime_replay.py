@@ -210,7 +210,7 @@ def test_worker_polls_decodes_and_emits(
     import asyncio
 
     from obehy.realtime.manifest import Channel
-    from obehy.realtime.worker import run_worker
+    from obehy.realtime.worker import WorkerOptions, run_worker
     from obehy.release import activate as activation
     from obehy.release.contract import load_contract
 
@@ -242,10 +242,12 @@ def test_worker_polls_decodes_and_emits(
             database_url,
             [channel],
             POLICY,
-            archive=tmp_path / "live-archive",
-            gtfs_rt_dir=tmp_path / "gtfs-rt",
-            fetcher=fetch,
-            once=True,
+            WorkerOptions(
+                archive=tmp_path / "live-archive",
+                gtfs_rt_dir=tmp_path / "gtfs-rt",
+                fetcher=fetch,
+                once=True,
+            ),
         )
     )
     assert (tmp_path / "gtfs-rt" / "jdf.pb").is_file()

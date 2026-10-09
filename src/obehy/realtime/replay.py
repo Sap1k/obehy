@@ -117,42 +117,59 @@ def replay(
     stats: dict[str, _Stats] = defaultdict(_Stats)
     groups: dict[tuple[str, str, Any, date], bool] = {}
     reasons: Counter[str] = Counter()
-    tick_s = policy.emit_tick_s
-    next_tick: Instant | None = None
-    next_snapshot: Instant | None = None
+    clock = _Clock(runner, options, policy.emit_tick_s)
     last: Instant | None = None
-
     for chunk in batched(_decoded(options, policy, stats), LOOKAHEAD_POLLS, strict=False):
         # Load the static data of the next polls' keys in one round trip set.
         runner.prefetch([o for _, observations in chunk for o in observations or ()])
         for at, observations in chunk:
-            if next_tick is None:
-                next_tick = _next_tick(at, tick_s)
-                if options.gtfs_rt_every_s:
-                    next_snapshot = _next_tick(at, options.gtfs_rt_every_s)
-            while next_tick <= at:
-                runner.tick(next_tick, emit=False)
-                if next_snapshot is not None and next_snapshot <= next_tick:
-                    _snapshot(options, runner, next_snapshot)
-                    next_snapshot = instant(
-                        next_snapshot + timedelta(seconds=options.gtfs_rt_every_s or 0)
-                    )
-                next_tick = instant(next_tick + timedelta(seconds=tick_s))
+            clock.advance(at)
             if observations is None:
                 continue
             _count(runner.process(observations), groups, reasons)
             last = at
     if last is not None:
-        runner.tick(last, emit=False)
-        for runtime in runner.runtimes.values():
-            estimate_all(runtime.state, runtime.ctx)
-        if writer is not None:
-            writer.write_state({feed: r.state for feed, r in runner.runtimes.items()})
+        _finish(runner, last, writer)
     document = _report(loads, options, stats, groups, reasons, runner.skipped)
     options.out.mkdir(parents=True, exist_ok=True)
     with atomic_output_path(options.out / "report.json") as temporary:
         temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", "utf-8")
     return document
+
+
+class _Clock:
+    """The simulated clock: emit ticks every `tick_s` and GTFS-RT snapshots every
+    `gtfs_rt_every_s`, on round multiples, run before the first observation after them."""
+
+    def __init__(self, runner: Runner, options: ReplayOptions, tick_s: int) -> None:
+        self.runner = runner
+        self.options = options
+        self.tick_s = tick_s
+        self.next_tick: Instant | None = None
+        self.next_snapshot: Instant | None = None
+
+    def advance(self, at: Instant) -> None:
+        every = self.options.gtfs_rt_every_s
+        if self.next_tick is None:
+            self.next_tick = _next_tick(at, self.tick_s)
+            if every:
+                self.next_snapshot = _next_tick(at, every)
+        while self.next_tick <= at:
+            self.runner.tick(self.next_tick, emit=False)
+            if self.next_snapshot is not None and self.next_snapshot <= self.next_tick:
+                _snapshot(self.options, self.runner, self.next_snapshot)
+                self.next_snapshot = instant(self.next_snapshot + timedelta(seconds=every or 0))
+            self.next_tick = instant(self.next_tick + timedelta(seconds=self.tick_s))
+
+
+def _finish(runner: Runner, last: Instant, writer: Writer | None) -> None:
+    """Final housekeeping and estimates, and the current state when writing history."""
+
+    runner.tick(last, emit=False)
+    for runtime in runner.runtimes.values():
+        estimate_all(runtime.state, runtime.ctx)
+    if writer is not None:
+        writer.write_state({feed: r.state for feed, r in runner.runtimes.items()})
 
 
 def _decoded(

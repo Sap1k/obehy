@@ -25,7 +25,7 @@ from datetime import timedelta
 
 from obehy.realtime.model import CallState, CallStatus, Instance, Interval, SourceClass
 from obehy.realtime.policy import PredictionPolicy
-from obehy.realtime.timeline.path import Scheduled
+from obehy.realtime.timeline.plan import Scheduled
 from obehy.realtime.times import Instant
 
 
@@ -49,7 +49,7 @@ def _call(
     )
 
 
-def _lateness(instance: Instance) -> tuple[timedelta | None, SourceClass | None]:
+def _current_lateness(instance: Instance) -> tuple[timedelta | None, SourceClass | None]:
     track = instance.track
     if track is not None and track.hypotheses:
         return timedelta(seconds=round(track.hypotheses[0].lateness_s)), "gps"
@@ -61,7 +61,7 @@ def _lateness(instance: Instance) -> tuple[timedelta | None, SourceClass | None]
 def estimate(instance: Instance, scheduled: Scheduled, policy: PredictionPolicy) -> Instance:
     """Per-call estimates; computed when state is emitted, not on every fix."""
 
-    lateness, delay_class = _lateness(instance)
+    lateness, delay_class = _current_lateness(instance)
     reached = instance.progress.call_index if instance.progress is not None else -1
     # A call with a crossing means every earlier call was passed, observed or not.
     for i, state in enumerate(instance.calls):

@@ -378,8 +378,8 @@ class Writer:
                                 i.lifecycle,
                                 i.delay_s,
                                 i.off_route,
-                                i.stale,
-                                i.updated_at,
+                                i.freshness.stale,
+                                i.freshness.updated_at,
                                 json.dumps([_call_json(c) for c in i.calls]),
                             )
                         )

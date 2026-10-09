@@ -10,33 +10,31 @@ segment), scored by three terms:
 - change of lateness: time lost or gained against the timetable between the two fixes, with a
   spread growing with the time between them. Absolute lateness is never penalised.
 
-The most likely hypothesis is the live position. A crossing is committed only when every
-surviving hypothesis has passed its trigger, so out-and-back branches (závleky), loops and stops
-passed before being served resolve from the following fixes instead of being guessed. A
-committed crossing always gets a time for realtime; it is recorded as an event (history) only
-when the fixes either side are close enough to say when it happened.
+A fix the path does not explain holds a hypothesis as if the fix were missing, at a fixed cost.
+The most likely hypothesis is the live position; crossings are committed once the readings
+agree (`commit.py`). GPS fixes are the only evidence in R1; source-reported progress (SŽ
+passages, a next stop) will be scored against the same hypotheses as a further term.
 """
 
 from __future__ import annotations
 
 import math
-from bisect import bisect_right
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import timedelta
-from itertools import pairwise
 
-from obehy.realtime.model import EventKind, Hypothesis, Interval, Position, Progress, Track
-from obehy.realtime.policy import Policy, ProgressPolicy
-from obehy.realtime.timeline.path import Candidate, Path, Plan, Timetable, candidates
+from obehy.realtime.model import Hypothesis, Placement, Position, Progress, Track
+from obehy.realtime.policy import ProgressPolicy
+from obehy.realtime.timeline.commit import Crossing, commit
+from obehy.realtime.timeline.path import Candidate, Path, candidates
+from obehy.realtime.timeline.plan import Plan
 from obehy.realtime.times import Instant
-
-# (call index, kind, fixes either side, interpolated time, recorded as an event)
-Crossing = tuple[int, EventKind, Interval, Instant, bool]
 
 
 @dataclass(frozen=True, slots=True)
 class Step:
+    """The tracker after one fix."""
+
     track: Track
     progress: Progress | None
     crossed: tuple[Crossing, ...]
@@ -44,75 +42,184 @@ class Step:
     off_route: bool
 
 
-# --- where the vehicle is ------------------------------------------------------------------------
+def update(
+    plan: Plan,
+    track: Track | None,
+    position: Position,
+    at: Instant,
+    mode: str,
+    policy: ProgressPolicy,
+) -> Step:
+    """Extend the journey's hypotheses with one fix and commit what they agree on."""
+
+    if len(plan.path.points) < 2:
+        return Step(track or Track((), 0.0), None, (), None, False)
+    live = track.hypotheses if track is not None else ()
+    speed = policy.max_speed_mps(mode)
+    window = _search_window(live, at, speed, policy)
+    found = candidates(
+        plan.path, position.lon, position.lat, _sigma(policy), policy.reach_sigmas, window
+    )
+    if live:
+        extended = _extend(plan, live, found, position, at, speed, policy)
+        extended += _held(live, at, policy)
+    else:
+        extended = _start(plan, found, position, at, policy)
+    if not extended:
+        return _unmatched(track, at, policy)
+
+    beam = _prune(extended, policy)
+    committed_m = track.committed_m if live and track is not None else _first_floor(beam)
+    crossed_at = track.crossed_at if track is not None else None
+    done = commit(plan, beam, committed_m, crossed_at, at, policy)
+    best = done.beam[0]
+    progress = Progress(best.along_m, plan.call_index_at(best.along_m), at)
+    since = best.off_path_since
+    off_route = since is not None and at - since >= timedelta(seconds=policy.off_route_hold_s)
+    new_track = Track(done.beam, done.committed_m, seen_at=at, crossed_at=done.crossed_at)
+    return Step(new_track, progress, done.crossed, since, off_route)
 
 
-def call_index_at(plan: Plan, along_m: float) -> int:
-    """The last call the vehicle has left: its departure trigger (or, for the last call, its
-    arrival trigger) is at or behind `along_m`; -1 before the first departure."""
+def _first_floor(beam: tuple[Hypothesis, ...]) -> float:
+    """Where commits start for a new track: nothing before the first fix was observed."""
 
-    index = -1
-    for i, (arrival, departure) in enumerate(plan.triggers):
-        trigger = departure if departure is not None else arrival
-        if trigger is not None and trigger <= along_m:
-            index = i
-    return index
+    return min(h.along_m for h in beam)
 
 
-# --- lateness ------------------------------------------------------------------------------------
+# --- extending hypotheses ----------------------------------------------------------------------
 
 
-def lateness_at(at: Instant, along: float, timetable: Timetable) -> float:
-    """Seconds behind (positive) or ahead of the timetable; 0 inside a call's dwell."""
+def _search_window(
+    live: tuple[Hypothesis, ...], at: Instant, speed: float, policy: ProgressPolicy
+) -> tuple[float, float] | None:
+    """The stretch of path any live hypothesis could have reached since its last fix; the whole
+    path when there is none."""
 
-    window = timetable(along)
-    if window is None:
-        return 0.0
-    lo, hi = window
-    if lo is not None and at < lo:
-        return (at - lo).total_seconds()
-    if hi is not None and at > hi:
-        return (at - hi).total_seconds()
-    return 0.0
-
-
-def _planned(at: Instant, along: float, timetable: Timetable) -> Instant | None:
-    """The timetable time of a fix: its time clamped into the window of its place."""
-
-    window = timetable(along)
-    if window is None:
+    if not live:
         return None
-    lo, hi = window
-    if lo is not None and at < lo:
-        return lo
-    if hi is not None and at > hi:
-        return hi
-    return at
+    elapsed = max((at - h.at).total_seconds() for h in live)
+    reach = policy.reach_sigmas * math.hypot(policy.gps_sigma_m, policy.chord_min_sigma_m)
+    return (
+        min(h.along_m for h in live) - policy.jitter_m,
+        max(h.along_m for h in live) + speed * max(0.0, elapsed) + reach,
+    )
 
 
-# --- scoring -------------------------------------------------------------------------------------
+def _start(
+    plan: Plan,
+    found: list[Candidate],
+    position: Position,
+    at: Instant,
+    policy: ProgressPolicy,
+) -> list[Hypothesis]:
+    """The first fix: one hypothesis per candidate, with a broad prior on absolute lateness."""
+
+    out: list[Hypothesis] = []
+    for candidate in found:
+        lateness = plan.timetable.lateness_s(at, candidate.along_m)
+        prior = -0.5 * (lateness / policy.start_lateness_sigma_s) ** 2
+        fit = _emission(candidate, position, plan.path, policy)
+        history = (Placement(candidate.along_m, at),)
+        out.append(Hypothesis(candidate.along_m, at, lateness, fit + prior, history))
+    return out
+
+
+def _extend(
+    plan: Plan,
+    live: tuple[Hypothesis, ...],
+    found: list[Candidate],
+    position: Position,
+    at: Instant,
+    speed: float,
+    policy: ProgressPolicy,
+) -> list[Hypothesis]:
+    """Each candidate continues the live hypothesis that reaches it most plausibly (Viterbi)."""
+
+    out: list[Hypothesis] = []
+    for candidate in found:
+        fit = _emission(candidate, position, plan.path, policy)
+        best: Hypothesis | None = None
+        for h in live:
+            if candidate.along_m < h.along_m - policy.jitter_m:
+                continue  # backwards beyond GPS noise: impossible
+            along = max(candidate.along_m, h.along_m)  # a small step back is no movement
+            lateness = plan.timetable.lateness_s(at, along)
+            move = _transition(h, along, at, lateness, speed, policy)
+            if move is None:
+                continue
+            score = h.log_p + move + fit
+            if best is None or score > best.log_p:
+                history = (*h.history, Placement(along, at))
+                best = Hypothesis(along, at, lateness, score, history)
+        if best is not None:
+            out.append(best)
+    return out
+
+
+def _held(live: tuple[Hypothesis, ...], at: Instant, policy: ProgressPolicy) -> list[Hypothesis]:
+    """A fix the geometry does not explain (a detour, a road far from a stop-to-stop chord)
+    says nothing about where the vehicle is: each hypothesis may also hold as if the fix were
+    missing, at a fixed cost, instead of dying for it."""
+
+    return [
+        h.evolve(log_p=h.log_p + policy.off_path_log_p, off_path_since=h.off_path_since or at)
+        for h in live
+    ]
+
+
+def _prune(extended: list[Hypothesis], policy: ProgressPolicy) -> tuple[Hypothesis, ...]:
+    """Most likely first, scores relative to it; near-identical positions merged; at most
+    `beam`, none more than `prune` behind."""
+
+    ordered = sorted(extended, key=lambda h: (-h.log_p, h.along_m, h.off_path_since is not None))
+    top = ordered[0].log_p
+    kept: list[Hypothesis] = []
+    for h in ordered:
+        if top - h.log_p > policy.prune or len(kept) >= policy.beam:
+            break
+        if any(abs(h.along_m - k.along_m) < 1.0 for k in kept):
+            continue
+        kept.append(h.evolve(log_p=h.log_p - top))
+    return tuple(kept)
+
+
+def _unmatched(track: Track | None, at: Instant, policy: ProgressPolicy) -> Step:
+    """A fix before any hypothesis exists that matches no segment: nothing to track yet."""
+
+    if track is None:
+        track = Track((), 0.0)
+    since = track.unmatched_since or at
+    held = at - since >= timedelta(seconds=policy.off_route_hold_s)
+    return Step(replace(track, unmatched_since=since, seen_at=at), None, (), since, held)
+
+
+# --- scoring -----------------------------------------------------------------------------------
 
 
 def _sigma(policy: ProgressPolicy) -> Callable[[Path, float], float]:
+    """How far a fix may lie from a segment (one standard deviation): GPS error combined with
+    the trust of the geometry there."""
+
     def sigma(path: Path, segment_m: float) -> float:
-        geometry = (
-            policy.shape_sigma_m
-            if path.shaped
-            else min(
-                policy.chord_max_sigma_m,
-                max(policy.chord_min_sigma_m, policy.chord_k * segment_m),
-            )
-        )
+        if path.shaped:
+            geometry = policy.shape_sigma_m
+        else:
+            chord = max(policy.chord_min_sigma_m, policy.chord_k * segment_m)
+            geometry = min(policy.chord_max_sigma_m, chord)
         return math.hypot(policy.gps_sigma_m, geometry)
 
     return sigma
 
 
-def _emission(candidate: Candidate, position: Position, path: Path, p: ProgressPolicy) -> float:
+def _emission(
+    candidate: Candidate, position: Position, path: Path, policy: ProgressPolicy
+) -> float:
+    """Log-likelihood of the fix at the candidate: lateral fit, and heading if it has one."""
+
     score = -0.5 * (candidate.lateral_m / candidate.sigma_m) ** 2 - math.log(candidate.sigma_m)
     if position.bearing is not None:
         turn = abs((position.bearing - candidate.heading_deg + 180.0) % 360.0 - 180.0)
-        spread = p.bearing_sigma_deg if path.shaped else p.chord_bearing_sigma_deg
+        spread = policy.bearing_sigma_deg if path.shaped else policy.chord_bearing_sigma_deg
         score -= 0.5 * (turn / spread) ** 2
     return score
 
@@ -121,9 +228,9 @@ def _transition(
     h: Hypothesis,
     along: float,
     at: Instant,
-    lateness: float,
+    lateness_s: float,
     speed: float,
-    p: ProgressPolicy,
+    policy: ProgressPolicy,
 ) -> float | None:
     """Log-likelihood of moving from `h` to `along` at `at`; None if impossible.
 
@@ -134,221 +241,11 @@ def _transition(
     elapsed = (at - h.at).total_seconds()
     if elapsed <= 0:
         return None
-    if max(0.0, moved) - p.jitter_m > speed * elapsed:
+    if max(0.0, moved) - policy.jitter_m > speed * elapsed:
         return None
-    change = lateness - h.lateness_s
+    change = lateness_s - h.lateness_s
     if change >= 0:
-        spread = p.loss_sigma_base_s + p.loss_sigma_rate * elapsed
+        spread = policy.loss_sigma_base_s + policy.loss_sigma_rate * elapsed
     else:
-        spread = p.gain_sigma_base_s + p.gain_sigma_rate * elapsed
+        spread = policy.gain_sigma_base_s + policy.gain_sigma_rate * elapsed
     return -0.5 * (change / spread) ** 2
-
-
-# --- one fix -------------------------------------------------------------------------------------
-
-
-def update(
-    plan: Plan,
-    track: Track | None,
-    position: Position,
-    at: Instant,
-    mode: str,
-    policy: Policy,
-) -> Step:
-    p = policy.progress
-    path, timetable = plan.path, plan.timetable
-    if len(path.points) < 2:
-        return Step(track or Track((), 0.0), None, (), None, False)
-    speed = p.max_speed_mps(mode)
-    live = track.hypotheses if track is not None else ()
-    window = None
-    if live:
-        elapsed = max((at - h.at).total_seconds() for h in live)
-        reach = p.reach_sigmas * math.hypot(p.gps_sigma_m, p.chord_min_sigma_m)
-        window = (
-            min(h.along_m for h in live) - p.jitter_m,
-            max(h.along_m for h in live) + speed * max(0.0, elapsed) + reach,
-        )
-    found = candidates(path, position.lon, position.lat, _sigma(p), p.reach_sigmas, window)
-
-    extended: list[Hypothesis] = []
-    for candidate in found:
-        fit = _emission(candidate, position, path, p)
-        if not live:
-            lateness = lateness_at(at, candidate.along_m, timetable)
-            prior = -0.5 * (lateness / p.start_lateness_sigma_s) ** 2
-            history = ((candidate.along_m, at),)
-            extended.append(Hypothesis(candidate.along_m, at, lateness, fit + prior, history))
-            continue
-        best: Hypothesis | None = None
-        for h in live:
-            if candidate.along_m < h.along_m - p.jitter_m:
-                continue  # backwards beyond GPS noise: impossible
-            along = max(candidate.along_m, h.along_m)  # a small step back is no movement
-            lateness = lateness_at(at, along, timetable)
-            move = _transition(h, along, at, lateness, speed, p)
-            if move is None:
-                continue
-            score = h.log_p + move + fit
-            if best is None or score > best.log_p:
-                best = Hypothesis(along, at, lateness, score, (*h.history, (along, at)))
-        if best is not None:
-            extended.append(best)
-    # A fix the geometry does not explain (a detour, a road far from a stop-to-stop chord) says
-    # nothing about where the vehicle is: each hypothesis may also hold as if the fix were
-    # missing, at a fixed cost, instead of dying for it.
-    for h in live:
-        since = h.off_path_since or at
-        held = h.log_p + p.off_path_log_p
-        extended.append(Hypothesis(h.along_m, h.at, h.lateness_s, held, h.history, since))
-
-    if not extended:
-        return _unmatched(track, at, policy)
-    beam = _prune(extended, p)
-    if track is not None and track.hypotheses:
-        committed_m = track.committed_m
-    else:
-        committed_m = min(h.along_m for h in beam)  # nothing before the first fix is observed
-    crossed_at = track.crossed_at if track is not None else None
-    beam, committed_m, crossed = _commit(plan, beam, committed_m, crossed_at, at, policy)
-    if crossed:
-        crossed_at = crossed[-1][3]
-    best = beam[0]
-    progress = Progress(best.along_m, call_index_at(plan, best.along_m), at)
-    since = best.off_path_since
-    off_route = since is not None and at - since >= timedelta(seconds=p.off_route_hold_s)
-    track = Track(beam, committed_m, seen_at=at, crossed_at=crossed_at)
-    return Step(track, progress, crossed, since, off_route)
-
-
-def _prune(extended: list[Hypothesis], p: ProgressPolicy) -> tuple[Hypothesis, ...]:
-    """Most likely first; near-identical positions merged; at most `beam`, none far behind."""
-
-    ordered = sorted(extended, key=lambda h: (-h.log_p, h.along_m, h.off_path_since is not None))
-    top = ordered[0].log_p
-    kept: list[Hypothesis] = []
-    for h in ordered:
-        if top - h.log_p > p.prune or len(kept) >= p.beam:
-            break
-        if any(abs(h.along_m - k.along_m) < 1.0 for k in kept):
-            continue
-        kept.append(
-            Hypothesis(h.along_m, h.at, h.lateness_s, h.log_p - top, h.history, h.off_path_since)
-        )
-    return tuple(kept)
-
-
-Fixes = tuple[float, Instant, float, Instant]  # (along, time) of the fixes either side
-
-
-def _commit(
-    plan: Plan,
-    beam: tuple[Hypothesis, ...],
-    committed_m: float,
-    crossed_at: Instant | None,
-    at: Instant,
-    policy: Policy,
-) -> tuple[tuple[Hypothesis, ...], float, tuple[Crossing, ...]]:
-    """Commit, in path order, every crossing all surviving hypotheses agree on.
-
-    Agreement means each hypothesis that is not negligible (within `agree_within` of the most
-    likely) has passed the trigger *and* brackets the crossing with the same two fixes (the
-    common prefix of their histories); negligible ones that disagree are dropped once it is
-    committed. The first disagreement stops
-    committing: that crossing is still undecided. A crossing before every history starts was
-    never observed and gets nothing. One bracketed by fixes further apart than
-    `max_event_interval_s` (a reception gap) gets a time for realtime but is not recorded as an
-    event. A decision open longer than `max_commit_lag_s` keeps only the most likely
-    hypothesis, which then agrees with itself. Crossing times never decrease along the path:
-    each is at least the one committed before it (`crossed_at`).
-    """
-
-    p = policy.progress
-    if not beam:
-        return beam, committed_m, ()
-    kept = tuple(h for h in beam if h.log_p >= -p.agree_within)
-    oldest = min(h.history[0][1] for h in kept)
-    if len(kept) > 1 and at - oldest > timedelta(seconds=p.max_commit_lag_s):
-        kept = (kept[0],)
-    frontier = min(h.along_m for h in kept)
-    first = bisect_right(plan.event_distances, committed_m)
-    last = bisect_right(plan.event_distances, frontier)
-    pending = plan.events[first:last]
-    longest = timedelta(seconds=p.max_event_interval_s)
-    crossed: list[Crossing] = []
-    reached = committed_m
-    for trigger, i, rank in pending:
-        kind: EventKind = "arrival" if rank == 0 else "departure"
-        found = [_bracket(h.history, trigger) for h in kept]
-        if len({None if f is None else (f[1], f[3]) for f in found}) > 1:
-            break  # the readings disagree on when: undecided
-        reached = trigger
-        fixes = found[0]
-        if fixes is not None:
-            arrival, departure = plan.scheduled[i]
-            if kind == "arrival":
-                planned = arrival if arrival is not None else departure
-            else:
-                planned = departure if departure is not None else arrival
-            when = _crossing_time(fixes, trigger, planned, plan.timetable)
-            if crossed_at is not None and when < crossed_at:
-                when = crossed_at
-            crossed_at = when
-            interval = Interval(fixes[1], fixes[3])
-            recorded = interval.hi - interval.lo <= longest
-            crossed.append((i, kind, interval, when, recorded))
-    if reached == committed_m:
-        return beam, committed_m, ()
-    survivors = (h for h in beam if h in kept or h.along_m >= reached)
-    return tuple(_cut(h, reached) for h in survivors), reached, tuple(crossed)
-
-
-def _bracket(history: tuple[tuple[float, Instant], ...], trigger: float) -> Fixes | None:
-    """The fixes either side of where the history crossed `trigger`; None if it was crossed
-    before the history starts (never observed)."""
-
-    for (a0, t0), (a1, t1) in pairwise(history):
-        if a0 < trigger <= a1:
-            return a0, t0, a1, t1
-    return None
-
-
-def _crossing_time(
-    fixes: Fixes, trigger: float, planned: Instant | None, timetable: Timetable
-) -> Instant:
-    """When the vehicle crossed `trigger` between two fixes.
-
-    Lateness drifts between fixes, so the crossing is placed in proportion to timetable time,
-    not distance: a vehicle that waited at a stop and then drove on is placed by the dwell, and
-    across a reception gap the timetable's pace between the fixes is kept. Without timetable
-    times it falls back to distance."""
-
-    a0, t0, a1, t1 = fixes
-    s0, s1 = _planned(t0, a0, timetable), _planned(t1, a1, timetable)
-    if planned is not None and s0 is not None and s1 is not None and s1 > s0:
-        share = (planned - s0) / (s1 - s0)
-    else:
-        share = (trigger - a0) / (a1 - a0)
-    return Instant(t0 + (t1 - t0) * min(1.0, max(0.0, share)))
-
-
-def _cut(h: Hypothesis, frontier: float) -> Hypothesis:
-    """Drop history before the last fix at or behind the commit point."""
-
-    start = 0
-    for i, (along, _) in enumerate(h.history):
-        if along <= frontier:
-            start = i
-    if start == 0:
-        return h
-    return Hypothesis(h.along_m, h.at, h.lateness_s, h.log_p, h.history[start:], h.off_path_since)
-
-
-def _unmatched(track: Track | None, at: Instant, policy: Policy) -> Step:
-    """A fix before any hypothesis exists that matches no segment: nothing to track yet."""
-
-    if track is None:
-        track = Track((), 0.0)
-    since = track.unmatched_since or at
-    held = at - since >= timedelta(seconds=policy.progress.off_route_hold_s)
-    return Step(replace(track, unmatched_since=since, seen_at=at), None, (), since, held)

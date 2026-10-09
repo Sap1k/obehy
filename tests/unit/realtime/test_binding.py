@@ -78,7 +78,7 @@ def test_t5_duk_q4_yesterdays_key_in_the_morning_is_not_in_service() -> None:
     assert results(effects) == [(journey, None), (None, Reason.NOT_IN_SERVICE)]
     current = state.vehicles[VehicleId("duk", "1001")]
     assert (current.status, current.binding) == ("not_in_service", None)
-    assert state.instances[journey].updated_at < current.last_seen  # not extended
+    assert state.instances[journey].freshness.updated_at < current.last_seen  # not extended
 
 
 def test_duk_q3_off_calendar_key_is_taken_literally() -> None:

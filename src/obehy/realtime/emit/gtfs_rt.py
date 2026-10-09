@@ -40,7 +40,7 @@ def feed_message(state: FeedState, now: Instant) -> rt.FeedMessage:
             vehicles_of[current.binding.journey].append(vehicle)
 
     for journey, instance in sorted(state.instances.items()):
-        if instance.lifecycle not in LIVE or instance.lost:
+        if instance.lifecycle not in LIVE or instance.freshness.lost:
             continue  # a stale journey keeps its predictions through a reception gap
         updates = [c for c in instance.calls if c.status in ("actual", "inferred", "predicted")]
         if not updates:
@@ -51,7 +51,7 @@ def feed_message(state: FeedState, now: Instant) -> rt.FeedMessage:
         _trip(update.trip, instance)
         if vehicles_of[journey]:
             update.vehicle.id = str(vehicles_of[journey][0])
-        update.timestamp = _epoch(instance.updated_at)
+        update.timestamp = _epoch(instance.freshness.updated_at)
         for call in updates:
             stop = update.stop_time_update.add()
             stop.stop_sequence = call.sequence
@@ -65,7 +65,7 @@ def feed_message(state: FeedState, now: Instant) -> rt.FeedMessage:
         if binding is None or current.position is None:
             continue
         instance = state.instances.get(binding.journey)
-        if instance is None or instance.lifecycle not in LIVE or instance.stale:
+        if instance is None or instance.lifecycle not in LIVE or instance.freshness.stale:
             continue
         entity = message.entity.add()
         entity.id = f"vehicle:{vehicle}"

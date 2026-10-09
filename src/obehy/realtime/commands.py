@@ -21,7 +21,7 @@ from obehy.realtime.jobs import vehicle_day
 from obehy.realtime.manifest import ManifestError, select_channels
 from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
-from obehy.realtime.worker import run_worker
+from obehy.realtime.worker import WorkerOptions, run_worker
 from obehy.runtime_config import ConfigurationError, load_database_url
 
 
@@ -185,9 +185,11 @@ def _worker(args: argparse.Namespace) -> int:
                 _url(args),
                 channels,
                 load_policy(),
-                archive=cast(Path, args.archive),
-                gtfs_rt_dir=cast(Path, args.gtfs_rt),
-                feeds=cast(tuple[Feed, ...], args.feeds),
+                WorkerOptions(
+                    archive=cast(Path, args.archive),
+                    gtfs_rt_dir=cast(Path, args.gtfs_rt),
+                    feeds=cast(tuple[Feed, ...], args.feeds),
+                ),
             )
         )
     return 0

@@ -29,6 +29,17 @@ def test_policy_without_a_value_does_not_load() -> None:
         parse_policy(document)
 
 
+def test_policy_with_an_unknown_value_does_not_load() -> None:
+    import tomllib
+
+    from obehy.realtime.policy import POLICY
+
+    document: dict[str, Any] = tomllib.loads(POLICY.read_text(encoding="utf-8"))
+    document["progress"]["chord_kk"] = 0.2  # a typo must not pass as a silent default
+    with pytest.raises(PolicyError, match=r"unknown progress\.chord_kk"):
+        parse_policy(document)
+
+
 def test_builder_index_has_keys_trips_shapes_and_visits() -> None:
     day = date(2026, 10, 8)
     index = (

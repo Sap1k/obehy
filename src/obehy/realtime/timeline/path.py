@@ -10,8 +10,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from datetime import date
+from dataclasses import dataclass
 from itertools import pairwise
 
 import shapely
@@ -19,8 +18,6 @@ from shapely.geometry import LineString
 
 from obehy.realtime.geo import EARTH_RADIUS_M, cumulative_m
 from obehy.realtime.index import IndexView, Trip
-from obehy.realtime.policy import Policy
-from obehy.realtime.times import Instant, ServiceTime
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,150 +212,3 @@ def _fill(known: list[float | None], times: list[int], length: float) -> tuple[f
         share = 0.0 if hi_t == lo_t else (times[i] - lo_t) / (hi_t - lo_t)
         out.append(lo_d + share * (hi_d - lo_d))
     return tuple(out)
-
-
-Scheduled = tuple[tuple[Instant | None, Instant | None], ...]
-
-
-# Each call's (arrival, departure) trigger distance along the path; None where it has no event.
-Triggers = tuple[tuple[float | None, float | None], ...]
-
-
-def triggers(path: Path, policy: Policy) -> Triggers:
-    """Each call's (arrival, departure) trigger distance; None where the call has no such event.
-
-    Arrival triggers `arrival_radius_m` before the stop, departure `departure_margin_m` after it,
-    but never past the midpoint to the neighbouring call: for stops closer together than the
-    two margins, a departure must not trigger after the next arrival, so event times always
-    follow call order.
-    """
-
-    radius = policy.lifecycle.arrival_radius_m
-    margin = policy.lifecycle.departure_margin_m
-    distances = path.call_distances_m
-    last = len(distances) - 1
-    out: list[tuple[float | None, float | None]] = []
-    for i, distance in enumerate(distances):
-        arrival = departure = None
-        if i > 0:
-            arrival = max(distance - radius, (distances[i - 1] + distance) / 2)
-        if i < last:
-            departure = min(distance + margin, (distance + distances[i + 1]) / 2)
-        out.append((arrival, departure))
-    return tuple(out)
-
-
-# When the timetable has the vehicle at a place: (earliest, latest), None for unbounded.
-Window = tuple[Instant | None, Instant | None]
-Timetable = Callable[[float], Window | None]
-
-
-def timetable_along(path: Path, scheduled: Scheduled, trigger_points: Triggers) -> Timetable:
-    """When the timetable has the vehicle at a distance along the path.
-
-    At a call (between its arrival and departure triggers) it is the dwell, [arrival,
-    departure]; the first call has no earliest time, so waiting at the origin is never early.
-    Between calls it is interpolated by distance from one
-    call's departure trigger to the next call's arrival trigger. None where the timetable has no
-    time.
-    """
-
-    starts: list[float] = []
-    windows: list[tuple[float, float, Instant | None, Instant | None]] = []
-    for i, ((arrival, departure), (arr_m, dep_m)) in enumerate(
-        zip(scheduled, trigger_points, strict=True)
-    ):
-        at_m = path.call_distances_m[i]
-        lo = None if i == 0 else (arrival if arrival is not None else departure)
-        hi = departure if departure is not None else arrival
-        start = -math.inf if arr_m is None else arr_m
-        windows.append((start, math.inf if dep_m is None else dep_m, lo, hi))
-        starts.append(start if i > 0 else at_m)
-
-    def at(along: float) -> Window | None:
-        if not windows:
-            return None
-        i = max(0, bisect_right(starts, along) - 1)
-        start, end, lo, hi = windows[i]
-        if along <= end or i == len(windows) - 1:
-            return (lo, hi) if along >= start else (None, hi)
-        next_start, _, next_lo, _ = windows[i + 1]
-        if hi is None or next_lo is None:
-            return None
-        span = next_start - end
-        share = 0.0 if span <= 0 else (along - end) / span
-        planned = Instant(hi + (next_lo - hi) * share)
-        return planned, planned
-
-    return at
-
-
-@dataclass(frozen=True, slots=True)
-class Plan:
-    """A journey's path with its timetable laid on it: built once per trip and service date."""
-
-    path: Path
-    scheduled: Scheduled
-    triggers: Triggers
-    timetable: Timetable
-    # Every trigger in path order: (distance, call index, 0 arrival / 1 departure).
-    events: tuple[tuple[float, int, int], ...] = ()
-    event_distances: tuple[float, ...] = ()
-
-
-@dataclass(slots=True)
-class PathCache:
-    """Paths by trip and plans by journey for one release; deterministic, so caching never
-    changes output."""
-
-    release_id: str = ""
-    paths: dict[str, Path] = field(default_factory=dict[str, Path])
-    plans: dict[tuple[str, date], Plan] = field(default_factory=dict[tuple[str, date], Plan])
-
-    def scheduled(self, trip: Trip, day: date) -> Scheduled:
-        """Each call's (arrival, departure) instants on service date `day`."""
-
-        return tuple(
-            (
-                None if c.arrival is None else ServiceTime(day, c.arrival).instant(),
-                None if c.departure is None else ServiceTime(day, c.departure).instant(),
-            )
-            for c in trip.calls
-        )
-
-    def get(self, trip: Trip, index: IndexView) -> Path:
-        if index.release_id != self.release_id:
-            self.release_id = index.release_id
-            self.paths.clear()
-            self.plans.clear()
-        path = self.paths.get(trip.trip_id)
-        if path is None:
-            path = build_path(trip, index)
-            self.paths[trip.trip_id] = path
-        return path
-
-    def plan(self, trip: Trip, day: date, index: IndexView, policy: Policy) -> Plan:
-        path = self.get(trip, index)
-        key = (trip.trip_id, day)
-        value = self.plans.get(key)
-        if value is None:
-            scheduled = self.scheduled(trip, day)
-            points = triggers(path, policy)
-            events = sorted(
-                (trigger, i, rank)
-                for i, pair in enumerate(points)
-                for rank, trigger in enumerate(pair)
-                if trigger is not None
-            )
-            value = Plan(
-                path,
-                scheduled,
-                points,
-                timetable_along(path, scheduled, points),
-                tuple(events),
-                tuple(e[0] for e in events),
-            )
-            if len(self.plans) > 50_000:
-                self.plans.clear()
-            self.plans[key] = value
-        return value

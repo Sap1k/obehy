@@ -23,8 +23,10 @@ from obehy.realtime.model import (
     CallState,
     Effect,
     FeedState,
+    Freshness,
     Instance,
     JourneyKey,
+    Lead,
     Observation,
     ObservationResult,
     Position,
@@ -40,7 +42,7 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.estimate import estimate
-from obehy.realtime.timeline.path import PathCache
+from obehy.realtime.timeline.plan import PlanCache
 from obehy.realtime.times import Instant
 
 CORE_VERSION = "r1.0"
@@ -54,7 +56,7 @@ SOURCE_RUNNING = "running"
 class Context:
     index: IndexView
     policy: Policy
-    paths: PathCache = field(default_factory=PathCache)
+    plans: PlanCache = field(default_factory=PlanCache)
 
 
 def vehicle_of(observation: Observation) -> VehicleId | None:
@@ -94,10 +96,10 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     trip = ctx.index.trip(binding.trip_id)
     instance = state.instances[binding.journey]
     if _leads(instance, vehicle, observation, ctx.policy):
-        instance = replace(instance, lead=vehicle, lead_seen=observation.at)
+        instance = replace(instance, lead=Lead(vehicle, observation.at))
         instance = _lifecycle(instance, observation, span(trip, binding.journey)[0])
         instance, timeline_effects = timeline.advance(
-            instance, trip, observation, ctx.index, ctx.policy, ctx.paths
+            instance, trip, observation, ctx.index, ctx.policy, ctx.plans
         )
         state.instances[binding.journey] = instance
         state.dirty.add(binding.journey)
@@ -118,7 +120,7 @@ def estimate_all(state: FeedState, ctx: Context) -> None:
         if instance is None:
             continue
         trip = ctx.index.trip(instance.trip_id)
-        plan = ctx.paths.plan(trip, journey.service_date, ctx.index, ctx.policy)
+        plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
         state.instances[journey] = estimate(instance, plan.scheduled, ctx.policy.prediction)
     state.dirty.clear()
 
@@ -135,7 +137,7 @@ def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
     bound = {v.binding.journey for v in state.vehicles.values() if v.binding is not None}
     limits: dict[str, tuple[timedelta, timedelta]] = {}
     for journey, instance in list(state.instances.items()):
-        idle = now - instance.heard_at
+        idle = now - instance.freshness.heard_at
         if idle > forget and journey not in bound:
             del state.instances[journey]
             continue
@@ -148,8 +150,10 @@ def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
         stale_after, lost_after = limits[mode]
         live = instance.lifecycle != "finished"
         stale, lost = live and idle > stale_after, live and idle > lost_after
-        if (stale, lost) != (instance.stale, instance.lost):
-            state.instances[journey] = replace(instance, stale=stale, lost=lost)
+        fresh = instance.freshness
+        if (stale, lost) != (fresh.stale, fresh.lost):
+            fresh = replace(fresh, stale=stale, lost=lost)
+            state.instances[journey] = replace(instance, freshness=fresh)
 
 
 def _leads(
@@ -158,10 +162,11 @@ def _leads(
     """Whether this vehicle drives the journey's timeline: it is the lead, there is none, or the
     lead has gone stale. One timeline never mixes two vehicles' fixes (DUK-Q11)."""
 
-    if instance.lead is None or instance.lead == vehicle or instance.lead_seen is None:
+    lead = instance.lead
+    if lead is None or lead.vehicle == vehicle:
         return True
     stale_after = timedelta(seconds=policy.lifecycle.stale_after_s(instance.mode))
-    return observation.at - instance.lead_seen > stale_after
+    return observation.at - lead.seen > stale_after
 
 
 def _continued(
@@ -195,8 +200,7 @@ def _open(state: FeedState, match: Match, ctx: Context, observation: Observation
         mode=trip.mode,
         lifecycle="pre_trip",
         calls=tuple(CallState(c.sequence, c.location_id, c.visit_n) for c in trip.calls),
-        updated_at=observation.at,
-        heard_at=observation.received_at,
+        freshness=Freshness(observation.at, observation.received_at),
     )
     return [snapshot(match.journey, ctx.index, trip.trip_id, observation.at)]
 
@@ -298,7 +302,7 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
         )
         moved[journey] = trip.trip_id
         state.dirty.add(journey)
-        effects.append(snapshot(journey, index, trip.trip_id, instance.updated_at))
+        effects.append(snapshot(journey, index, trip.trip_id, instance.freshness.updated_at))
     for vehicle, current in sorted(state.vehicles.items()):
         binding = current.binding
         if binding is None:

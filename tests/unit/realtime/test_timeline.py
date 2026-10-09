@@ -264,10 +264,12 @@ def test_duk_q11_only_the_lead_vehicle_drives_the_timeline() -> None:
     run.at("08:03:20", east(1800), vehicle="1002")  # ...or far ahead: neither moves progress
     progress = run.instance.progress
     assert progress is not None and abs(progress.distance_m - 600) < 5
-    assert run.instance.lead == VehicleId("duk", "1001")
+    lead = run.instance.lead
+    assert lead is not None and lead.vehicle == VehicleId("duk", "1001")
     assert run.state.vehicles[VehicleId("duk", "1002")].binding is not None
     run.at("08:08:30", east(1900), vehicle="1002")  # the lead went stale: 1002 takes over
-    assert run.instance.lead == VehicleId("duk", "1002")
+    lead = run.instance.lead
+    assert lead is not None and lead.vehicle == VehicleId("duk", "1002")
 
 
 def test_close_stops_never_produce_events_out_of_order() -> None:

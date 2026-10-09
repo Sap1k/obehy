@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from obehy.realtime.times import Instant
 
@@ -193,6 +193,13 @@ class Progress:
     at: Instant
 
 
+class Placement(NamedTuple):
+    """Where a reading placed one fix along the path."""
+
+    along_m: float
+    at: Instant
+
+
 @dataclass(frozen=True, slots=True)
 class Hypothesis:
     """One reading of where the vehicle is along the path (BASE_PLAN.md section 20.4)."""
@@ -201,11 +208,30 @@ class Hypothesis:
     at: Instant
     lateness_s: float
     log_p: float
-    # (along_m, at) of each fix since the commit point, oldest first, ending at the last fix
-    # this reading placed on the path.
-    history: tuple[tuple[float, Instant], ...]
+    # Each fix since the commit point, oldest first, ending at the last fix this reading placed
+    # on the path.
+    history: tuple[Placement, ...]
     # Since when the fixes have been off the path for this reading (held, as if missing).
     off_path_since: Instant | None = None
+
+    def evolve(
+        self,
+        *,
+        log_p: float | None = None,
+        history: tuple[Placement, ...] | None = None,
+        off_path_since: Instant | None = None,
+    ) -> Hypothesis:
+        """A copy with some fields changed; `dataclasses.replace` is too slow for the tracker's
+        inner loop. `off_path_since` can be set, never cleared."""
+
+        return Hypothesis(
+            self.along_m,
+            self.at,
+            self.lateness_s,
+            self.log_p if log_p is None else log_p,
+            self.history if history is None else history,
+            self.off_path_since if off_path_since is None else off_path_since,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +249,29 @@ class Track:
 
 
 @dataclass(frozen=True, slots=True)
+class Freshness:
+    """How current a journey's data is."""
+
+    updated_at: Instant  # source time of the last observation
+    # When the last observation bringing anything new was received (reception clock, so a
+    # vehicle clock offset or a frozen GPS time does not matter); staleness counts from here.
+    heard_at: Instant
+    # No new observation for `stale_after_s`: the position is withdrawn, predictions continue.
+    stale: bool = False
+    # No new observation for `predict_without_data_s`: predictions are withdrawn too.
+    lost: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Lead:
+    """The one vehicle whose observations drive the timeline when several claim the journey
+    (DUK-Q11); it changes only when the lead goes stale."""
+
+    vehicle: VehicleId
+    seen: Instant
+
+
+@dataclass(frozen=True, slots=True)
 class Instance:
     journey: JourneyKey
     release_id: str
@@ -230,23 +279,13 @@ class Instance:
     mode: str  # the route mode, for per-mode policy values
     lifecycle: Lifecycle
     calls: tuple[CallState, ...]
-    updated_at: Instant
-    # When the last observation bringing anything new was received (reception clock, so a
-    # vehicle clock offset or a frozen GPS time does not matter); staleness counts from here.
-    heard_at: Instant
+    freshness: Freshness
     progress: Progress | None = None
     track: Track | None = None
     delay_s: int | None = None
     off_route_since: Instant | None = None
     off_route: bool = False
-    # No observation for `stale_after_s`: the position is withdrawn, predictions continue.
-    stale: bool = False
-    # No observation for `predict_without_data_s`: predictions are withdrawn too.
-    lost: bool = False
-    # The one vehicle whose observations drive the timeline when several claim the journey
-    # (DUK-Q11); it changes only when the lead goes stale.
-    lead: VehicleId | None = None
-    lead_seen: Instant | None = None
+    lead: Lead | None = None
 
 
 VehicleStatus = Literal["running", "positioning", "layover", "unmatched", "not_in_service"]

@@ -207,7 +207,11 @@ different oběh every day, and a mid-day swap changes only the live binding.
 - The nightly job sets `history.vehicle_day.tour_id` with `tour_match_share`, the share of the
   day's journeys that follow the tour. "Which vehicle ran oběh X each day" is then one query.
 
-## 9. Progress model (`timeline/progress.py`)
+## 9. Progress model (`timeline/progress.py`, `commit.py`, `plan.py`)
+
+`plan.py` lays the timetable on the path once per trip and date (trigger points, timetable
+windows); `progress.py` extends the hypotheses with each fix; `commit.py` commits the crossings
+they agree on.
 
 The design is `BASE_PLAN.md` section 20.4: map matching over the trip's own path, decoded online
 with a small beam of hypotheses; events committed when all surviving hypotheses agree. This
@@ -218,7 +222,7 @@ section fixes the concrete shape.
 ```text
 Hypothesis   along_m, at (last fix placed on the path), lateness_s, log_p, off_path_since,
              history since the commit point: ((along_m, at), ...)
-Track        hypotheses (≤ beam), committed_m (frontier), unmatched_since, seen_at (newest
+Track        hypotheses (≤ beam), committed_m (frontier), unmatched_since, crossed_at, seen_at (newest
              fix time used; a fix no newer is skipped and does not keep the journey fresh)
 ```
 
