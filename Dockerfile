@@ -21,9 +21,9 @@ COPY src ./src
 RUN uv sync --locked --no-dev
 COPY deploy ./deploy
 
-# data/ holds fetched releases, the raw archive and the GTFS-RT output (one volume).
+# data/ holds fetched releases, the raw archive, the GTFS-RT output and the feed list (one volume).
 RUN useradd --system --uid 10001 --home-dir /app obehy \
-    && mkdir -p data/releases data/rt-raw data/gtfs-rt \
+    && mkdir -p data/releases data/rt-raw data/gtfs-rt data/public \
     && chown -R obehy:obehy data
 USER obehy
 ENTRYPOINT ["obehy"]

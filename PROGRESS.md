@@ -227,6 +227,10 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-10** — `/get-feeds/` on the server stack: the active release's JDF, filtered JDF and
+  CZPTT GTFS plus the live GTFS-RT under stable names (those of the MOTIS node's old directory),
+  with a list page and `feeds.json` written by `obehy release feed-list` after each release
+  update. Unit-tested; the Caddy routes are not run here (no Docker).
 - **2026-10-10** — DPmÚL gaps from the first live night documented and parked: Friday-night
   weekend numbers on night lines (DUK-Q16), trip numbers missing from the release (DUK-Q17).
 - **2026-10-10** — First live day exposed DUK-Q14/Q15: a bus in the depot in State 3 with its
