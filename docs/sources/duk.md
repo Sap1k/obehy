@@ -205,6 +205,10 @@ Each quirk is handled where stated and has a scenario test named after its ID
 | DUK-Q11 | one trip claimed by two vehicles at once (mostly PID `100xxx` detour trips) | both bind the instance (section 19.5); one position per feed by arbitration |
 | DUK-Q12 | DPmÚL and Teplice vehicles never send `ArrivalDT` | arrivals come from GPS progress only |
 | DUK-Q13 | `Azimut` is exactly 0 in about 5 % of entries, often while the vehicle moves | 0 is read as no bearing; progress uses bearing only when present |
+| DUK-Q14 | in State 2/3, `Delay` is the time since the trip's scheduled departure, growing while the vehicle stands (vehicle 171, 2026-10-09: `582480:140` of 21:59 in the depot at 23:52, `Delay` 113) | source delay ignored until the trip starts |
+| DUK-Q15 | State 2/3 with a trip key whose scheduled end has passed: a stale key from the depot (same vehicle) | `stale_key`: not bound, and a journey that never started is dropped; a running vehicle keeps the late-running window |
+| DUK-Q16 | DPmÚL night lines (`59504x`) run Friday nights under the weekend numbers: on 2026-10-09 at 23:51 a bus reported `595041:309` (Sat/Sun, 23:51–00:20) while the timetable runs the identical weekday trip `9` that night; `595043:2310` likewise. Weekday `n` and weekend `300 + n` have identical times | taken literally (as DUK-Q3): `not_in_service`, no realtime. Not handled; a DPmÚL-only twin rule (bind `n` ↔ `300 + n` when only the twin runs at that time) is the candidate fix |
+| DUK-Q17 | DPmÚL trip numbers absent from the release: `595042:201`, `595046:512` (2026-10-09 night; lines 42 and 46 have only 1–14 and 301–314) | `no_trip`. Not investigated: probably a temporary or diversion JDF version missing from the national export or dropped by `merge-jdf` |
 
 ## Open questions
 

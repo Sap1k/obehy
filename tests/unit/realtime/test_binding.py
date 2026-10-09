@@ -127,3 +127,43 @@ def test_a_running_source_state_starts_the_trip() -> None:
     )
     (instance,) = state.instances.values()
     assert instance.lifecycle == "running"
+
+
+def test_duk_q14_source_delay_before_departure_is_ignored() -> None:
+    # Vehicle 171, 2026-10-09: 582480:140 of 21:59 in the depot, State 3, Delay growing.
+    index = timetable().trip("582480:140", days=[D9], calls=[("A", "21:59"), ("B", "22:44")])
+    state, _ = run(
+        index.index(),
+        {"at": "2026-10-09 22:30", "key": "582480:140", "state": "pre_trip", "delay": 1860},
+    )
+    instance = state.instances[JourneyKey("jdf", NS, "582480:140", D9)]
+    assert (instance.lifecycle, instance.delay_s) == ("pre_trip", None)
+
+
+def test_duk_q15_pre_departure_key_after_the_scheduled_end_is_stale() -> None:
+    index = timetable().trip("582480:140", days=[D9], calls=[("A", "21:59"), ("B", "22:44")])
+    journey = JourneyKey("jdf", NS, "582480:140", D9)
+    pre_trip = {"key": "582480:140", "state": "pre_trip", "delay": 6780}
+
+    # First seen at 23:52 (a worker started late): never bound.
+    state, effects = run(index.index(), {"at": "2026-10-09 23:52", **pre_trip})
+    assert results(effects) == [(None, Reason.STALE_KEY)]
+    assert journey not in state.instances
+    assert state.vehicles[VehicleId("duk", "1001")].status == "unmatched"
+
+    # Bound while waiting, still waiting after the end: the binding ends, the journey goes.
+    state, effects = run(
+        index.index(),
+        {"at": "2026-10-09 21:50", **pre_trip},
+        {"at": "2026-10-09 22:50", **pre_trip},
+    )
+    assert results(effects) == [(journey, None), (None, Reason.STALE_KEY)]
+    assert journey not in state.instances
+
+
+def test_duk_q15_a_running_vehicle_keeps_the_late_running_window() -> None:
+    index = timetable().trip("582480:140", days=[D9], calls=[("A", "21:59"), ("B", "22:44")])
+    _, effects = run(
+        index.index(), {"at": "2026-10-09 23:52", "key": "582480:140", "state": "running"}
+    )
+    assert results(effects) == [(JourneyKey("jdf", NS, "582480:140", D9), None)]

@@ -84,6 +84,9 @@ heap hard limit is configured; memory figures are telemetry.
 - Serving validation checks keys, hashes and foreign keys; cross-representation content
   validation (GTFS vs serving relations) is incomplete.
 - No route shapes are generated yet (MOTIS shape generation is future work).
+- DPmÚL realtime coverage is poor: weekend trip numbers on weekdays and Friday nights (DUK-Q3,
+  DUK-Q16) stay unmatched by the literal-key rule, and some trip numbers are missing from the
+  release (DUK-Q17). Parked deliberately on 2026-10-10; `docs/sources/duk.md` has the details.
 
 ## Next steps
 
@@ -224,6 +227,14 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-10** — DPmÚL gaps from the first live night documented and parked: Friday-night
+  weekend numbers on night lines (DUK-Q16), trip numbers missing from the release (DUK-Q17).
+- **2026-10-10** — First live day exposed DUK-Q14/Q15: a bus in the depot in State 3 with its
+  evening trip's key got that trip predicted 113 min late from DÚK's pre-departure `Delay`.
+  Source delay is now ignored before departure, and a pre-departure key after the trip's
+  scheduled end is `stale_key` (unbound, unstarted journey dropped). Pinned corpus: 15,666
+  observations newly `stale_key`, running match rates unchanged, GTFS-RT check clean, golden
+  digests regenerated.
 - **2026-10-09** — Server image (`Dockerfile`, built and pushed to GHCR by CI on green main, with
   a smoke test) and `deploy/compose.yaml`: PostGIS, migrate, hourly release update, realtime
   worker, nightly jobs at 03:30, Caddy serving the GTFS-RT and the active `gtfs.zip`. Replaces
