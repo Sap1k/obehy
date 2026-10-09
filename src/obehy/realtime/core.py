@@ -11,7 +11,7 @@ again (DUK-Q4: yesterday's key in the morning is `not_in_service`, never an exte
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from obehy.realtime import timeline
 from obehy.realtime.index import IndexView
@@ -38,6 +38,7 @@ from obehy.realtime.model import (
     VehicleStatus,
 )
 from obehy.realtime.policy import Policy
+from obehy.realtime.timeline.path import PathCache
 from obehy.realtime.times import Instant
 
 CORE_VERSION = "r1.0"
@@ -51,6 +52,7 @@ SOURCE_RUNNING = "running"
 class Context:
     index: IndexView
     policy: Policy
+    paths: PathCache = field(default_factory=PathCache)
 
 
 def vehicle_of(observation: Observation) -> VehicleId | None:
@@ -87,12 +89,13 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         effects.extend(_open(state, result, ctx, observation))
         effects.append(AssignVehicle(vehicle, result.journey, observation.at))
 
-    instance = state.instances[binding.journey]
     trip = ctx.index.trip(binding.trip_id)
-    instance, timeline_effects = timeline.advance(
-        instance, trip, observation, ctx.index, ctx.policy
+    instance = _lifecycle(
+        state.instances[binding.journey], observation, span(trip, binding.journey)[0]
     )
-    instance = _lifecycle(instance, observation, span(trip, binding.journey)[0])
+    instance, timeline_effects = timeline.advance(
+        instance, trip, observation, ctx.index, ctx.policy, ctx.paths
+    )
     state.instances[binding.journey] = instance
     effects.extend(timeline_effects)
     status = "positioning" if instance.lifecycle in ("forecast", "pre_trip") else "running"

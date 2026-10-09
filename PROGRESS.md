@@ -216,6 +216,11 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — Timeline (single source): path from shape or straight stops, monotone
+  progress with backtrack tolerance, off-route hold/flag/rejoin, arrival and departure events as
+  fix-bounded intervals (loops attach to the right visit), predictions from the source delay with
+  monotone repair, `pre_trip` → `running` → `finished`. 10 scenario tests incl. DUK-Q5/Q6.
+  `stale` is set at emit time (ticket 6).
 - **2026-10-09** — `core.step` with keyed binding (`infer/keyed.py`: date rule of §19.3,
   binding continuity, reason codes), vehicle states and the pre-trip lifecycle; scenario tests
   T2–T5, DUK-Q3, DUK-Q4, DUK-Q11 pass. The timeline is still a stub that only tracks delay.
