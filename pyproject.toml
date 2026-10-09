@@ -20,6 +20,7 @@ obehy-osm = "obehy.osm_snapshot:main"
 
 [dependency-groups]
 dev = [
+  "import-linter>=2.15",
   "pyarrow-stubs>=20,<21",
   "pyright>=1.1.403,<2",
   "pytest>=8.4,<9",
@@ -62,3 +63,26 @@ pythonVersion = "3.13"
 typeCheckingMode = "strict"
 include = ["src", "tests"]
 exclude = ["converters"]
+
+[tool.importlinter]
+root_package = "obehy"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "The realtime core is pure: no database, network, filesystem services or connectors"
+type = "forbidden"
+source_modules = [
+    "obehy.realtime.model",
+    "obehy.realtime.index",
+    "obehy.realtime.geo",
+    "obehy.realtime.times",
+]
+forbidden_modules = [
+    "psycopg",
+    "urllib",
+    "asyncio",
+    "obehy.release",
+    "obehy.pipeline",
+    "obehy.realtime.archive",
+    "obehy.realtime.record",
+]

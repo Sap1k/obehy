@@ -101,7 +101,8 @@ realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
 
 - Run the narrowest relevant checks first, then broader ones when practical:
   `uv run pytest tests/unit -q` (plus `tests/db` with `OBEHY_TEST_DATABASE_URL`),
-  `uv run ruff check src tests`, `uv run ruff format --check src tests`, `uv run pyright`.
+  `uv run ruff check src tests`, `uv run ruff format --check src tests`, `uv run pyright`,
+  `uv run lint-imports` (add each new pure realtime module to its contract in `pyproject.toml`).
 - JrUtil: `dotnet test jrutil.tests/jrutil.tests.fsproj -c Release --no-restore` in the standalone
   checkout; report the exact command and result.
 - Inspect JrUtil log output as well as the exit code: conversion commands may log entity-level
