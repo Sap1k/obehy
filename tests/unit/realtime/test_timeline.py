@@ -212,3 +212,84 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
 
     refresh(run.state, local("2026-10-08 08:10"), POLICY)  # stale after 180 s
     assert len(feed_message(run.state, local("2026-10-08 08:10")).entity) == 0
+
+
+def test_duk_q11_only_the_lead_vehicle_drives_the_timeline() -> None:
+    run = Run().at("08:00", east(0)).at("08:03", east(600))
+    run.at("08:03:10", east(100), vehicle="1002")  # a second claimant far behind
+    run.at("08:03:20", east(1800), vehicle="1002")  # ...or far ahead: neither moves progress
+    progress = run.instance.progress
+    assert progress is not None and abs(progress.distance_m - 600) < 5
+    assert run.instance.lead == VehicleId("duk", "1001")
+    assert run.state.vehicles[VehicleId("duk", "1002")].binding is not None
+    run.at("08:07:00", east(1900), vehicle="1002")  # the lead went stale: 1002 takes over
+    assert run.instance.lead == VehicleId("duk", "1002")
+
+
+def test_close_stops_never_produce_events_out_of_order() -> None:
+    index = (
+        timetable()
+        .stop("A", ORIGIN[0], LAT)
+        .stop("B", east(1000)[0], LAT)
+        .stop("C", east(1050)[0], LAT)  # 50 m after B: closer than both margins together
+        .stop("D", east(2000)[0], LAT)
+        .trip(
+            "582492:143",
+            days=[DAY],
+            calls=[("A", "08:00"), ("B", "08:05"), ("C", "08:06"), ("D", "08:10")],
+        )
+        .index()
+    )
+    run = Run()
+    run.ctx = Context(index, POLICY)
+    run.at("08:00", east(0)).at("08:04", east(990)).at("08:05", east(1060)).at("08:09", east(2000))
+    times = [
+        t
+        for c in run.instance.calls
+        for t in (c.estimated_arrival, c.estimated_departure)
+        if t is not None
+    ]
+    assert times == sorted(times)
+
+
+def test_a_zavlek_is_driven_not_skipped() -> None:
+    """A side branch out and back (A B C D C B E): a fix near B on the way in must not jump to
+    B's second visit even when it lies closer to the way back out."""
+
+    index = (
+        timetable()
+        .stop("A", ORIGIN[0], LAT)
+        .stop("B", east(1000)[0], LAT)
+        .stop("C", east(1000)[0], LAT + 900 / 111_195)
+        .stop("D", east(1000)[0], LAT + 1800 / 111_195)
+        .stop("E", east(1000)[0] + 0.012, LAT - 300 / 111_195)
+        .trip(
+            "582492:143",
+            days=[DAY],
+            calls=[
+                ("A", "08:00"),
+                ("B", "08:02"),
+                ("C", "08:04"),
+                ("D", "08:06"),
+                ("C", "08:08"),
+                ("B", "08:10"),
+                ("E", "08:12"),
+            ],
+            shape=False,
+        )
+        .index()
+    )
+    run = Run()
+    run.ctx = Context(index, POLICY)
+    run.at("08:00", east(0)).at("08:01", east(500))
+    # South-east of B, nearer the chord B->E (the way back out) than the chord A->B.
+    run.at("08:01:30", (east(1000)[0] + 0.001, LAT - 150 / 111_195))
+    run.at("08:03:30", (east(1000)[0], LAT + 850 / 111_195))
+    run.at("08:05:30", (east(1000)[0], LAT + 1790 / 111_195))
+    run.at("08:07:30", (east(1000)[0], LAT + 950 / 111_195))
+    run.at("08:09:30", east(1000)).at("08:11:30", (east(1000)[0] + 0.012, LAT - 300 / 111_195))
+    order = [
+        (e.location_id[-1], e.visit_n, e.kind) for e in run.effects if isinstance(e, WriteEvent)
+    ]
+    arrivals = [(stop, visit) for stop, visit, kind in order if kind == "arrival"]
+    assert arrivals == [("B", 1), ("C", 1), ("D", 1), ("C", 2), ("B", 2), ("E", 1)]

@@ -15,6 +15,7 @@ from typing import cast
 import psycopg
 
 from obehy.realtime import record, replay
+from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError
 from obehy.realtime.jobs import vehicle_day
 from obehy.realtime.manifest import ManifestError, select_channels
@@ -77,6 +78,10 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     )
     _database(replayer)
 
+    checker = rt.add_parser("check-gtfs-rt", help="check GTFS-RT snapshots against a static GTFS")
+    checker.add_argument("--gtfs", type=Path, required=True, help="the static gtfs.zip")
+    checker.add_argument("snapshots", type=Path, help="a .pb file or a directory of them")
+
     corpus = rt.add_parser("corpus", help="pinned replay corpora")
     corpus_commands = corpus.add_subparsers(dest="corpus_command", required=True)
     pin = corpus_commands.add_parser("pin", help="copy archive days into a pinned corpus")
@@ -115,6 +120,8 @@ def run(args: argparse.Namespace) -> int:
             return _record(args)
         if args.rt_command == "corpus":
             return _pin(args)
+        if args.rt_command == "check-gtfs-rt":
+            return _check(args)
         return _replay(args)
     except (
         OSError,
@@ -196,6 +203,16 @@ def _jobs(args: argparse.Namespace) -> int:
             print(f"{day}: {vehicle_day(connection, day, policy)} vehicle days")
             day += timedelta(days=1)
     return 0
+
+
+def _check(args: argparse.Namespace) -> int:
+    target = cast(Path, args.snapshots)
+    files = sorted(target.glob("*.pb")) if target.is_dir() else [target]
+    problems, totals = check(cast(Path, args.gtfs), files)
+    print(", ".join(f"{count} {name}" for name, count in sorted(totals.items())))
+    for name, count in sorted(problems.items()):
+        print(f"problem: {count} x {name}")
+    return 1 if problems else 0
 
 
 def _pin(args: argparse.Namespace) -> int:

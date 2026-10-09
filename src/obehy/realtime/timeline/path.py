@@ -78,11 +78,12 @@ def project_near(
     lat: float,
     base_m: float,
     k: float,
+    cap_m: float,
     window: tuple[float, float] | None = None,
 ) -> list[Projection]:
     """Projections onto the segments the point is within tolerance of,
-    `max(base_m, k * segment length)`, optionally only segments overlapping the along-path
-    `window` (lo, hi) in metres."""
+    `max(base_m, min(k * segment length, cap_m))`, optionally only segments overlapping the
+    along-path `window` (lo, hi) in metres."""
 
     kx, ky = _plane(lat)
     distances = path.distances_m
@@ -101,7 +102,7 @@ def project_near(
         lateral = math.hypot(px - t * ux, py - t * uy)
         start, end = distances[i], distances[i + 1]
         segment = end - start
-        if lateral <= max(base_m, k * segment):
+        if lateral <= max(base_m, min(k * segment, cap_m)):
             out.append(Projection(start + t * segment, lateral, segment))
     return out
 
@@ -166,13 +167,10 @@ def build_path(trip: Trip, index: IndexView) -> Path:
         return make_path(points, distances, tuple(0.0 for _ in trip.calls))
     known: list[float | None] = []
     after = 0.0
-    for call, point in zip(trip.calls, located, strict=True):
-        if call.distance_m is not None and trip.shape_id is not None:
-            value: float | None = max(call.distance_m, after)
-        elif point is not None:
+    for point in located:
+        value: float | None = None
+        if point is not None:
             value = _locate(points, distances, point[0], point[1], after)
-        else:
-            value = None
         if value is not None:
             after = value
         known.append(value)

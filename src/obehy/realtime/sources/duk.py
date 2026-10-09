@@ -97,17 +97,18 @@ def _entry(
         feed, key = "czptt", TripKey("czptt:train_number", str(trip))
     else:
         feed, key = "jdf", TripKey("cis:line_trip", f"{cis_line:06d}:{trip}")
+    observed = _time(entry.get("GPSPositionDT"), digits_are_utc=vehicle in TEPLICE)
+    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
+        observed = None
     facts: list[Fact] = [VehicleKey(str(vehicle)), key]
     lat, lon = _number(entry.get("Latitude")), _number(entry.get("Longitude"))
-    if lat is not None and lon is not None and lat != 0 and lon != 0:
+    # A position without a trustworthy time cannot place events in time: it is dropped.
+    if observed is not None and lat is not None and lon is not None and lat != 0 and lon != 0:
         facts.append(Position(lat=lat, lon=lon, bearing=_number(entry.get("Azimut"))))
     delay = entry.get("Delay")
     if isinstance(delay, int) and not isinstance(delay, bool):
         facts.append(Delay(delay * 60, "unknown"))
     facts.append(SourceState("pre_trip" if state in PRE_TRIP_STATES else "running"))
-    observed = _time(entry.get("GPSPositionDT"), digits_are_utc=vehicle in TEPLICE)
-    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
-        observed = None
     return Observation(
         source=SOURCE,
         channel=CHANNEL,

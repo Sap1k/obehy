@@ -201,6 +201,10 @@ class Instance:
     off_route_since: Instant | None = None
     off_route: bool = False
     stale: bool = False
+    # The one vehicle whose observations drive the timeline when several claim the journey
+    # (DUK-Q11); it changes only when the lead goes stale.
+    lead: VehicleId | None = None
+    lead_seen: Instant | None = None
 
 
 VehicleStatus = Literal["running", "positioning", "layover", "unmatched", "not_in_service"]

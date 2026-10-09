@@ -153,18 +153,16 @@ class IndexLoader:
             passenger,
             arrival,
             departure,
-            dist,
         ) in self._rows_first(
             "SELECT trip_id, sequence, location_id,"
             " row_number() OVER (PARTITION BY trip_id, location_id ORDER BY sequence),"
-            " passenger_service, scheduled_arrival, scheduled_departure,"
-            " shape_distance_traveled"
+            " passenger_service, scheduled_arrival, scheduled_departure"
             " FROM static.trip_call WHERE trip_id = ANY(%s) AND load_id = %s"
             " ORDER BY trip_id, sequence",
             trip_ids,
         ):
             calls[trip_id].append(
-                Call(sequence, location_id, visit_n, passenger, arrival, departure, dist)
+                Call(sequence, location_id, visit_n, passenger, arrival, departure)
             )
             locations.add(location_id)
         shapes: set[str] = set()
@@ -204,22 +202,16 @@ class IndexLoader:
 
     def _load_shapes(self, shape_ids: list[str]) -> None:
         points: dict[str, list[tuple[float, float]]] = defaultdict(list)
-        given: dict[str, list[float | None]] = defaultdict(list)
-        for shape_id, lon, lat, travelled in self._rows_first(
-            "SELECT shape_id, longitude, latitude, distance_traveled FROM static.shape_point"
+        for shape_id, lon, lat in self._rows_first(
+            "SELECT shape_id, longitude, latitude FROM static.shape_point"
             " WHERE shape_id = ANY(%s) AND load_id = %s ORDER BY shape_id, sequence",
             shape_ids,
         ):
             points[shape_id].append((lon, lat))
-            given[shape_id].append(travelled)
         for shape_id in shape_ids:
             vertices = tuple(points.get(shape_id, ()))
-            travelled = given.get(shape_id, [])
-            if travelled and all(value is not None for value in travelled):
-                distances = tuple(cast(float, value) for value in travelled)
-            else:
-                distances = cumulative_m(vertices)
-            self.index.shapes[shape_id] = Shape(shape_id, vertices, distances)
+            # Distances come from the geometry; feed `distance_traveled` units vary.
+            self.index.shapes[shape_id] = Shape(shape_id, vertices, cumulative_m(vertices))
 
     def _load_dates(self, service_ids: Iterable[str], days: set[date], *, extend: bool) -> None:
         ids = sorted(service_ids)

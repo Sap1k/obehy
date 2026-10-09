@@ -53,7 +53,6 @@ class Call:
     passenger_service: bool
     arrival: int | None
     departure: int | None
-    distance_m: float | None
 
     @property
     def time(self) -> int:
@@ -97,6 +96,9 @@ class Location:
 
 @dataclass(frozen=True, slots=True)
 class Shape:
+    """Vertices and metres travelled at each, computed from the geometry. Feed-provided
+    `shape_dist_traveled` values are never used: their unit is not fixed (PID overlays use km)."""
+
     shape_id: str
     points: tuple[tuple[float, float], ...]  # (lon, lat)
     distances_m: tuple[float, ...]

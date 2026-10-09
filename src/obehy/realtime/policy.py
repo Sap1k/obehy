@@ -42,6 +42,7 @@ class LifecyclePolicy:
     stale_after_s: int
     off_route_base_m: ByMode
     off_route_k: float
+    off_route_max_m: float
     off_route_hold_s: int
     max_speed_mps: ByMode
     backtrack_tolerance_m: float
@@ -120,6 +121,7 @@ def parse_policy(document: dict[str, Any]) -> Policy:
             stale_after_s=lifecycle.integer("stale_after_s"),
             off_route_base_m=lifecycle.by_mode("off_route_base_m"),
             off_route_k=lifecycle.number("off_route_k"),
+            off_route_max_m=lifecycle.number("off_route_max_m"),
             off_route_hold_s=lifecycle.integer("off_route_hold_s"),
             max_speed_mps=lifecycle.by_mode("max_speed_mps"),
             backtrack_tolerance_m=lifecycle.number("backtrack_tolerance_m"),

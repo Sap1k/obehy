@@ -48,6 +48,10 @@ def estimate(instance: Instance, scheduled: Scheduled) -> Instance:
     delay_class: SourceClass | None = "source" if instance.delay_s is not None else None
     delay = None if instance.delay_s is None else timedelta(seconds=instance.delay_s)
     reached = instance.progress.call_index if instance.progress is not None else -1
+    # A call with an observed event means every earlier call was passed, observed or not.
+    for i, state in enumerate(instance.calls):
+        if (state.arrival is not None or state.departure is not None) and i > reached:
+            reached = i - 1 if state.departure is None else i
     floor: Instant | None = instance.progress.at if instance.progress is not None else None
     finished = instance.lifecycle == "finished"
     calls: list[CallState] = []

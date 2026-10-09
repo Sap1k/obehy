@@ -40,8 +40,8 @@ def test_builder_index_has_keys_trips_shapes_and_visits() -> None:
     trip = index.trip(entry.public_id)
     assert [c.visit_n for c in trip.calls] == [1, 1, 2]
     assert (trip.start, trip.end) == (23 * 3600 + 50 * 60, 24 * 3600 + 20 * 60)
-    assert trip.calls[1].distance_m is not None
-    assert abs(trip.calls[1].distance_m - 1000) < 10
+    assert trip.shape_id is not None
+    assert abs(index.shape(trip.shape_id).distances_m[1] - 1000) < 10
     assert index.runs_on(trip.service_id, day)
     assert not index.runs_on(trip.service_id, date(2026, 10, 9))
     assert index.keys("cis:line", "582492")

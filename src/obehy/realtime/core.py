@@ -92,15 +92,16 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         effects.append(AssignVehicle(vehicle, result.journey, observation.at))
 
     trip = ctx.index.trip(binding.trip_id)
-    instance = _lifecycle(
-        state.instances[binding.journey], observation, span(trip, binding.journey)[0]
-    )
-    instance, timeline_effects = timeline.advance(
-        instance, trip, observation, ctx.index, ctx.policy, ctx.paths
-    )
-    state.instances[binding.journey] = instance
-    state.dirty.add(binding.journey)
-    effects.extend(timeline_effects)
+    instance = state.instances[binding.journey]
+    if _leads(instance, vehicle, observation, ctx.policy):
+        instance = replace(instance, lead=vehicle, lead_seen=observation.at)
+        instance = _lifecycle(instance, observation, span(trip, binding.journey)[0])
+        instance, timeline_effects = timeline.advance(
+            instance, trip, observation, ctx.index, ctx.policy, ctx.paths
+        )
+        state.instances[binding.journey] = instance
+        state.dirty.add(binding.journey)
+        effects.extend(timeline_effects)
     status = "positioning" if instance.lifecycle in ("forecast", "pre_trip") else "running"
     if instance.lifecycle == "finished":
         status = "layover"
@@ -140,6 +141,17 @@ def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
         stale = instance.lifecycle != "finished" and idle > stale_after
         if stale != instance.stale:
             state.instances[journey] = replace(instance, stale=stale)
+
+
+def _leads(
+    instance: Instance, vehicle: VehicleId, observation: Observation, policy: Policy
+) -> bool:
+    """Whether this vehicle drives the journey's timeline: it is the lead, there is none, or the
+    lead has gone stale. One timeline never mixes two vehicles' fixes (DUK-Q11)."""
+
+    if instance.lead is None or instance.lead == vehicle or instance.lead_seen is None:
+        return True
+    return observation.at - instance.lead_seen > timedelta(seconds=policy.lifecycle.stale_after_s)
 
 
 def _continued(

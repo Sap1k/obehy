@@ -41,7 +41,10 @@ def advance(
     instance = replace(instance, updated_at=observation.at, delay_s=delay_s)
 
     position = observation.first(Position)
-    if instance.lifecycle == "running" and position is not None:
+    stale_fix = instance.progress is not None and observation.at <= instance.progress.at
+    # A fix no newer than the last one used (repeated or out of order) never moves progress, so
+    # event intervals always run forward in time.
+    if instance.lifecycle == "running" and position is not None and not stale_fix:
         path = paths.get(trip, index)
         movement = move(
             path,

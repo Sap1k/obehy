@@ -58,6 +58,8 @@ def test_duk_q1_teplice_gps_time_digits_are_utc() -> None:
 def test_duk_q2_1970_means_no_time() -> None:
     (obs,) = decode(entry(GPSPositionDT="1970-01-01T02:00:00+02:00"))
     assert obs.observed_at is None and obs.at == RECEIVED
+    assert obs.first(Position) is None  # no time, no usable position
+    assert obs.first(TripKey) is not None
 
 
 @pytest.mark.parametrize(
@@ -91,6 +93,7 @@ def test_duk_q9_cis_line_is_padded_to_six_digits() -> None:
 def test_t15_a_gps_time_beyond_the_skew_is_dropped() -> None:
     (obs,) = decode(entry(GPSPositionDT="2026-10-05T22:58:00+02:00"))
     assert obs.observed_at is None
+    assert obs.first(Position) is None
 
 
 def test_bad_payloads_raise() -> None:

@@ -96,7 +96,7 @@ class Timetable:
             location = self._location(name)
             visits[name] = visits.get(name, 0) + 1
             built.append(
-                Call(sequence, location.location_id, visits[name], True, arrival, departure, None)
+                Call(sequence, location.location_id, visits[name], True, arrival, departure)
             )
         line = key.split(":", 1)[0]
         self.trips.append(
@@ -135,18 +135,6 @@ class Timetable:
                 )
                 distances = cumulative_m(points)
                 index.shapes[shape_id] = Shape(shape_id, points, distances)
-                calls = tuple(
-                    Call(
-                        c.sequence,
-                        c.location_id,
-                        c.visit_n,
-                        c.passenger_service,
-                        c.arrival,
-                        c.departure,
-                        distances[i],
-                    )
-                    for i, c in enumerate(calls)
-                )
             service_id = f"{spec.trip_id}:service"
             index.trips[spec.trip_id] = Trip(
                 spec.trip_id,
@@ -266,7 +254,8 @@ def serving_rows(tt: Timetable) -> dict[str, list[dict[str, object]]]:
                 "pickup_type": 0,
                 "dropoff_type": 0,
                 "timepoint": True,
-                "shape_distance_traveled": call.distance_m,
+                # Kilometres, as some feeds do: the core must not rely on this unit.
+                "shape_distance_traveled": None,
             }
             for call in trip.calls
         )
