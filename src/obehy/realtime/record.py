@@ -7,7 +7,6 @@ before the payload is stored (Arriva's fleet-wide feed is reduced to Arriva Expr
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
 import json
 import math
@@ -15,8 +14,7 @@ import re
 import signal
 import statistics
 import sys
-import tomllib
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,115 +24,13 @@ from urllib.request import urlopen
 
 from obehy.pipeline.download import http_request
 from obehy.realtime.archive import ArchiveWriter, Poll
+from obehy.realtime.manifest import SOURCES, Channel, ManifestError, select_channels
+from obehy.realtime.manifest import load_channels as _load_channels
+from obehy.realtime.runtime.scheduler import backoff_interval, run_channel
 
-MANIFEST = Path(__file__).resolve().parents[1] / "data" / "realtime" / "sources.toml"
+MANIFEST = SOURCES
 KEPT_HEADERS = ("age", "date", "etag", "last-modified")
-BACKOFF_AFTER = 5
-MAX_BACKOFF_S = 300.0
 SUMMARY_INTERVAL_S = 600.0
-
-
-class ManifestError(ValueError):
-    """The realtime channel manifest is invalid."""
-
-
-@dataclass(frozen=True)
-class Channel:
-    source: str
-    channel: str
-    method: str
-    url: str
-    interval_s: float
-    timeout_s: float
-    headers: dict[str, str] = field(default_factory=dict[str, str])
-    body: bytes | None = None
-    filter: str | None = None
-
-    @property
-    def name(self) -> str:
-        return f"{self.source}/{self.channel}"
-
-
-_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-
-
-def _string(table: dict[str, Any], key: str, where: str) -> str:
-    value = table.get(key)
-    if not isinstance(value, str) or not value:
-        raise ManifestError(f"{where}: {key!r} must be a non-empty string")
-    return value
-
-
-def _seconds(table: dict[str, Any], key: str, where: str) -> float:
-    value = table.get(key)
-    if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
-        raise ManifestError(f"{where}: {key!r} must be a positive number")
-    return float(value)
-
-
-def load_channels(path: Path = MANIFEST) -> list[Channel]:
-    try:
-        with path.open("rb") as stream:
-            document = tomllib.load(stream)
-    except tomllib.TOMLDecodeError as error:
-        raise ManifestError(f"Invalid TOML in {path}: {error}") from error
-    if document.get("schema_version") != 1:
-        raise ManifestError(f"{path} must contain schema_version = 1")
-    tables = document.get("channel")
-    if not isinstance(tables, list) or not tables:
-        raise ManifestError(f"{path} defines no [[channel]]")
-    channels: list[Channel] = []
-    for number, raw in enumerate(cast(list[object], tables), start=1):
-        where = f"{path} channel {number}"
-        if not isinstance(raw, dict):
-            raise ManifestError(f"{where}: not a table")
-        table = cast(dict[str, Any], raw)
-        source = _string(table, "source", where)
-        name = _string(table, "channel", where)
-        for value in (source, name):
-            if not _IDENTIFIER.match(value):
-                raise ManifestError(f"{where}: {value!r} must be lowercase ASCII and dashes")
-        method = _string(table, "method", where)
-        if method not in ("GET", "POST"):
-            raise ManifestError(f"{where}: method must be GET or POST")
-        headers = table.get("headers", {})
-        if not isinstance(headers, dict) or any(
-            not isinstance(value, str) for value in cast(dict[str, object], headers).values()
-        ):
-            raise ManifestError(f"{where}: headers must be a table of strings")
-        body = table.get("body")
-        if body is not None and not isinstance(body, str):
-            raise ManifestError(f"{where}: body must be a string")
-        if body is not None and method != "POST":
-            raise ManifestError(f"{where}: only POST channels take a body")
-        filter_name = table.get("filter")
-        if filter_name is not None and filter_name not in FILTERS:
-            raise ManifestError(f"{where}: unknown filter {filter_name!r}")
-        channel = Channel(
-            source=source,
-            channel=name,
-            method=method,
-            url=_string(table, "url", where),
-            interval_s=_seconds(table, "interval_s", where),
-            timeout_s=_seconds(table, "timeout_s", where),
-            headers=dict(cast(dict[str, str], headers)),
-            body=None if body is None else body.encode("utf-8"),
-            filter=cast(str | None, filter_name),
-        )
-        if any(existing.name == channel.name for existing in channels):
-            raise ManifestError(f"{where}: duplicate channel {channel.name}")
-        channels.append(channel)
-    return channels
-
-
-def select_channels(channels: Sequence[Channel], sources: Sequence[str] | None) -> list[Channel]:
-    if not sources:
-        return list(channels)
-    known = {channel.source for channel in channels}
-    unknown = sorted(set(sources) - known)
-    if unknown:
-        raise ManifestError(f"Unknown source(s) {', '.join(unknown)}; known: {sorted(known)}")
-    return [channel for channel in channels if channel.source in sources]
 
 
 class FilterError(ValueError):
@@ -191,6 +87,21 @@ def _arriva_express(body: bytes) -> Filtered:
 FILTERS: dict[str, PayloadFilter] = {
     "arriva-express": PayloadFilter(version=1, apply=_arriva_express),
 }
+
+
+def load_channels(path: Path = SOURCES) -> list[Channel]:
+    """Connector channels with the recorder's payload filters known."""
+
+    return _load_channels(path, tuple(FILTERS))
+
+
+__all__ = [
+    "Channel",
+    "ManifestError",
+    "backoff_interval",
+    "load_channels",
+    "select_channels",
+]
 
 
 def archived_payload(channel: Channel, poll: Poll) -> tuple[bytes | None, dict[str, object]]:
@@ -302,61 +213,38 @@ class ChannelStats:
         return text
 
 
-def backoff_interval(channel: Channel, consecutive_failures: int) -> float:
-    if consecutive_failures < BACKOFF_AFTER:
-        return channel.interval_s
-    doubled = channel.interval_s * 2 ** (consecutive_failures - BACKOFF_AFTER + 1)
-    return min(MAX_BACKOFF_S, max(channel.interval_s, doubled))
-
-
 def _log(message: str) -> None:
     print(f"{datetime.now(UTC).isoformat(timespec='seconds')} {message}", flush=True)
 
 
-async def _record_channel(
-    channel: Channel,
-    writer: ArchiveWriter,
-    stats: ChannelStats,
-    stop: asyncio.Event,
-    fetcher: FetchFn,
-    once: bool,
-) -> None:
-    loop = asyncio.get_running_loop()
-    next_tick = loop.time()
-    failures = 0
-    while not stop.is_set():
-        poll = await asyncio.to_thread(fetcher, channel)
-        body, extra = archived_payload(channel, poll)
-        stored = writer.append(channel.source, channel.channel, poll, body, extra)
-        stats.polls += 1
-        stats.latencies_ms.append(
-            (poll.received_at - poll.requested_at) / timedelta(milliseconds=1)
-        )
-        if stored.new_object_bytes:
-            stats.new_objects += 1
-            stats.stored_bytes += stored.new_object_bytes
-        if "filter_error" in extra:
-            stats.filter_errors += 1
-            _log(f"{channel.name}: filter error, stored unfiltered: {extra['filter_error']}")
-        if poll.ok:
-            failures = 0
-        else:
-            stats.errors += 1
-            failures += 1
-            _log(f"{channel.name}: {poll.error or f'HTTP {poll.status}'}")
-        if once:
-            return
-        interval = backoff_interval(channel, failures)
-        now = loop.time()
-        if interval != channel.interval_s:
-            next_tick = now + interval
-        else:
-            next_tick += interval
-            if next_tick <= now:
-                # Skip missed ticks instead of bunching requests after a slow poll.
-                next_tick += math.ceil((now - next_tick) / interval + 1e-9) * interval
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=max(0.0, next_tick - now))
+def _on_poll(
+    writer: ArchiveWriter, stats: dict[str, ChannelStats]
+) -> Callable[[Channel, Poll], Awaitable[None]]:
+    async def on_poll(channel: Channel, poll: Poll) -> None:
+        archive_poll(writer, channel, poll, stats[channel.name])
+
+    return on_poll
+
+
+def archive_poll(
+    writer: ArchiveWriter, channel: Channel, poll: Poll, stats: ChannelStats
+) -> str | None:
+    """Store a poll (filtered if the channel says so); return the stored payload's sha256."""
+
+    body, extra = archived_payload(channel, poll)
+    stored = writer.append(channel.source, channel.channel, poll, body, extra)
+    stats.polls += 1
+    stats.latencies_ms.append((poll.received_at - poll.requested_at) / timedelta(milliseconds=1))
+    if stored.new_object_bytes:
+        stats.new_objects += 1
+        stats.stored_bytes += stored.new_object_bytes
+    if "filter_error" in extra:
+        stats.filter_errors += 1
+        _log(f"{channel.name}: filter error, stored unfiltered: {extra['filter_error']}")
+    if not poll.ok:
+        stats.errors += 1
+        _log(f"{channel.name}: {poll.error or f'HTTP {poll.status}'}")
+    return stored.sha256
 
 
 async def record(
@@ -397,11 +285,9 @@ async def record(
             helpers.append(asyncio.create_task(deadline(duration_s)))
     _log(f"recording {', '.join(channel.name for channel in channels)} into {archive}")
     try:
+        on_poll = _on_poll(writer, stats)
         await asyncio.gather(
-            *(
-                _record_channel(channel, writer, stats[channel.name], stop, fetcher, once)
-                for channel in channels
-            )
+            *(run_channel(channel, stop, fetcher, on_poll, once=once) for channel in channels)
         )
     finally:
         for helper in helpers:

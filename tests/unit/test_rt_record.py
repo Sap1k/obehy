@@ -49,47 +49,68 @@ def _arriva_body(*main_types: str) -> bytes:
     return json.dumps([{"data": {"busesCurrentLocations": vehicles}}]).encode()
 
 
-def test_shipped_manifest_loads() -> None:
+def test_shipped_manifests_load() -> None:
     channels = record.load_channels()
     assert [channel.name for channel in channels] == [
+        "arriva-express/buses",
         "duk/vehicles",
         "sz-mapa/trains",
-        "arriva-express/buses",
     ]
-    arriva = channels[2]
+    arriva, duk, sz = channels
     assert arriva.method == "POST"
     assert arriva.filter == "arriva-express"
     assert arriva.body is not None and b"busesCurrentLocations" in arriva.body
     assert arriva.headers["x-enviroment"] == "client"
-    assert "OsVlaky" in channels[1].url
+    assert "OsVlaky" in sz.url
+    assert (duk.interval_s, duk.backoff_after, duk.max_backoff_s) == (15.0, 5, 300.0)
+    assert duk.feeds == ("jdf", "czptt")
+    assert duk.semantics["key_namespaces"]["jdf"] == "cis:line_trip"
+
+
+CHANNEL = (
+    'source = "duk"\nmanifest_version = 1\n[[channel]]\nname = "vehicles"\n'
+    "backoff = { after_failures = 5, max_s = 300 }\ntimeout_s = 5\n"
+)
+GET = 'request = { method = "GET", url = "https://x.invalid" }\n'
+EVERY_5S = 'poll = { kind = "interval", seconds = 5 }\n'
 
 
 @pytest.mark.parametrize(
     ("snippet", "message"),
     [
-        ("interval_s = 0\ntimeout_s = 5\n", "interval_s"),
-        ('interval_s = 5\ntimeout_s = 5\nfilter = "nope"\n', "unknown filter"),
-        ('interval_s = 5\ntimeout_s = 5\nbody = "x"\n', "only POST"),
+        ('poll = { kind = "interval", seconds = 0 }\n' + GET, "seconds"),
+        ('poll = { kind = "cron", seconds = 5 }\n' + GET, "poll.kind"),
+        (EVERY_5S + 'filter = "nope"\n' + GET, "unknown filter"),
+        (
+            EVERY_5S + 'request = { method = "GET", url = "https://x.invalid", body = "x" }\n',
+            "only POST",
+        ),
+        (EVERY_5S + 'feeds = ["gtfs"]\n' + GET, "unknown feeds"),
     ],
 )
 def test_manifest_errors(tmp_path: Path, snippet: str, message: str) -> None:
-    manifest = tmp_path / "sources.toml"
-    manifest.write_text(
-        'schema_version = 1\n[[channel]]\nsource = "duk"\nchannel = "vehicles"\n'
-        'method = "GET"\nurl = "https://example.invalid"\n' + snippet,
-        encoding="utf-8",
-    )
+    manifest = tmp_path / "duk.toml"
+    manifest.write_text(CHANNEL + snippet, encoding="utf-8")
     with pytest.raises(record.ManifestError, match=message):
+        record.load_channels(manifest)
+
+
+def test_manifest_source_must_match_its_file(tmp_path: Path) -> None:
+    manifest = tmp_path / "other.toml"
+    manifest.write_text(CHANNEL + EVERY_5S + GET, encoding="utf-8")
+    with pytest.raises(record.ManifestError, match="file name"):
         record.load_channels(manifest)
 
 
 def test_manifest_rejects_duplicate_channels(tmp_path: Path) -> None:
     table = (
-        '[[channel]]\nsource = "duk"\nchannel = "vehicles"\nmethod = "GET"\n'
-        'url = "https://example.invalid"\ninterval_s = 5\ntimeout_s = 5\n'
+        '[[channel]]\nname = "vehicles"\n'
+        + EVERY_5S
+        + "backoff = { after_failures = 5, max_s = 300 }\ntimeout_s = 5\n"
+        + GET
     )
-    manifest = tmp_path / "sources.toml"
-    manifest.write_text("schema_version = 1\n" + table + table, encoding="utf-8")
+    manifest = tmp_path / "duk.toml"
+    manifest.write_text('source = "duk"\nmanifest_version = 1\n' + table + table, encoding="utf-8")
     with pytest.raises(record.ManifestError, match="duplicate"):
         record.load_channels(manifest)
 
@@ -188,7 +209,7 @@ def test_backoff_doubles_after_repeated_failures() -> None:
     assert record.backoff_interval(channel, 4) == 30.0
     assert record.backoff_interval(channel, 5) == 60.0
     assert record.backoff_interval(channel, 6) == 120.0
-    assert record.backoff_interval(channel, 20) == record.MAX_BACKOFF_S
+    assert record.backoff_interval(channel, 20) == channel.max_backoff_s
 
 
 def test_parse_duration() -> None:

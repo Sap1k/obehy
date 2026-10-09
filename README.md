@@ -38,8 +38,8 @@ there is no sibling-checkout or parent-directory fallback.
 ## Recording realtime payloads
 
 `obehy rt record` polls the realtime sources (DÚK, SŽ, Arriva Express) and archives their
-payloads, unprocessed, for later replay. Channels are defined in
-`src/obehy/data/realtime/sources.toml`. Recording needs no `obehy.local.toml`:
+payloads, unprocessed, for later replay. Channels are declared per connector in
+`src/obehy/realtime/sources/<source>.toml`. Recording needs no `obehy.local.toml`:
 
 ```bash
 uv run obehy rt record --once                      # one poll per channel, smoke test
@@ -214,7 +214,27 @@ only. `release fetch` is not written yet. DB tests in `tests/db/` run when
 
 ## Replaying realtime payloads
 
-`obehy rt replay --release <release-dir> --from <day> --to <day> --out <dir>` resolves archived
-payloads against a release and writes `report.json` and `episodes.parquet`; the source dossiers in
-`docs/sources/` record its results. The realtime core itself (`BASE_PLAN.md` sections 18–22) is
-the current work.
+`obehy rt replay` runs archived payloads through the same pipeline as the live worker, with a
+simulated clock, against a release in the database (a release directory is loaded first if it
+is not there yet; no activation is needed):
+
+```powershell
+uv run obehy rt replay --release <release-dir|run-id> --from 2026-10-05 --to 2026-10-06 `
+  --archive ..t-datat-raw --out workeplay --gtfs-rt-every 60 [--write-history]
+```
+
+It writes `report.json` (results by reason and, per DÚK fleet, the share of running key groups
+bound to a journey) and GTFS-RT snapshots. `--write-history` rebuilds `rt.observation` and the
+history of the replayed days. `obehy rt corpus pin` copies archive days into a pinned corpus.
+
+## Running the realtime worker
+
+```powershell
+uv run obehy realtime --archive data/rt-raw --gtfs-rt data/gtfs-rt
+```
+
+The worker needs an active release. It rebuilds its state from the last hours of stored
+observations (warm replay), polls and archives every channel, runs the DÚK connector through
+the core, writes `data/gtfs-rt/<feed>.pb` every emit tick and history continuously, and rebases
+live journeys when a new release is activated. `obehy jobs vehicle-day --from DAY` builds the
+vehicles' working days. The design is in `docs/R1_SLICE.md`.

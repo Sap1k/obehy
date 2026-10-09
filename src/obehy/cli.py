@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
-import contextlib
 import json
 import os
 import shutil
@@ -38,7 +36,7 @@ from obehy.production_package import (
     package_digest,
     read_manifest,
 )
-from obehy.realtime import record, replay
+from obehy.realtime import commands as realtime_commands
 from obehy.release import commands as release_commands
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
@@ -471,89 +469,15 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="download every CZPTT source object instead of reusing the source cache",
     )
-    realtime = commands.add_parser("rt", help="realtime tools")
-    realtime_commands = realtime.add_subparsers(dest="rt_command", required=True)
-    recorder = realtime_commands.add_parser(
-        "record", help="archive realtime source payloads without processing them"
-    )
-    recorder.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
-    recorder.add_argument(
-        "--sources",
-        type=lambda text: [source.strip() for source in text.split(",") if source.strip()],
-        help="comma-separated source IDs (default: every channel in the manifest)",
-    )
-    recorder.add_argument("--manifest", type=Path, default=record.MANIFEST)
-    recorder.add_argument("--once", action="store_true", help="poll every channel once and exit")
-    recorder.add_argument(
-        "--duration", type=record.parse_duration, help="stop after e.g. 30m, 6h or 2d"
-    )
-    replayer = realtime_commands.add_parser(
-        "replay", help="resolve archived realtime payloads against a release directory"
-    )
-    replayer.add_argument("--release", type=Path, required=True, help="release directory")
-    replayer.add_argument("--from", dest="start", type=date.fromisoformat, required=True)
-    replayer.add_argument("--to", dest="end", type=date.fromisoformat, required=True)
-    replayer.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
-    replayer.add_argument(
-        "--sources",
-        type=lambda text: [source.strip() for source in text.split(",") if source.strip()],
-        help=f"comma-separated source IDs (default: {','.join(replay.SOURCES)})",
-    )
-    replayer.add_argument("--manifest", type=Path, default=record.MANIFEST)
-    replayer.add_argument("--out", type=Path, required=True, help="output directory")
+    realtime_commands.add_parsers(commands)
     release_commands.add_parsers(commands)
     return parser
 
 
-def _record(args: argparse.Namespace) -> int:
-    try:
-        channels = record.select_channels(
-            record.load_channels(cast(Path, args.manifest)),
-            cast(list[str] | None, args.sources),
-        )
-    except (OSError, record.ManifestError) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 1
-    with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(
-            record.record(
-                channels,
-                cast(Path, args.archive),
-                once=cast(bool, args.once),
-                duration_s=cast(float | None, args.duration),
-            )
-        )
-    return 0
-
-
-def _replay(args: argparse.Namespace) -> int:
-    try:
-        channels = record.select_channels(
-            record.load_channels(cast(Path, args.manifest)),
-            cast(list[str] | None, args.sources) or list(replay.SOURCES),
-        )
-        document = replay.replay(
-            replay.ReplayOptions(
-                release=cast(Path, args.release),
-                archive=cast(Path, args.archive),
-                start=cast(date, args.start),
-                end=cast(date, args.end),
-                channels=[(channel.source, channel.channel) for channel in channels],
-                out=cast(Path, args.out),
-            )
-        )
-    except (OSError, record.ManifestError, replay.ReplayError) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 1
-    for line in replay.summary_lines(document):
-        print(line)
-    return 0
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    if args.command == "rt":
-        return _replay(args) if args.rt_command == "replay" else _record(args)
+    if args.command in ("rt", "realtime", "jobs"):
+        return realtime_commands.run(args)
     if args.command in ("db", "release"):
         return release_commands.run(args)
     try:

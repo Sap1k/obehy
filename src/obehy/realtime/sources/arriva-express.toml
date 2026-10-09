@@ -1,0 +1,23 @@
+# Arriva bus positions (docs/sources/arriva-express.md). The endpoint returns Arriva's whole
+# fleet and takes no arguments; the filter keeps only Arriva Express. Recorded only until R4.
+source = "arriva-express"
+manifest_version = 1
+
+[[channel]]
+name = "buses"
+poll = { kind = "interval", seconds = 30 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 25
+filter = "arriva-express"
+feeds = ["jdf"]
+
+[channel.request]
+method = "POST"
+url = "https://www.arriva.cz/api/graphql"
+body = '[{"query":"query busesCurrentLocation { busesCurrentLocations { angle delay destinationName lastStopName latitude longitude linkNumber state type mainType spz updated linkNumberAlias } }","operationName":"busesCurrentLocation","variables":{}}]'
+
+[channel.request.headers]
+content-type = "application/json"
+x-enviroment = "client"
+origin = "https://www.arriva.cz"
+referer = "https://www.arriva.cz/cs/dopravni-info/aktualni-poloha-autobusu-online"

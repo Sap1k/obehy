@@ -54,11 +54,6 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "DTZ"]
 
-[tool.ruff.lint.per-file-ignores]
-# Legacy replay path, removed with the realtime core (docs/R1_SLICE.md).
-"src/obehy/realtime/decode.py" = ["DTZ"]
-"tests/unit/test_rt_replay.py" = ["DTZ"]
-
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
@@ -92,3 +87,9 @@ forbidden_modules = [
     "obehy.realtime.archive",
     "obehy.realtime.record",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Connectors only declare and decode: no inference, timeline or core"
+type = "forbidden"
+source_modules = ["obehy.realtime.sources"]
+forbidden_modules = ["obehy.realtime.core", "obehy.realtime.infer", "obehy.realtime.timeline"]

@@ -1,0 +1,17 @@
+# DÚK vehicle positions (docs/sources/duk.md). Buses go to jdf, trains (CISLineID = 0) to czptt.
+source = "duk"
+manifest_version = 1
+
+[[channel]]
+name = "vehicles"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 20
+request = { method = "GET", url = "https://tabule.portabo.cz/api/v1-tabule/cis/GetTraffic/0" }
+feeds = ["jdf", "czptt"]
+capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
+
+[channel.semantics]
+clock = "source"
+delay_reference = "unknown"  # DUK-Q6
+key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" }

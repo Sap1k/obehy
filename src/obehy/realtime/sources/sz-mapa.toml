@@ -1,0 +1,11 @@
+# SŽ train map (docs/sources/sz.md). Recorded only until the R2 connector.
+source = "sz-mapa"
+manifest_version = 1
+
+[[channel]]
+name = "trains"
+poll = { kind = "interval", seconds = 30 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 25
+request = { method = "GET", url = 'https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers\OsVlaky&&action=load' }
+feeds = ["czptt"]

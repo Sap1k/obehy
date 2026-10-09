@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
 from obehy.realtime import timeline
-from obehy.realtime.index import IndexView
+from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.infer.keyed import Match, bind, in_window, span
 from obehy.realtime.model import (
     AssignVehicle,
@@ -219,3 +219,64 @@ def _set_vehicle(
         position=position,
         reason=reason,
     )
+
+
+def rebase(state: FeedState, index: IndexView) -> list[Effect]:
+    """Move live journeys onto a newly activated release (BASE_PLAN.md section 29).
+
+    Each journey is re-resolved through its own key and service date and re-snapshotted, which
+    history records as a new revision. Calls keep their observed events by
+    `(location_id, visit_n)`; progress restarts from the next fix because path distances
+    change. A journey whose key no longer runs is dropped and its vehicles unbound. The caller
+    has loaded every live journey's key into `index`.
+    """
+
+    effects: list[Effect] = []
+    moved: dict[JourneyKey, str] = {}
+    for journey, instance in sorted(state.instances.items()):
+        trip = _resolve(journey, index)
+        if trip is None:
+            del state.instances[journey]
+            continue
+        old = {(c.location_id, c.visit_n): c for c in instance.calls}
+        calls = tuple(
+            replace(
+                old.get(
+                    (c.location_id, c.visit_n), CallState(c.sequence, c.location_id, c.visit_n)
+                ),
+                sequence=c.sequence,
+            )
+            for c in trip.calls
+        )
+        state.instances[journey] = replace(
+            instance,
+            release_id=index.release_id,
+            trip_id=trip.trip_id,
+            calls=calls,
+            progress=None,
+        )
+        moved[journey] = trip.trip_id
+        effects.append(snapshot(journey, index, trip.trip_id, instance.updated_at))
+    for vehicle, current in sorted(state.vehicles.items()):
+        binding = current.binding
+        if binding is None:
+            continue
+        if binding.journey in moved:
+            state.vehicles[vehicle] = replace(
+                current, binding=replace(binding, trip_id=moved[binding.journey])
+            )
+        else:
+            state.vehicles[vehicle] = replace(
+                current, binding=None, status="unmatched", reason=Reason.NO_TRIP
+            )
+    return effects
+
+
+def _resolve(journey: JourneyKey, index: IndexView) -> Trip | None:
+    for entry in index.keys(journey.namespace, journey.key):
+        if not entry.valid_on(journey.service_date):
+            continue
+        trip = index.trip(entry.public_id)
+        if index.runs_on(trip.service_id, journey.service_date):
+            return trip
+    return None

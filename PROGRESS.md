@@ -216,6 +216,14 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — R1 pipeline complete in code: per-connector manifests
+  (`realtime/sources/*.toml`, recorder unchanged in behaviour), DÚK connector with quirk tests,
+  shared scheduler, `Runner` (lazy index, invariants), `obehy rt replay` rebuilt on it
+  (GTFS-RT snapshots, `--write-history`), `obehy realtime` worker (warm replay, emit tick,
+  release rebase on NOTIFY), `obehy jobs vehicle-day`, `obehy rt corpus pin`. Legacy
+  `resolve`/`episodes`/`decode`/`release_index` removed. End-to-end DB tests: deterministic
+  replay and history rebuild, warm restart equals an uninterrupted run, mid-day release switch
+  orphans vanished calls. Not yet run on the real corpus.
 - **2026-10-09** — Migrations 0005 `rt` and 0006 `history` (journey-keyed, partitioned by
   service-date month, `tour_id` reserved); `emit/db.Writer` (COPY observations, revisioned
   snapshots with orphaning, events, assignments, current state, `clear_history`, partitions on

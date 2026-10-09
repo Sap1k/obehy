@@ -24,12 +24,15 @@ from obehy.realtime.model import (
     Feed,
     FeedState,
     JourneyKey,
+    Observation,
     ObservationResult,
+    RawRef,
     SnapshotJourney,
     VehicleKey,
     WriteEvent,
 )
-from obehy.realtime.model_json import facts_to_json
+from obehy.realtime.model_json import facts_from_json, facts_to_json
+from obehy.realtime.times import instant
 
 HISTORY_TABLES = (
     "journey",
@@ -411,3 +414,44 @@ def _call_json(call: CallState) -> dict[str, Any]:
         "estimated_departure": _iso(call.estimated_departure),
         "source_class": call.source_class,
     }
+
+
+def clear_observations(
+    connection: psycopg.Connection, start: datetime, end: datetime, sources: Sequence[str]
+) -> None:
+    """Delete stored observations of `sources` received in [start, end) before a replay."""
+
+    connection.execute(
+        "DELETE FROM rt.observation WHERE received_at >= %s AND received_at < %s"
+        " AND source = ANY(%s)",
+        (start, end, list(sources)),
+    )
+
+
+def load_observations(
+    connection: psycopg.Connection, since: datetime, until: datetime
+) -> list[Observation]:
+    """Stored observations received in [since, until), in processing order (warm replay)."""
+
+    rows = connection.execute(
+        "SELECT source, channel, feed, received_at, observed_at, raw_sha256, raw_item,"
+        " decoder_version, facts FROM rt.observation"
+        " WHERE received_at >= %s AND received_at < %s"
+        " ORDER BY received_at, source, raw_sha256, raw_item",
+        (since, until),
+    ).fetchall()
+    observations: list[Observation] = []
+    for source, channel, feed, received_at, observed_at, sha256, item, version, facts in rows:
+        observations.append(
+            Observation(
+                source=source,
+                channel=channel,
+                feed=feed,
+                received_at=instant(received_at),
+                observed_at=None if observed_at is None else instant(observed_at),
+                raw=RawRef(sha256, item),
+                decoder_version=version,
+                facts=facts_from_json(facts),
+            )
+        )
+    return observations
