@@ -173,8 +173,9 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
 - **Status:** step 1 done (2026-10-06; recording continues). Step 2 done (§6). Step 3 done
-  (`release fetch` 2026-10-09; the hourly systemd timer for fetch → load → `activate
-  --if-newer` is in `deploy/`, not yet installed on a server).
+  (`release fetch` 2026-10-09; the server runs as `deploy/compose.yaml` from the CI-built
+  image: hourly fetch → load → `activate --if-newer`, worker, nightly jobs, Caddy; not yet
+  deployed).
   Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
   report) done 2026-10-08. The core architecture is decided (2026-10-08, `BASE_PLAN.md`
   sections 5, 18–22, 29–30). The first slice (DÚK buses with history, warm-replay restart,
@@ -223,9 +224,12 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — Server image (`Dockerfile`, built and pushed to GHCR by CI on green main, with
+  a smoke test) and `deploy/compose.yaml`: PostGIS, migrate, hourly release update, realtime
+  worker, nightly jobs at 03:30, Caddy serving the GTFS-RT and the active `gtfs.zip`. Replaces
+  the systemd units. Not built locally (no Docker here); the first CI run is the check.
 - **2026-10-09** — `obehy jobs nightly` (vehicle days of the last two service dates, then drop
-  `rt.observation` days older than 30, policy `[retention]`) with a 03:30 Prague systemd timer
-  in `deploy/`. DB test for the drop; raw-archive retention is still missing.
+  `rt.observation` days older than 30, policy `[retention]`) run at 03:30 Prague by the server stack. DB test for the drop; raw-archive retention is still missing.
 - **2026-10-09** — `release activate --if-newer` (newer than every release published before, so a
   rollback sticks) and `deploy/` systemd service + hourly timer running fetch → load → activate.
   DB test added; the units are not yet installed on a server.

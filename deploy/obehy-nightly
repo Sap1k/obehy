@@ -1,0 +1,12 @@
+#!/bin/sh
+# Run `obehy jobs nightly` every day at 03:30 local time (TZ, Europe/Prague in the image),
+# after the last night journeys of the previous service date.
+set -u
+
+while :; do
+    now=$(date +%s)
+    next=$(date -d 'today 03:30' +%s)
+    [ "$next" -gt "$now" ] || next=$(date -d 'tomorrow 03:30' +%s)
+    sleep $((next - now))
+    obehy jobs nightly || echo "nightly jobs failed" >&2
+done

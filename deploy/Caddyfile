@@ -1,0 +1,24 @@
+# Serves the GTFS-RT feed and the static GTFS of the active release from the data volume, over
+# plain HTTP: TLS and the public hostname belong to the reverse proxy in front.
+{
+	auto_https off
+}
+
+:80 {
+	encode zstd gzip
+
+	handle /gtfs-rt/*.pb {
+		root * /srv
+		header Content-Type application/x-protobuf
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle /gtfs/jdf.zip {
+		root * /srv
+		rewrite * /releases/active/jdf/gtfs.zip
+		file_server
+	}
+	handle {
+		respond 404
+	}
+}

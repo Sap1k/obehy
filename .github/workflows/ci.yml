@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgis/postgis:17-3.5
+        # Google's Docker Hub mirror: runners share IPs, so Docker Hub rate-limits and times out.
+        image: mirror.gcr.io/postgis/postgis:17-3.5
         env:
           POSTGRES_DB: obehy_test
           POSTGRES_USER: obehy
@@ -24,10 +25,10 @@ jobs:
     env:
       OBEHY_TEST_DATABASE_URL: postgresql://obehy:obehy-ci@localhost:5432/obehy_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.2.0  # no floating major tags since v8
         with:
           python-version: "3.13"
           enable-cache: true
@@ -36,3 +37,46 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
+
+  # The server image (Dockerfile, deploy/compose.yaml), published for every green main.
+  image:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+      # Nothing here pulls from Docker Hub: the base image is on GHCR and BuildKit comes from
+      # Google's Docker Hub mirror.
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-$GITHUB_SHA"
+          docker run --rm "$image" release fetch --help
+          docker run --rm --entrypoint sh "$image" -c 'date && ls -la /app/data /app/deploy'
