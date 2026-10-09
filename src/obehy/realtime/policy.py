@@ -47,6 +47,7 @@ class LifecyclePolicy:
     arrival_radius_m: float
     departure_margin_m: float
     finished_grace_s: int
+    forget_after_s: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +124,7 @@ def parse_policy(document: dict[str, Any]) -> Policy:
             arrival_radius_m=lifecycle.number("arrival_radius_m"),
             departure_margin_m=lifecycle.number("departure_margin_m"),
             finished_grace_s=lifecycle.integer("finished_grace_s"),
+            forget_after_s=lifecycle.integer("forget_after_s"),
         ),
         delay_discard_below_s=root.table("delay").integer("discard_below_s"),
         warm_replay_hours=root.table("warm_replay").integer("hours"),

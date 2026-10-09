@@ -5,6 +5,7 @@ description = "Czech public-transport static feed builds and publication"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "gtfs-realtime-bindings>=3.0.0",
   "psycopg[binary]>=3.3,<4",
   "pyarrow>=25,<26",
   "rich>=14,<15",
@@ -80,6 +81,7 @@ source_modules = [
     "obehy.realtime.infer",
     "obehy.realtime.timeline",
     "obehy.realtime.policy",
+    "obehy.realtime.model_json",
 ]
 forbidden_modules = [
     "psycopg",

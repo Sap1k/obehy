@@ -12,6 +12,7 @@ again (DUK-Q4: yesterday's key in the morning is `not_in_service`, never an exte
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from datetime import timedelta
 
 from obehy.realtime import timeline
 from obehy.realtime.index import IndexView
@@ -106,6 +107,25 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     return effects
 
 
+def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
+    """Emit-tick housekeeping: flag stale journeys, forget long-unseen vehicles and journeys."""
+
+    stale_after = timedelta(seconds=policy.lifecycle.stale_after_s)
+    forget = timedelta(seconds=policy.lifecycle.forget_after_s)
+    for vehicle, current in sorted(state.vehicles.items()):
+        if now - current.last_seen > forget:
+            del state.vehicles[vehicle]
+    bound = {v.binding.journey for v in state.vehicles.values() if v.binding is not None}
+    for journey, instance in sorted(state.instances.items()):
+        idle = now - instance.updated_at
+        if idle > forget and journey not in bound:
+            del state.instances[journey]
+            continue
+        stale = instance.lifecycle != "finished" and idle > stale_after
+        if stale != instance.stale:
+            state.instances[journey] = replace(instance, stale=stale)
+
+
 def _continued(
     previous: VehicleState | None,
     key: TripKey,
@@ -138,13 +158,14 @@ def _open(state: FeedState, match: Match, ctx: Context, observation: Observation
         calls=tuple(CallState(c.sequence, c.location_id, c.visit_n) for c in trip.calls),
         updated_at=observation.at,
     )
-    return [snapshot(match.journey, ctx.index, trip.trip_id)]
+    return [snapshot(match.journey, ctx.index, trip.trip_id, observation.at)]
 
 
-def snapshot(journey: JourneyKey, index: IndexView, trip_id: str) -> SnapshotJourney:
+def snapshot(journey: JourneyKey, index: IndexView, trip_id: str, at: Instant) -> SnapshotJourney:
     trip = index.trip(trip_id)
     return SnapshotJourney(
         journey=journey,
+        at=at,
         release_id=index.release_id,
         trip_id=trip.trip_id,
         route_name=trip.route_name,

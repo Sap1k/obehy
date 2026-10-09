@@ -19,6 +19,8 @@ backtrack_tolerance_m = 80
 arrival_radius_m = 60
 departure_margin_m = 40
 finished_grace_s = 300
+# Vehicles unseen and journeys untouched this long are dropped from memory (history keeps them).
+forget_after_s = 7200
 
 [delay]
 discard_below_s = -1800

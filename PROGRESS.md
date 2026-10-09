@@ -216,6 +216,11 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — Migrations 0005 `rt` and 0006 `history` (journey-keyed, partitioned by
+  service-date month, `tour_id` reserved); `emit/db.Writer` (COPY observations, revisioned
+  snapshots with orphaning, events, assignments, current state, `clear_history`, partitions on
+  demand); per-feed GTFS-RT (matched only, deterministic); `jobs.vehicle_day` SQL (T13). DB tests
+  pass on the remote dev database.
 - **2026-10-09** — Timeline (single source): path from shape or straight stops, monotone
   progress with backtrack tolerance, off-route hold/flag/rejoin, arrival and departure events as
   fix-bounded intervals (loops attach to the right visit), predictions from the source delay with

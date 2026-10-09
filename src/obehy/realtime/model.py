@@ -242,6 +242,7 @@ class ScheduledCall:
 @dataclass(frozen=True, slots=True)
 class SnapshotJourney:
     journey: JourneyKey
+    at: Instant
     release_id: str
     trip_id: str
     route_name: str

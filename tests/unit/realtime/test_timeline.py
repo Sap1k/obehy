@@ -14,7 +14,7 @@ from obehy.realtime.model import (
     WriteEvent,
 )
 from obehy.realtime.policy import load_policy
-from tests.realtime.builder import ORIGIN, STEP_LON, timetable
+from tests.realtime.builder import ORIGIN, STEP_LON, timetable, with_unknown
 from tests.realtime.observations import local, observe
 
 POLICY = load_policy()
@@ -43,7 +43,7 @@ class Run:
             )
             .index()
         )
-        self.ctx = Context(index, POLICY)
+        self.ctx = Context(with_unknown(index, ("cis:line_trip", "999999:1")), POLICY)
         self.state = FeedState("jdf")
         self.effects: list[Effect] = []
 
@@ -182,3 +182,31 @@ def test_a_loop_attaches_events_to_the_right_visit() -> None:
         ("jdf:A", 2, "arrival"),
     ]
     assert run.instance.lifecycle == "finished"
+
+
+def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
+    from google.transit import gtfs_realtime_pb2 as rt
+
+    from obehy.realtime.core import refresh
+    from obehy.realtime.emit.gtfs_rt import feed_message
+
+    run = Run().at("08:00", east(0)).at("08:03", east(500), delay=60)
+    run.at("08:03", None, vehicle="2002", key="999999:1")  # unmatched: never in GTFS-RT
+    now = local("2026-10-08 08:03:10")
+    refresh(run.state, now, POLICY)
+    raw = feed_message(run.state, now).SerializeToString(deterministic=True)
+    message = rt.FeedMessage()
+    message.ParseFromString(raw)
+
+    assert [e.id for e in message.entity] == [
+        "trip:cis:line_trip:582492:143:2026-10-08",
+        "vehicle:duk:1001",
+    ]
+    update = message.entity[0].trip_update
+    assert (update.trip.trip_id, update.trip.start_date) == ("jdf:t1", "20261008")
+    assert [s.stop_sequence for s in update.stop_time_update] == [1, 2, 3]
+    assert update.stop_time_update[1].arrival.time == int(local("2026-10-08 08:06").timestamp())
+    assert feed_message(run.state, now).SerializeToString(deterministic=True) == raw
+
+    refresh(run.state, local("2026-10-08 08:10"), POLICY)  # stale after 180 s
+    assert len(feed_message(run.state, local("2026-10-08 08:10")).entity) == 0
