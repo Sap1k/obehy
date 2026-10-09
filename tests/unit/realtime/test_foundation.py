@@ -37,20 +37,20 @@ def test_builder_index_has_keys_trips_shapes_and_visits() -> None:
         .index()
     )
     (entry,) = index.keys("cis:line_trip", "582492:143")
-    trip = index.trip(entry.trip_id)
+    trip = index.trip(entry.public_id)
     assert [c.visit_n for c in trip.calls] == [1, 1, 2]
     assert (trip.start, trip.end) == (23 * 3600 + 50 * 60, 24 * 3600 + 20 * 60)
     assert trip.calls[1].distance_m is not None
     assert abs(trip.calls[1].distance_m - 1000) < 10
     assert index.runs_on(trip.service_id, day)
     assert not index.runs_on(trip.service_id, date(2026, 10, 9))
-    assert index.namespace_has_prefix("cis:line_trip", "582492")
+    assert index.keys("cis:line", "582492")
 
 
 def test_unloaded_data_is_an_error_and_unknown_keys_are_empty() -> None:
     index = with_unknown(timetable().index(), ("cis:line_trip", "100001:1"))
     assert index.keys("cis:line_trip", "100001:1") == ()
-    assert not index.namespace_has_prefix("cis:line_trip", "100001")
+    assert index.keys("cis:line", "100001") == ()
     with pytest.raises(IndexMiss):
         index.keys("cis:line_trip", "100001:2")
 

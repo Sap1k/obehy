@@ -16,6 +16,17 @@ from obehy.realtime.model import Feed
 
 KeyRef = tuple[str, str]  # (namespace, identifier)
 
+# A composite source key and the namespace of its leading part, so a missing trip can be told
+# apart from a missing line. The split is the source's own key format, never a public ID.
+PARENT_NAMESPACE = {"cis:line_trip": "cis:line"}
+
+
+def parent_ref(ref: KeyRef) -> KeyRef | None:
+    parent = PARENT_NAMESPACE.get(ref[0])
+    if parent is None or ":" not in ref[1]:
+        return None
+    return parent, ref[1].split(":", 1)[0]
+
 
 class IndexMiss(LookupError):
     """The core asked for static data that was never loaded."""
@@ -23,9 +34,10 @@ class IndexMiss(LookupError):
 
 @dataclass(frozen=True, slots=True)
 class KeyEntry:
-    """A source key applies to `trip_id` on the trip's service dates inside its validity."""
+    """A source key applies to `public_id` (a trip or a route) on the service dates inside its
+    validity."""
 
-    trip_id: str
+    public_id: str
     valid_from: date
     valid_to: date
 
@@ -99,8 +111,6 @@ class IndexView(Protocol):
 
     def keys(self, namespace: str, identifier: str) -> tuple[KeyEntry, ...]: ...
 
-    def namespace_has_prefix(self, namespace: str, prefix: str) -> bool: ...
-
     def trip(self, trip_id: str) -> Trip: ...
 
     def runs_on(self, service_id: str, day: date) -> bool: ...
@@ -119,7 +129,6 @@ class Index:
     key_entries: dict[KeyRef, tuple[KeyEntry, ...]] = field(
         default_factory=dict[KeyRef, tuple[KeyEntry, ...]]
     )
-    prefixes: dict[tuple[str, str], bool] = field(default_factory=dict[tuple[str, str], bool])
     trips: dict[str, Trip] = field(default_factory=dict[str, Trip])
     service_dates: dict[str, frozenset[date]] = field(default_factory=dict[str, frozenset[date]])
     loaded_dates: frozenset[date] = frozenset()
@@ -136,14 +145,6 @@ class Index:
             return self.key_entries[(namespace, identifier)]
         except KeyError:
             raise IndexMiss(f"key {namespace}:{identifier} was not loaded") from None
-
-    def namespace_has_prefix(self, namespace: str, prefix: str) -> bool:
-        """Whether any key of `namespace` starts with `prefix:` (e.g. a CIS line exists)."""
-
-        try:
-            return self.prefixes[(namespace, prefix)]
-        except KeyError:
-            raise IndexMiss(f"prefix {namespace}:{prefix} was not loaded") from None
 
     def trip(self, trip_id: str) -> Trip:
         try:

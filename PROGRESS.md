@@ -216,6 +216,11 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — Realtime foundation: `model.py` (facts, journeys, state, effects, JSON
+  round-trip), `policy-v1.toml` + loader, `index.py`, the test timetable builder and the
+  import-linter purity contract; `index_sql.IndexLoader` fills the index lazily by source key from
+  `static.*` by load_id, and `ensure_release` loads a release directory on demand. DB tests (index
+  equals builder) pass against the remote dev database.
 - **2026-10-09** — `realtime/times.py` (T1, T6–T12, T14, T15 pass) and its SQL twin
   `control.obehy_instant` (migration 0004; agrees with Python on the DST cases against the remote
   dev database). ruff `DTZ` on, with ignores only for the legacy `decode.py` and its test. DB tests
