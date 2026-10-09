@@ -63,7 +63,7 @@ Oběhy is a **modular monolith**: one Python package (`src/obehy/`) with a few p
 application server:
 
 ```text
-obehy release fetch|load|activate   one-shot, driven by a systemd timer
+obehy release fetch|load|activate   one-shot, run hourly by the server stack
 obehy ref import                    one-shot: curated reference datasets → ref.*
 obehy realtime                      long-running realtime worker; the only upstream I/O
 obehy jobs                          nightly set-wise SQL (vehicle days, circulations, retention)

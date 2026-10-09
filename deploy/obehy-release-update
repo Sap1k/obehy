@@ -1,14 +1,18 @@
 #!/bin/sh
 # Fetch, load and activate the newest published build (BASE_PLAN.md section 16.1).
 # Every step is idempotent: a fetched release is not downloaded again, a loaded package is not
-# loaded again, and a release no newer than those activated before is left alone, so the timer
-# can run this often and a failed step is simply retried on the next run.
+# loaded again, and a release no newer than those activated before is left alone, so this can
+# run often and a failed step is simply retried on the next run. After an activation,
+# data/releases/active points at the release, so its gtfs.zip is served beside the GTFS-RT.
 set -eu
 
 obehy() {
-    uv run --no-sync obehy "$@"
+    if command -v obehy >/dev/null 2>&1; then command obehy "$@"; else uv run --no-sync obehy "$@"; fi
 }
 
 release_dir=$(obehy release fetch)
+run_id=$(basename "$release_dir")
 obehy release load "$release_dir"
-obehy release activate --if-newer "$(basename "$release_dir")"
+if obehy release activate --if-newer "$run_id" | tee /dev/stderr | grep -q '^activated '; then
+    ln -sfn "$run_id" "$(dirname "$release_dir")/active"
+fi

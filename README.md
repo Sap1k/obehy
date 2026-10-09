@@ -216,17 +216,29 @@ and its manifest, and keeps the three newest release directories (`--keep`). `GI
 raises the API rate limit but is not needed. DB tests in `tests/db/` run when
 `OBEHY_TEST_DATABASE_URL` or `[database] test_url` names a database that may create databases.
 
-On the server, `deploy/systemd/obehy-release.timer` runs `deploy/obehy-release-update` hourly:
-fetch, load, then `activate --if-newer`, which leaves alone any release no newer than one
-activated before (so a rollback sticks until the next build). It expects the checkout in
-`/opt/obehy` (`uv sync --no-dev`), a user `obehy`, `uv` on the system `PATH` and the database
-in `config/obehy.local.toml` or `/etc/obehy/release.env`:
+`deploy/obehy-release-update` runs fetch, load, then `activate --if-newer`, which leaves alone
+any release no newer than one activated before (so a rollback sticks until the next build),
+and points `data/releases/active` at what it activated.
+
+## Running the server
+
+CI publishes `ghcr.io/sap1k/obehy:latest` (and `:sha-<commit>`) from the `Dockerfile` for
+every green push to main. `deploy/compose.yaml` runs the server from it: PostGIS, migrations,
+an hourly release update, the realtime worker, the nightly jobs and Caddy serving
+`/gtfs-rt/jdf.pb` and the active release's `/gtfs/jdf.zip`. Copy `deploy/` to the server and
+next to it write `.env`:
 
 ```bash
-sudo cp deploy/systemd/obehy-release.* /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now obehy-release.timer
+POSTGRES_PASSWORD=...     # URL-safe characters only; it goes into the database URL
+OBEHY_DOMAIN=rt.example.cz
 ```
+
+```bash
+docker compose up -d
+```
+
+The first release update downloads and loads a full release; the worker restarts until it is
+active. The package must be public on GitHub (or `docker login ghcr.io` on the server).
 
 ## Replaying realtime payloads
 
@@ -253,6 +265,6 @@ The worker needs an active release. It rebuilds its state from the last hours of
 observations (warm replay), polls and archives every channel, runs the DÚK connector through
 the core, writes `data/gtfs-rt/<feed>.pb` every emit tick and history continuously, and rebases
 live journeys when a new release is activated. `obehy jobs vehicle-day --from DAY` builds the
-vehicles' working days; `obehy jobs nightly` (`deploy/systemd/obehy-jobs.timer`, 03:30 Prague)
+vehicles' working days; `obehy jobs nightly` (03:30 Prague in the server stack)
 rebuilds them for the last two service dates and drops `rt.observation` days older than
 `[retention] observation_days` (30). The raw archive is not pruned yet. The design is in `docs/R1_SLICE.md`.

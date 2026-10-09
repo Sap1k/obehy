@@ -165,3 +165,15 @@ def test_prune_keeps_the_newest_and_the_fetched_run(tmp_path: Path) -> None:
 
     assert prune(tmp_path, 2, protect=runs[0]) == [runs[2], runs[1]]
     assert sorted(path.name for path in tmp_path.iterdir()) == [runs[0], runs[3], runs[4], "notes"]
+
+
+def test_prune_keeps_the_release_the_active_link_points_at(tmp_path: Path) -> None:
+    runs = [f"2026100{day}T000000Z-000000000000" for day in range(1, 5)]
+    for run in runs:
+        (tmp_path / run).mkdir()
+    try:
+        (tmp_path / "active").symlink_to(runs[0], target_is_directory=True)
+    except OSError:
+        pytest.skip("this system does not allow symbolic links")
+
+    assert prune(tmp_path, 1, protect=runs[3]) == [runs[2], runs[1]]

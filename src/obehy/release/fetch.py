@@ -255,13 +255,20 @@ def fetch_release(
 
 
 def prune(into: Path, keep: int, protect: str) -> list[str]:
-    """Delete fetched releases beyond the ``keep`` newest; never ``protect``."""
+    """Delete fetched releases beyond the ``keep`` newest; never ``protect`` or the one the
+    ``active`` link (written after an activation, deploy/obehy-release-update) points at."""
 
+    active = into / "active"
+    kept = {protect, active.resolve().name if active.is_symlink() else protect}
     runs = sorted(
-        (path.name for path in into.iterdir() if path.is_dir() and _RUN_ID.match(path.name)),
+        (
+            path.name
+            for path in into.iterdir()
+            if path.is_dir() and not path.is_symlink() and _RUN_ID.match(path.name)
+        ),
         reverse=True,
     )
-    dropped = [run for run in runs[keep:] if run != protect]
+    dropped = [run for run in runs[keep:] if run not in kept]
     for run in dropped:
         shutil.rmtree(into / run)
     return dropped
