@@ -204,7 +204,7 @@ $env:OBEHY_DATABASE_URL = "postgresql://..."
 uv run obehy db migrate
 uv run obehy release fetch                 # newest build -> data/releases/<run-id>; prints the dir
 uv run obehy release load <release-dir>
-uv run obehy release activate <run-id>     # or --rollback
+uv run obehy release activate <run-id>     # or --rollback; --if-newer skips older releases
 uv run obehy release status
 ```
 
@@ -215,6 +215,18 @@ checks every asset against the digest GitHub records and every package against `
 and its manifest, and keeps the three newest release directories (`--keep`). `GITHUB_TOKEN`
 raises the API rate limit but is not needed. DB tests in `tests/db/` run when
 `OBEHY_TEST_DATABASE_URL` or `[database] test_url` names a database that may create databases.
+
+On the server, `deploy/systemd/obehy-release.timer` runs `deploy/obehy-release-update` hourly:
+fetch, load, then `activate --if-newer`, which leaves alone any release no newer than one
+activated before (so a rollback sticks until the next build). It expects the checkout in
+`/opt/obehy` (`uv sync --no-dev`), a user `obehy`, `uv` on the system `PATH` and the database
+in `config/obehy.local.toml` or `/etc/obehy/release.env`:
+
+```bash
+sudo cp deploy/systemd/obehy-release.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now obehy-release.timer
+```
 
 ## Replaying realtime payloads
 

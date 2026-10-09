@@ -65,6 +65,11 @@ def add_parsers(commands: Any) -> None:
         "--rollback", action="store_true", help="return to the previously active release"
     )
     activator.add_argument(
+        "--if-newer",
+        action="store_true",
+        help="do nothing unless the release is newer than every release activated before",
+    )
+    activator.add_argument(
         "--keep",
         type=int,
         default=activation.DEFAULT_KEEP,
@@ -136,6 +141,13 @@ def run(args: argparse.Namespace) -> int:
                 if args.rollback:
                     publication = activation.rollback(connection, contract)
                     verb = "rolled back to"
+                elif args.if_newer:
+                    run_id = cast(str, args.run_id)
+                    activated = activation.activate_if_newer(connection, contract, run_id)
+                    if activated is None:
+                        print(f"{run_id} is not newer than the releases activated before")
+                        return 0
+                    publication, verb = activated, "activated"
                 else:
                     publication = activation.activate(connection, contract, cast(str, args.run_id))
                     verb = "activated"

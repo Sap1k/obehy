@@ -173,7 +173,8 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
 - **Status:** step 1 done (2026-10-06; recording continues). Step 2 done (§6). Step 3 done
-  (`release fetch` 2026-10-09; the systemd timer for fetch → load → activate is not set up).
+  (`release fetch` 2026-10-09; the hourly systemd timer for fetch → load → `activate
+  --if-newer` is in `deploy/`, not yet installed on a server).
   Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
   report) done 2026-10-08. The core architecture is decided (2026-10-08, `BASE_PLAN.md`
   sections 5, 18–22, 29–30). The first slice (DÚK buses with history, warm-replay restart,
@@ -222,6 +223,9 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — `release activate --if-newer` (newer than every release published before, so a
+  rollback sticks) and `deploy/` systemd service + hourly timer running fetch → load → activate.
+  DB test added; the units are not yet installed on a server.
 - **2026-10-09** — `obehy release fetch`: newest (or named) `build-*` GitHub release, assets
   checked against GitHub's digests while streaming, packages against `release.json` and their
   manifests, unpacked atomically, three newest kept. Unit-tested with a fake GitHub; the real
