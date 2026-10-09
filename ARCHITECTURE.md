@@ -197,7 +197,7 @@ flowchart TB
   split -->|vehicle_assignment| vas[("rt.vehicle_assignment")]
   split -->|platform| arb
   comp --> dc[("rt.detail_cache")]
-  arb --> emit["emit tick<br/>GTFS-RT · trip state · history · checkpoint"]
+  arb --> emit["emit tick<br/>GTFS-RT · trip state · history"]
   vst --> vjson["vehicles.json"]
 ```
 

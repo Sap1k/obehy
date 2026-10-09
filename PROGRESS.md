@@ -176,13 +176,13 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
   except `release fetch`, which waits for the first GitHub Actions release (2026-10-07).
   Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
   report) done 2026-10-08. The core architecture is decided (2026-10-08, `BASE_PLAN.md`
-  sections 5, 18–22, 29–30); the next tickets are `BASE_PLAN.md` section 34 items 1–3:
-  - `realtime/times.py` with its scenario table. Known bug it fixes: `resolve.py`
-    `seconds_after_midnight` counts from midnight instead of noon − 12 h, so replay matching is
-    off by an hour on DST-change days;
-  - release index from `active.*` in PostgreSQL instead of pyarrow over Parquet, and
-    `rt replay --release` loading a non-retained release into a scratch database;
-  - model, clock, `core.step`, worker shell, checkpoint, `rt`/`history` migrations.
+  sections 5, 18–22, 29–30). The first slice (DÚK buses with history, warm-replay restart) is
+  fixed in `docs/R1_SLICE.md`; the next tickets are `BASE_PLAN.md` section 34 items 1–3:
+  - `realtime/times.py` with the T1–T15 table. Schedule times are wall-clock; JrUtil's
+    `serving-v5.json` time description still says noon − 12 h and needs correcting;
+  - `model.py`, the test timetable builder and the import-linter contract;
+  - release index from `active.*` in PostgreSQL, and `rt replay --release` loading a
+    non-retained release into a scratch database.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -216,6 +216,11 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-09** — `docs/R1_SLICE.md`: core types, time scenario table T1–T14, `rt`/`history`
+  DDL sketch, connector manifest and policy shapes, fixtures, R1 acceptance. Restart by warm
+  replay replaces the checkpoint; stable `tour_id` added to section 22. Docs only. Schedule times
+  are wall-clock (DST nights may be slightly wrong); nonexistent or skewed source times are
+  dropped, never guessed.
 - **2026-10-08** — `ARCHITECTURE.md` (Mermaid diagrams) and the remaining long-lived decisions
   (docs only).
   - Connector contract: polled channels and lazy lookups (`plan` → `fetch` → `decode`), run by

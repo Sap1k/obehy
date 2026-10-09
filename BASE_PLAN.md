@@ -167,7 +167,7 @@ realtime process are enough for one machine. Revisit only when measurements show
 
 - systemd units (or Docker Compose) on one server; reverse proxy for public endpoints;
 - one PostgreSQL server;
-- local filesystem directories for releases, the raw realtime archive and checkpoints;
+- local filesystem directories for releases and the raw realtime archive;
 - GTFS-RT files written atomically and served directly by the reverse proxy.
 
 ---
@@ -902,7 +902,7 @@ changes). Its manifest semantics must be backed by captured examples.
   SQL. Sharding the core by feed later needs no redesign.
 - An emit tick (default 10 s) writes GTFS-RT `.pb` files per feed by atomic rename, upserts
   changed rows of the UNLOGGED `rt.trip_state_current` (joined by the API with static
-  departures), and writes a state checkpoint.
+  departures).
 - The inference index is built in memory (plain dictionaries) from SQL queries over the
   `active.*` views, so the realtime core and the API see exactly the same static data and the
   same derived helpers (`service_date`). It is double-buffered and swapped between cycles when
@@ -914,7 +914,10 @@ changes). Its manifest semantics must be backed by captured examples.
   whose `release_id` matches the active publication, so a release swap never mixes releases.
 - Releases normally activate at night. A mid-day activation (a hotfix rerun) is allowed: every
   journey is re-snapshotted against the new release (section 29).
-- Restart loads the checkpoint and today's `rt.stop_event`, then resumes polling.
+- **Restart is a warm replay; there is no checkpoint format.** The worker loads the index,
+  re-runs the core over the stored observations of the last few hours (policy) with the replay
+  clock, then starts polling. Bindings are re-made from their keys, and the date rule (section
+  19.3) gives the same service date because it depends only on schedule and observation time.
 - Scale target: about 20k vehicles updating every 10–30 s, roughly 1–2k observations per second,
   handled by one Python process with in-memory indexes. Shard per feed only if measurements
   require it.
@@ -1046,12 +1049,19 @@ set of fixed rules with one implementation.
 
 ```text
 Instant       timezone-aware UTC instant
-ServiceTime   (service_date, seconds after noon − 12 h local time of that date)
+ServiceTime   (service_date, wall-clock seconds from local midnight of that date; ≥ 86400
+              continues into the next day)
 ```
 
-`ServiceTime` is exactly the contract's time encoding, so it is correct on DST days without
-special cases (on those days "noon − 12 h" is not midnight). Naive datetimes are banned
-(ruff `DTZ`).
+**Schedule times are wall-clock.** JrUtil writes what the timetable says: `05:00` means 05:00
+on the clock of that day, also on DST days. `times.py` converts a `ServiceTime` to an `Instant`
+by reading it as local wall time; a time in the repeated autumn hour takes the first
+occurrence, and a time in the skipped spring hour is read with the pre-change offset (one hour
+later on the clock). Trips in those hours rarely run as printed and operational changes on DST
+nights mostly never reach CIS, so being occasionally wrong there is accepted; there is no
+further special-casing. Durations always come from the converted instants, so a trip across the
+change gets its real length. Naive datetimes are banned (ruff `DTZ`), and arithmetic is done on
+UTC instants only.
 
 **Operating date.** Practically no provider sends the operating date, so date inference is core:
 
@@ -1068,10 +1078,16 @@ special cases (on those days "noon − 12 h" is not midnight). Naive datetimes a
 
 **Source local times.** A source time without an offset is resolved against `received_at`: the
 unique instant within ±12 h of reception that reads as that local time and is closest to
-`received_at`. This handles the repeated hour at the autumn change and the missing hour in
-spring. Mislabelled source timezones (Teplice `GPSPositionDT` is UTC labelled `+02:00`; Arriva
+`received_at`. This handles the repeated hour at the autumn change; a local time that does not exist (the
+skipped spring hour) is rejected and the observation is treated as untimed. Mislabelled source timezones (Teplice `GPSPositionDT` is UTC labelled `+02:00`; Arriva
 `updated` is local time labelled UTC) are corrected in the connector and recorded in the
 dossier's quirk ledger.
+
+**Clock sanity, not clock cleverness.** Around DST changes source clocks switch late or
+inconsistently (a corrected `+02:00` label turns into `+01:00`; correctly labelled vehicles lag
+behind). The connector does not try to guess offsets: a source time further from `received_at`
+than the policy skew limit (`time.max_clock_skew`) is dropped and the observation is treated as
+untimed for that poll (section 19.6).
 
 **Service date everywhere.** Instances, history partitions, `vehicle_day` and departure queries
 are keyed by service date, never by the UTC or local calendar date: a 00:30 night trip belongs to
@@ -1427,6 +1443,13 @@ train numbers (section 28). For each vehicle and service
 date (section 19.3) it records the ordered journeys (section 29), with actual start and end times
 and locations, layovers and gaps. Weak inferences never enter it, so they cannot feed their own
 prior.
+
+**Tour identity.** A tour is a plan keyed by journey keys; a vehicle is never part of it, so a
+vehicle can work a different oběh every day and a mid-day swap changes only the live binding.
+`tour_id` is opaque and stable: rosters and blocks keep their own names (`roster:<dataset>:<name>`,
+`block:<key>`); a learned chain is `learned:<feed>:<day_class>:<first journey key>`, renewed when
+its first journey changes. The nightly job sets `vehicle_day.tour_id` with `tour_match_share` (the
+share of the day's journeys that follow the tour), so per-oběh history is one query.
 
 **Learned layer (successor edges).** Each edge reads "after journey key A, this vehicle usually
 does key B next":
@@ -1977,7 +2000,8 @@ Recorder, raw archive, replay and evaluate; observation model and core loop; inf
 with exact and inferred paths and date inference; rail runs; timeline engine with progress
 integrity; arbitration; per-feed GTFS-RT emitters; debug endpoints.
 
-Exit: all scenario tables pass; replay is byte-deterministic.
+Exit: the first slice (DÚK buses with history) meets the acceptance list in
+`docs/R1_SLICE.md`: all scenario tables pass and replay is byte-deterministic.
 
 ## Milestone R2 — DÚK and SŽ
 
@@ -2031,29 +2055,31 @@ propagation without circulations.
 Done: recorder and dossiers, serving schema 5, database foundation, `release load|activate
 --rollback`, replay over Parquet. Next:
 
-1. `realtime/times.py` (section 19.3) with its scenario table; the replay resolver moves onto it,
-   which fixes its midnight-based counting on DST days.
-2. Release index from `active.*` in PostgreSQL; `rt replay --release` loads a non-retained
-   release into a scratch database. Import-linter layering contract in CI.
-3. Realtime skeleton: model, clock, `core.step`, worker shell, checkpoint file, `rt` and
-   `history` migrations, `release_id` on every row.
-4. Keyed inference: `TripKey`, operating-date and time-window scorers, decision rule,
-   explanations, rail runs.
+The first slice is DÚK buses with history; its types, time table, DDL, manifests and acceptance
+are fixed in `docs/R1_SLICE.md`.
+
+1. `realtime/times.py` (section 19.3) with its scenario table.
+2. `realtime/model.py`, the test timetable builder, import-linter layering contract in CI.
+3. Release index from `active.*` in PostgreSQL; `rt replay --release` loads a non-retained
+   release into a scratch database.
+4. `core.step` with keyed binding, operating-date and time-window scorers, explanations.
 5. Timeline engine: intervals, delay semantics, propagation, lifecycle and off-route (section
    20.7), progress integrity, conflicts, predictions, arbitration, monotone repair.
-6. DÚK connector and per-feed GTFS-RT emitters with debug endpoints; journey snapshots and
-   actual events in `history`.
-7. SŽ connectors and rail fusion with DÚK (section 20.6).
-8. `release fetch`; project API with realtime departures and vehicles.
-9. PID: Golemio APIs and GTFS-RT alerts.
-10. Arriva Express: keyless inference, own GPS delay, travel-time provider interface.
-11. Circulation learning v1 (`vehicle_day`, `circulation_edge`).
-12. Frontend in `web/` with per-release PMTiles.
+6. Emitters and the `rt` and `history` migrations: per-feed GTFS-RT, state rows, journey
+   snapshots and actual events, `release_id` on every row.
+7. DÚK connector manifest, worker with poll scheduler and warm replay; the slice acceptance.
+   `resolve.py` and `episodes.py` are retired.
+8. DÚK trains and SŽ connectors, rail fusion (section 20.6): the R2 slice.
+9. `release fetch`; project API with realtime departures and vehicles.
+10. PID: Golemio APIs and GTFS-RT alerts.
+11. Arriva Express: keyless inference, own GPS delay, travel-time provider interface.
+12. Circulation learning v1 (`vehicle_day`, `circulation_edge`, `tour_id`).
+13. Frontend in `web/` with per-release PMTiles.
 
 The first end-to-end success is:
 
 ```text
-one DÚK bus and one DÚK/SŽ train
+one DÚK bus (R1), then one DÚK/SŽ train (R2)
  -> resolved against the active release of their feeds
  -> per-call actuals and predictions with explained evidence
  -> emitted in valid per-feed GTFS-RT and the project API
