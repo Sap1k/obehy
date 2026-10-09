@@ -139,6 +139,7 @@ class Reason(StrEnum):
     NOT_IN_SERVICE = "not_in_service"
     AMBIGUOUS = "ambiguous"
     UNTIMED = "untimed"
+    STALE_KEY = "stale_key"
 
 
 BindingMethod = Literal["keyed"]

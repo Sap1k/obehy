@@ -224,6 +224,12 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-10** — First live day exposed DUK-Q14/Q15: a bus in the depot in State 3 with its
+  evening trip's key got that trip predicted 113 min late from DÚK's pre-departure `Delay`.
+  Source delay is now ignored before departure, and a pre-departure key after the trip's
+  scheduled end is `stale_key` (unbound, unstarted journey dropped). Pinned corpus: 15,666
+  observations newly `stale_key`, running match rates unchanged, GTFS-RT check clean, golden
+  digests regenerated.
 - **2026-10-09** — Server image (`Dockerfile`, built and pushed to GHCR by CI on green main, with
   a smoke test) and `deploy/compose.yaml`: PostGIS, migrate, hourly release update, realtime
   worker, nightly jobs at 03:30, Caddy serving the GTFS-RT and the active `gtfs.zip`. Replaces

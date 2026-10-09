@@ -205,6 +205,8 @@ Each quirk is handled where stated and has a scenario test named after its ID
 | DUK-Q11 | one trip claimed by two vehicles at once (mostly PID `100xxx` detour trips) | both bind the instance (section 19.5); one position per feed by arbitration |
 | DUK-Q12 | DPmÚL and Teplice vehicles never send `ArrivalDT` | arrivals come from GPS progress only |
 | DUK-Q13 | `Azimut` is exactly 0 in about 5 % of entries, often while the vehicle moves | 0 is read as no bearing; progress uses bearing only when present |
+| DUK-Q14 | in State 2/3, `Delay` is the time since the trip's scheduled departure, growing while the vehicle stands (vehicle 171, 2026-10-09: `582480:140` of 21:59 in the depot at 23:52, `Delay` 113) | source delay ignored until the trip starts |
+| DUK-Q15 | State 2/3 with a trip key whose scheduled end has passed: a stale key from the depot (same vehicle) | `stale_key`: not bound, and a journey that never started is dropped; a running vehicle keeps the late-running window |
 
 ## Open questions
 

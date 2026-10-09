@@ -7,6 +7,8 @@ Binding continuity (section 19.5): an observation with the key of its current bi
 that journey, and its service date is never re-derived, until the time leaves the journey's
 admissible window. Then the binding ends, and only a new admissible journey for the key binds
 again (DUK-Q4: yesterday's key in the morning is `not_in_service`, never an extended trip).
+A key reported before departure after the trip's scheduled end is stale (DUK-Q15): the journey
+never started and the delay window for late running does not apply.
 """
 
 from __future__ import annotations
@@ -82,6 +84,9 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     binding = _continued(previous, key, observation, state, ctx)
     if binding is None:
         result = bind(key, observation.at, ctx.index, ctx.policy)
+        if isinstance(result, Match) and _stale(result, observation):
+            _drop_unstarted(state, result.journey, vehicle)
+            result = Reason.STALE_KEY
         if not isinstance(result, Match):
             status: VehicleStatus = (
                 "not_in_service" if result is Reason.NOT_IN_SERVICE else "unmatched"
@@ -184,7 +189,32 @@ def _continued(
         return None
     trip = ctx.index.trip(binding.trip_id)
     match = Match(binding.journey, trip, *span(trip, binding.journey))
-    return binding if in_window(match, observation.at, ctx.policy) else None
+    if not in_window(match, observation.at, ctx.policy) or _stale(match, observation):
+        return None
+    return binding
+
+
+def _stale(match: Match, observation: Observation) -> bool:
+    """A pre-departure report after the trip's scheduled end (DUK-Q15)."""
+
+    source = observation.first(SourceState)
+    return source is not None and source.code == SOURCE_PRE_TRIP and observation.at > match.end
+
+
+def _drop_unstarted(state: FeedState, journey: JourneyKey, vehicle: VehicleId) -> None:
+    """Forget a journey that never started once its only vehicle's key turns out stale."""
+
+    instance = state.instances.get(journey)
+    if instance is None or instance.progress is not None or instance.lifecycle == "finished":
+        return
+    others = [
+        v
+        for v, current in state.vehicles.items()
+        if v != vehicle and current.binding is not None and current.binding.journey == journey
+    ]
+    if not others:
+        del state.instances[journey]
+        state.dirty.discard(journey)
 
 
 def _open(state: FeedState, match: Match, ctx: Context, observation: Observation) -> list[Effect]:
