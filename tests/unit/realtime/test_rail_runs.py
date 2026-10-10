@@ -164,6 +164,8 @@ def test_gtfs_rt_has_a_trip_update_per_part_without_railway_points() -> None:
     assert second[0].HasField("departure") and not second[0].HasField("arrival")
     (vehicle,) = [e.vehicle for e in message.entity if e.HasField("vehicle")]
     assert vehicle.trip.trip_id == "czptt:trip:PA1:1"
+    assert vehicle.vehicle.id.startswith("train-") and vehicle.vehicle.label == "106006"
+    assert {u.vehicle.id for u in updates.values()} == {vehicle.vehicle.id}
 
 
 def test_two_versions_of_one_part_running_the_same_day_are_ambiguous() -> None:

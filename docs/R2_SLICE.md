@@ -47,6 +47,7 @@ it already has (no extra input):
 | Journey (public, history) | `JourneyKey(czptt, czptt:train_number, tn, service_date)` | One per train number over the run's parts. |
 | Number change | `journey_link(kind = continues_as)` | Example: TL 106006 → 6006. Two journeys, one run instance. |
 | Output | GTFS-RT per passenger trip part (`trip_id`, the part's own `stop_sequence`) | Operational points are never exported. |
+| Train vehicle | One VehiclePosition per run: opaque `train-<hash>` ID, train-number label | Coupled DÚK units and the SŽ entry are one train; the position is the lead of the source fusion tracks. |
 
 - **The run plan** concatenates the parts' calls in `run_part` order: passenger calls and
   operational points, with the junction call shared by consecutive parts merged. CZPTT has no

@@ -250,7 +250,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   - Station boards read on demand (about 64/min nationally at noon, 60/min ceiling) give
     platforms; only tracks reach GTFS-RT.
   - Fixed replay tagging every poll with the last channel when replaying several.
-  - Validated: 280 unit + 39 DB tests, JrUtil 313 tests, the DÚK golden corpus unchanged, a 2 h
+  - A train is one GTFS-RT vehicle (opaque per-run ID, train-number label), not one per
+    coupled DÚK unit plus SŽ.
+  - Validated: 283 unit + 39 DB tests, JrUtil 313 tests, the DÚK golden corpus unchanged, a 2 h
     rail replay clean. Open: the R2 corpus and acceptance.
 - **2026-10-10** — `docs/R2_SLICE.md` (rail slice contract) and `docs/sources/sz-tabule.md`
   (SŽ station boards, probed by hand: one request per station, about 20 arrivals and 20

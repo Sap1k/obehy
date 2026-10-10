@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from obehy.realtime.core import Context, estimate_all, refresh, step
+from obehy.realtime.emit.gtfs_rt import feed_message, run_vehicle_id
 from obehy.realtime.index import Index
 from obehy.realtime.manifest import semantics_by_channel
 from obehy.realtime.model import (
@@ -68,10 +69,10 @@ def _sz(at: str, *facts: Fact) -> Observation:
     )
 
 
-def _duk(at: str, x: float) -> Observation:
+def _duk(at: str, x: float, unit: str = "950") -> Observation:
     when = local(at)
     facts: tuple[Fact, ...] = (
-        VehicleKey("950"),
+        VehicleKey(unit),
         TripKey("czptt:train_number", "100"),
         Position(lat=ORIGIN[1], lon=ORIGIN[0] + x * STEP_LON),
     )
@@ -190,6 +191,32 @@ def test_r14_fresh_gps_leads_the_position() -> None:
         _sz("2026-10-08 08:05:00", sz_fix),  # DÚK silent for longer than position_fresh_s
     )
     assert later.instances[PA].track_source == "sz-mapa"
+
+
+def test_a_train_is_one_vehicle_however_many_report_it() -> None:
+    sz_fix = Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.9 * STEP_LON)
+    state, _, _ = _run(
+        _index(),
+        _duk("2026-10-08 08:00:30", 0.2),
+        _duk("2026-10-08 08:00:35", 0.21, unit="951"),  # the coupled unit
+        _sz("2026-10-08 08:01:00", sz_fix),
+        _duk("2026-10-08 08:01:30", 0.4),
+    )
+    message = feed_message(state, local("2026-10-08 08:02"))
+    (entity,) = [e for e in message.entity if e.HasField("vehicle")]
+    assert entity.vehicle.vehicle.id == run_vehicle_id(PA) == entity.id.removeprefix("vehicle:")
+    assert entity.vehicle.vehicle.label == "100"
+    assert abs(entity.vehicle.position.longitude - (ORIGIN[0] + 0.4 * STEP_LON)) < 1e-5  # DÚK lead
+    later, _, _ = _run(
+        _index(),
+        _duk("2026-10-08 08:00:30", 0.2),
+        _sz("2026-10-08 08:05:00", sz_fix),  # DÚK silent: the SŽ position, same vehicle
+    )
+    (entity,) = [
+        e for e in feed_message(later, local("2026-10-08 08:05")).entity if e.HasField("vehicle")
+    ]
+    assert entity.vehicle.vehicle.id == run_vehicle_id(PA)
+    assert abs(entity.vehicle.position.longitude - sz_fix.lon) < 1e-5
 
 
 def test_r6_a_run_is_stale_only_when_every_source_is_silent() -> None:
