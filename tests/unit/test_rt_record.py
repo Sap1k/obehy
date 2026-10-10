@@ -71,7 +71,8 @@ def test_shipped_manifests_load() -> None:
     assert duk.core_semantics == SourceSemantics(
         pre_trip_delay_is_elapsed=True, pre_trip_after_end_is_stale=True
     )
-    assert arriva.core_semantics == sz.core_semantics == SourceSemantics()
+    assert arriva.core_semantics == SourceSemantics()
+    assert sz.core_semantics == SourceSemantics(unchanged_entry_is_no_news=True)  # SZ-Q6
 
 
 CHANNEL = (

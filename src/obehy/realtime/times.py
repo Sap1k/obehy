@@ -85,6 +85,17 @@ def resolve_local(wall: datetime, received_at: Instant) -> Instant | None:
     return _closest(_readings(wall), received_at)
 
 
+def read_local(text: str, layout: str, received_at: Instant) -> Instant | None:
+    """A source's local date-time text in `strptime` layout (SZ-Q2: `md`), resolved like
+    `resolve_local`; None if it does not parse or does not exist."""
+
+    try:
+        wall = datetime.strptime(text.strip(), layout)  # noqa: DTZ007 - local, resolved below
+    except ValueError:
+        return None
+    return resolve_local(wall, received_at)
+
+
 def resolve_clock(clock: time, received_at: Instant) -> Instant | None:
     """A bare local time of day (`HH:mm`): the reading within 12 h of `received_at` closest to
     it, or None if no such reading exists."""

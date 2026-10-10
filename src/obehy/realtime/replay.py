@@ -4,8 +4,10 @@ Polls of the selected channels are merged in reception order, decoded by their c
 through the same `Runner` as the worker. Housekeeping ticks fall on fixed multiples of the emit
 interval, so output never depends on when the replay runs. Outputs:
 
-- `report.json`: decode counts, results by reason, and per DÚK fleet the share of running
-  key groups (vehicle, trip key, local day) that bound to a journey;
+- `report.json`: decode counts, results by reason, and per DÚK fleet (per source otherwise) the
+  share of running key groups (vehicle, trip key, local day) that bound to a journey; with the
+  rail feed also names that could not be placed (SŽ points, board rows) and the shadow error of
+  each rail predictor (`evaluate.py`);
 - `gtfs-rt/<feed>/<UTC time>.pb` every `gtfs_rt_every_s` simulated seconds, if asked;
 - with `write_history`, `rt.observation` and history rows for the replayed days (rebuilt).
 """
@@ -30,6 +32,7 @@ from obehy.realtime.archive import ArchivedPoll, iter_polls
 from obehy.realtime.core import CORE_VERSION, estimate_all
 from obehy.realtime.emit.db import Writer, clear_observations
 from obehy.realtime.emit.gtfs_rt import feed_message
+from obehy.realtime.evaluate import SAMPLE_EVERY, PredictorLog
 from obehy.realtime.index_sql import ReleaseLoads, ensure_release
 from obehy.realtime.model import (
     Derivation,
@@ -39,19 +42,23 @@ from obehy.realtime.model import (
     ObservationResult,
     SourceState,
     TripKey,
+    Unresolved,
     VehicleKey,
 )
 from obehy.realtime.policy import Policy
 from obehy.realtime.runner import Runner
-from obehy.realtime.sources import duk
+from obehy.realtime.sources import duk, sz
 from obehy.realtime.times import Instant, instant, local_date
 
 REPORT_SCHEMA_VERSION = 2
 LOOKAHEAD_POLLS = 40
-SOURCES = ("duk",)
+SOURCES = ("duk", "sz-mapa")
 
 Decoder = Callable[[bytes, str, Instant, timedelta], list[Observation]]
-DECODERS: dict[tuple[str, str], Decoder] = {(duk.SOURCE, duk.CHANNEL): duk.decode}
+DECODERS: dict[tuple[str, str], Decoder] = {
+    (duk.SOURCE, duk.CHANNEL): duk.decode,
+    (sz.SOURCE, sz.CHANNEL): sz.decode,
+}
 
 
 class ReplayError(RuntimeError):
@@ -81,14 +88,17 @@ class _Stats:
     observations: int = 0
 
 
+def _stream(
+    options: ReplayOptions, source: str, channel: str
+) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
+    for poll in iter_polls(options.archive, source, channel, options.start, options.end):
+        yield poll.received_at, source, channel, poll
+
+
 def _polls(options: ReplayOptions) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
-    streams = [
-        (
-            (poll.received_at, source, channel, poll)
-            for poll in iter_polls(options.archive, source, channel, options.start, options.end)
-        )
-        for source, channel in sorted(options.channels)
-    ]
+    # One generator function per channel: a generator expression here would read the loop's
+    # last (source, channel) for every stream.
+    streams = [_stream(options, source, channel) for source, channel in sorted(options.channels)]
     return heapq.merge(*streams, key=lambda item: (item[0], item[1], item[2]))
 
 
@@ -117,7 +127,9 @@ def replay(
     stats: dict[str, _Stats] = defaultdict(_Stats)
     groups: dict[tuple[str, str, Any, date], bool] = {}
     reasons: Counter[str] = Counter()
-    clock = _Clock(runner, options, policy.emit_tick_s)
+    unresolved: Counter[str] = Counter()
+    predictors = PredictorLog() if "czptt" in runner.runtimes else None
+    clock = _Clock(runner, options, policy.emit_tick_s, predictors)
     last: Instant | None = None
     for chunk in batched(_decoded(options, policy, stats), LOOKAHEAD_POLLS, strict=False):
         # Load the static data of the next polls' keys in one round trip set.
@@ -126,11 +138,14 @@ def replay(
             clock.advance(at)
             if observations is None:
                 continue
-            _count(runner.process(observations), groups, reasons)
+            _count(runner.process(observations), groups, reasons, unresolved)
             last = at
     if last is not None:
         _finish(runner, last, writer)
     document = _report(loads, options, stats, groups, reasons, runner.skipped)
+    if predictors is not None:
+        document["unresolved"] = dict(sorted(unresolved.items()))
+        document["predictors"] = predictors.report()
     options.out.mkdir(parents=True, exist_ok=True)
     with atomic_output_path(options.out / "report.json") as temporary:
         temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", "utf-8")
@@ -141,12 +156,20 @@ class _Clock:
     """The simulated clock: emit ticks every `tick_s` and GTFS-RT snapshots every
     `gtfs_rt_every_s`, on round multiples, run before the first observation after them."""
 
-    def __init__(self, runner: Runner, options: ReplayOptions, tick_s: int) -> None:
+    def __init__(
+        self,
+        runner: Runner,
+        options: ReplayOptions,
+        tick_s: int,
+        predictors: PredictorLog | None = None,
+    ) -> None:
         self.runner = runner
         self.options = options
         self.tick_s = tick_s
+        self.predictors = predictors
         self.next_tick: Instant | None = None
         self.next_snapshot: Instant | None = None
+        self.next_sample: Instant | None = None
 
     def advance(self, at: Instant) -> None:
         every = self.options.gtfs_rt_every_s
@@ -154,8 +177,15 @@ class _Clock:
             self.next_tick = _next_tick(at, self.tick_s)
             if every:
                 self.next_snapshot = _next_tick(at, every)
+            if self.predictors is not None:
+                self.next_sample = _next_tick(at, int(SAMPLE_EVERY.total_seconds()))
         while self.next_tick <= at:
             self.runner.tick(self.next_tick, emit=False)
+            if self.next_sample is not None and self.next_sample <= self.next_tick:
+                rail = self.runner.runtimes["czptt"]
+                assert self.predictors is not None
+                self.predictors.sample(rail.state, rail.ctx.index, self.next_sample)
+                self.next_sample = instant(self.next_sample + SAMPLE_EVERY)
             if self.next_snapshot is not None and self.next_snapshot <= self.next_tick:
                 _snapshot(self.options, self.runner, self.next_snapshot)
                 self.next_snapshot = instant(self.next_snapshot + timedelta(seconds=every or 0))
@@ -236,8 +266,12 @@ def _count(
     effects: Sequence[Effect],
     groups: dict[tuple[str, str, Any, date], bool],
     reasons: Counter[str],
+    unresolved: Counter[str],
 ) -> None:
     for effect in effects:
+        if isinstance(effect, Unresolved):
+            unresolved[f"{effect.observation.source}/{effect.kind}"] += 1
+            continue
         if not isinstance(effect, ObservationResult):
             continue
         obs = effect.observation

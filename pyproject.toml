@@ -8,6 +8,7 @@ dependencies = [
   "gtfs-realtime-bindings>=3.0.0",
   "psycopg[binary]>=3.3,<4",
   "pyarrow>=25,<26",
+  "pyproj>=3.7,<4",
   "rich>=14,<15",
   "shapely>=2.1,<3",
   "zstandard>=0.23,<1",
@@ -78,6 +79,7 @@ source_modules = [
     "obehy.realtime.policy",
     "obehy.realtime.model_json",
     "obehy.realtime.runs",
+    "obehy.realtime.evaluate",
 ]
 forbidden_modules = [
     "psycopg",

@@ -38,7 +38,6 @@ from obehy.realtime.model import (
     Freshness,
     Instance,
     JourneyKey,
-    Lead,
     Observation,
     ObservationResult,
     Position,
@@ -55,7 +54,8 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.policy import Policy
 from obehy.realtime.runs import journey_spans, part_spans, snapshots
-from obehy.realtime.timeline.estimate import estimate
+from obehy.realtime.timeline.estimate import estimate, monotone
+from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, lead_of, with_lead
 from obehy.realtime.timeline.plan import PlanCache
 from obehy.realtime.timeline.progress import past_first_stop
 from obehy.realtime.times import PRAGUE, Instant
@@ -127,7 +127,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     trip = ctx.index.trip(binding.trip_id)
     instance = state.instances[binding.journey]
     if _leads(instance, vehicle, observation, ctx.policy):
-        instance = replace(instance, lead=Lead(vehicle, observation.at))
+        instance = with_lead(instance, vehicle, observation)
         instance = _lifecycle(instance, trip, observation, span(trip, binding.journey)[0], ctx)
         instance, timeline_effects = timeline.advance(
             instance,
@@ -172,7 +172,18 @@ def estimate_all(state: FeedState, ctx: Context) -> None:
             continue
         trip = ctx.index.trip(instance.trip_id)
         plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
-        state.instances[journey] = estimate(instance, plan.scheduled, ctx.policy.prediction)
+        if trip.run_key is None:  # not a rail run (a CZPTT run may start as a bus)
+            state.instances[journey] = estimate(instance, plan.scheduled, ctx.policy.prediction)
+            continue
+        predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)
+        estimated = estimate(
+            instance,
+            plan.scheduled,
+            ctx.policy.prediction,
+            current=current_lateness(instance),
+            anchor=predictor,
+        )
+        state.instances[journey] = monotone(estimated)
     state.dirty.clear()
 
 
@@ -210,10 +221,11 @@ def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
 def _leads(
     instance: Instance, vehicle: VehicleId, observation: Observation, policy: Policy
 ) -> bool:
-    """Whether this vehicle drives the journey's timeline: it is the lead, there is none, or the
-    lead has gone stale. One timeline never mixes two vehicles' fixes (DUK-Q11)."""
+    """Whether this vehicle drives its source's contribution to the journey: it is that
+    source's lead, there is none, or the lead has gone stale. One source never mixes two
+    vehicles' fixes (DUK-Q11); different sources are fused (`timeline.fusion`)."""
 
-    lead = instance.lead
+    lead = lead_of(instance, vehicle.source)
     if lead is None or lead.vehicle == vehicle:
         return True
     stale_after = timedelta(seconds=policy.lifecycle.stale_after_s(instance.mode))

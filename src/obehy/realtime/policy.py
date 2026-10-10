@@ -92,6 +92,30 @@ class EgressPolicy:
     cooldown_s: int  # how long a proxy that failed or was refused stays out of rotation
 
 
+PREDICTORS = ("anchor_change", "sz", "propagate")
+
+
+@dataclass(frozen=True, slots=True)
+class RailPolicy:
+    """Fusing several sources on one rail run (docs/R2_SLICE.md section 5)."""
+
+    # Sources whose positions lead, best first; a source not listed never leads over a listed.
+    position_preference: tuple[str, ...]
+    # A preferred source's position stays the lead this long after its last fix.
+    position_fresh_s: int
+    # How far a source's fix may lie from the path (one standard deviation), by source.
+    position_sigma_m: ByMode
+    # A crossing measured from positions more than this outside a source's point event (a
+    # minute) loses to it; within it the two are intersected.
+    event_tolerance_s: int
+    # Forward prediction: anchor_change, sz (the source's own) or propagate.
+    predictor: str
+
+    def rank(self, source: str) -> int:
+        order = self.position_preference
+        return order.index(source) if source in order else len(order)
+
+
 @dataclass(frozen=True, slots=True)
 class Policy:
     version: str
@@ -104,6 +128,7 @@ class Policy:
     emit_tick_s: int
     observation_retention_days: int
     egress: EgressPolicy
+    rail: RailPolicy
 
 
 class _Table:
@@ -163,6 +188,34 @@ class _Table:
         return cls(**values)
 
 
+def _rail(table: _Table) -> RailPolicy:
+    known = {
+        "position_preference",
+        "position_fresh_s",
+        "position_sigma_m",
+        "event_tolerance_s",
+        "predictor",
+    }
+    unknown = sorted(set(table.data) - known)
+    if unknown:
+        raise PolicyError(f"unknown {table.path}{unknown[0]}")
+    order = table.data.get("position_preference")
+    if not isinstance(order, list) or not all(
+        isinstance(v, str) and v for v in cast(list[object], order)
+    ):
+        raise PolicyError(f"{table.path}position_preference must be a list of source names")
+    predictor = table.text("predictor")
+    if predictor not in PREDICTORS:
+        raise PolicyError(f"{table.path}predictor must be one of {PREDICTORS}")
+    return RailPolicy(
+        position_preference=tuple(cast(list[str], order)),
+        position_fresh_s=table.integer("position_fresh_s"),
+        position_sigma_m=table.by_mode("position_sigma_m"),
+        event_tolerance_s=table.integer("event_tolerance_s"),
+        predictor=predictor,
+    )
+
+
 def parse_policy(document: dict[str, Any]) -> Policy:
     root = _Table(document, "")
     return Policy(
@@ -176,6 +229,7 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         emit_tick_s=root.table("emit").integer("tick_s"),
         observation_retention_days=root.table("retention").integer("observation_days"),
         egress=root.section("egress", EgressPolicy),
+        rail=_rail(root.table("rail")),
     )
 
 

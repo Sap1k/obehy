@@ -58,10 +58,20 @@ def _current_lateness(instance: Instance) -> tuple[timedelta | None, SourceClass
     return None, None
 
 
-def estimate(instance: Instance, scheduled: Scheduled, policy: PredictionPolicy) -> Instance:
-    """Per-call estimates; computed when state is emitted, not on every fix."""
+def estimate(
+    instance: Instance,
+    scheduled: Scheduled,
+    policy: PredictionPolicy,
+    *,
+    current: tuple[timedelta | None, SourceClass | None] | None = None,
+    anchor: tuple[int, timedelta] | None = None,
+) -> Instance:
+    """Per-call estimates; computed when state is emitted, not on every fix.
 
-    lateness, delay_class = _current_lateness(instance)
+    Rail runs pass the fused current lateness and, from a source's prediction, the lateness at
+    one call ahead (`anchor`) from which propagation continues (`timeline.fusion`)."""
+
+    lateness, delay_class = current if current is not None else _current_lateness(instance)
     reached = instance.progress.call_index if instance.progress is not None else -1
     # A call with a crossing means every earlier call was passed, observed or not.
     for i, state in enumerate(instance.calls):
@@ -80,10 +90,13 @@ def estimate(instance: Instance, scheduled: Scheduled, policy: PredictionPolicy)
             est_arr = _passed(state.passed_arrival, state.arrival)
             est_dep = _passed(state.passed_departure, state.departure)
             status: CallStatus = "actual" if recorded else "inferred"
-            if est_dep is None and i < last and not finished and lateness is not None:
-                # Arrived, not yet left: the departure is still a prediction.
+            waiting = i > reached  # behind the last call left, its departure is just unknown
+            if est_dep is None and i < last and waiting and not finished and lateness is not None:
+                # Arrived, not yet left: the departure is still a prediction, never before the
+                # arrival (a source's arrival can be later than the last fix).
+                leave_floor = floor if est_arr is None or (floor and floor > est_arr) else est_arr
                 est_dep, lateness = _departure(
-                    est_arr, sched_arr, sched_dep, lateness, floor, instance.mode, policy
+                    est_arr, sched_arr, sched_dep, lateness, leave_floor, instance.mode, policy
                 )
             calls.append(_call(state, est_arr, est_dep, status, "gps"))
             latest = est_dep or est_arr
@@ -94,6 +107,8 @@ def estimate(instance: Instance, scheduled: Scheduled, policy: PredictionPolicy)
         elif lateness is None:
             calls.append(_call(state, None, None, "scheduled", None))
         else:
+            if anchor is not None and anchor[0] == i:
+                lateness = anchor[1]
             est_arr = _shifted(sched_arr, lateness, floor)
             if est_arr is not None:
                 floor = est_arr
@@ -103,6 +118,29 @@ def estimate(instance: Instance, scheduled: Scheduled, policy: PredictionPolicy)
             if est_dep is not None:
                 floor = est_dep
             calls.append(_call(state, est_arr, est_dep, "predicted", delay_class))
+    return replace(instance, calls=tuple(calls))
+
+
+def monotone(instance: Instance) -> Instance:
+    """The final monotone repair (BASE_PLAN.md 20.6): emitted times never decrease along the
+    trip. Sources measured to a minute and positions can disagree by seconds; the later time
+    holds. Recorded events in history are left as they are."""
+
+    latest: Instant | None = None
+    calls: list[CallState] = []
+    for state in instance.calls:
+        arrival, departure = state.estimated_arrival, state.estimated_departure
+        if arrival is not None:
+            if latest is not None and arrival < latest:
+                arrival = latest
+            latest = arrival
+        if departure is not None:
+            if latest is not None and departure < latest:
+                departure = latest
+            latest = departure
+        if (arrival, departure) != (state.estimated_arrival, state.estimated_departure):
+            state = replace(state, estimated_arrival=arrival, estimated_departure=departure)
+        calls.append(state)
     return replace(instance, calls=tuple(calls))
 
 

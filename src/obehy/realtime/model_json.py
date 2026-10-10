@@ -59,11 +59,11 @@ def fact_to_json(fact: Fact) -> Json:
             return {"t": "next_stop", "call": call_ref}
         case ServiceDay(day):
             return {"t": "service_day", "day": day.isoformat()}
-        case PointEvent(name, sr70, scheduled, actual, standing):
+        case PointEvent(name, codes, scheduled, actual, standing):
             return {
                 "t": "point_event",
                 "name": name,
-                "sr70": sr70,
+                "codes": list(codes),
                 "scheduled": _iso(scheduled),
                 "lo": actual.lo.isoformat(),
                 "hi": actual.hi.isoformat(),
@@ -121,7 +121,7 @@ def fact_from_json(data: Json) -> Fact:
         case "point_event":
             return PointEvent(
                 str(data["name"]),
-                _text(data.get("sr70")),
+                tuple(str(code) for code in cast(list[Any], data["codes"])),
                 _instant(data.get("scheduled")),
                 Interval(_at(data["lo"]), _at(data["hi"])),
                 bool(data["standing"]),

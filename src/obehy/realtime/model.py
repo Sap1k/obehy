@@ -75,6 +75,8 @@ class SourceSemantics:
     pre_trip_delay_is_elapsed: bool = False
     # A pre-trip key after the trip's scheduled end is left over from an earlier trip (DUK-Q15).
     pre_trip_after_end_is_stale: bool = False
+    # A vehicle's entry repeated unchanged is no news: no fix, no event, no freshness (SZ-Q6).
+    unchanged_entry_is_no_news: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,11 +112,12 @@ class ServiceDay:
 @dataclass(frozen=True, slots=True)
 class PointEvent:
     """The last railway point the source reports the train reached or passed (SŽ `cna`): its
-    name, its SR70 code if the connector resolved the name, the timetabled time and when it
-    happened (a minute: `[T, T + 59 s]`); `standing` while the train stands there."""
+    name, the SR70 codes (5 digits) the catalogue gives that name, the timetabled time and when
+    it happened (a minute: `[T, T + 59 s]`); `standing` while the train stands there. Several
+    codes share some names (SZ-Q4); the run's calls decide which is meant."""
 
     name: str
-    sr70: str | None
+    codes: tuple[str, ...]
     scheduled: Instant | None
     actual: Interval
     standing: bool
@@ -412,9 +415,13 @@ class SourceTrack:
     next_point: NextPoint | None = None
     delay_s: int | None = None
     delay_at: Instant | None = None
+    delay_reference: DelayReference | None = None  # `point` once it gave a point delay
     prediction: NextStopPrediction | None = None
     point: int | None = None  # index of the last call the source placed the train at
     position_at: Instant | None = None  # when it last gave a usable new position
+    # The vehicle leading this source's contributions (DUK-Q11 per source); the instance's own
+    # `lead` is the first source's.
+    lead: Lead | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,6 +444,7 @@ class Instance:
     journeys: tuple[JourneySpan, ...] = ()
     parts: tuple[PartSpan, ...] = ()
     sources: tuple[SourceTrack, ...] = ()
+    track_source: str | None = None  # the source of the tracker's last fix
 
     def source_track(self, source: str) -> SourceTrack | None:
         for track in self.sources:
@@ -563,8 +571,25 @@ class ObservationResult:
     public: tuple[JourneyKey, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class Unresolved:
+    """Diagnostics: a source named something the run could not place (an SŽ point name, a
+    board row's call); counted by replay, never stored."""
+
+    observation: Observation
+    # point: names no call of the run ahead; inconsistent: contradicts the run's other events
+    kind: Literal["point", "inconsistent", "platform"]
+    name: str
+
+
 Effect = (
-    SnapshotJourney | WriteEvent | AssignVehicle | ObservationResult | LinkJourneys | RecordPlatform
+    SnapshotJourney
+    | WriteEvent
+    | AssignVehicle
+    | ObservationResult
+    | LinkJourneys
+    | RecordPlatform
+    | Unresolved
 )
 
 

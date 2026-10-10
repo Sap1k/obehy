@@ -69,7 +69,12 @@ def update(
         return _unmatched(track, at, policy)
 
     beam = _prune(extended, policy)
-    committed_m = track.committed_m if live and track is not None else _first_floor(beam)
+    # A restart never commits behind what was committed (a source's point anchor can leave a
+    # track without readings; before any match nothing is committed yet).
+    floor = _first_floor(beam)
+    committed_m = track.committed_m if live and track is not None else floor
+    if track is not None and not live:
+        committed_m = max(track.committed_m, floor)
     crossed_at = track.crossed_at if track is not None else None
     done = commit(plan, beam, committed_m, crossed_at, at, policy)
     best = done.beam[0]

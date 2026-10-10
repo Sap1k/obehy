@@ -145,8 +145,14 @@ The selected values carry provenance: source, channel and reason.
 | Progress and events | An SŽ `PointEvent` commits the call's event with the minute interval and is a floor: hypotheses behind it are pruned. A DÚK GPS crossing inside that minute narrows the interval to the intersection. A GPS crossing outside it by more than `rail.event_tolerance_s` loses to SŽ and is logged as a conflict. |
 | Current delay | GPS lateness while DÚK is fresh, else SŽ `de` at its point. |
 | Prediction | Policy `rail.predictor`: `anchor_change`, `sz` or `propagate` (below). |
-| Coverage and staleness | Each source's coverage is a policy scope: `duk` is the Ústecký kraj polygon, `sz` is national. A run is stale only when every source covering its current position is silent past `stale_after_s(rail)`. DÚK falling silent outside its scope ends DÚK's coverage and does not make the run stale. |
+| Coverage and staleness | A run is stale only when every source is silent past `stale_after_s(rail)`: its freshness is the latest of all sources, so DÚK falling silent when the train leaves Ústecký kraj never makes the run stale while SŽ reports. No coverage polygon is needed for that, and none is kept. |
 | Platform | §24 order: the fresh board assignment, then a previous still-valid one, then the scheduled boarding point, then unspecified. |
+
+A point event that contradicts the run's other events in time (beyond the tolerance) is
+ignored and reported (`inconsistent`): a stale report or a station the run passes twice would
+otherwise land on the wrong call. Emitted times get a final monotone repair (BASE_PLAN.md 20.6).
+A run is recognized by its `run_key`, not its route mode, since a CZPTT run may start as a
+rail-replacement bus.
 
 The predictors:
 

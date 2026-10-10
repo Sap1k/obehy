@@ -94,6 +94,24 @@ one CZPTT path).
 - DÚK's vehicle feed also reports trains in its area by train number (`duk.md`); 876 of 919
   running DÚK train episodes resolve to one run, giving a second position and delay for the run.
 
+## Connector (`realtime/sources/sz.py`), measured
+
+Checked on the 2026-10-06 capture (sampled one poll in 60, and a 2-hour replay 07:00-09:00 local
+through the core against release `20261006T194555Z-06c0829d89aa`, with the serving 5.1 `sr70`
+keys derived for the measurement):
+
+- **Positions (SZ-Q1):** `pyproj` EPSG:5514 → WGS84. Trains standing at a point (`rr = 1`)
+  decode a median 24 m from the catalogue's point (p90 96 m, p99 182 m; n = 5,426).
+- **Names (SZ-Q4):** every `cna` in the sample is a `NÁZEV20` name of the catalogue; 77% name
+  one code and 23% several (`Brno hl.n.` …), decided by the run's calls. Of the point events
+  in the replay, 96.7% place on the run (854 of about 26,000 do not, mostly names of points
+  the run's calls do not include).
+- **Binding:** 1,653 of 1,660 SŽ train key groups and 142 of 150 DÚK train key groups bind in
+  the replay window.
+- **Prediction:** for the predicted next stop, `anchor_change` errs 91 s on average (bias
+  −22 s, n = 2,751), plain propagation 92 s, SŽ's own prediction 100 s; the policy uses
+  `anchor_change`.
+
 ## Semantics
 
 - **Times are bare `HH:mm` without a date.** Recover the date from `md`: a time more than 12 h

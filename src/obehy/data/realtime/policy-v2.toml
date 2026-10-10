@@ -93,3 +93,15 @@ observation_days = 30
 refresh_s = 21600
 # A proxy refused (403/407/429) or unreachable stays out of rotation this long.
 cooldown_s = 1800
+
+[rail]
+# Several sources on one rail run (docs/R2_SLICE.md section 5). DÚK GPS leads the position while
+# fresh; SŽ positions refresh only every few minutes and are coarse.
+position_preference = ["duk", "sz-mapa"]
+position_fresh_s = 120
+position_sigma_m = { default = 20, "sz-mapa" = 150 }
+# SŽ point events are minutes; a crossing from positions further outside loses to them.
+event_tolerance_s = 60
+# Forward prediction for runs with an SŽ prediction: anchor_change, sz or propagate. Chosen from
+# the replay's predictor report (docs/R2_SLICE.md section 11, item 5).
+predictor = "anchor_change"
