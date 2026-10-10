@@ -50,14 +50,16 @@ nohup uv run obehy rt record --archive data/rt-raw > rt-record.log 2>&1 &
 recorder stops cleanly on SIGINT/SIGTERM. A restart appends to the same archive.
 
 SŽ channels (`egress = "sz"` in their manifest) are only ever sent through a proxy pool, with no
-User-Agent: SŽ blocks addresses that run services against it. Put your proxy-list URL (Webshare's
-`ip:port:username:password` download) in the gitignored local config, or set
-`OBEHY_EGRESS_SZ_PROXY_LIST_URL` (the server's `deploy/.env`). Without it SŽ channels are not
+User-Agent: SŽ blocks addresses that run services against it. Save your proxy list (Webshare's
+`ip:port:username:password` lines) to a file outside git and name it in the gitignored local
+config, or set `OBEHY_EGRESS_SZ_PROXY_LIST_FILE`. A download URL (`proxy_list_url`,
+`OBEHY_EGRESS_SZ_PROXY_LIST_URL`) works too, but Webshare regenerates those links; a saved list
+wins when both are set. Either is re-read every 6 hours. Without one, SŽ channels are not
 polled; the other sources still are.
 
 ```toml
 [realtime.egress.sz]
-proxy_list_url = "<secret>"
+proxy_list_file = "D:/secrets/sz-proxies.txt"
 ```
 
 ## Production feed pair

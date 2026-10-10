@@ -195,10 +195,12 @@ The policy default is set from that report.
 `egress = "sz"`.
 
 **The proxy pool.**
-- It is the user's Webshare pool. Its list URL is per user and secret: `[realtime.egress.sz]
-  proxy_list_url = "<secret>"` in the gitignored `config/obehy.local.toml`, or
-  `OBEHY_EGRESS_SZ_PROXY_LIST_URL` in the gitignored deploy `.env`.
-- The runtime downloads the list at start and every `egress.refresh_h`. Each line is
+- It is the user's Webshare pool, secret. Preferably a saved list file (`[realtime.egress.sz]
+  proxy_list_file` in the gitignored `config/obehy.local.toml`, or
+  `OBEHY_EGRESS_SZ_PROXY_LIST_FILE`; on the server `deploy/secrets/`, mounted read-only), else
+  the download link (`proxy_list_url` / `OBEHY_EGRESS_SZ_PROXY_LIST_URL`), which Webshare
+  regenerates.
+- The runtime reads the list at start and every `egress.refresh_s`. Each line is
   `ip:port:username:password`. The pool is held in memory only, and an empty or malformed list
   keeps the previous pool.
 

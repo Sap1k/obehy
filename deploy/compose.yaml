@@ -1,8 +1,9 @@
 # The Oběhy server: PostGIS, the realtime worker, hourly release updates, nightly jobs and
 # nginx serving the feeds over plain HTTP to your reverse proxy. Put POSTGRES_PASSWORD
-# (URL-safe) and optionally OBEHY_HTTP_PORT (8080), OBEHY_TAG, GITHUB_TOKEN and
-# OBEHY_EGRESS_SZ_PROXY_LIST_URL (the secret proxy list SŽ requests must go through; without it
-# SŽ is not polled) in .env next to this file.
+# (URL-safe) and optionally OBEHY_HTTP_PORT (8080), OBEHY_TAG and GITHUB_TOKEN in .env next to
+# this file. SŽ is polled only through a proxy list: save it as secrets/sz-proxies.txt here
+# (gitignored) and set OBEHY_EGRESS_SZ_PROXY_LIST_FILE=/app/secrets/sz-proxies.txt in .env, or
+# set OBEHY_EGRESS_SZ_PROXY_LIST_URL to a download link.
 name: obehy
 
 x-app: &app
@@ -12,8 +13,10 @@ x-app: &app
     OBEHY_DATABASE_URL: postgresql://obehy:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/obehy
     GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     OBEHY_EGRESS_SZ_PROXY_LIST_URL: ${OBEHY_EGRESS_SZ_PROXY_LIST_URL:-}
+    OBEHY_EGRESS_SZ_PROXY_LIST_FILE: ${OBEHY_EGRESS_SZ_PROXY_LIST_FILE:-}
   volumes:
     - data:/app/data
+    - ./secrets:/app/secrets:ro
   depends_on:
     migrate:
       condition: service_completed_successfully

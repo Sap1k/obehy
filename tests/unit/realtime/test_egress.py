@@ -182,3 +182,23 @@ def test_a_403_opens_the_circuit_at_once() -> None:
     assert backoff_interval(channel, failures_after(channel, 0, failed)) == 30.0
     assert backoff_interval(channel, failures_after(channel, 0, refused)) == 300.0
     assert failures_after(channel, 40, Poll(T0, T0, 200, b"{}")) == 0
+
+
+def test_a_saved_proxy_list_wins_over_the_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saved = tmp_path / "proxies.txt"
+    saved.write_text("10.0.0.1:8080:alice:secret\n", encoding="utf-8")
+    config = tmp_path / "obehy.local.toml"
+    config.write_text(
+        "schema_version = 1\n[realtime.egress.sz]\n"
+        'proxy_list_url = "https://config.invalid/x"\n'
+        f'proxy_list_file = "{saved.as_posix()}"\n',
+        encoding="utf-8",
+    )
+    for kind in ("URL", "FILE"):
+        monkeypatch.delenv(f"OBEHY_EGRESS_SZ_PROXY_LIST_{kind}", raising=False)
+    (source,) = load_egress_urls(["sz"], config).values()
+    pool = ProxyPool("sz", source, POLICY, log=lambda _: None)
+    pool.refresh()
+    assert pool.proxies == ("http://alice:secret@10.0.0.1:8080",)

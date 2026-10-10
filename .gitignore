@@ -14,3 +14,5 @@ data/
 dist/
 build/
 work/
+# Proxy lists and other server secrets (docs/R2_SLICE.md section 7)
+deploy/secrets/
