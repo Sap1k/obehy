@@ -49,6 +49,8 @@ class Channel:
     feeds: tuple[str, ...] = ()
     capabilities: tuple[str, ...] = ()
     semantics: dict[str, Any] = field(default_factory=dict[str, Any])
+    # A named proxied, anonymous egress (runtime/egress.py); never fetched directly.
+    egress: str | None = None
 
     @property
     def name(self) -> str:
@@ -148,6 +150,9 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     if not isinstance(semantics, dict):
         raise ManifestError(f"{where}: semantics must be a table")
     _core_semantics(cast(dict[str, Any], semantics), where)
+    egress = table.get("egress")
+    if egress is not None and (not isinstance(egress, str) or not _IDENTIFIER.match(egress)):
+        raise ManifestError(f"{where}: egress must be a lowercase ASCII name")
     return Channel(
         source=source,
         channel=name,
@@ -163,6 +168,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         feeds=_strings(table, "feeds", where, FEED_NAMES),
         capabilities=_strings(table, "capabilities", where, CAPABILITIES),
         semantics=dict(cast(dict[str, Any], semantics)),
+        egress=egress,
     )
 
 

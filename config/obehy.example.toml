@@ -18,3 +18,8 @@ directory = "D:/src/jrutil"
 # url = "postgresql://obehy:PASSWORD@localhost:45873/obehy"
 # Admin database for tests/db (OBEHY_TEST_DATABASE_URL overrides it); the server may be remote.
 # test_url = "postgresql://obehy:PASSWORD@localhost:45873/obehy_test"
+
+# Proxied, anonymous egress for SŽ (docs/R2_SLICE.md section 7). Secret: keep it out of git.
+# OBEHY_EGRESS_SZ_PROXY_LIST_URL overrides it.
+# [realtime.egress.sz]
+# proxy_list_url = "https://proxy.webshare.io/api/v2/proxy/list/download/<token>/..."

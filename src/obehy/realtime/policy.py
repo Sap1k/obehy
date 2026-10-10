@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v1.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v2.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v1.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v2.toml"
 
 
 class PolicyError(ValueError):
@@ -85,6 +85,14 @@ class PredictionPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class EgressPolicy:
+    """Proxy pools of egress channels (docs/R2_SLICE.md section 7)."""
+
+    refresh_s: int  # how often the proxy list is downloaded again
+    cooldown_s: int  # how long a proxy that failed or was refused stays out of rotation
+
+
+@dataclass(frozen=True, slots=True)
 class Policy:
     version: str
     time: TimePolicy
@@ -95,6 +103,7 @@ class Policy:
     warm_replay_hours: int
     emit_tick_s: int
     observation_retention_days: int
+    egress: EgressPolicy
 
 
 class _Table:
@@ -166,6 +175,7 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         warm_replay_hours=root.table("warm_replay").integer("hours"),
         emit_tick_s=root.table("emit").integer("tick_s"),
         observation_retention_days=root.table("retention").integer("observation_days"),
+        egress=root.section("egress", EgressPolicy),
     )
 
 

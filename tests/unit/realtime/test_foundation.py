@@ -12,7 +12,7 @@ from tests.realtime.builder import timetable, with_unknown
 
 def test_policy_loads_and_resolves_modes() -> None:
     policy = load_policy()
-    assert policy.version == "1"
+    assert policy.version == "2"
     assert policy.time.max_delay_s("rail") == 14400
     assert policy.time.max_delay_s("bus") == 7200
     assert policy.progress.max_speed_mps("rail") == 45

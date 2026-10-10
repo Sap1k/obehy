@@ -49,6 +49,17 @@ nohup uv run obehy rt record --archive data/rt-raw > rt-record.log 2>&1 &
 `--sources duk,sz-mapa` limits the sources and `--duration 2d` stops after a set time. The
 recorder stops cleanly on SIGINT/SIGTERM. A restart appends to the same archive.
 
+SŽ channels (`egress = "sz"` in their manifest) are only ever sent through a proxy pool, with no
+User-Agent: SŽ blocks addresses that run services against it. Put your proxy-list URL (Webshare's
+`ip:port:username:password` download) in the gitignored local config, or set
+`OBEHY_EGRESS_SZ_PROXY_LIST_URL` (the server's `deploy/.env`). Without it SŽ channels are not
+polled; the other sources still are.
+
+```toml
+[realtime.egress.sz]
+proxy_list_url = "<secret>"
+```
+
 ## Production feed pair
 
 The main CLI freezes the current national and regional inputs, builds JDF and CZPTT sequentially,

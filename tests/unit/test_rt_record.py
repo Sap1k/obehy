@@ -63,6 +63,7 @@ def test_shipped_manifests_load() -> None:
     assert arriva.body is not None and b"busesCurrentLocations" in arriva.body
     assert arriva.headers["x-enviroment"] == "client"
     assert "OsVlaky" in sz.url
+    assert sz.egress == "sz" and duk.egress is None and arriva.egress is None
     assert (duk.interval_s, duk.backoff_after, duk.max_backoff_s) == (15.0, 5, 300.0)
     assert duk.feeds == ("jdf", "czptt")
     assert duk.semantics["key_namespaces"]["jdf"] == "cis:line_trip"
@@ -93,6 +94,7 @@ EVERY_5S = 'poll = { kind = "interval", seconds = 5 }\n'
         ),
         (EVERY_5S + 'feeds = ["gtfs"]\n' + GET, "unknown feeds"),
         (EVERY_5S + GET + "semantics = { pre_trip_after_end_is_stale = 1 }\n", "true or false"),
+        (EVERY_5S + GET + 'egress = "SZ proxy"\n', "egress"),
     ],
 )
 def test_manifest_errors(tmp_path: Path, snippet: str, message: str) -> None:

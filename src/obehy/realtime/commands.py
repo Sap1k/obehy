@@ -18,9 +18,11 @@ from obehy.realtime import record, replay
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError
 from obehy.realtime.jobs import drop_observations, vehicle_day
-from obehy.realtime.manifest import ManifestError, select_channels
+from obehy.realtime.manifest import Channel, ManifestError, select_channels
 from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
+from obehy.realtime.runtime.egress import EgressError, build_egress
+from obehy.realtime.runtime.scheduler import FetchFn
 from obehy.realtime.times import instant, local_date
 from obehy.realtime.worker import WorkerOptions, run_worker
 from obehy.runtime_config import ConfigurationError, load_database_url
@@ -57,6 +59,7 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     recorder.add_argument("--manifest", type=Path, default=record.MANIFEST)
     recorder.add_argument("--once", action="store_true", help="poll every channel once and exit")
     recorder.add_argument("--duration", type=record.parse_duration, help="e.g. 30m, 6h or 2d")
+    recorder.add_argument("--config", type=Path, help="local config with egress proxy lists")
 
     replayer = rt.add_parser("replay", help="run archived payloads through the realtime core")
     replayer.add_argument(
@@ -136,15 +139,32 @@ def run(args: argparse.Namespace) -> int:
         ConfigurationError,
         IndexLoadError,
         replay.ReplayError,
+        EgressError,
         psycopg.Error,
     ) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
 
+def _egress(channels: list[Channel], args: argparse.Namespace) -> tuple[list[Channel], FetchFn]:
+    """The channels that may poll and the fetcher: egress channels only through their proxy
+    pool, and not at all without one (docs/R2_SLICE.md section 7)."""
+
+    egress = build_egress(
+        channels, load_policy().egress, config=cast(Path | None, args.config), log=record.log
+    )
+    usable = egress.usable(channels, record.log)
+    if not usable:
+        raise EgressError("no channel can poll: configure the egress proxy lists")
+    return usable, egress.fetch
+
+
 def _record(args: argparse.Namespace) -> int:
-    channels = select_channels(
-        record.load_channels(cast(Path, args.manifest)), cast(list[str] | None, args.sources)
+    channels, fetcher = _egress(
+        select_channels(
+            record.load_channels(cast(Path, args.manifest)), cast(list[str] | None, args.sources)
+        ),
+        args,
     )
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(
@@ -153,6 +173,7 @@ def _record(args: argparse.Namespace) -> int:
                 cast(Path, args.archive),
                 once=cast(bool, args.once),
                 duration_s=cast(float | None, args.duration),
+                fetcher=fetcher,
             )
         )
     return 0
@@ -182,8 +203,11 @@ def _replay(args: argparse.Namespace) -> int:
 
 
 def _worker(args: argparse.Namespace) -> int:
-    channels = select_channels(
-        record.load_channels(cast(Path, args.manifest)), cast(list[str] | None, args.sources)
+    channels, fetcher = _egress(
+        select_channels(
+            record.load_channels(cast(Path, args.manifest)), cast(list[str] | None, args.sources)
+        ),
+        args,
     )
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(
@@ -195,6 +219,7 @@ def _worker(args: argparse.Namespace) -> int:
                     archive=cast(Path, args.archive),
                     gtfs_rt_dir=cast(Path, args.gtfs_rt),
                     feeds=cast(tuple[Feed, ...], args.feeds),
+                    fetcher=fetcher,
                 ),
             )
         )

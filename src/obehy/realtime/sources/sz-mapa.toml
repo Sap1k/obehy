@@ -4,6 +4,8 @@ manifest_version = 1
 
 [[channel]]
 name = "trains"
+# SŽ blocks addresses running services: proxied and anonymous only (docs/R2_SLICE.md 7).
+egress = "sz"
 poll = { kind = "interval", seconds = 30 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 25

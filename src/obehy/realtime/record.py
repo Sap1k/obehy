@@ -18,18 +18,15 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol, cast
-from urllib.error import HTTPError
-from urllib.request import urlopen
+from typing import Any, cast
 
-from obehy.pipeline.download import http_request
 from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.manifest import SOURCES, Channel, ManifestError, select_channels
 from obehy.realtime.manifest import load_channels as _load_channels
+from obehy.realtime.runtime.fetch import fetch
 from obehy.realtime.runtime.scheduler import backoff_interval, run_channel
 
 MANIFEST = SOURCES
-KEPT_HEADERS = ("age", "date", "etag", "last-modified")
 SUMMARY_INTERVAL_S = 600.0
 
 
@@ -99,6 +96,7 @@ __all__ = [
     "Channel",
     "ManifestError",
     "backoff_interval",
+    "fetch",
     "load_channels",
     "select_channels",
 ]
@@ -126,71 +124,7 @@ def archived_payload(channel: Channel, poll: Poll) -> tuple[bytes | None, dict[s
     return filtered.body, extra
 
 
-class _Response(Protocol):
-    status: int
-    headers: Any
-
-    def read(self) -> bytes: ...
-
-    def __enter__(self) -> _Response: ...
-
-    def __exit__(self, *args: object) -> None: ...
-
-
-Clock = Callable[[], datetime]
 FetchFn = Callable[[Channel], Poll]
-
-
-def utc_clock() -> datetime:
-    return datetime.now(UTC)
-
-
-def _kept_headers(headers: Any) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for name in KEPT_HEADERS:
-        value = cast(str | None, headers.get(name))
-        if value is not None:
-            result[name] = value
-    return result
-
-
-def fetch(channel: Channel, clock: Clock = utc_clock) -> Poll:
-    request = http_request(channel.url, data=channel.body, headers=channel.headers)
-    request.method = channel.method
-    requested_at = clock()
-    try:
-        with cast(_Response, urlopen(request, timeout=channel.timeout_s)) as response:
-            body = response.read()
-            return Poll(
-                requested_at=requested_at,
-                received_at=clock(),
-                status=response.status,
-                body=body,
-                content_type=cast(str | None, response.headers.get("Content-Type")),
-                headers=_kept_headers(response.headers),
-            )
-    except HTTPError as error:
-        try:
-            body = error.read()
-        except OSError:
-            body = None
-        return Poll(
-            requested_at=requested_at,
-            received_at=clock(),
-            status=error.code,
-            body=body or None,
-            content_type=error.headers.get("Content-Type") if error.headers else None,
-            headers=_kept_headers(error.headers) if error.headers else {},
-            error=f"HTTP {error.code} {error.reason}",
-        )
-    except (OSError, ValueError) as error:
-        return Poll(
-            requested_at=requested_at,
-            received_at=clock(),
-            status=None,
-            body=None,
-            error=f"{type(error).__name__}: {error}",
-        )
 
 
 @dataclass
@@ -213,7 +147,7 @@ class ChannelStats:
         return text
 
 
-def _log(message: str) -> None:
+def log(message: str) -> None:
     print(f"{datetime.now(UTC).isoformat(timespec='seconds')} {message}", flush=True)
 
 
@@ -240,10 +174,10 @@ def archive_poll(
         stats.stored_bytes += stored.new_object_bytes
     if "filter_error" in extra:
         stats.filter_errors += 1
-        _log(f"{channel.name}: filter error, stored unfiltered: {extra['filter_error']}")
+        log(f"{channel.name}: filter error, stored unfiltered: {extra['filter_error']}")
     if not poll.ok:
         stats.errors += 1
-        _log(f"{channel.name}: {poll.error or f'HTTP {poll.status}'}")
+        log(f"{channel.name}: {poll.error or f'HTTP {poll.status}'}")
     return stored.sha256
 
 
@@ -266,7 +200,7 @@ async def record(
 
     def summarize() -> None:
         for name, channel_stats in stats.items():
-            _log(channel_stats.line(name))
+            log(channel_stats.line(name))
             channel_stats.latencies_ms.clear()
 
     async def summaries() -> None:
@@ -283,7 +217,7 @@ async def record(
         helpers.append(asyncio.create_task(summaries()))
         if duration_s is not None:
             helpers.append(asyncio.create_task(deadline(duration_s)))
-    _log(f"recording {', '.join(channel.name for channel in channels)} into {archive}")
+    log(f"recording {', '.join(channel.name for channel in channels)} into {archive}")
     try:
         on_poll = _on_poll(writer, stats)
         await asyncio.gather(

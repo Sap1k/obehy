@@ -1,7 +1,8 @@
-# Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4).
+# Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
+# docs/R2_SLICE.md section 8).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "1"
+policy_version = "2"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -86,3 +87,9 @@ tick_s = 10
 # Daily rt.observation partitions older than this are dropped by `obehy jobs nightly`. Warm
 # replay reads only the last hours; history is rebuilt from the raw archive, not from here.
 observation_days = 30
+
+[egress]
+# Proxy pools of channels that declare an egress (SŽ; docs/R2_SLICE.md section 7).
+refresh_s = 21600
+# A proxy refused (403/407/429) or unreachable stays out of rotation this long.
+cooldown_s = 1800
