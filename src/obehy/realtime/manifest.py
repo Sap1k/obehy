@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
+from obehy.realtime.model import SourceSemantics
+
 SOURCES = Path(__file__).resolve().parent / "sources"
 FEED_NAMES = ("jdf", "czptt")
 POLL_KINDS = ("interval",)
@@ -51,6 +53,29 @@ class Channel:
     @property
     def name(self) -> str:
         return f"{self.source}/{self.channel}"
+
+    @property
+    def core_semantics(self) -> SourceSemantics:
+        return _core_semantics(self.semantics, self.name)
+
+
+CORE_SEMANTICS = tuple(SourceSemantics.__dataclass_fields__)
+
+
+def _core_semantics(semantics: dict[str, Any], where: str) -> SourceSemantics:
+    flags: dict[str, bool] = {}
+    for name in CORE_SEMANTICS:
+        value = semantics.get(name, False)
+        if not isinstance(value, bool):
+            raise ManifestError(f"{where}: semantics.{name} must be true or false")
+        flags[name] = value
+    return SourceSemantics(**flags)
+
+
+def semantics_by_channel(channels: Sequence[Channel]) -> dict[tuple[str, str], SourceSemantics]:
+    """The core semantics of each `(source, channel)`, as `Context.semantics` takes them."""
+
+    return {(channel.source, channel.channel): channel.core_semantics for channel in channels}
 
 
 _IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -122,6 +147,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     semantics = table.get("semantics", {})
     if not isinstance(semantics, dict):
         raise ManifestError(f"{where}: semantics must be a table")
+    _core_semantics(cast(dict[str, Any], semantics), where)
     return Channel(
         source=source,
         channel=name,

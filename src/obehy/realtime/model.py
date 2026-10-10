@@ -65,6 +65,24 @@ class SourceState:
     code: str
 
 
+@dataclass(frozen=True, slots=True)
+class SourceSemantics:
+    """How the core reads one channel's facts where sources differ, from its manifest's
+    `[channel.semantics]`. The defaults take every fact at face value."""
+
+    # In a pre-trip state the delay is the time since the scheduled departure (DUK-Q14).
+    pre_trip_delay_is_elapsed: bool = False
+    # A pre-trip key after the trip's scheduled end is left over from an earlier trip (DUK-Q15).
+    pre_trip_after_end_is_stale: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SourceDeparture:
+    """The departure the source plans for the run of the trip it reports (DÚK `TODepartureDT`)."""
+
+    at: Instant
+
+
 EventKind = Literal["arrival", "departure", "passage"]
 
 
@@ -80,7 +98,9 @@ class NextStop:
     call_ref: str
 
 
-Fact = VehicleKey | TripKey | Position | Delay | SourceState | StopEvent | NextStop
+Fact = (
+    VehicleKey | TripKey | Position | Delay | SourceState | SourceDeparture | StopEvent | NextStop
+)
 
 
 @dataclass(frozen=True, slots=True)

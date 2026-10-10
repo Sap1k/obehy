@@ -80,6 +80,15 @@ def update(
     return Step(new_track, progress, done.crossed, since, off_route)
 
 
+def past_first_stop(plan: Plan, position: Position, policy: ProgressPolicy) -> bool:
+    """Whether the fix lies on the path after the first stop's departure trigger."""
+
+    first = plan.zones[0].departure_m if plan.zones else None
+    after = plan.path.call_distances_m[0] if first is None else first
+    found = candidates(plan.path, position.lon, position.lat, _sigma(policy), policy.reach_sigmas)
+    return any(candidate.along_m > after for candidate in found)
+
+
 def _first_floor(beam: tuple[Hypothesis, ...]) -> float:
     """Where commits start for a new track: nothing before the first fix was observed."""
 

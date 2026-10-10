@@ -25,7 +25,7 @@ from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.core import CORE_VERSION
 from obehy.realtime.emit.db import Writer, load_observations
 from obehy.realtime.index_sql import ReleaseLoads, active_loads
-from obehy.realtime.manifest import Channel
+from obehy.realtime.manifest import Channel, semantics_by_channel
 from obehy.realtime.model import Derivation, Feed
 from obehy.realtime.policy import Policy
 from obehy.realtime.record import ChannelStats, archive_poll, fetch
@@ -74,7 +74,12 @@ class _Worker:
     """The running worker: one runner, guarded by a lock shared by polls, ticks and rebases."""
 
     def __init__(
-        self, database_url: str, policy: Policy, options: WorkerOptions, stop: asyncio.Event
+        self,
+        database_url: str,
+        channels: Sequence[Channel],
+        policy: Policy,
+        options: WorkerOptions,
+        stop: asyncio.Event,
     ) -> None:
         self.database_url = database_url
         self.policy = policy
@@ -84,7 +89,13 @@ class _Worker:
         self.connection = psycopg.connect(database_url, autocommit=True)
         loads = active_loads(self.connection)
         self.runner = Runner(
-            self.connection, loads, policy, options.feeds, None, options.gtfs_rt_dir
+            self.connection,
+            loads,
+            policy,
+            options.feeds,
+            None,
+            options.gtfs_rt_dir,
+            semantics_by_channel(channels),
         )
         self.archive = ArchiveWriter(options.archive)
         self.stats: dict[str, ChannelStats] = {}
@@ -161,7 +172,7 @@ async def run_worker(
         loop = asyncio.get_running_loop()
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, stop.set)
-    worker = _Worker(database_url, policy, options, stop)
+    worker = _Worker(database_url, channels, policy, options, stop)
     worker.start()
     for channel in channels:
         worker.stats[channel.name] = ChannelStats()

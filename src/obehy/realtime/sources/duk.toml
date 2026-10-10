@@ -14,4 +14,6 @@ capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 [channel.semantics]
 clock = "source"
 delay_reference = "unknown"  # DUK-Q6
+pre_trip_delay_is_elapsed = true  # DUK-Q14
+pre_trip_after_end_is_stale = true  # DUK-Q15
 key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" }

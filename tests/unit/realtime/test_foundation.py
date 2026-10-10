@@ -75,6 +75,7 @@ def test_facts_round_trip_through_json() -> None:
         Fact,
         NextStop,
         Position,
+        SourceDeparture,
         SourceState,
         StopEvent,
         TripKey,
@@ -89,6 +90,7 @@ def test_facts_round_trip_through_json() -> None:
         Position(50.66, 14.03, None),
         Delay(-60, "unknown"),
         SourceState("1"),
+        SourceDeparture(instant(datetime(2026, 10, 10, 22, 54, tzinfo=UTC))),
         StopEvent("A", "departure", instant(datetime(2026, 10, 8, 10, tzinfo=UTC))),
         NextStop("B"),
     )

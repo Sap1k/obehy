@@ -227,6 +227,14 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-10** — Source-specific readings in the core come from the manifest's
+  `[channel.semantics]` (`SourceSemantics`): DÚK sets `pre_trip_delay_is_elapsed` (DUK-Q14)
+  and `pre_trip_after_end_is_stale` (DUK-Q15); other sources take their facts at face value.
+  The DUK-Q18 missed-departure rule applies to every source.
+- **2026-10-10** — DUK-Q18: a bus whose onboard unit missed the departure (State 3 all trip long,
+  `TODepartureDT` rolled to the next run) runs once it is on the path past the first stop after
+  the scheduled start, so it gets GPS delays instead of a bare position. New `SourceDeparture`
+  fact; DÚK decoder version 2.
 - **2026-10-10** — The feed list page and `feeds.json` name the realtime sources and what they
   cover (DÚK vehicle positions → `cz-jdf-gtfs-rt.pb`).
 - **2026-10-10** — The server stack serves feeds with stock nginx instead of Caddy, for its

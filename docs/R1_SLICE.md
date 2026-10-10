@@ -131,6 +131,9 @@ capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 clock = "source"                    # source | none (observed_at becomes an interval)
 delay_reference = "unknown"         # DUK-Q6
 key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" }
+# How the core reads the facts where sources differ (`SourceSemantics`); absent means false.
+pre_trip_delay_is_elapsed = true    # DUK-Q14
+pre_trip_after_end_is_stale = true  # DUK-Q15
 
 # [[lookup]] sections arrive with the first lookup connector (R2 or later).
 ```

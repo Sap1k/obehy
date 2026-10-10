@@ -19,6 +19,8 @@ from obehy.realtime.model import (
     Instance,
     Observation,
     Position,
+    SourceSemantics,
+    SourceState,
     WriteEvent,
 )
 from obehy.realtime.policy import Policy
@@ -34,6 +36,7 @@ def advance(
     index: IndexView,
     policy: Policy,
     plans: PlanCache,
+    semantics: SourceSemantics,
 ) -> tuple[Instance, list[Effect]]:
     """Apply one bound observation to its instance."""
 
@@ -43,7 +46,7 @@ def advance(
     # while payloads keep coming) is no new information: it never moves progress, so event
     # intervals always run forward in time, and it does not keep the journey fresh.
     repeated = position is not None and seen is not None and observation.at <= seen
-    instance = _note(instance, observation, policy, fresh=not repeated)
+    instance = _note(instance, observation, policy, semantics, fresh=not repeated)
     if instance.lifecycle != "running" or position is None or repeated:
         return instance, []
 
@@ -63,19 +66,26 @@ def advance(
     return instance, effects
 
 
-def _note(instance: Instance, observation: Observation, policy: Policy, *, fresh: bool) -> Instance:
+def _note(
+    instance: Instance,
+    observation: Observation,
+    policy: Policy,
+    semantics: SourceSemantics,
+    *,
+    fresh: bool,
+) -> Instance:
     """Record the observation's time and source delay; only new information keeps it fresh.
 
-    Before departure the source delay is ignored: DÚK reports the time since the scheduled
-    departure there, growing while the vehicle stands in the depot (DUK-Q14)."""
+    A source whose pre-trip delay is the time since the scheduled departure (DÚK: growing while
+    the vehicle stands in the depot, DUK-Q14) has it ignored before departure and while it still
+    reports a pre-trip state (DUK-Q18)."""
 
     delay = observation.first(Delay)
+    source = observation.first(SourceState)
+    before = instance.lifecycle == "pre_trip" or (source is not None and source.code == "pre_trip")
+    elapsed = semantics.pre_trip_delay_is_elapsed and before
     delay_s = instance.delay_s
-    if (
-        delay is not None
-        and instance.lifecycle != "pre_trip"
-        and delay.seconds > policy.delay_discard_below_s
-    ):
+    if delay is not None and not elapsed and delay.seconds > policy.delay_discard_below_s:
         delay_s = delay.seconds
     freshness = replace(instance.freshness, updated_at=observation.at)
     if fresh:

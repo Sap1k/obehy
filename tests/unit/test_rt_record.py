@@ -10,6 +10,7 @@ import pytest
 from obehy import cli
 from obehy.realtime import record
 from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls
+from obehy.realtime.model import SourceSemantics
 
 T0 = datetime(2026, 10, 5, 23, 59, 50, tzinfo=UTC)
 
@@ -65,6 +66,11 @@ def test_shipped_manifests_load() -> None:
     assert (duk.interval_s, duk.backoff_after, duk.max_backoff_s) == (15.0, 5, 300.0)
     assert duk.feeds == ("jdf", "czptt")
     assert duk.semantics["key_namespaces"]["jdf"] == "cis:line_trip"
+    # DUK-Q14 and Q15 are DÚK's readings; the other sources take their facts at face value.
+    assert duk.core_semantics == SourceSemantics(
+        pre_trip_delay_is_elapsed=True, pre_trip_after_end_is_stale=True
+    )
+    assert arriva.core_semantics == sz.core_semantics == SourceSemantics()
 
 
 CHANNEL = (
@@ -86,6 +92,7 @@ EVERY_5S = 'poll = { kind = "interval", seconds = 5 }\n'
             "only POST",
         ),
         (EVERY_5S + 'feeds = ["gtfs"]\n' + GET, "unknown feeds"),
+        (EVERY_5S + GET + "semantics = { pre_trip_after_end_is_stale = 1 }\n", "true or false"),
     ],
 )
 def test_manifest_errors(tmp_path: Path, snippet: str, message: str) -> None:

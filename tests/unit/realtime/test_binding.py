@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 
 from obehy.realtime.core import Context, step
 from obehy.realtime.index import Index
+from obehy.realtime.manifest import semantics_by_channel
 from obehy.realtime.model import (
     AssignVehicle,
     Effect,
@@ -14,21 +16,28 @@ from obehy.realtime.model import (
     ObservationResult,
     Reason,
     SnapshotJourney,
+    SourceSemantics,
     VehicleId,
 )
 from obehy.realtime.policy import load_policy
-from tests.realtime.builder import days_between, timetable, with_unknown
+from obehy.realtime.record import load_channels
+from tests.realtime.builder import ORIGIN, STEP_LON, days_between, timetable, with_unknown
 from tests.realtime.observations import observe
 
 POLICY = load_policy()
 D8, D9 = date(2026, 10, 8), date(2026, 10, 9)
 NS = "cis:line_trip"
+DUK = semantics_by_channel(load_channels())  # the observations come from duk/vehicles
 
 
-def run(index: Index, *observations: str | dict[str, object]) -> tuple[FeedState, list[Effect]]:
+def run(
+    index: Index,
+    *observations: str | dict[str, object],
+    semantics: Mapping[tuple[str, str], SourceSemantics] = DUK,
+) -> tuple[FeedState, list[Effect]]:
     state = FeedState("jdf")
     effects: list[Effect] = []
-    ctx = Context(index, POLICY)
+    ctx = Context(index, POLICY, semantics=semantics)
     for item in observations:
         obs = observe(item) if isinstance(item, str) else observe(**item)  # type: ignore[arg-type]
         effects.extend(step(state, obs, ctx))
@@ -167,3 +176,49 @@ def test_duk_q15_a_running_vehicle_keeps_the_late_running_window() -> None:
         index.index(), {"at": "2026-10-09 23:52", "key": "582480:140", "state": "running"}
     )
     assert results(effects) == [(JourneyKey("jdf", NS, "582480:140", D9), None)]
+
+
+def test_duk_q18_a_missed_departure_runs_once_past_the_first_stop() -> None:
+    # Vehicle 177, 2026-10-10: State 3 all through 803/206 of 00:54, TODepartureDT already the
+    # next night's 00:54, the bus on the route a few minutes late.
+    d10 = date(2026, 10, 10)
+    index = timetable().trip(
+        "582803:206", days=[d10], calls=[("A", "00:54"), ("B", "01:00"), ("C", "01:06")]
+    )
+    journey = JourneyKey("jdf", NS, "582803:206", d10)
+    at_a, past_b = ORIGIN, (ORIGIN[0] + 1.5 * STEP_LON, ORIGIN[1])
+    waiting = {"key": "582803:206", "state": "pre_trip", "delay": 0}
+    tomorrow = {**waiting, "departure": "2026-10-11 00:54"}
+
+    def lifecycle(*observations: dict[str, object]) -> str:
+        state, _ = run(index.index(), *observations)
+        return state.instances[journey].lifecycle
+
+    assert lifecycle({"at": "2026-10-10 01:02", "position": past_b, **tomorrow}) == "running"
+    # Each condition alone holds it: the source still plans tonight's run, the vehicle has not
+    # left the first stop, the scheduled start has not come.
+    tonight = {**waiting, "departure": "2026-10-10 00:54"}
+    assert lifecycle({"at": "2026-10-10 01:02", "position": past_b, **tonight}) == "pre_trip"
+    assert lifecycle({"at": "2026-10-10 01:02", "position": at_a, **tomorrow}) == "pre_trip"
+    assert lifecycle({"at": "2026-10-10 00:50", "position": past_b, **tomorrow}) == "pre_trip"
+
+
+def test_a_channel_without_semantics_takes_its_facts_at_face_value() -> None:
+    # The DUK-Q14 and Q15 readings are DÚK's: another source's pre-trip delay is a delay, its
+    # pre-trip key after the end is late running. A missed departure (DUK-Q18) runs for all.
+    index = timetable().trip(
+        "582480:140", days=[D9], calls=[("A", "21:59"), ("B", "22:04"), ("C", "22:10")]
+    )
+    journey = JourneyKey("jdf", NS, "582480:140", D9)
+    waiting = {"key": "582480:140", "state": "pre_trip", "delay": 300}
+    state, _ = run(index.index(), {"at": "2026-10-09 21:50", **waiting}, semantics={})
+    assert state.instances[journey].delay_s == 300
+    _, effects = run(index.index(), {"at": "2026-10-09 22:50", **waiting}, semantics={})
+    assert results(effects) == [(journey, None)]
+    moved_on = {
+        **waiting,
+        "departure": "2026-10-10 21:59",
+        "position": (ORIGIN[0] + 1.5 * STEP_LON, ORIGIN[1]),
+    }
+    state, _ = run(index.index(), {"at": "2026-10-09 22:05", **moved_on}, semantics={})
+    assert state.instances[journey].lifecycle == "running"

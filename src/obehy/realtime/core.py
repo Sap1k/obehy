@@ -7,12 +7,17 @@ Binding continuity (section 19.5): an observation with the key of its current bi
 that journey, and its service date is never re-derived, until the time leaves the journey's
 admissible window. Then the binding ends, and only a new admissible journey for the key binds
 again (DUK-Q4: yesterday's key in the morning is `not_in_service`, never an extended trip).
-A key reported before departure after the trip's scheduled end is stale (DUK-Q15): the journey
-never started and the delay window for late running does not apply.
+Source-specific readings of the facts come from the channel's `SourceSemantics` (its manifest):
+a key reported before departure after the trip's scheduled end may be stale (DUK-Q15: the
+journey never started and the delay window for late running does not apply). For every source,
+a vehicle on its trip's path past the first stop counts as departed while the source has
+already moved on to a later run of the same trip (DUK-Q18: the onboard unit missed the
+departure); a vehicle driving its trip is never left without realtime.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
@@ -35,6 +40,8 @@ from obehy.realtime.model import (
     Reason,
     ScheduledCall,
     SnapshotJourney,
+    SourceDeparture,
+    SourceSemantics,
     SourceState,
     TripKey,
     VehicleId,
@@ -45,7 +52,8 @@ from obehy.realtime.model import (
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.estimate import estimate
 from obehy.realtime.timeline.plan import PlanCache
-from obehy.realtime.times import Instant
+from obehy.realtime.timeline.progress import past_first_stop
+from obehy.realtime.times import PRAGUE, Instant
 
 CORE_VERSION = "r1.0"
 
@@ -54,11 +62,21 @@ SOURCE_PRE_TRIP = "pre_trip"  # DUK-Q5: no progress or events until it departs
 SOURCE_RUNNING = "running"
 
 
+PLAIN = SourceSemantics()
+
+
 @dataclass(frozen=True, slots=True)
 class Context:
     index: IndexView
     policy: Policy
     plans: PlanCache = field(default_factory=PlanCache)
+    # Per (source, channel); a channel without an entry takes its facts at face value.
+    semantics: Mapping[tuple[str, str], SourceSemantics] = field(
+        default_factory=dict[tuple[str, str], SourceSemantics]
+    )
+
+    def semantics_of(self, observation: Observation) -> SourceSemantics:
+        return self.semantics.get((observation.source, observation.channel), PLAIN)
 
 
 def vehicle_of(observation: Observation) -> VehicleId | None:
@@ -84,7 +102,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     binding = _continued(previous, key, observation, state, ctx)
     if binding is None:
         result = bind(key, observation.at, ctx.index, ctx.policy)
-        if isinstance(result, Match) and _stale(result, observation):
+        if isinstance(result, Match) and _stale(result, observation, ctx):
             _drop_unstarted(state, result.journey, vehicle)
             result = Reason.STALE_KEY
         if not isinstance(result, Match):
@@ -102,9 +120,15 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     instance = state.instances[binding.journey]
     if _leads(instance, vehicle, observation, ctx.policy):
         instance = replace(instance, lead=Lead(vehicle, observation.at))
-        instance = _lifecycle(instance, observation, span(trip, binding.journey)[0])
+        instance = _lifecycle(instance, trip, observation, span(trip, binding.journey)[0], ctx)
         instance, timeline_effects = timeline.advance(
-            instance, trip, observation, ctx.index, ctx.policy, ctx.plans
+            instance,
+            trip,
+            observation,
+            ctx.index,
+            ctx.policy,
+            ctx.plans,
+            ctx.semantics_of(observation),
         )
         state.instances[binding.journey] = instance
         state.dirty.add(binding.journey)
@@ -189,14 +213,17 @@ def _continued(
         return None
     trip = ctx.index.trip(binding.trip_id)
     match = Match(binding.journey, trip, *span(trip, binding.journey))
-    if not in_window(match, observation.at, ctx.policy) or _stale(match, observation):
+    if not in_window(match, observation.at, ctx.policy) or _stale(match, observation, ctx):
         return None
     return binding
 
 
-def _stale(match: Match, observation: Observation) -> bool:
-    """A pre-departure report after the trip's scheduled end (DUK-Q15)."""
+def _stale(match: Match, observation: Observation, ctx: Context) -> bool:
+    """A pre-departure report after the trip's scheduled end, from a source whose such keys are
+    left over (DUK-Q15)."""
 
+    if not ctx.semantics_of(observation).pre_trip_after_end_is_stale:
+        return False
     source = observation.first(SourceState)
     return source is not None and source.code == SOURCE_PRE_TRIP and observation.at > match.end
 
@@ -259,15 +286,40 @@ def snapshot(journey: JourneyKey, index: IndexView, trip_id: str, at: Instant) -
     )
 
 
-def _lifecycle(instance: Instance, observation: Observation, start: Instant) -> Instance:
+def _lifecycle(
+    instance: Instance, trip: Trip, observation: Observation, start: Instant, ctx: Context
+) -> Instance:
     """`pre_trip` becomes `running` when the source says so, or, for a source without trip
-    states, once the scheduled start has passed. A pre-trip source state (DUK-Q5) holds it."""
+    states, once the scheduled start has passed. A pre-trip source state (DUK-Q5) holds it,
+    unless the source shows a missed departure (DUK-Q18)."""
 
     if instance.lifecycle != "pre_trip":
         return instance
     source = observation.first(SourceState)
-    started = source.code == SOURCE_RUNNING if source is not None else observation.at >= start
+    if source is None:
+        started = observation.at >= start
+    else:
+        started = source.code == SOURCE_RUNNING or _missed_departure(
+            instance, trip, observation, start, ctx
+        )
     return replace(instance, lifecycle="running") if started else instance
+
+
+def _missed_departure(
+    instance: Instance, trip: Trip, observation: Observation, start: Instant, ctx: Context
+) -> bool:
+    """DUK-Q18: after the scheduled start, the source plans the same departure on a later day
+    and the vehicle is on the trip's path past its first stop."""
+
+    planned = observation.first(SourceDeparture)
+    position = observation.first(Position)
+    if planned is None or position is None or observation.at < start:
+        return False
+    later, scheduled = planned.at.astimezone(PRAGUE), start.astimezone(PRAGUE)
+    if later.date() <= scheduled.date() or later.time() != scheduled.time():
+        return False
+    plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)
+    return past_first_stop(plan, position, ctx.policy.progress)
 
 
 def _set_vehicle(

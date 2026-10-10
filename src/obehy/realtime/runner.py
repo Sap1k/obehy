@@ -8,7 +8,7 @@ Per batch it loads the static data of the batch's keys (lazy index), steps every
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -21,8 +21,17 @@ from obehy.realtime.emit.gtfs_rt import feed_message, write_feed
 from obehy.realtime.index import KeyRef
 from obehy.realtime.index_sql import IndexLoader, ReleaseLoads
 from obehy.realtime.infer.keyed import Match, in_window, span
-from obehy.realtime.model import Effect, Feed, FeedState, Observation, TripKey
+from obehy.realtime.manifest import semantics_by_channel
+from obehy.realtime.model import (
+    Effect,
+    Feed,
+    FeedState,
+    Observation,
+    SourceSemantics,
+    TripKey,
+)
 from obehy.realtime.policy import Policy
+from obehy.realtime.record import load_channels
 from obehy.realtime.times import Instant, candidate_service_dates
 
 
@@ -37,6 +46,12 @@ class FeedRuntime:
     ctx: Context
 
 
+def shipped_semantics() -> dict[tuple[str, str], SourceSemantics]:
+    """The core semantics of the connector manifests shipped with the package."""
+
+    return semantics_by_channel(load_channels())
+
+
 @dataclass(slots=True)
 class Runner:
     connection: psycopg.Connection
@@ -45,6 +60,7 @@ class Runner:
     feeds: tuple[Feed, ...]
     writer: Writer | None = None
     gtfs_rt_dir: Path | None = None
+    semantics: Mapping[tuple[str, str], SourceSemantics] = field(default_factory=shipped_semantics)
     runtimes: dict[Feed, FeedRuntime] = field(default_factory=dict[Feed, FeedRuntime])
     skipped: int = 0
 
@@ -52,7 +68,9 @@ class Runner:
         for feed in self.feeds:
             loader = IndexLoader(self.connection, self.loads, feed)
             self.runtimes[feed] = FeedRuntime(
-                loader, FeedState(feed), Context(loader.index, self.policy)
+                loader,
+                FeedState(feed),
+                Context(loader.index, self.policy, semantics=self.semantics),
             )
 
     def prefetch(self, observations: Sequence[Observation]) -> None:
@@ -151,7 +169,7 @@ class Runner:
             loader.ensure(
                 {(j.namespace, j.key) for j in journeys}, {j.service_date for j in journeys}
             )
-            ctx = Context(loader.index, self.policy)
+            ctx = Context(loader.index, self.policy, semantics=self.semantics)
             effects.extend(rebase(runtime.state, loader.index))
             self.runtimes[feed] = FeedRuntime(loader, runtime.state, ctx)
         if self.writer is not None and effects:
