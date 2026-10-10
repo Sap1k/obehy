@@ -49,10 +49,12 @@ def _call(trip: Trip, day: date, fact: PlatformAssignment, index: IndexView) -> 
 
 
 def _boarding_point(fact: PlatformAssignment, index: IndexView) -> str | None:
-    if fact.label != "track":
-        return None  # a platform number is a label only: no stop to point at
-    found = index.keyed_locations("sr70:track", f"{fact.station}:{fact.value}")
-    return found[0] if len(found) == 1 else None
+    """Nothing is mapped for now: boards number tracks for passengers, CZPTT by internal track
+    numbers, so an equal designation is often a different track (2026-10-10). Values are
+    recorded until board-numbered platform stops exist in the static feed."""
+
+    del fact, index
+    return None
 
 
 def apply_platform(

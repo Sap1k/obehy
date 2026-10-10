@@ -94,11 +94,12 @@ heap hard limit is configured; memory figures are telemetry.
 
 Work order: §5 (core runtime) in `BASE_PLAN.md` section 34 order. R2 (DÚK trains + SŽ, rail
 fusion, platforms, `docs/R2_SLICE.md`) is implemented; its acceptance waits for a CI release
-with serving 5.1 and a 25 h corpus recorded against it. Deferred until weeks of boards are
-collected: platform stops for board values the static data lacks (as PID does: `stops.txt`
-child stops per platform, unused by `stop_times`, targeted by `assigned_stop_id`), listed from
-unmapped `history.platform_evidence` into a reviewed file that JrUtil turns into `sr70:track`
-/ `sr70:platform` children; big-station platforms could then reach GTFS-RT too. Then R3 (PID). §1, §4 and §6 are done; §2 and §3 wait on comparing consecutive Actions builds,
+with serving 5.1 and a 25 h corpus recorded against it. Platforms are off in GTFS-RT
+(2026-10-10): boards number tracks for passengers, CZPTT by internal track numbers, so equal
+designations were often different tracks. Board values are still recorded in
+`history.platform_evidence`. After a few weeks: publish the board-numbered platforms as static
+child stops unused by `stop_times` (as PID does), keyed by station and shown value, and match
+board values to them in RT; never to CZPTT tracks. Then R3 (PID). §1, §4 and §6 are done; §2 and §3 wait on comparing consecutive Actions builds,
 and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ### 1. Stop coordinates and easy `[?]` clusters
