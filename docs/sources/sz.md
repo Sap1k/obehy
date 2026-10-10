@@ -103,9 +103,13 @@ keys derived for the measurement):
 - **Positions (SZ-Q1):** `pyproj` EPSG:5514 → WGS84. Trains standing at a point (`rr = 1`)
   decode a median 24 m from the catalogue's point (p90 96 m, p99 182 m; n = 5,426).
 - **Names (SZ-Q4):** every `cna` in the sample is a `NÁZEV20` name of the catalogue; 77% name
-  one code and 23% several (`Brno hl.n.` …), decided by the run's calls. Of the point events
-  in the replay, 96.7% place on the run (854 of about 26,000 do not, mostly names of points
-  the run's calls do not include).
+  one code and 23% several (`Brno hl.n.` …), decided by the run's calls. Of about 26,000 point
+  events in the replay, 99.5% place on the run. Of the 135 that do not, 96 name points the run
+  does not have: a train diverted off its timetabled route (9887 via Lovosice instead of
+  Litoměřice) or points missing from the static data (Kadaň on the Kadaň předměstí - Prunéřov
+  part). 28 contradict a GPS event of a neighbouring call by more than the tolerance, and 11 are
+  a train's first report naming a point already well behind it. A point repeated while other
+  fields of the entry change resolves from the call the source placed the train at last (SZ-Q10).
 - **Binding:** 1,653 of 1,660 SŽ train key groups and 142 of 150 DÚK train key groups bind in
   the replay window.
 - **Prediction:** for the predicted next stop, `anchor_change` errs 91 s on average (bias
@@ -165,6 +169,8 @@ diversion). Platforms are not in this endpoint; they come from the station board
 | SZ-Q7 | `nna` can be a track location, block post or junction | an operational point, not a stop |
 | SZ-Q8 | bearing `a` is `""` when standing; `pde` is the string `"N min"` or `""` | parsed in the connector |
 | SZ-Q9 | TRs absent from CZPTT, or present but not running that day | unmatched, shown as such |
+| SZ-Q10 | `cna` stays the same while other fields of the entry change (delay, position), so a point repeats; another source may have passed it already | resolved from the call this source placed the train at last; a repeat of a recorded event changes nothing |
+| SZ-Q11 | a train reports points its timetable does not have (diverted; `di` stays 0) | unresolved, counted; nothing moves |
 
 ## Open questions
 

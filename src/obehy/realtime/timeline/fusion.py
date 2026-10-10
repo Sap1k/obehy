@@ -149,11 +149,36 @@ def _frontier(instance: Instance) -> int:
     return max(reached, 0)
 
 
-def _resolve(trip: Trip, start: int, codes: tuple[str, ...], index: IndexView) -> int | None:
+def _start(instance: Instance, previous: SourceTrack | None) -> int:
+    """Where a source's point may lie: from the call it placed the train at last (it repeats a
+    point while other fields of its entry change), else one call behind the run's frontier (a
+    source reports a point another one has just passed)."""
+
+    if previous is not None and previous.point is not None:
+        return previous.point
+    return max(0, _frontier(instance) - 1)
+
+
+def _resolve(
+    instance: Instance,
+    trip: Trip,
+    start: int,
+    codes: tuple[str, ...],
+    actual: Interval,
+    index: IndexView,
+    policy: Policy,
+) -> tuple[int | None, bool]:
+    """The first call from `start` with one of the codes that fits the run's other events in
+    time; with codes found but none fitting, (None, True)."""
+
+    found = False
     for i in range(start, len(trip.calls)):
-        if index.location_key(trip.calls[i].location_id, "sr70") in codes:
-            return i
-    return None
+        if index.location_key(trip.calls[i].location_id, "sr70") not in codes:
+            continue
+        found = True
+        if _consistent(instance, i, actual, policy):
+            return i, False
+    return None, found
 
 
 def _consistent(instance: Instance, i: int, actual: Interval, policy: Policy) -> bool:
@@ -203,14 +228,15 @@ def apply_point(
     hint = previous.next_point if previous is not None else None
     if hint is not None and hint.name == event.name and hint.sr70 is not None:
         codes = (*codes, hint.sr70)
-    i = _resolve(trip, _frontier(instance), codes, index)
+    i, misfit = _resolve(
+        instance, trip, _start(instance, previous), codes, event.actual, index, policy
+    )
     if i is None:
-        return instance, [Unresolved(observation, "point", event.name)]  # moves nothing
+        why = "inconsistent" if misfit else "point"
+        return instance, [Unresolved(observation, why, event.name)]  # moves nothing
     last = len(trip.calls) - 1
     if i == 0 and event.standing:
         return instance, []  # waiting at the origin: nothing has happened yet
-    if not _consistent(instance, i, event.actual, policy):
-        return instance, [Unresolved(observation, "inconsistent", event.name)]
     call = trip.calls[i]
     kind: EventKind
     if event.standing:
@@ -221,6 +247,7 @@ def apply_point(
         kind = "passage"
     calls = list(instance.calls)
     state: CallState = calls[i]
+    before = state.arrival if kind == "arrival" else state.departure
     if kind == "arrival":
         merged = merge(state.arrival, event.actual, new_is_point=True, policy=policy)
         state = replace(state, arrival=merged, passed_arrival=_middle(merged))
@@ -252,6 +279,8 @@ def apply_point(
     )
     if track is not None:
         instance = _with_track(instance, replace(track, point=i))
+    if merged == before:
+        return instance, []  # a repeat of the point already recorded
     journey, visit = instance.public_call(i, kind)
     effect = WriteEvent(
         journey, call.location_id, visit, kind, merged, "source", observation.source

@@ -241,3 +241,21 @@ def test_predictors_anchor_change_sz_and_propagate() -> None:
     assert _predicted_c("anchor_change") == local("2026-10-08 08:24")
     assert _predicted_c("sz") == local("2026-10-08 08:24")
     assert _predicted_c("propagate") == local("2026-10-08 08:21")
+
+
+def test_sz_q10_a_repeated_point_changes_nothing_and_a_late_one_still_places() -> None:
+    point = _point("B", ("10002",), "2026-10-08 08:13")
+    _, effects, _ = _run(
+        _index(),
+        _sz("2026-10-08 08:13:10", point, Delay(60, "point")),
+        _sz("2026-10-08 08:13:40", point, Delay(120, "point")),  # same cna, other fields changed
+    )
+    assert _events(effects) == [("czptt:B", "departure", "source")]
+    _, late, _ = _run(
+        _index(),
+        _duk("2026-10-08 08:10:30", 2.0),
+        _duk("2026-10-08 08:14:00", 2.4),
+        _duk("2026-10-08 08:15:00", 2.6),
+        _sz("2026-10-08 08:15:10", _point("B", ("10002",), "2026-10-08 08:13")),
+    )
+    assert ("czptt:B", "departure", "source") in _events(late)

@@ -199,7 +199,7 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   egress, serving 5.1 `sr70`/`sr70:track` keys (JrUtil), rail runs with train-number journeys
   and `journey_link`, the SŽ map connector, DÚK + SŽ fusion, station boards with platforms. A
   2 h replay (2026-10-06 07-09, keys derived for the measurement) binds 1,653/1,660 SŽ and
-  142/150 DÚK train key groups, places 96.7% of SŽ point events, and its rail GTFS-RT passes the
+  142/150 DÚK train key groups, places 99.5% of SŽ point events, and its rail GTFS-RT passes the
   consistency check. Open for R2 acceptance: a CI release with serving 5.1, then a 25 h
   DÚK + SŽ + boards corpus pinned against it (golden digests, validator, live hour).
   Predictions follow `BASE_PLAN.md` 20.5 (dwell recovery, early running carried over, no
