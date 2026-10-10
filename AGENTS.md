@@ -81,6 +81,8 @@ realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
 - `docs/sources/<source>.md`: source facts, replay results and the quirk ledger.
 - `docs/R1_SLICE.md`: the concrete contract of the first realtime slice (types, time scenario
   table, DDL, manifests, acceptance).
+- `docs/R2_SLICE.md`: the rail slice on top of it (runs, SŽ and DÚK trains, fusion, platforms,
+  proxied SŽ egress).
 - `README.md`: how to install and run; point to the other documents instead of repeating them.
 - `STATIC_PIPELINE.md`, `NATIONAL_CZPTT.md`, `JDF_SEMANTICS.md`: the static contracts.
 

@@ -2,8 +2,8 @@
 
 Status: **a 25-hour capture (2026-10-05 21:57 to 2026-10-06 22:43 local, 2,973 polls, 9,300
 train-days) replayed against release `20261006T194555Z-06c0829d89aa` (serving schema 5.0)**, plus the upstream JrUtil WIP scraper `jrutil/src/SzMapa.fs`
-(dvdkon/jrutil commit `587a50010a1a3edaa2f27248bff85254b8dd9160`). Terms of use, rate limits
-and licence: to be confirmed.
+(dvdkon/jrutil commit `587a50010a1a3edaa2f27248bff85254b8dd9160`). Terms of use and licence:
+none published; used anonymously through the proxy pool as an accepted risk.
 
 ## Endpoint
 
@@ -22,6 +22,13 @@ md                  response timestamp, local Europe/Prague, "dd.MM.yyyy HH:mm:s
 cached, cachedResult, executionTime, success, messages, userAccountExpired
 result[]            GeoJSON Features
 ```
+
+## Egress
+
+SŽ is reported to IP-ban addresses that run services against it. From R2 every request goes
+through the proxy pool and sends no `User-Agent` (`docs/R2_SLICE.md` section 7). Upstream JrUtil's
+`SzMapa.fs` polls every 10 s without a User-Agent; its `Grapp.fs` limits itself to 3 concurrent
+and 5 requests per second and treats a 403 as blocked.
 
 ## Per train
 
@@ -124,8 +131,8 @@ one CZPTT path).
 
 `vehicle_position`, `trip_progress`, `stop_event` (actual arrival/departure/passage at passenger
 and operational points), `delay`, `prediction` (next stop), `trip_status` (replacement bus,
-diversion). Platforms are not in this endpoint; station departure boards are a separate channel,
-still to be investigated.
+diversion). Platforms are not in this endpoint; they come from the station boards
+(`sz-tabule.md`).
 
 ## Quirks
 
@@ -134,7 +141,7 @@ still to be investigated.
 | SZ-Q1 | positions in S-JTSK / Křovák (EPSG:5514) | connector transforms to WGS84 |
 | SZ-Q2 | `cp`, `cr`, `nst`, `nsp` are bare `HH:mm`; `md` is local time without an offset | `md` resolved against `received_at` (`BASE_PLAN.md` 19.3, which covers the repeated autumn hour); a time > 12 h after `md` belongs to the previous day |
 | SZ-Q3 | `cr` is the arrival while `rr = 1` and the departure after the train leaves the same `cna` | arrival and departure kept apart (section 20.7) |
-| SZ-Q4 | `cna` is name-only (SR70 20-character names); `zst_sr70` has 6 digits with check digit, `nsn70` 5 without | map names through the SR70 catalogue to the run's calls at or after progress; normalize both codes |
+| SZ-Q4 | `cna` is name-only (SR70 `NÁZEV20` names); `zst_sr70` has 6 digits with check digit, `nsn70` 5 without | resolved through the run's last `NextPoint`, then `source_key(sr70:name20)`, restricted to the run's calls at or after progress; codes through `source_key(sr70)` |
 | SZ-Q5 | RegioJet R 1011xx: one TR with two timetables active the same day | fall back to `tn`; quarantine only if that is ambiguous too |
 | SZ-Q6 | an entry changes in only 16% of polls; unchanged entries carry no new information | not counted as fresh fixes; never makes a train look stationary |
 | SZ-Q7 | `nna` can be a track location, block post or junction | an operational point, not a stop |
@@ -145,4 +152,3 @@ still to be investigated.
 
 - Confirm `e` = ETCS supervision with SŽ.
 - Rounding of `cr` and `de`.
-- Terms of use.

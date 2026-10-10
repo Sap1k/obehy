@@ -93,7 +93,8 @@ heap hard limit is configured; memory figures are telemetry.
 ## Next steps
 
 Work order: §5 (core runtime) in `BASE_PLAN.md` section 34 order; next is R2 (DÚK trains + SŽ,
-rail fusion). §1, §4 and §6 are done; §2 and §3 wait on comparing consecutive Actions builds,
+rail fusion, platforms), contract in `docs/R2_SLICE.md`: proxied SŽ egress, SR70 location keys
+in JrUtil (serving 5.1), rail runs, SŽ connector and fusion, station boards. §1, §4 and §6 are done; §2 and §3 wait on comparing consecutive Actions builds,
 and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ### 1. Stop coordinates and easy `[?]` clusters
@@ -231,6 +232,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-10** — `docs/R2_SLICE.md` (rail slice contract) and `docs/sources/sz-tabule.md`
+  (SŽ station boards, probed by hand: one request per station, about 20 arrivals and 20
+  departures, platforms about 60 min ahead, numbered by platform at big stations and by track at
+  small ones; big-station platforms are shown labels only and stay out of GTFS-RT). SŽ is reported to
+  IP-ban services: all SŽ requests will go through a proxy pool without a User-Agent. No code yet.
 - **2026-10-10** — `docs/sources/dpmd.md`: dossier for the DPMD (Děčín city buses) vehicle map,
   from its page script and a 3-minute capture. Keys are `515<line>:<trip>` (all 15 DPMD lines in
   the release), 8 of 9 live trips resolve; quirks DPMD-Q1–Q9. No connector or 25-hour capture yet.
