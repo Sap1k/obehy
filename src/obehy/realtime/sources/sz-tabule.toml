@@ -1,0 +1,15 @@
+# SŽ station boards (docs/sources/sz-tabule.md), decoded by realtime/sources/sz_tabule.py. Read
+# on demand per station: only while trains are due there, within the [boards] policy budget.
+source = "sz-tabule"
+manifest_version = 1
+
+[[channel]]
+name = "board"
+# SŽ blocks addresses running services: proxied and anonymous only (docs/R2_SLICE.md 7).
+egress = "sz"
+poll = { kind = "demand", query = "station_boards" }
+backoff = { after_failures = 3, max_s = 900 }
+timeout_s = 15
+request = { method = "POST", url = 'https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers\InfoTabule&&action=loadTabule', headers = { "Content-Type" = "application/x-www-form-urlencoded; charset=UTF-8" }, body = 'SR70={sr70}&module=Layers%5CInfoTabule&action=loadTabule' }
+feeds = ["czptt"]
+capabilities = ["trip_key", "platform"]

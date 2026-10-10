@@ -105,3 +105,21 @@ event_tolerance_s = 60
 # Forward prediction for runs with an SŽ prediction: anchor_change, sz or propagate. Chosen from
 # the replay's predictor report (docs/R2_SLICE.md section 11, item 5).
 predictor = "anchor_change"
+
+[boards]
+# SŽ station boards, read on demand per station (docs/R2_SLICE.md section 7). One read covers
+# about 20 arrivals and 20 departures; platforms appear about an hour ahead.
+min_boarding_points = 2
+window_min = 60
+due_refresh_s = 900
+# Measured on the 2026-10-06 timetable at noon (900 stations): refreshing every 5 min near a
+# train and every 2 min just before it would want ~118 reads a minute; these settings ~64.
+early_min = 45
+near_min = 15
+near_refresh_s = 600
+imminent_min = 5
+imminent_refresh_s = 300
+# About one person with SŽ's map open (its UI made ~57 requests a minute).
+ceiling_per_min = 60
+slowdown_s = 900
+slow_latency_factor = 2.0

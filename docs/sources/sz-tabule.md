@@ -75,6 +75,13 @@ SŽ map and are not used.
 | SZT-Q7 | the `onlyForVlak` per-train variant is mostly empty | not used |
 | SZT-Q8 | addresses running services are reportedly IP-banned | proxy pool, no User-Agent, a 403 opens the circuit, a budget ceiling |
 
+## Demand (measured)
+
+On the 2026-10-06 timetable, 900 stations have 2 or more boarding points; at noon about 850
+have passenger calls due within the hour, at 23:30 about 330. Reading each once 45 minutes
+ahead, then every 10 minutes within 15 minutes and every 5 within 5, wants about 64 reads a
+minute at noon (p90 78); the 60/min ceiling drops the excess refreshes first.
+
 ## Recording plan
 
 `obehy rt record` with the demand scheduler (`sz-tabule/board`) against the active release, for

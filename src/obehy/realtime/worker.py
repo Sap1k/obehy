@@ -4,6 +4,8 @@
    with no side effects, rebuilding in-memory state (there is no checkpoint format).
 2. Every channel is polled by the generic scheduler and archived; channels with a connector are
    decoded and their observations go through the shared `Runner` (core, effects, history).
+   Demand channels (SŽ station boards) are read per station while trains are due there
+   (`runtime/demand.py`), within the boards budget.
 3. An emit tick writes per-feed GTFS-RT files and the current-state tables.
 4. `NOTIFY obehy_publication` (sent by `obehy release activate`) rebases live journeys onto the
    new release.
@@ -31,6 +33,8 @@ from obehy.realtime.policy import Policy
 from obehy.realtime.record import ChannelStats, archive_poll, fetch
 from obehy.realtime.replay import DECODERS
 from obehy.realtime.runner import Runner
+from obehy.realtime.runtime.demand import FetchBody, StationDemand, run_demand
+from obehy.realtime.runtime.fetch import fetch_body
 from obehy.realtime.runtime.scheduler import FetchFn, run_channel
 from obehy.realtime.times import Instant, instant
 
@@ -67,6 +71,7 @@ class WorkerOptions:
     gtfs_rt_dir: Path
     feeds: tuple[Feed, ...] = ("jdf",)
     fetcher: FetchFn = fetch
+    body_fetcher: FetchBody = fetch_body  # demand channels: a body per read
     once: bool = False  # poll every channel once and stop (tests)
 
 
@@ -99,6 +104,11 @@ class _Worker:
         )
         self.archive = ArchiveWriter(options.archive)
         self.stats: dict[str, ChannelStats] = {}
+        self.demand: StationDemand | None = None
+        if any(channel.demand is not None for channel in channels):
+            # Its own connection: due calls are queried off the event loop's thread.
+            demand_connection = psycopg.connect(database_url, autocommit=True)
+            self.demand = StationDemand(demand_connection, loads.load_ids["czptt"], policy.boards)
 
     def start(self) -> None:
         warmed = warm_start(self.runner, self.connection, _now(), self.policy.warm_replay_hours)
@@ -115,7 +125,11 @@ class _Worker:
             return
         try:
             observations = decoder(
-                poll.body, sha256, instant(poll.received_at), self.policy.time.max_clock_skew
+                poll.body,
+                sha256,
+                instant(poll.received_at),
+                self.policy.time.max_clock_skew,
+                poll.request,
             )
         except ValueError as error:
             _log(f"{channel.name}: undecodable payload: {error}")
@@ -148,6 +162,8 @@ class _Worker:
                     self.runner.switch_release(
                         current, _writer(self.connection, current, self.policy)
                     )
+                if self.demand is not None:
+                    self.demand.switch(current.load_ids["czptt"])
                 _log(f"rebased onto release {current.run_id}")
         finally:
             listener.close()
@@ -158,6 +174,26 @@ class _Worker:
         for name, channel_stats in sorted(self.stats.items()):
             _log(channel_stats.line(name))
         self.connection.close()
+        if self.demand is not None:
+            self.demand.connection.close()
+
+
+async def _poller(
+    worker: _Worker, channel: Channel, options: WorkerOptions, stop: asyncio.Event
+) -> None:
+    if channel.demand is None:
+        await run_channel(channel, stop, options.fetcher, worker.on_poll, once=options.once)
+        return
+    assert worker.demand is not None
+    await run_demand(
+        channel,
+        stop,
+        worker.demand.due,
+        options.body_fetcher,
+        worker.on_poll,
+        worker.policy.boards,
+        once=options.once,
+    )
 
 
 async def run_worker(
@@ -180,12 +216,7 @@ async def run_worker(
     if not options.once:
         helpers = [asyncio.create_task(worker.ticks()), asyncio.create_task(worker.publications())]
     try:
-        await asyncio.gather(
-            *(
-                run_channel(channel, stop, options.fetcher, worker.on_poll, once=options.once)
-                for channel in channels
-            )
-        )
+        await asyncio.gather(*(_poller(worker, channel, options, stop) for channel in channels))
     finally:
         for helper in helpers:
             helper.cancel()

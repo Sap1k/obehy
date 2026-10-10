@@ -92,6 +92,23 @@ class EgressPolicy:
     cooldown_s: int  # how long a proxy that failed or was refused stays out of rotation
 
 
+@dataclass(frozen=True, slots=True)
+class BoardPolicy:
+    """Demand-polled station boards (docs/R2_SLICE.md section 7)."""
+
+    min_boarding_points: int  # stations with fewer used boarding points are never read
+    window_min: int  # calls due this far ahead make a station wanted
+    due_refresh_s: int  # how often the due calls are queried again
+    early_min: int  # one read when a call comes this close
+    near_min: int  # within this, read again after near_refresh_s
+    near_refresh_s: int
+    imminent_min: int  # within this, read again after imminent_refresh_s
+    imminent_refresh_s: int
+    ceiling_per_min: int  # reads per minute at most, sequential
+    slowdown_s: int  # after a refusal or slow answers, half the ceiling this long
+    slow_latency_factor: float  # slower than this times the median latency is a warning sign
+
+
 PREDICTORS = ("anchor_change", "sz", "propagate")
 
 
@@ -129,6 +146,7 @@ class Policy:
     observation_retention_days: int
     egress: EgressPolicy
     rail: RailPolicy
+    boards: BoardPolicy
 
 
 class _Table:
@@ -230,6 +248,7 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         observation_retention_days=root.table("retention").integer("observation_days"),
         egress=root.section("egress", EgressPolicy),
         rail=_rail(root.table("rail")),
+        boards=root.section("boards", BoardPolicy),
     )
 
 

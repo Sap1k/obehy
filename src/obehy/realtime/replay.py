@@ -18,12 +18,12 @@ import heapq
 import json
 import math
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from itertools import batched
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psycopg
 
@@ -47,17 +47,19 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.policy import Policy
 from obehy.realtime.runner import Runner
-from obehy.realtime.sources import duk, sz
+from obehy.realtime.sources import duk, sz, sz_tabule
 from obehy.realtime.times import Instant, instant, local_date
 
 REPORT_SCHEMA_VERSION = 2
 LOOKAHEAD_POLLS = 40
-SOURCES = ("duk", "sz-mapa")
+SOURCES = ("duk", "sz-mapa", "sz-tabule")
 
-Decoder = Callable[[bytes, str, Instant, timedelta], list[Observation]]
+# body, payload sha256, reception time, clock skew, the request's context (`Poll.request`)
+Decoder = Callable[[bytes, str, Instant, timedelta, Mapping[str, Any]], list[Observation]]
 DECODERS: dict[tuple[str, str], Decoder] = {
-    (duk.SOURCE, duk.CHANNEL): duk.decode,
-    (sz.SOURCE, sz.CHANNEL): sz.decode,
+    (duk.SOURCE, duk.CHANNEL): lambda body, sha, at, skew, _: duk.decode(body, sha, at, skew),
+    (sz.SOURCE, sz.CHANNEL): lambda body, sha, at, skew, _: sz.decode(body, sha, at, skew),
+    (sz_tabule.SOURCE, sz_tabule.CHANNEL): sz_tabule.decode,
 }
 
 
@@ -222,8 +224,13 @@ def _decoded(
             yield at, None
             continue
         try:
+            request = poll.entry.get("request")
             observations = DECODERS[(source, channel)](
-                body, str(poll.entry["sha256"]), at, policy.time.max_clock_skew
+                body,
+                str(poll.entry["sha256"]),
+                at,
+                policy.time.max_clock_skew,
+                cast(dict[str, Any], request) if isinstance(request, dict) else {},
             )
         except ValueError:
             stats[name].bad_payloads += 1

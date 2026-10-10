@@ -227,8 +227,11 @@ The policy default is set from that report.
   counted (`board_demand_dropped`).
 - **Backoff.** A 403/429/5xx response, or a latency above twice the rolling median, halves the
   rate for `boards.slowdown_s`.
-- Demand peaks at about 3,700 calls per hour at about 860 stations (2026-10-06), an estimated
-  45–70 reads per minute. SŽ's own map made about 57 requests per minute for one viewer.
+- Measured on the 2026-10-06 timetable (900 stations with 2 or more boarding points, about 850
+  with calls due at noon): refreshing every 5 min near a train and every 2 min just before it
+  would want about 118 reads a minute; refreshing every 10 and 5 min wants about 64 (p90 78),
+  so the policy uses those. SŽ's own map made about 57 requests a minute for one viewer. The
+  due-calls query takes about 2 s every 15 minutes.
 
 ```toml
 # realtime/sources/sz-tabule.toml
@@ -256,7 +259,7 @@ needs the pool.
 | `[rail]` | `predictor`, `sz_position_sigma_m`, `point_interval_s = 59`, `event_tolerance_s`, `max_position_conflict_m` |
 | `[coverage]` | per source: `duk = "realtime/coverage/ustecky-kraj.geojson"`, `sz = "national"` |
 | `[egress]` | `refresh_h`, `cooldown_s` |
-| `[boards]` | `min_boarding_points = 2`, `window_min = 60`, `early_min = 45`, `near_min = 15`, `near_refresh_s = 300`, `imminent_min = 5`, `imminent_refresh_s = 120`, `ceiling_per_min = 60`, `slowdown_s = 900` |
+| `[boards]` | `min_boarding_points = 2`, `window_min = 60`, `due_refresh_s = 900`, `early_min = 45`, `near_min = 15`, `near_refresh_s = 600`, `imminent_min = 5`, `imminent_refresh_s = 300`, `ceiling_per_min = 60`, `slowdown_s = 900`, `slow_latency_factor = 2.0` |
 
 `stale_after_s`, `predict_without_data_s` and the time windows gain `rail` entries. The
 Ústecký kraj polygon is a curated, git-reviewed file under `src/obehy/data/realtime/coverage/`,

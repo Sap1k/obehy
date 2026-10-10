@@ -17,7 +17,8 @@ from obehy.realtime.model import SourceSemantics
 
 SOURCES = Path(__file__).resolve().parent / "sources"
 FEED_NAMES = ("jdf", "czptt")
-POLL_KINDS = ("interval",)
+POLL_KINDS = ("interval", "demand")
+DEMAND_QUERIES = ("station_boards",)
 CAPABILITIES = (
     "vehicle_key",
     "trip_key",
@@ -26,6 +27,7 @@ CAPABILITIES = (
     "source_state",
     "stop_event",
     "next_stop",
+    "platform",
 )
 
 
@@ -51,6 +53,9 @@ class Channel:
     semantics: dict[str, Any] = field(default_factory=dict[str, Any])
     # A named proxied, anonymous egress (runtime/egress.py); never fetched directly.
     egress: str | None = None
+    # Demand polling: the named query that says what to request (runtime/demand.py); the
+    # request body's `{sr70}` is filled per read. Interval channels have none.
+    demand: str | None = None
 
     @property
     def name(self) -> str:
@@ -128,6 +133,9 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     poll = _table(table, "poll", where)
     if poll.get("kind") not in POLL_KINDS:
         raise ManifestError(f"{where}: poll.kind must be one of {POLL_KINDS}")
+    demand = poll.get("query") if poll.get("kind") == "demand" else None
+    if poll.get("kind") == "demand" and demand not in DEMAND_QUERIES:
+        raise ManifestError(f"{where}: poll.query must be one of {DEMAND_QUERIES}")
     backoff = _table(table, "backoff", where)
     request = _table(table, "request", where)
     method = _string(request, "method", where)
@@ -158,7 +166,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         channel=name,
         method=method,
         url=_string(request, "url", where),
-        interval_s=_positive(poll, "seconds", where),
+        interval_s=60.0 if demand is not None else _positive(poll, "seconds", where),
         timeout_s=_positive(table, "timeout_s", where),
         headers=dict(cast(dict[str, str], headers)),
         body=None if body is None else body.encode("utf-8"),
@@ -169,6 +177,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         capabilities=_strings(table, "capabilities", where, CAPABILITIES),
         semantics=dict(cast(dict[str, Any], semantics)),
         egress=egress,
+        demand=demand,
     )
 
 

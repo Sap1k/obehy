@@ -23,8 +23,11 @@ from typing import Any, cast
 from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.manifest import SOURCES, Channel, ManifestError, select_channels
 from obehy.realtime.manifest import load_channels as _load_channels
-from obehy.realtime.runtime.fetch import fetch
+from obehy.realtime.policy import BoardPolicy
+from obehy.realtime.runtime.demand import DueCalls, FetchBody, run_demand
+from obehy.realtime.runtime.fetch import fetch, fetch_body
 from obehy.realtime.runtime.scheduler import backoff_interval, run_channel
+from obehy.realtime.times import Instant
 
 MANIFEST = SOURCES
 SUMMARY_INTERVAL_S = 600.0
@@ -166,6 +169,8 @@ def archive_poll(
     """Store a poll (filtered if the channel says so); return the stored payload's sha256."""
 
     body, extra = archived_payload(channel, poll)
+    if poll.request:
+        extra["request"] = dict(sorted(poll.request.items()))
     stored = writer.append(channel.source, channel.channel, poll, body, extra)
     stats.polls += 1
     stats.latencies_ms.append((poll.received_at - poll.requested_at) / timedelta(milliseconds=1))
@@ -189,7 +194,12 @@ async def record(
     duration_s: float | None = None,
     fetcher: FetchFn = fetch,
     summary_interval_s: float = SUMMARY_INTERVAL_S,
+    body_fetcher: FetchBody = fetch_body,
+    demand: Callable[[Instant], DueCalls] | None = None,
+    boards: BoardPolicy | None = None,
 ) -> dict[str, ChannelStats]:
+    """Poll and archive until stopped; demand channels need `demand` (the due calls) and the
+    boards policy."""
     writer = ArchiveWriter(archive)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -220,9 +230,17 @@ async def record(
     log(f"recording {', '.join(channel.name for channel in channels)} into {archive}")
     try:
         on_poll = _on_poll(writer, stats)
-        await asyncio.gather(
-            *(run_channel(channel, stop, fetcher, on_poll, once=once) for channel in channels)
-        )
+        pollers: list[Awaitable[object]] = []
+        for channel in channels:
+            if channel.demand is None:
+                pollers.append(run_channel(channel, stop, fetcher, on_poll, once=once))
+            elif demand is not None and boards is not None:
+                pollers.append(
+                    run_demand(channel, stop, demand, body_fetcher, on_poll, boards, once=once)
+                )
+            else:
+                log(f"{channel.name}: a demand channel needs the active release; not recorded")
+        await asyncio.gather(*pollers)
     finally:
         for helper in helpers:
             helper.cancel()

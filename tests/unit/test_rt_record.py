@@ -56,8 +56,11 @@ def test_shipped_manifests_load() -> None:
         "arriva-express/buses",
         "duk/vehicles",
         "sz-mapa/trains",
+        "sz-tabule/board",
     ]
-    arriva, duk, sz = channels
+    arriva, duk, sz, boards = channels
+    assert (boards.demand, boards.egress, boards.method) == ("station_boards", "sz", "POST")
+    assert boards.body is not None and b"SR70={sr70}" in boards.body
     assert arriva.method == "POST"
     assert arriva.filter == "arriva-express"
     assert arriva.body is not None and b"busesCurrentLocations" in arriva.body

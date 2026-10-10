@@ -40,6 +40,7 @@ from obehy.realtime.model import (
     JourneyKey,
     Observation,
     ObservationResult,
+    PlatformAssignment,
     Position,
     Reason,
     ServiceDay,
@@ -52,6 +53,7 @@ from obehy.realtime.model import (
     VehicleState,
     VehicleStatus,
 )
+from obehy.realtime.platforms import apply_platform
 from obehy.realtime.policy import Policy
 from obehy.realtime.runs import journey_spans, part_spans, snapshots
 from obehy.realtime.timeline.estimate import estimate, monotone
@@ -96,6 +98,16 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         raise ValueError(f"observation for {observation.feed} applied to {state.feed} state")
     effects: list[Effect] = []
     vehicle = vehicle_of(observation)
+    platform = observation.first(PlatformAssignment)
+    if vehicle is None and platform is not None:
+        # Call evidence (a station board row): binds, never creates or moves a vehicle.
+        return apply_platform(
+            state,
+            observation,
+            ctx.index,
+            lambda o: _bind(o, ctx, platform.scheduled),
+            lambda match: _open(state, match, ctx, observation),
+        )
     key = observation.first(TripKey)
     if vehicle is None or key is None:
         effects.append(ObservationResult(observation, None, Reason.NO_KEY))
@@ -149,13 +161,14 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     return effects
 
 
-def _bind(observation: Observation, ctx: Context) -> Match | Reason:
-    """Bind by the first key; while that is ambiguous, by each further key in turn (SZ-Q5)."""
+def _bind(observation: Observation, ctx: Context, at: Instant | None = None) -> Match | Reason:
+    """Bind by the first key; while that is ambiguous, by each further key in turn (SZ-Q5).
+    `at` is the time to bind at (a board row: its scheduled time), else the observation's."""
 
     day = observation.first(ServiceDay)
     result: Match | Reason = Reason.NO_KEY
     for n, key in enumerate(observation.all(TripKey)):
-        found = bind(key, observation.at, ctx.index, ctx.policy, day and day.day)
+        found = bind(key, at or observation.at, ctx.index, ctx.policy, day and day.day)
         if n == 0 or isinstance(found, Match):
             result = found
         if result is not Reason.AMBIGUOUS:

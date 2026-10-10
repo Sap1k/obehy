@@ -40,6 +40,9 @@ class Poll:
     content_type: str | None = None
     headers: Mapping[str, str] = field(default_factory=dict[str, str])
     error: str | None = None
+    # What a demand-polled request was for (a board's station: {"sr70": "534149"}); archived
+    # with the poll, since the payload itself may not say.
+    request: Mapping[str, str] = field(default_factory=dict[str, str])
 
     @property
     def ok(self) -> bool:

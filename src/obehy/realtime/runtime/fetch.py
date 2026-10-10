@@ -111,6 +111,15 @@ def channel_request(channel: Channel, *, anonymous: bool, body: bytes | None = N
     return request
 
 
+def fetch_body(channel: Channel, body: bytes, clock: Clock = utc_clock) -> Poll:
+    """A direct request with a per-read body (demand channels); refused like `fetch`."""
+
+    if channel.egress is not None:
+        return refused(channel, f"egress {channel.egress!r} required: not sent directly", clock)
+    request = channel_request(channel, anonymous=False, body=body)
+    return send(request, channel.timeout_s, clock)
+
+
 def fetch(channel: Channel, clock: Clock = utc_clock) -> Poll:
     """A direct request; refused for a channel that must go through an egress."""
 
