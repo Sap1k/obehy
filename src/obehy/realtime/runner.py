@@ -27,6 +27,7 @@ from obehy.realtime.model import (
     Feed,
     FeedState,
     Observation,
+    PlatformAssignment,
     ServiceDay,
     SourceSemantics,
     TripKey,
@@ -57,8 +58,15 @@ def _refs(observation: Observation) -> set[KeyRef]:
     return {(key.namespace, key.key) for key in observation.all(TripKey)}
 
 
-def _days(observation: Observation) -> set[date]:
+def observation_days(observation: Observation) -> set[date]:
+    """The service dates binding the observation may look at: around its time, its source's
+    service day, and around a board row's scheduled time (a row read before midnight for a
+    train after it binds at the scheduled time)."""
+
     days = set(candidate_service_dates(observation.at))
+    platform = observation.first(PlatformAssignment)
+    if platform is not None:
+        days.update(candidate_service_dates(platform.scheduled))
     day = observation.first(ServiceDay)
     if day is not None:
         days.add(day.day)
@@ -95,7 +103,7 @@ class Runner:
             if observation.feed not in self.runtimes:
                 continue
             refs[observation.feed].update(_refs(observation))
-            days[observation.feed].update(_days(observation))
+            days[observation.feed].update(observation_days(observation))
         for feed in sorted(days):
             self.runtimes[feed].loader.ensure(refs[feed], days[feed])
 
@@ -116,7 +124,7 @@ class Runner:
             days: set[date] = set()
             for observation in batch:
                 refs.update(_refs(observation))
-                days.update(_days(observation))
+                days.update(observation_days(observation))
             runtime.loader.ensure(refs, days)
             for observation in batch:
                 effects.extend(self._step(runtime, observation))

@@ -23,6 +23,7 @@ from obehy.realtime.model import (
     Unresolved,
 )
 from obehy.realtime.policy import load_policy
+from obehy.realtime.runner import observation_days
 from obehy.realtime.runtime.demand import Pace, ReadLog, plan_reads, run_demand
 from obehy.realtime.sources import sz_tabule
 from tests.realtime.builder import timetable
@@ -248,3 +249,21 @@ def test_run_demand_fills_the_station_into_the_body_and_keeps_it_with_the_poll()
     )
     assert sent == [b"SR70=534149&x=1"]
     assert [p.request for p in polls] == [{"sr70": "534149"}]
+
+
+def test_a_row_after_midnight_loads_the_dates_around_its_scheduled_time() -> None:
+    # Read at 20:12 for a train at 00:10: binding looks at the scheduled day's neighbours too
+    # (the server crashed on an unloaded service date, 2026-10-10).
+    fact = PlatformAssignment("10001", "departure", local("2026-10-09 00:10"), "2", "track")
+    facts = (TripKey("czptt:train_number", "100"), fact)
+    row = Observation(
+        "sz-tabule",
+        "board",
+        "czptt",
+        local("2026-10-08 20:12"),
+        None,
+        RawRef("3" * 64, 0),
+        1,
+        facts,
+    )
+    assert date(2026, 10, 10) in observation_days(row)
