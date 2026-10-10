@@ -32,7 +32,10 @@ STATIC_FEEDS = (
     Feed("cz-jdf-filtered-gtfs.zip", "jdf-filtered/gtfs.zip", "Buses (JDF), filtered"),
     Feed("cz-czptt-gtfs.zip", "czptt/gtfs.zip", "Rail (CZPTT), national"),
 )
-REALTIME_FEEDS = (Feed("cz-jdf-gtfs-rt.pb", "", "Buses (JDF), GTFS-RT, updated every 10 s"),)
+REALTIME_FEEDS = (
+    Feed("cz-jdf-gtfs-rt.pb", "", "Buses (JDF), GTFS-RT, updated every 10 s"),
+    Feed("cz-czptt-gtfs-rt.pb", "", "Rail (CZPTT), GTFS-RT, updated every 10 s"),
+)
 
 
 @dataclass(frozen=True)
@@ -42,13 +45,19 @@ class RealtimeSource:
     covers: str
 
 
-# What the worker currently runs (realtime/sources/*.toml with feeds=jdf); update with it.
+# What the worker currently runs (realtime/sources/*.toml); update with it.
 REALTIME_SOURCES = (
     RealtimeSource(
         "DÚK vehicle positions (Ústecký kraj)",
         "cz-jdf-gtfs-rt.pb",
         "DÚK regional buses, Teplice city buses; Ústí nad Labem city buses (DPmÚL) only in "
         "part. Positions, and delays measured from GPS against the timetable.",
+    ),
+    RealtimeSource(
+        "DÚK train positions and SŽ train map, fused",
+        "cz-czptt-gtfs-rt.pb",
+        "Trains nationwide from the SŽ map (positions, passages at railway points, delays), "
+        "DÚK GPS in Ústecký kraj, and platforms from SŽ station boards where they are tracks.",
     ),
 )
 

@@ -24,9 +24,11 @@ from obehy.realtime.model import (
     Feed,
     FeedState,
     JourneyKey,
+    LinkJourneys,
     Observation,
     ObservationResult,
     RawRef,
+    RecordPlatform,
     SnapshotJourney,
     VehicleKey,
     WriteEvent,
@@ -41,6 +43,8 @@ HISTORY_TABLES = (
     "actual_stop_event",
     "vehicle_assignment",
     "vehicle_day",
+    "journey_link",
+    "platform_evidence",
 )
 
 
@@ -122,9 +126,11 @@ class Writer:
         snapshots = [e for e in effects if isinstance(e, SnapshotJourney)]
         events = [e for e in effects if isinstance(e, WriteEvent)]
         assigned = [e for e in effects if isinstance(e, AssignVehicle)]
+        links = [e for e in effects if isinstance(e, LinkJourneys)]
+        platforms = [e for e in effects if isinstance(e, RecordPlatform)]
         for result in results:
             self._observation_partition(result.observation.received_at.astimezone(UTC).date())
-        for day in {e.journey.service_date for e in snapshots}:
+        for day in {e.journey.service_date for e in (*snapshots, *platforms)}:
             self._history_partition(day)
         with self.connection.transaction():
             self._observations(results)
@@ -132,6 +138,8 @@ class Writer:
                 self._snapshot(snapshot)
             self._events(events)
             self._assignments(results, assigned)
+            self._links(links)
+            self._platforms(platforms)
 
     def _observations(self, results: Sequence[ObservationResult]) -> None:
         if not results:
@@ -187,8 +195,8 @@ class Writer:
         revision = latest + 1
         self.connection.execute(
             "INSERT INTO history.journey_schedule (feed, key_namespace, key, service_date,"
-            " revision, release_id, trip_id, route_name, headsign, derivation_id)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " revision, release_id, trip_id, route_name, headsign, derivation_id, run_key)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 *key,
                 revision,
@@ -197,6 +205,7 @@ class Writer:
                 snapshot.route_name,
                 snapshot.headsign,
                 self.derivation_id,
+                snapshot.run_key,
             ),
         )
         with self.connection.cursor() as cursor:
@@ -286,10 +295,12 @@ class Writer:
             vehicle = result.observation.first(VehicleKey)
             if result.journey is None or vehicle is None:
                 continue
-            key = (result.observation.source, vehicle.source_vehicle_id, result.journey)
             at = result.observation.at
-            lo, hi = seen.get(key, (at, at))
-            seen[key] = (min(lo, at), max(hi, at))
+            # History is keyed by public journeys (rail: train numbers), not by the run.
+            for journey in result.public or (result.journey,):
+                key = (result.observation.source, vehicle.source_vehicle_id, journey)
+                lo, hi = seen.get(key, (at, at))
+                seen[key] = (min(lo, at), max(hi, at))
         for assignment in assigned:
             key = (
                 assignment.vehicle.source,
@@ -324,6 +335,61 @@ class Writer:
                     for (source, vehicle, journey), (lo, hi) in sorted(
                         seen.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])
                     )
+                ],
+            )
+
+    def _links(self, links: Sequence[LinkJourneys]) -> None:
+        if not links:
+            return
+        with self.connection.cursor() as cursor:
+            cursor.executemany(
+                "INSERT INTO history.journey_link (feed, source_namespace, source_key,"
+                " target_namespace, target_key, service_date, kind, derivation_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                [
+                    (
+                        link.source.feed,
+                        link.source.namespace,
+                        link.source.key,
+                        link.target.namespace,
+                        link.target.key,
+                        link.source.service_date,
+                        link.kind,
+                        self.derivation_id,
+                    )
+                    for link in links
+                ],
+            )
+
+    def _platforms(self, platforms: Sequence[RecordPlatform]) -> None:
+        if not platforms:
+            return
+        with self.connection.cursor() as cursor:
+            cursor.executemany(
+                "INSERT INTO history.platform_evidence (feed, key_namespace, key, service_date,"
+                " location_id, visit_n, event_type, value, label, boarding_point_id, source,"
+                " first_seen, last_seen, derivation_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                " ON CONFLICT (feed, key_namespace, key, service_date, location_id, visit_n,"
+                " event_type, value) DO UPDATE SET"
+                " first_seen = least(history.platform_evidence.first_seen, excluded.first_seen),"
+                " last_seen = greatest(history.platform_evidence.last_seen, excluded.last_seen),"
+                " boarding_point_id = excluded.boarding_point_id, label = excluded.label",
+                [
+                    (
+                        *_key(e.journey),
+                        e.location_id,
+                        e.visit_n,
+                        e.kind,
+                        e.platform.value,
+                        e.platform.label,
+                        e.platform.boarding_point_id,
+                        e.platform.source,
+                        e.platform.assigned_at,
+                        e.platform.assigned_at,
+                        self.derivation_id,
+                    )
+                    for e in platforms
                 ],
             )
 
@@ -413,6 +479,15 @@ def _call_json(call: CallState) -> dict[str, Any]:
         "estimated_arrival": _iso(call.estimated_arrival),
         "estimated_departure": _iso(call.estimated_departure),
         "source_class": call.source_class,
+        "passenger": call.passenger,
+        "platform": None
+        if call.platform is None
+        else {
+            "value": call.platform.value,
+            "label": call.platform.label,
+            "boarding_point_id": call.platform.boarding_point_id,
+            "source": call.platform.source,
+        },
     }
 
 

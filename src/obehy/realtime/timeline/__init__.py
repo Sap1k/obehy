@@ -112,11 +112,12 @@ def _cross(
                 state = replace(state, departure=crossing.fixes)
         calls[crossing.call] = state
         if crossing.recorded:  # one passed inside a reception gap is realtime only
+            journey, visit = instance.public_call(crossing.call, crossing.kind)
             effects.append(
                 WriteEvent(
-                    instance.journey,
+                    journey,
                     state.location_id,
-                    state.visit_n,
+                    visit,
                     crossing.kind,
                     crossing.fixes,
                     "progress",

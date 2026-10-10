@@ -13,7 +13,7 @@ from obehy.realtime.index_sql import IndexLoader, active_loads, ensure_release, 
 from obehy.release import activate as activation
 from obehy.release.contract import load_contract
 from obehy.release.load import load_release
-from tests.db.serving_fixture import write_release
+from tests.db.serving_fixture import czptt_rows, write_release
 from tests.realtime.builder import Timetable, serving_rows, timetable
 
 pytestmark = pytest.mark.postgres
@@ -102,3 +102,82 @@ def test_ensure_release_loads_a_directory_once(
     first = ensure_release(connection, release, report=_quiet)
     assert ensure_release(connection, "run-rt", report=_quiet) == first
     assert ensure_release(connection, release, report=_quiet) == first
+
+
+def test_rail_trips_load_their_run_train_numbers_and_sr70_keys(
+    connection: psycopg.Connection, tmp_path: Path
+) -> None:
+    rows = czptt_rows()
+    run_key = rows["trip"][0]["run_key"]
+    station, point = "czptt:location:CZ54000", "czptt:location:CZ54001"
+    track = f"{station}:platform:2"
+    rows["location"].append(
+        {
+            "location_id": track,
+            "kind": "boarding_point",
+            "domain": "heavy_rail",
+            "parent_location_id": station,
+            "name": "Česká Lípa hl.n.",
+            "public_code": "2",
+            "coordinate_precision": "missing",
+        }
+    )
+    rows["trip"].append(
+        {
+            "trip_id": "czptt:trip:1:2",
+            "route_id": "czptt:route:1",
+            "service_id": "czptt:service:1",
+            "short_name": "Os 16600",
+            "run_key": run_key,
+            "run_part": 2,
+        }
+    )
+    rows["trip_call"].append(
+        {
+            "trip_id": "czptt:trip:1:2",
+            "sequence": 2,
+            "location_id": point,
+            "passenger_service": False,
+            "scheduled_arrival": 6 * 3600 + 480,
+            "scheduled_departure": 6 * 3600 + 480,
+            "pickup_type": 1,
+            "dropoff_type": 1,
+            "timepoint": True,
+        }
+    )
+    first, last = date(2026, 10, 5), date(2026, 10, 11)
+    for kind, namespace, identifier, public_id in [
+        ("trip", "czptt:train_number", "16600", "czptt:trip:1:2"),
+        ("location", "sr70", "54000", station),
+        ("location", "sr70", "54001", point),
+        ("location", "sr70:track", "54000:2", track),
+    ]:
+        rows["source_key"].append(
+            {
+                "entity_kind": kind,
+                "namespace": namespace,
+                "identifier": identifier,
+                "public_id": public_id,
+                "valid_from": first,
+                "valid_to": last,
+                "binding_method": "identity",
+            }
+        )
+    release = write_release(tmp_path, "run-rail", czptt=rows)
+    load_release(connection, release, CONTRACT, report=_quiet)
+    loads = run_loads(connection, "run-rail")
+    assert loads is not None
+    day = date(2026, 10, 7)
+
+    index = IndexLoader(connection, loads, "czptt").ensure([("czptt:train_number", "6600")], [day])
+
+    assert index.runs[run_key] == ("czptt:trip:1:1", "czptt:trip:1:2")
+    part = index.trip("czptt:trip:1:1")
+    assert (part.run_key, part.run_part, part.train_number) == (run_key, 1, "6600")
+    run = index.run(part, day)
+    assert [(p.trip_id, p.train_number, p.first, p.last) for p in run.parts] == [
+        ("czptt:trip:1:1", "6600", 0, 1),
+        ("czptt:trip:1:2", "16600", 1, 1),
+    ]
+    assert index.location_key(point, "sr70") == "54001"
+    assert index.keyed_locations("sr70:track", "54000:2") == (track,)

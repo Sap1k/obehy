@@ -3,6 +3,10 @@
 Queries read `static.*` by `load_id` rather than `active.*`, so replay can use a retained release
 that is not the active one; the live worker passes the active publication's loads. This is the
 one sanctioned reader outside `active.*` (AGENTS.md).
+
+Rail trips load with every part of their run (PA), their train numbers and the `sr70` keys of
+their locations (and the `sr70:track` keys of those stations' tracks), so the core can follow the
+whole run and resolve SŽ points and tracks (docs/R2_SLICE.md sections 1 and 2).
 """
 
 from __future__ import annotations
@@ -137,7 +141,10 @@ class IndexLoader:
     def _load_trips(self, trip_ids: list[str]) -> None:
         heads = self._rows_first(
             "SELECT t.trip_id, t.route_id, coalesce(r.short_name, r.route_id), r.mode,"
-            " t.service_id, t.headsign, t.shape_id"
+            " t.service_id, t.headsign, t.shape_id, t.run_key, t.run_part,"
+            " (SELECT min(k.identifier) FROM static.source_key k"
+            "  WHERE k.load_id = t.load_id AND k.public_id = t.trip_id"
+            "  AND k.namespace = 'czptt:train_number')"
             " FROM static.trip t JOIN static.route r"
             " ON r.load_id = t.load_id AND r.route_id = t.route_id"
             " WHERE t.trip_id = ANY(%s) AND t.load_id = %s",
@@ -167,7 +174,19 @@ class IndexLoader:
             locations.add(location_id)
         shapes: set[str] = set()
         services: set[str] = set()
-        for trip_id, route_id, route_name, mode, service_id, headsign, shape_id in heads:
+        runs: set[str] = set()
+        for (
+            trip_id,
+            route_id,
+            route_name,
+            mode,
+            service_id,
+            headsign,
+            shape_id,
+            run_key,
+            run_part,
+            train_number,
+        ) in heads:
             self.index.trips[trip_id] = Trip(
                 trip_id,
                 route_id,
@@ -177,18 +196,69 @@ class IndexLoader:
                 headsign,
                 shape_id,
                 tuple(calls[trip_id]),
+                run_key=run_key,
+                run_part=run_part,
+                train_number=train_number,
             )
+            if run_key is not None and run_key not in self.index.runs:
+                runs.add(run_key)
             if shape_id is not None and shape_id not in self.index.shapes:
                 shapes.add(shape_id)
             if service_id not in self.index.service_dates:
                 services.add(service_id)
-        self._load_locations(sorted(locations - self.index.locations.keys()))
+        new_locations = sorted(locations - self.index.locations.keys())
+        self._load_locations(new_locations)
+        if self.index.feed == "czptt":
+            self._load_rail_keys(new_locations)
         if shapes:
             self._load_shapes(sorted(shapes))
         if services and self.index.loaded_dates:
             self._load_dates(services, set(self.index.loaded_dates), extend=False)
         for service_id in services:
             self.index.service_dates.setdefault(service_id, frozenset())
+        if runs:
+            self._load_runs(sorted(runs))
+
+    def _load_runs(self, run_keys: list[str]) -> None:
+        """Every part of each run, in `run_part` order; parts not loaded yet load like any
+        trip."""
+
+        parts: dict[str, list[str]] = defaultdict(list)
+        for run_key, trip_id in self._rows_first(
+            "SELECT run_key, trip_id FROM static.trip"
+            " WHERE run_key = ANY(%s) AND load_id = %s ORDER BY run_key, run_part, trip_id",
+            run_keys,
+        ):
+            parts[run_key].append(trip_id)
+        for run_key in run_keys:
+            self.index.runs[run_key] = tuple(parts.get(run_key, ()))
+        siblings = sorted({t for ids in parts.values() for t in ids if t not in self.index.trips})
+        if siblings:
+            self._load_trips(siblings)
+
+    def _load_rail_keys(self, location_ids: list[str]) -> None:
+        """`sr70` keys of the locations, and the `sr70:track` keys of those stations' tracks."""
+
+        if not location_ids:
+            return
+        codes: set[str] = set()
+        for identifier, public_id in self._rows_first(
+            "SELECT identifier, public_id FROM static.source_key"
+            " WHERE entity_kind = 'location' AND namespace = 'sr70'"
+            " AND public_id = ANY(%s) AND load_id = %s ORDER BY 1, 2",
+            location_ids,
+        ):
+            self.index.add_location_key(public_id, "sr70", identifier)
+            codes.add(identifier)
+        if not codes:
+            return
+        for identifier, public_id in self._rows_first(
+            "SELECT identifier, public_id FROM static.source_key"
+            " WHERE entity_kind = 'location' AND namespace = 'sr70:track'"
+            " AND split_part(identifier, ':', 1) = ANY(%s) AND load_id = %s ORDER BY 1, 2",
+            sorted(codes),
+        ):
+            self.index.add_location_key(public_id, "sr70:track", identifier)
 
     def _load_locations(self, location_ids: list[str]) -> None:
         if not location_ids:

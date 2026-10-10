@@ -5,7 +5,7 @@ Warm replay reads them back, so `facts_from_json(facts_to_json(x)) == x` for eve
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, cast
 
 from obehy.realtime.model import (
@@ -14,15 +14,23 @@ from obehy.realtime.model import (
     DelayReference,
     EventKind,
     Fact,
+    Interval,
+    NextPoint,
     NextStop,
+    NextStopPrediction,
+    PlatformAssignment,
+    PlatformLabel,
+    PointEvent,
     Position,
+    ServiceDay,
     SourceDeparture,
     SourceState,
     StopEvent,
     TripKey,
+    TripStatus,
     VehicleKey,
 )
-from obehy.realtime.times import instant
+from obehy.realtime.times import Instant, instant
 
 Json = dict[str, Any]
 
@@ -49,6 +57,38 @@ def fact_to_json(fact: Fact) -> Json:
             return {"t": "stop_event", "call": call_ref, "kind": kind, "at": at.isoformat()}
         case NextStop(call_ref):
             return {"t": "next_stop", "call": call_ref}
+        case ServiceDay(day):
+            return {"t": "service_day", "day": day.isoformat()}
+        case PointEvent(name, sr70, scheduled, actual, standing):
+            return {
+                "t": "point_event",
+                "name": name,
+                "sr70": sr70,
+                "scheduled": _iso(scheduled),
+                "lo": actual.lo.isoformat(),
+                "hi": actual.hi.isoformat(),
+                "standing": standing,
+            }
+        case NextPoint(name, sr70):
+            return {"t": "next_point", "name": name, "sr70": sr70}
+        case NextStopPrediction(sr70, scheduled, predicted):
+            return {
+                "t": "next_stop_prediction",
+                "sr70": sr70,
+                "scheduled": _iso(scheduled),
+                "predicted": _iso(predicted),
+            }
+        case TripStatus(replacement_bus, diverted):
+            return {"t": "trip_status", "replacement_bus": replacement_bus, "diverted": diverted}
+        case PlatformAssignment(station, kind, scheduled, value, label):
+            return {
+                "t": "platform",
+                "station": station,
+                "kind": kind,
+                "scheduled": scheduled.isoformat(),
+                "value": value,
+                "label": label,
+            }
 
 
 def fact_from_json(data: Json) -> Fact:
@@ -76,8 +116,53 @@ def fact_from_json(data: Json) -> Fact:
             )
         case "next_stop":
             return NextStop(str(data["call"]))
+        case "service_day":
+            return ServiceDay(date.fromisoformat(str(data["day"])))
+        case "point_event":
+            return PointEvent(
+                str(data["name"]),
+                _text(data.get("sr70")),
+                _instant(data.get("scheduled")),
+                Interval(_at(data["lo"]), _at(data["hi"])),
+                bool(data["standing"]),
+            )
+        case "next_point":
+            return NextPoint(str(data["name"]), _text(data.get("sr70")))
+        case "next_stop_prediction":
+            return NextStopPrediction(
+                str(data["sr70"]), _instant(data.get("scheduled")), _instant(data.get("predicted"))
+            )
+        case "trip_status":
+            return TripStatus(bool(data["replacement_bus"]), bool(data["diverted"]))
+        case "platform":
+            kind = str(data["kind"])
+            if kind not in ("arrival", "departure"):
+                raise FactSchemaError(f"bad platform kind {kind!r}")
+            return PlatformAssignment(
+                str(data["station"]),
+                "arrival" if kind == "arrival" else "departure",
+                _at(data["scheduled"]),
+                str(data["value"]),
+                cast(PlatformLabel, data["label"]),
+            )
         case other:
             raise FactSchemaError(f"unknown fact type {other!r}")
+
+
+def _iso(value: Instant | None) -> str | None:
+    return None if value is None else value.isoformat()
+
+
+def _at(value: object) -> Instant:
+    return instant(datetime.fromisoformat(str(value)))
+
+
+def _instant(value: object) -> Instant | None:
+    return None if value is None else _at(value)
+
+
+def _text(value: object) -> str | None:
+    return None if value is None else str(value)
 
 
 def facts_to_json(facts: tuple[Fact, ...]) -> Json:

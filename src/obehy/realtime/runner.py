@@ -27,6 +27,7 @@ from obehy.realtime.model import (
     Feed,
     FeedState,
     Observation,
+    ServiceDay,
     SourceSemantics,
     TripKey,
 )
@@ -50,6 +51,18 @@ def shipped_semantics() -> dict[tuple[str, str], SourceSemantics]:
     """The core semantics of the connector manifests shipped with the package."""
 
     return semantics_by_channel(load_channels())
+
+
+def _refs(observation: Observation) -> set[KeyRef]:
+    return {(key.namespace, key.key) for key in observation.all(TripKey)}
+
+
+def _days(observation: Observation) -> set[date]:
+    days = set(candidate_service_dates(observation.at))
+    day = observation.first(ServiceDay)
+    if day is not None:
+        days.add(day.day)
+    return days
 
 
 @dataclass(slots=True)
@@ -81,10 +94,8 @@ class Runner:
         for observation in observations:
             if observation.feed not in self.runtimes:
                 continue
-            key = observation.first(TripKey)
-            if key is not None:
-                refs[observation.feed].add((key.namespace, key.key))
-            days[observation.feed].update(candidate_service_dates(observation.at))
+            refs[observation.feed].update(_refs(observation))
+            days[observation.feed].update(_days(observation))
         for feed in sorted(days):
             self.runtimes[feed].loader.ensure(refs[feed], days[feed])
 
@@ -104,10 +115,8 @@ class Runner:
             refs: set[KeyRef] = set()
             days: set[date] = set()
             for observation in batch:
-                key = observation.first(TripKey)
-                if key is not None:
-                    refs.add((key.namespace, key.key))
-                days.update(candidate_service_dates(observation.at))
+                refs.update(_refs(observation))
+                days.update(_days(observation))
             runtime.loader.ensure(refs, days)
             for observation in batch:
                 effects.extend(self._step(runtime, observation))

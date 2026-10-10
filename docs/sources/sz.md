@@ -141,7 +141,7 @@ diversion). Platforms are not in this endpoint; they come from the station board
 | SZ-Q1 | positions in S-JTSK / Křovák (EPSG:5514) | connector transforms to WGS84 |
 | SZ-Q2 | `cp`, `cr`, `nst`, `nsp` are bare `HH:mm`; `md` is local time without an offset | `md` resolved against `received_at` (`BASE_PLAN.md` 19.3, which covers the repeated autumn hour); a time > 12 h after `md` belongs to the previous day |
 | SZ-Q3 | `cr` is the arrival while `rr = 1` and the departure after the train leaves the same `cna` | arrival and departure kept apart (section 20.7) |
-| SZ-Q4 | `cna` is name-only (SR70 `NÁZEV20` names); `zst_sr70` has 6 digits with check digit, `nsn70` 5 without | resolved through the run's last `NextPoint`, then `source_key(sr70:name20)`, restricted to the run's calls at or after progress; codes through `source_key(sr70)` |
+| SZ-Q4 | `cna` is name-only (SR70 `NÁZEV20` names); `zst_sr70` has 6 digits with check digit, `nsn70` 5 without | the connector maps a unique `NÁZEV20` name to its code (`data/realtime/sr70-name20.csv`); else the run's last `NextPoint` of that name gives it; the call is the run's first with that `source_key(sr70)` at or after progress; 6-digit codes lose their check digit |
 | SZ-Q5 | RegioJet R 1011xx: one TR with two timetables active the same day | fall back to `tn`; quarantine only if that is ambiguous too |
 | SZ-Q6 | an entry changes in only 16% of polls; unchanged entries carry no new information | not counted as fresh fixes; never makes a train look stationary |
 | SZ-Q7 | `nna` can be a track location, block post or junction | an operational point, not a stop |

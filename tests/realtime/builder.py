@@ -7,6 +7,11 @@
 Stops not declared with `stop()` are placed 1 km apart eastwards in order of first use. Times
 are wall-clock `HH:MM` (may exceed 24:00) or `(arrival, departure)` pairs. Every trip gets a
 straight shape through its stops unless `shape=False`.
+
+Rail: `trip(..., run=("PA", part), train="6006", first_sequence=n)` makes a part of a run;
+parts of one run share the junction call's sequence. A stop name starting with `~` is a railway
+point without passenger service. `stop(..., sr70="53414")` and `track(stop, "102")` add the
+location keys the SŽ sources resolve through.
 """
 
 from __future__ import annotations
@@ -48,6 +53,8 @@ class TripSpec:
     shape: bool
     valid_from: date
     valid_to: date
+    run: tuple[str, int] | None = None
+    train: str | None = None
 
 
 @dataclass(slots=True)
@@ -57,9 +64,26 @@ class Timetable:
     namespace: str = "cis:line_trip"
     stops: dict[str, Location] = field(default_factory=dict[str, Location])
     trips: list[TripSpec] = field(default_factory=list[TripSpec])
+    codes: dict[str, str] = field(default_factory=dict[str, str])  # stop name -> SR70
+    tracks: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    aliases: list[tuple[str, str, str]] = field(default_factory=list[tuple[str, str, str]])
 
-    def stop(self, name: str, lon: float, lat: float) -> Timetable:
+    def stop(self, name: str, lon: float, lat: float, sr70: str | None = None) -> Timetable:
         self.stops[name] = Location(f"{self.feed}:{name}", name, lon, lat)
+        if sr70 is not None:
+            self.codes[name] = sr70
+        return self
+
+    def key(self, namespace: str, key: str, *trip_ids: str) -> Timetable:
+        """A further source key naming trips (rail: a TR naming every part of a run)."""
+
+        self.aliases.extend((namespace, key, trip_id) for trip_id in trip_ids)
+        return self
+
+    def track(self, name: str, track: str) -> Timetable:
+        """A boarding point (track) of a stop with an SR70 code."""
+
+        self.tracks.append((name, track))
         return self
 
     def _location(self, name: str) -> Location:
@@ -83,11 +107,15 @@ class Timetable:
         shape: bool = True,
         valid_from: date = date(2026, 1, 1),
         valid_to: date = date(2026, 12, 31),
+        run: tuple[str, int] | None = None,
+        train: str | None = None,
+        first_sequence: int = 1,
     ) -> Timetable:
         visits: dict[str, int] = {}
         built: list[Call] = []
-        for sequence, spec in enumerate(calls, start=1):
-            name = spec[0]
+        for sequence, spec in enumerate(calls, start=first_sequence):
+            name = spec[0].lstrip("~")
+            passenger = not spec[0].startswith("~")
             if len(spec) == 2:
                 arrival = departure = hhmm(spec[1])
             else:
@@ -96,7 +124,7 @@ class Timetable:
             location = self._location(name)
             visits[name] = visits.get(name, 0) + 1
             built.append(
-                Call(sequence, location.location_id, visits[name], True, arrival, departure)
+                Call(sequence, location.location_id, visits[name], passenger, arrival, departure)
             )
         line = key.split(":", 1)[0]
         self.trips.append(
@@ -113,6 +141,8 @@ class Timetable:
                 shape=shape,
                 valid_from=valid_from,
                 valid_to=valid_to,
+                run=run,
+                train=train,
             )
         )
         return self
@@ -145,7 +175,14 @@ class Timetable:
                 spec.headsign,
                 shape_id,
                 calls,
+                run_key=None if spec.run is None else spec.run[0],
+                run_part=None if spec.run is None else spec.run[1],
+                train_number=spec.train,
             )
+            if spec.run is not None:
+                parts = [*index.runs.get(spec.run[0], ()), spec.trip_id]
+                order = {t.trip_id: t.run[1] for t in self.trips if t.run is not None}
+                index.runs[spec.run[0]] = tuple(sorted(parts, key=lambda t: order[t]))
             index.service_dates[service_id] = spec.days
             all_days |= spec.days
             ref = (spec.namespace, spec.key)
@@ -156,6 +193,20 @@ class Timetable:
                 route = KeyEntry(spec.route_id, spec.valid_from, spec.valid_to)
                 if route not in index.key_entries.get(parent, ()):
                     index.key_entries[parent] = (*index.key_entries.get(parent, ()), route)
+        for namespace, key, trip_id in self.aliases:
+            spec = next(t for t in self.trips if t.trip_id == trip_id)
+            entry = KeyEntry(trip_id, spec.valid_from, spec.valid_to)
+            index.key_entries[(namespace, key)] = (
+                *index.key_entries.get((namespace, key), ()),
+                entry,
+            )
+        for name, code in sorted(self.codes.items()):
+            index.add_location_key(self._location(name).location_id, "sr70", code)
+        for name, track in self.tracks:
+            location = self._location(name)
+            point = Location(f"{location.location_id}:platform:{track}", name, None, None)
+            index.locations[point.location_id] = point
+            index.add_location_key(point.location_id, "sr70:track", f"{self.codes[name]}:{track}")
         if all_days:
             index.loaded_dates = frozenset(
                 days_between(min(all_days) - timedelta(days=3), max(all_days) + timedelta(days=3))

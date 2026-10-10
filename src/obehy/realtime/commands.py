@@ -71,7 +71,7 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     replayer.add_argument(
         "--sources", type=_list, help=f"source IDs (default: {','.join(replay.SOURCES)})"
     )
-    replayer.add_argument("--feeds", type=_feeds, default=("jdf",), help="default: jdf")
+    replayer.add_argument("--feeds", type=_feeds, default=FEEDS, help="default: jdf,czptt")
     replayer.add_argument("--manifest", type=Path, default=record.MANIFEST)
     replayer.add_argument("--out", type=Path, required=True, help="output directory")
     replayer.add_argument(
@@ -102,7 +102,7 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     worker.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
     worker.add_argument("--gtfs-rt", type=Path, default=Path("data/gtfs-rt"))
     worker.add_argument("--sources", type=_list, help="comma-separated source IDs")
-    worker.add_argument("--feeds", type=_feeds, default=("jdf",), help="default: jdf")
+    worker.add_argument("--feeds", type=_feeds, default=FEEDS, help="default: jdf,czptt")
     worker.add_argument("--manifest", type=Path, default=record.MANIFEST)
     _database(worker)
 

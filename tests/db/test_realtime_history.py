@@ -103,7 +103,8 @@ def test_a_new_release_adds_a_revision_and_orphans_vanished_calls(
     _, effects, ctx = _run()
     _writer(connection).write(effects)
     journey = JourneyKey("jdf", NS, "582492:143", D8)
-    first = snapshot(journey, ctx.index, "jdf:t1", local("2026-10-08 08:00"))
+    (first,) = snapshot(journey, ctx.index, "jdf:t1", local("2026-10-08 08:00"))
+    assert isinstance(first, SnapshotJourney)
     without_b = replace(
         first,
         release_id="run-b",

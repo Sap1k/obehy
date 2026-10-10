@@ -22,6 +22,7 @@ def test_feed_list_names_every_feed_of_the_release(tmp_path: Path) -> None:
         "cz-jdf-gtfs.zip",
         "cz-czptt-gtfs.zip",
         "cz-jdf-gtfs-rt.pb",
+        "cz-czptt-gtfs-rt.pb",
     ]
     stored = json.loads((tmp_path / "public" / "feeds.json").read_text(encoding="utf-8"))
     assert stored["run_id"] == release.name and stored["feeds"][0]["size_bytes"] == 2_500_000

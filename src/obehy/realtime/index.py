@@ -3,6 +3,13 @@
 The worker and replay fill an `Index` with `obehy.realtime.index_sql.IndexLoader` before each
 step for keys not seen yet; tests fill it with `tests.realtime.builder`. The core only reads it
 through `IndexView` and treats a key it was not given as a programming error.
+
+Rail (docs/R2_SLICE.md section 2): a CZPTT path (PA, `trip.run_key`) is published as trip parts
+ordered by `run_part`, which keep the path's sequence numbers, so consecutive parts share their
+junction call's sequence. The core follows the whole path as one **run trip** per service date:
+`Index.run` concatenates the parts running that day, merges each junction call and drops
+non-passenger points without any time. It is synthetic (`run:<PA>:<parts>`) and never output;
+`Trip.parts` say which calls belong to which published part.
 """
 
 from __future__ import annotations
@@ -65,6 +72,16 @@ class Call:
 
 
 @dataclass(frozen=True, slots=True)
+class TripPart:
+    """A published trip part of a run trip: its calls are `calls[first:last + 1]` of the run."""
+
+    trip_id: str
+    train_number: str | None
+    first: int
+    last: int
+
+
+@dataclass(frozen=True, slots=True)
 class Trip:
     trip_id: str
     route_id: str
@@ -74,6 +91,12 @@ class Trip:
     headsign: str | None
     shape_id: str | None
     calls: tuple[Call, ...]
+    # Rail: the CZPTT path (PA) this trip is a part of, its place in it and its train number.
+    run_key: str | None = None
+    run_part: int | None = None
+    train_number: str | None = None
+    # Only on a run trip: its published parts, in order.
+    parts: tuple[TripPart, ...] = ()
 
     @property
     def start(self) -> int:
@@ -121,6 +144,18 @@ class IndexView(Protocol):
 
     def shape(self, shape_id: str) -> Shape: ...
 
+    def run(self, trip: Trip, day: date) -> Trip:
+        """The run trip of a trip part on `day`; a trip outside a run is its own run."""
+        ...
+
+    def location_key(self, location_id: str, namespace: str) -> str | None:
+        """The location's source key in `namespace` (rail: `sr70`), if it has one."""
+        ...
+
+    def keyed_locations(self, namespace: str, identifier: str) -> tuple[str, ...]:
+        """Locations a source key names (rail: `sr70:track` boarding points)."""
+        ...
+
 
 @dataclass(slots=True)
 class Index:
@@ -136,6 +171,11 @@ class Index:
     loaded_dates: frozenset[date] = frozenset()
     locations: dict[str, Location] = field(default_factory=dict[str, Location])
     shapes: dict[str, Shape] = field(default_factory=dict[str, Shape])
+    # Rail: the trip parts of each loaded run (PA), in `run_part` order.
+    runs: dict[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
+    # Location source keys: by location and namespace, and the locations each key names.
+    location_keys: dict[str, dict[str, str]] = field(default_factory=dict[str, dict[str, str]])
+    keyed: dict[KeyRef, tuple[str, ...]] = field(default_factory=dict[KeyRef, tuple[str, ...]])
 
     def missing(self, refs: Iterable[KeyRef]) -> set[KeyRef]:
         """Keys whose static data has not been loaded (or looked up and found absent) yet."""
@@ -170,3 +210,94 @@ class Index:
             return self.shapes[shape_id]
         except KeyError:
             raise IndexMiss(f"shape {shape_id} was not loaded") from None
+
+    def location_key(self, location_id: str, namespace: str) -> str | None:
+        return self.location_keys.get(location_id, {}).get(namespace)
+
+    def keyed_locations(self, namespace: str, identifier: str) -> tuple[str, ...]:
+        return self.keyed.get((namespace, identifier), ())
+
+    def add_location_key(self, location_id: str, namespace: str, identifier: str) -> None:
+        self.location_keys.setdefault(location_id, {})[namespace] = identifier
+        named = self.keyed.get((namespace, identifier), ())
+        if location_id not in named:
+            self.keyed[(namespace, identifier)] = tuple(sorted((*named, location_id)))
+
+    def run(self, trip: Trip, day: date) -> Trip:
+        if trip.run_key is None or trip.parts:
+            return trip
+        try:
+            part_ids = self.runs[trip.run_key]
+        except KeyError:
+            raise IndexMiss(f"run {trip.run_key} was not loaded") from None
+        parts = [self.trip(t) for t in part_ids]
+        running = [p for p in parts if self.runs_on(p.service_id, day)] or [trip]
+        run_id = f"run:{trip.run_key}:{','.join(str(p.run_part) for p in running)}"
+        cached = self.trips.get(run_id)
+        if cached is None:
+            cached = run_trip(run_id, trip.run_key, running)
+            self.trips[run_id] = cached
+        return cached
+
+
+def _timed(call: Call) -> bool:
+    return call.passenger_service or call.arrival is not None or call.departure is not None
+
+
+def run_trip(run_id: str, run_key: str, parts: list[Trip]) -> Trip:
+    """The parts concatenated into one trip: the junction call shared by consecutive parts is
+    merged (arrival of the earlier part, departure of the later), and railway points without
+    any time are left out (they cannot be placed)."""
+
+    calls: list[Call] = []
+    spans: list[TripPart] = []
+    for part in parts:
+        first: int | None = None
+        for call in part.calls:
+            if not _timed(call):
+                continue
+            if calls and calls[-1].sequence == call.sequence:
+                previous = calls[-1]
+                calls[-1] = Call(
+                    call.sequence,
+                    call.location_id,
+                    0,
+                    previous.passenger_service or call.passenger_service,
+                    previous.arrival if previous.arrival is not None else call.arrival,
+                    call.departure if call.departure is not None else previous.departure,
+                )
+                index = len(calls) - 1
+            else:
+                calls.append(call)
+                index = len(calls) - 1
+            if first is None:
+                first = index
+        if first is not None:
+            spans.append(TripPart(part.trip_id, part.train_number, first, len(calls) - 1))
+    visits: dict[str, int] = {}
+    numbered: list[Call] = []
+    for call in calls:
+        visits[call.location_id] = visits.get(call.location_id, 0) + 1
+        numbered.append(
+            Call(
+                call.sequence,
+                call.location_id,
+                visits[call.location_id],
+                call.passenger_service,
+                call.arrival,
+                call.departure,
+            )
+        )
+    head, tail = parts[0], parts[-1]
+    return Trip(
+        run_id,
+        head.route_id,
+        head.route_name,
+        head.mode,
+        head.service_id,
+        tail.headsign,
+        None,
+        tuple(numbered),
+        run_key=run_key,
+        parts=tuple(spans),
+    )

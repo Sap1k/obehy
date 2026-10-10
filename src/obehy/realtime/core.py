@@ -13,6 +13,11 @@ journey never started and the delay window for late running does not apply). For
 a vehicle on its trip's path past the first stop counts as departed while the source has
 already moved on to a later run of the same trip (DUK-Q18: the onboard unit missed the
 departure); a vehicle driving its trip is never left without realtime.
+
+Rail runs (docs/R2_SLICE.md section 2): the instance of a CZPTT train is its whole run (PA) on
+the service date, whichever source key bound it; history and assignments go to its public
+train-number journeys (`runs.py`). A source key that is ambiguous on its own (SZ-Q5: one TR,
+two timetables) falls back to the observation's further keys, in order.
 """
 
 from __future__ import annotations
@@ -38,8 +43,7 @@ from obehy.realtime.model import (
     ObservationResult,
     Position,
     Reason,
-    ScheduledCall,
-    SnapshotJourney,
+    ServiceDay,
     SourceDeparture,
     SourceSemantics,
     SourceState,
@@ -50,6 +54,7 @@ from obehy.realtime.model import (
     VehicleStatus,
 )
 from obehy.realtime.policy import Policy
+from obehy.realtime.runs import journey_spans, part_spans, snapshots
 from obehy.realtime.timeline.estimate import estimate
 from obehy.realtime.timeline.plan import PlanCache
 from obehy.realtime.timeline.progress import past_first_stop
@@ -101,7 +106,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     previous = state.vehicles.get(vehicle)
     binding = _continued(previous, key, observation, state, ctx)
     if binding is None:
-        result = bind(key, observation.at, ctx.index, ctx.policy)
+        result = _bind(observation, ctx)
         if isinstance(result, Match) and _stale(result, observation, ctx):
             _drop_unstarted(state, result.journey, vehicle)
             result = Reason.STALE_KEY
@@ -114,7 +119,10 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
             return effects
         binding = Binding(vehicle, result.journey, result.trip.trip_id, "keyed", observation.at)
         effects.extend(_open(state, result, ctx, observation))
-        effects.append(AssignVehicle(vehicle, result.journey, observation.at))
+        effects.extend(
+            AssignVehicle(vehicle, journey, observation.at)
+            for journey in state.instances[result.journey].public
+        )
 
     trip = ctx.index.trip(binding.trip_id)
     instance = state.instances[binding.journey]
@@ -137,8 +145,22 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     if instance.lifecycle == "finished":
         status = "layover"
     _set_vehicle(state, observation, vehicle, status, key, binding, None)
-    effects.append(ObservationResult(observation, binding.journey, None))
+    effects.append(ObservationResult(observation, binding.journey, None, instance.public))
     return effects
+
+
+def _bind(observation: Observation, ctx: Context) -> Match | Reason:
+    """Bind by the first key; while that is ambiguous, by each further key in turn (SZ-Q5)."""
+
+    day = observation.first(ServiceDay)
+    result: Match | Reason = Reason.NO_KEY
+    for n, key in enumerate(observation.all(TripKey)):
+        found = bind(key, observation.at, ctx.index, ctx.policy, day and day.day)
+        if n == 0 or isinstance(found, Match):
+            result = found
+        if result is not Reason.AMBIGUOUS:
+            break
+    return result
 
 
 def estimate_all(state: FeedState, ctx: Context) -> None:
@@ -250,40 +272,34 @@ def _open(state: FeedState, match: Match, ctx: Context, observation: Observation
     if match.journey in state.instances:
         return []  # a second vehicle on the same journey (DUK-Q11)
     trip = match.trip
+    spans = journey_spans(ctx.index.feed, trip, match.journey.service_date)
     state.instances[match.journey] = Instance(
         journey=match.journey,
         release_id=ctx.index.release_id,
         trip_id=trip.trip_id,
         mode=trip.mode,
         lifecycle="pre_trip",
-        calls=tuple(CallState(c.sequence, c.location_id, c.visit_n) for c in trip.calls),
+        calls=_call_states(trip),
         freshness=Freshness(observation.at, observation.received_at),
+        journeys=spans,
+        parts=part_spans(trip),
     )
-    return [snapshot(match.journey, ctx.index, trip.trip_id, observation.at)]
+    return snapshots(match.journey, spans, trip, ctx.index, observation.at)
 
 
-def snapshot(journey: JourneyKey, index: IndexView, trip_id: str, at: Instant) -> SnapshotJourney:
+def _call_states(trip: Trip) -> tuple[CallState, ...]:
+    return tuple(
+        CallState(c.sequence, c.location_id, c.visit_n, passenger=c.passenger_service)
+        for c in trip.calls
+    )
+
+
+def snapshot(journey: JourneyKey, index: IndexView, trip_id: str, at: Instant) -> list[Effect]:
+    """The schedule snapshots (and journey links) of an instance's trip or run."""
+
     trip = index.trip(trip_id)
-    return SnapshotJourney(
-        journey=journey,
-        at=at,
-        release_id=index.release_id,
-        trip_id=trip.trip_id,
-        route_name=trip.route_name,
-        headsign=trip.headsign,
-        calls=tuple(
-            ScheduledCall(
-                ordinal,
-                call.location_id,
-                call.visit_n,
-                call.passenger_service,
-                call.arrival,
-                call.departure,
-                index.location(call.location_id).name,
-            )
-            for ordinal, call in enumerate(trip.calls, start=1)
-        ),
-    )
+    spans = journey_spans(index.feed, trip, journey.service_date)
+    return snapshots(journey, spans, trip, index, at)
 
 
 def _lifecycle(
@@ -367,13 +383,13 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
         old = {(c.location_id, c.visit_n): c for c in instance.calls}
         calls = tuple(
             replace(
-                old.get(
-                    (c.location_id, c.visit_n), CallState(c.sequence, c.location_id, c.visit_n)
-                ),
+                old.get((c.location_id, c.visit_n), fresh),
                 sequence=c.sequence,
+                passenger=fresh.passenger,
             )
-            for c in trip.calls
+            for c, fresh in zip(trip.calls, _call_states(trip), strict=True)
         )
+        spans = journey_spans(index.feed, trip, journey.service_date)
         state.instances[journey] = replace(
             instance,
             release_id=index.release_id,
@@ -381,10 +397,12 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
             calls=calls,
             progress=None,
             track=None,
+            journeys=spans,
+            parts=part_spans(trip),
         )
         moved[journey] = trip.trip_id
         state.dirty.add(journey)
-        effects.append(snapshot(journey, index, trip.trip_id, instance.freshness.updated_at))
+        effects.extend(snapshots(journey, spans, trip, index, instance.freshness.updated_at))
     for vehicle, current in sorted(state.vehicles.items()):
         binding = current.binding
         if binding is None:
@@ -406,5 +424,5 @@ def _resolve(journey: JourneyKey, index: IndexView) -> Trip | None:
             continue
         trip = index.trip(entry.public_id)
         if index.runs_on(trip.service_id, journey.service_date):
-            return trip
+            return index.run(trip, journey.service_date)
     return None

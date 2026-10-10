@@ -19,25 +19,25 @@ track stay out of GTFS-RT (section 6).
 
 ## 1. Static contract: serving 5.1 (JrUtil main)
 
-Location keys, all `entity_kind = location`, filled by JrUtil from `SR70.csv` (the
-`jrunify-ext-geodata` catalogue) and the CZPTT tracks:
+Two location keys, `entity_kind = location`, built by JrUtil from the CZPTT points and tracks
+it already has (no extra input):
 
 | Namespace | Encoding | Example | Target |
 |---|---|---|---|
-| `sr70` | 6-digit SR70 with check digit, as in the catalogue | `534149` | stop place or operational point |
-| `sr70:name20` | the catalogue's 20-character name (`NÁZEV20`), verbatim | `Ústí n.Orl.město z` | stop place or operational point |
-| `sr70:track` | `<sr70>:<track designation>` as in CZPTT | `534149:102` | boarding point |
+| `sr70` | the CZ point's 5-digit SR70 code, no check digit (as CZPTT carries it) | `53414` | stop place or operational point |
+| `sr70:track` | `<sr70>:<track designation>` as in CZPTT | `53414:102` | boarding point |
 
-- Location IDs stay opaque. The SŽ map's 5-digit codes (`nsn70`) are looked up as the `sr70`
-  key whose first five digits match; the namespace encoding documents that the 5-digit form is
-  the code without its check digit.
-- Check digits are never computed: they are Luhn for most codes but not all (Poniklá is
-  `571500`).
-- The SŽ map names points with `NÁZEV20` names, and so does upstream JrUtil's `Grapp.fs`
-  (`sr70_process.py --name=NÁZEV20`). A `sr70:name20` key naming several locations is
-  ambiguous and quarantined at use, never guessed.
-- Oběhy vendors `serving-v5.1.json`. `IndexLoader` loads the location keys of the run's calls
-  together with the run.
+- Location IDs stay opaque. SŽ's 6-digit codes (`zst_sr70`, the boards' `SR70`) are the 5-digit
+  code plus a check digit; the connectors drop the last digit. The check digit is never computed
+  (it is Luhn for most codes but not all: Poniklá is `571500`).
+- **Names are matched in Oběhy.** The SŽ map names points by the SR70 catalogue's 20-character
+  names (`NÁZEV20`), as does upstream JrUtil's `Grapp.fs`. Oběhy ships that catalogue
+  (`src/obehy/data/realtime/sr70-name20.csv`, from `jrunify-ext-geodata/rail/SR70_Nazev20.csv`):
+  the SŽ connector maps a name to its code when the name is unique, and leaves it unresolved
+  otherwise (never guessed). The same file gives the boards their 6-digit codes.
+- Oběhy vendors serving 5.1. `IndexLoader` loads a rail trip with every part of its run, the
+  parts' train numbers, the `sr70` keys of their locations and the `sr70:track` keys of those
+  stations.
 
 ## 2. Rail runs and identity
 
@@ -104,12 +104,10 @@ Delay.reference += "point"                             SŽ de: measured at the l
 - **SZ-Q6, unchanged entries.** The core keeps a per-source fingerprint of each train's last
   entry. An unchanged entry is liveness only: it is no new fix, and it never makes the train
   look stationary.
-- **SZ-Q4, resolving a point.** A `PointEvent` resolves in this order:
-  1. the run's last `NextPoint` with the same name, giving its `sr70` key;
-  2. the `sr70:name20` key.
-
-  Either way the result is restricted to the run's calls at or after the committed frontier,
-  taking the first such visit. An unresolved or ambiguous point is reported
+- **SZ-Q4, resolving a point.** The connector gives a `PointEvent` the code of its `NÁZEV20`
+  name when the catalogue has that name exactly once. The core then takes, in this order, the
+  code from the connector or from the run's last `NextPoint` with the same name, and finds the
+  run's first call with that `sr70` key at or after the committed frontier. An unresolved or ambiguous point is reported
   (`point_unresolved`) and moves nothing.
 
 ### DÚK trains (`sources/duk.py`, unchanged decoder)
@@ -318,7 +316,7 @@ keys and serves only the point-name measurement.
   `id` is the CZPTT service date. This is an invariant, not a question. Replay counts
   `ServiceDay` facts whose date has no running run for the TR (`date_mismatch`), and the
   rail-runs commit reports that count on the 2026-10-05/06 capture.
-- **Point names.** With `sr70:name20` keys, `cna` names should always resolve. Replay measures
+- **Point names.** With the `NÁZEV20` catalogue, `cna` names should always resolve. Replay measures
   it (`point_unresolved`, per name), first on a bounded, sampled scan of the 2026-10-05/06
   capture.
 - **No track-to-platform layout exists for us**, and there are no per-platform coordinates.

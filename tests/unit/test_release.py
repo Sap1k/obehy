@@ -127,6 +127,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "functions",
         "rt",
         "history",
+        "rail",
     ]
 
 
