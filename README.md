@@ -52,9 +52,8 @@ recorder stops cleanly on SIGINT/SIGTERM. A restart appends to the same archive.
 SŽ channels (`egress = "sz"` in their manifest) are only ever sent through a proxy pool, with no
 User-Agent: SŽ blocks addresses that run services against it. Save your proxy list (Webshare's
 `ip:port:username:password` lines) to a file outside git and name it in the gitignored local
-config, or set `OBEHY_EGRESS_SZ_PROXY_LIST_FILE`. A download URL (`proxy_list_url`,
-`OBEHY_EGRESS_SZ_PROXY_LIST_URL`) works too, but Webshare regenerates those links; a saved list
-wins when both are set. Either is re-read every 6 hours. Without one, SŽ channels are not
+config, or set `OBEHY_EGRESS_SZ_PROXY_LIST_FILE`. It is re-read every 6 hours (Webshare's
+download links are regenerated, so they are not used). Without one, SŽ channels are not
 polled; the other sources still are.
 
 ```toml

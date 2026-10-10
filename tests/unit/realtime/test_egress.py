@@ -16,7 +16,7 @@ from obehy.realtime.policy import EgressPolicy
 from obehy.realtime.runtime.egress import (
     Egress,
     ProxyPool,
-    load_egress_urls,
+    load_egress_lists,
     parse_proxy_list,
 )
 from obehy.realtime.runtime.fetch import fetch
@@ -84,7 +84,7 @@ def proxies() -> Iterator[tuple[_Proxy, _Proxy]]:
 
 
 def _pool(text: str, logs: list[str]) -> ProxyPool:
-    pool = ProxyPool("sz", "https://lists.invalid/secret", POLICY, download=lambda _: text)
+    pool = ProxyPool("sz", "secret.txt", POLICY, read=lambda _: text)
     pool.log = logs.append
     pool.refresh()
     return pool
@@ -95,18 +95,18 @@ def test_proxy_list_lines_become_proxy_urls() -> None:
     assert parse_proxy_list(text) == ("http://bob:p%40ss@10.0.0.2:8080",)
 
 
-def test_egress_url_comes_from_the_environment_before_the_config(
+def test_the_list_file_comes_from_the_environment_before_the_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = tmp_path / "obehy.local.toml"
     config.write_text(
-        'schema_version = 1\n[realtime.egress.sz]\nproxy_list_url = "https://config.invalid/x"\n',
+        'schema_version = 1\n[realtime.egress.sz]\nproxy_list_file = "D:/secrets/a.txt"\n',
         encoding="utf-8",
     )
-    monkeypatch.delenv("OBEHY_EGRESS_SZ_PROXY_LIST_URL", raising=False)
-    assert load_egress_urls(["sz", "other"], config) == {"sz": "https://config.invalid/x"}
-    monkeypatch.setenv("OBEHY_EGRESS_SZ_PROXY_LIST_URL", "https://env.invalid/y")
-    assert load_egress_urls(["sz"], config) == {"sz": "https://env.invalid/y"}
+    monkeypatch.delenv("OBEHY_EGRESS_SZ_PROXY_LIST_FILE", raising=False)
+    assert load_egress_lists(["sz", "other"], config) == {"sz": "D:/secrets/a.txt"}
+    monkeypatch.setenv("OBEHY_EGRESS_SZ_PROXY_LIST_FILE", "/app/secrets/b.txt")
+    assert load_egress_lists(["sz"], config) == {"sz": "/app/secrets/b.txt"}
 
 
 def test_an_egress_channel_is_never_fetched_directly() -> None:
@@ -164,9 +164,9 @@ def test_a_failed_list_download_keeps_the_pool() -> None:
     clock = iter([0.0, 4000.0])
     pool = ProxyPool(
         "sz",
-        "https://lists.invalid/secret",
+        "secret.txt",
         POLICY,
-        download=lambda _: next(texts),
+        read=lambda _: next(texts),
         monotonic=lambda: next(clock),
         log=lambda _: None,
     )
@@ -184,21 +184,18 @@ def test_a_403_opens_the_circuit_at_once() -> None:
     assert failures_after(channel, 40, Poll(T0, T0, 200, b"{}")) == 0
 
 
-def test_a_saved_proxy_list_wins_over_the_url(
+def test_the_saved_list_is_read_from_its_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     saved = tmp_path / "proxies.txt"
     saved.write_text("10.0.0.1:8080:alice:secret\n", encoding="utf-8")
     config = tmp_path / "obehy.local.toml"
     config.write_text(
-        "schema_version = 1\n[realtime.egress.sz]\n"
-        'proxy_list_url = "https://config.invalid/x"\n'
-        f'proxy_list_file = "{saved.as_posix()}"\n',
+        f'schema_version = 1\n[realtime.egress.sz]\nproxy_list_file = "{saved.as_posix()}"\n',
         encoding="utf-8",
     )
-    for kind in ("URL", "FILE"):
-        monkeypatch.delenv(f"OBEHY_EGRESS_SZ_PROXY_LIST_{kind}", raising=False)
-    (source,) = load_egress_urls(["sz"], config).values()
+    monkeypatch.delenv("OBEHY_EGRESS_SZ_PROXY_LIST_FILE", raising=False)
+    (source,) = load_egress_lists(["sz"], config).values()
     pool = ProxyPool("sz", source, POLICY, log=lambda _: None)
     pool.refresh()
     assert pool.proxies == ("http://alice:secret@10.0.0.1:8080",)

@@ -20,8 +20,6 @@ directory = "D:/src/jrutil"
 # test_url = "postgresql://obehy:PASSWORD@localhost:45873/obehy_test"
 
 # Proxied, anonymous egress for SŽ (docs/R2_SLICE.md section 7). Secret: keep it out of git.
-# A saved list (ip:port:username:password lines) wins over a download URL, which
-# Webshare regenerates. OBEHY_EGRESS_SZ_PROXY_LIST_FILE / _URL override them.
+# A saved list of ip:port:username:password lines; OBEHY_EGRESS_SZ_PROXY_LIST_FILE overrides it.
 # [realtime.egress.sz]
 # proxy_list_file = "D:/secrets/sz-proxies.txt"
-# proxy_list_url = "https://proxy.webshare.io/api/v2/proxy/list/download/<token>/..."
