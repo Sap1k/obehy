@@ -15,7 +15,7 @@ non-passenger points without any time. It is synthetic (`run:<PA>:<parts>`) and 
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Protocol
 
@@ -232,6 +232,11 @@ class Index:
             raise IndexMiss(f"run {trip.run_key} was not loaded") from None
         parts = [self.trip(t) for t in part_ids]
         running = [p for p in parts if self.runs_on(p.service_id, day)] or [trip]
+        numbers = [p.run_part for p in running]
+        if len(set(numbers)) != len(numbers):
+            # Two versions of one part running the same day: no run is built, the binding is
+            # ambiguous (`parts` stays empty).
+            return replace(trip, trip_id=f"run:{trip.run_key}:ambiguous")
         run_id = f"run:{trip.run_key}:{','.join(str(p.run_part) for p in running)}"
         cached = self.trips.get(run_id)
         if cached is None:

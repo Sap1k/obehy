@@ -70,6 +70,7 @@ name = "The realtime core is pure: no database, network, filesystem services or 
 type = "forbidden"
 source_modules = [
     "obehy.realtime.model",
+    "obehy.realtime.facts",
     "obehy.realtime.index",
     "obehy.realtime.geo",
     "obehy.realtime.times",

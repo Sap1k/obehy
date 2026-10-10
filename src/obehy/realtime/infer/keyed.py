@@ -75,12 +75,14 @@ def bind(
                 continue
             if trip.run_key is not None:
                 trip = index.run(trip, candidate)
+                if not trip.parts:
+                    return Reason.AMBIGUOUS  # two versions of a part run that day
                 journey = run_journey(index.feed, trip, candidate)
+                if journey in seen:
+                    continue  # another part of the same run
+                seen.add(journey)
             else:
                 journey = JourneyKey(index.feed, key.namespace, key.key, candidate)
-            if journey in seen:
-                continue  # another part of the same run
-            seen.add(journey)
             running.append(Match(journey, trip, *span(trip, journey)))
     if not running:
         return Reason.NOT_ACTIVE

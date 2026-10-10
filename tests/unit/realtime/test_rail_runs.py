@@ -164,3 +164,11 @@ def test_gtfs_rt_has_a_trip_update_per_part_without_railway_points() -> None:
     assert second[0].HasField("departure") and not second[0].HasField("arrival")
     (vehicle,) = [e.vehicle for e in message.entity if e.HasField("vehicle")]
     assert vehicle.trip.trip_id == "czptt:trip:PA1:1"
+
+
+def test_two_versions_of_one_part_running_the_same_day_are_ambiguous() -> None:
+    index = _run()
+    index.trips["czptt:trip:PA1:2b"] = index.trips["czptt:trip:PA1:2"]
+    index.runs["PA1"] = (*index.runs["PA1"], "czptt:trip:PA1:2b")
+    _, effects = _step(index, {"at": "2026-10-08 08:00", "key": "106006"})
+    assert [e.reason for e in effects if isinstance(e, ObservationResult)] == [Reason.AMBIGUOUS]

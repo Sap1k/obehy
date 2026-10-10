@@ -78,6 +78,14 @@ def estimate(
         passed = state.passed_arrival is not None or state.passed_departure is not None
         if passed and i > reached:
             reached = i - 1 if state.passed_departure is None else i
+    latest_event = max(
+        (
+            i
+            for i, c in enumerate(instance.calls)
+            if c.arrival or c.departure or c.passed_arrival or c.passed_departure
+        ),
+        default=-1,
+    )
     floor: Instant | None = instance.progress.at if instance.progress is not None else None
     finished = instance.lifecycle == "finished"
     last = len(instance.calls) - 1
@@ -90,7 +98,8 @@ def estimate(
             est_arr = _passed(state.passed_arrival, state.arrival)
             est_dep = _passed(state.passed_departure, state.departure)
             status: CallStatus = "actual" if recorded else "inferred"
-            waiting = i > reached  # behind the last call left, its departure is just unknown
+            # A call with an event after it was left, departure unseen: not a prediction.
+            waiting = i >= latest_event
             if est_dep is None and i < last and waiting and not finished and lateness is not None:
                 # Arrived, not yet left: the departure is still a prediction, never before the
                 # arrival (a source's arrival can be later than the last fix).

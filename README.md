@@ -276,9 +276,15 @@ uv run obehy realtime --archive data/rt-raw --gtfs-rt data/gtfs-rt
 ```
 
 The worker needs an active release. It rebuilds its state from the last hours of stored
-observations (warm replay), polls and archives every channel, runs the DÚK connector through
-the core, writes `data/gtfs-rt/<feed>.pb` every emit tick and history continuously, and rebases
-live journeys when a new release is activated. `obehy jobs vehicle-day --from DAY` builds the
+observations (warm replay), polls and archives every channel, runs the DÚK, SŽ map and SŽ
+station board connectors through the core, writes `data/gtfs-rt/jdf.pb` (buses) and
+`data/gtfs-rt/czptt.pb` (trains: DÚK GPS and the SŽ map fused per run, platforms where the board
+numbers tracks) every emit tick and history continuously, and rebases live journeys when a new
+release is activated. SŽ channels poll only with the egress proxy list configured (see
+"Recording realtime payloads"); station boards are read per station while trains are due there,
+at most 60 a minute. Rail point events and the SŽ station codes need a release with serving 5.1
+`sr70` keys. `obehy jobs vehicle-day --from DAY` builds the
 vehicles' working days; `obehy jobs nightly` (03:30 Prague in the server stack)
 rebuilds them for the last two service dates and drops `rt.observation` days older than
-`[retention] observation_days` (30). The raw archive is not pruned yet. The design is in `docs/R1_SLICE.md`.
+`[retention] observation_days` (30). The raw archive is not pruned yet. The design is in
+`docs/R1_SLICE.md` and, for rail, `docs/R2_SLICE.md`.

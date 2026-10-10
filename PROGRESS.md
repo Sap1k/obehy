@@ -92,9 +92,9 @@ heap hard limit is configured; memory figures are telemetry.
 
 ## Next steps
 
-Work order: §5 (core runtime) in `BASE_PLAN.md` section 34 order; next is R2 (DÚK trains + SŽ,
-rail fusion, platforms), contract in `docs/R2_SLICE.md`: proxied SŽ egress, SR70 location keys
-in JrUtil (serving 5.1), rail runs, SŽ connector and fusion, station boards. §1, §4 and §6 are done; §2 and §3 wait on comparing consecutive Actions builds,
+Work order: §5 (core runtime) in `BASE_PLAN.md` section 34 order. R2 (DÚK trains + SŽ, rail
+fusion, platforms, `docs/R2_SLICE.md`) is implemented; its acceptance waits for a CI release
+with serving 5.1 and a 25 h corpus recorded against it. Then R3 (PID). §1, §4 and §6 are done; §2 and §3 wait on comparing consecutive Actions builds,
 and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ### 1. Stop coordinates and easy `[?]` clusters
@@ -195,6 +195,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   Open for R1 acceptance (§6 there): history rebuilt twice and the warm-restart comparison on
   the real corpus (both pass as DB tests on fixtures; the corpus run was stopped, slow over the
   LAN), and the MobilityData GTFS-RT validator (needs a `read:packages` token).
+  R2 (DÚK trains + SŽ, `docs/R2_SLICE.md`) is implemented (2026-10-10): proxied anonymous SŽ
+  egress, serving 5.1 `sr70`/`sr70:track` keys (JrUtil), rail runs with train-number journeys
+  and `journey_link`, the SŽ map connector, DÚK + SŽ fusion, station boards with platforms. A
+  2 h replay (2026-10-06 07-09, keys derived for the measurement) binds 1,653/1,660 SŽ and
+  142/150 DÚK train key groups, places 96.7% of SŽ point events, and its rail GTFS-RT passes the
+  consistency check. Open for R2 acceptance: a CI release with serving 5.1, then a 25 h
+  DÚK + SŽ + boards corpus pinned against it (golden digests, validator, live hour).
   Predictions follow `BASE_PLAN.md` 20.5 (dwell recovery, early running carried over, no
   uncertainty); per-stop holding and knock-on to the next trip of a tour wait for history
   learning and circulations (section 22). JrUtil's
@@ -232,6 +239,19 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-10** — R2 implemented (`docs/R2_SLICE.md`):
+  - SŽ requests only through a proxy pool from secret config, with no User-Agent, failing
+    closed; a 403 opens the circuit.
+  - JrUtil serving 5.1 publishes `sr70`/`sr70:track` location keys.
+  - Rail runs: one instance per CZPTT path, journeys per train number with `journey_link`,
+    GTFS-RT per part (`0007_rail.sql`).
+  - SŽ map connector (Křovák via pyproj, NÁZEV20 names) and DÚK + SŽ fusion with the
+    `anchor_change` predictor, which beat SŽ's own prediction and plain propagation in replay.
+  - Station boards read on demand (about 64/min nationally at noon, 60/min ceiling) give
+    platforms; only tracks reach GTFS-RT.
+  - Fixed replay tagging every poll with the last channel when replaying several.
+  - Validated: 280 unit + 39 DB tests, JrUtil 313 tests, the DÚK golden corpus unchanged, a 2 h
+    rail replay clean. Open: the R2 corpus and acceptance.
 - **2026-10-10** — `docs/R2_SLICE.md` (rail slice contract) and `docs/sources/sz-tabule.md`
   (SŽ station boards, probed by hand: one request per station, about 20 arrivals and 20
   departures, platforms about 60 min ahead, numbered by platform at big stations and by track at
