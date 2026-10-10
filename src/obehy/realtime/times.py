@@ -107,10 +107,20 @@ def resolve_clock(clock: time, received_at: Instant) -> Instant | None:
     return _closest(near, received_at)
 
 
-def read_digits_as_utc(text: str) -> Instant:
-    """An ISO time whose digits are UTC whatever offset it is labelled with (DUK-Q1)."""
+def read_unless_offset_twice(text: str, reference: Instant, tolerance: timedelta) -> Instant | None:
+    """An ISO time with its offset; when it is later than `reference` (a clock of the same
+    device known to be right) by its own positive offset, within `tolerance`, the offset was
+    applied twice (DUK-Q1) and is taken off once more. Only ever subtracted: a time behind
+    its reference is just older. None without an offset."""
 
-    return instant(datetime.fromisoformat(text).replace(tzinfo=UTC))
+    moment = datetime.fromisoformat(text)
+    offset = moment.utcoffset()
+    if offset is None:
+        return None
+    labelled = instant(moment)
+    if offset > timedelta(0) and abs(labelled - reference - offset) <= tolerance:
+        return instant(labelled - offset)
+    return labelled
 
 
 def read_digits_as_local(text: str, received_at: Instant) -> Instant | None:

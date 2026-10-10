@@ -58,9 +58,38 @@ def test_a_bus_becomes_a_keyed_jdf_observation() -> None:
     assert (obs.raw.sha256, obs.raw.item) == ("f" * 64, 0)
 
 
-def test_duk_q1_teplice_gps_time_digits_are_utc() -> None:
-    (obs,) = decode(entry(ID=400132, GPSPositionDT="2026-10-05T19:57:59+02:00"))
+def test_duk_q1_an_offset_applied_twice_is_taken_off() -> None:
+    # Teplice moving: GPS 2 h ahead of its activity time (2026-10-05 21:57:59 CEST).
+    (obs,) = decode(
+        entry(
+            ID=400132,
+            GPSPositionDT="2026-10-05T23:57:59+02:00",
+            LastActivityDT="2026-10-05T21:57:59+02:00",
+        )
+    )
     assert obs.observed_at == instant(datetime(2026, 10, 5, 19, 57, 59, tzinfo=UTC))
+    assert obs.first(Position) is not None
+    # An RJÚK train standing: both clocks frozen together, 18 s apart; the fix just ages.
+    (obs,) = decode(
+        entry(
+            ID=20611,
+            CISLineID=0,
+            GPSPositionDT="2026-10-05T23:50:44+02:00",
+            LastActivityDT="2026-10-05T21:51:02+02:00",
+        )
+    )
+    assert obs.observed_at == instant(datetime(2026, 10, 5, 19, 50, 44, tzinfo=UTC))
+
+
+def test_duk_q1_a_normal_frozen_fix_is_not_shifted() -> None:
+    # Standing still, a normal unit's GPS time freezes while its activity time runs on.
+    (obs,) = decode(
+        entry(
+            GPSPositionDT="2026-10-05T21:50:00+02:00",
+            LastActivityDT="2026-10-05T21:57:48+02:00",
+        )
+    )
+    assert obs.observed_at == instant(datetime(2026, 10, 5, 19, 50, tzinfo=UTC))
 
 
 def test_duk_q2_1970_means_no_time() -> None:

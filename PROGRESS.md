@@ -244,6 +244,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-10** — DUK-Q1 corrected: Teplice buses and RJÚK trains apply the local offset
+  twice to their GPS time (`LastActivityDT` is right); the old "UTC digits" reading put them
+  4 h ahead, so all their positions were dropped. Now detected per entry against the unit's
+  activity time, only ever subtracted. Corpus: every Teplice/`206xx` entry fixed, no other
+  vehicle touched; Teplice positions 0 → 5,357 in the bus golden snapshots (digests
+  regenerated). Open: a Teplice bus switching to its next trip while finishing the last over
+  the same streets reads as 19 min early (`585101:65`).
 - **2026-10-10** — Early running only when observed. 28 DÚK corpus journeys were "30+ min
   early": the tracker took a loop route's second pass at the start (Klášterec `527356`), and
   DPmÚL vehicles say running on a stand past the first stop under the next trip (DUK-Q19).

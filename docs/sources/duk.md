@@ -192,7 +192,7 @@ Each quirk is handled where stated and has a scenario test named after its ID
 
 | ID | Quirk | Handling |
 |---|---|---|
-| DUK-Q1 | Teplice `40xxxx`: `GPSPositionDT` is UTC labelled with the local offset (`+02:00`, `+01:00` in winter) | connector ignores the label and reads the digits as UTC; the clock-skew check (`BASE_PLAN.md` 19.3) drops anything still off |
+| DUK-Q1 | Some units apply the local offset twice to `GPSPositionDT`: read as labelled it is exactly one offset late (`23:57:59+02:00` for 21:57:59 CEST), while their `LastActivityDT` is right. All Teplice `40xxxx` buses and RJÚK trains (`206xx` IDs on 2026-10-05/06, every entry; operator not in the payload); no unit mixes. Earlier read as "UTC digits", which put every Teplice fix 4 h ahead and the skew check dropped them all (no Teplice positions until 2026-10-10) | a GPS time later than the unit's own `LastActivityDT` by its label's positive offset (within 5 min) has the offset taken off once more; never added, so a frozen fix behind its activity time just ages, and an affected unit standing still (both clocks frozen together) still matches. The skew check (`BASE_PLAN.md` 19.3) drops anything still off |
 | DUK-Q2 | `ArrivalDT` = `1970-01-01T02:00:00+02:00` means "none" | connector drops it |
 | DUK-Q3 | DPmÚL weekend numbers (`300 + n`) reported briefly on weekdays | taken literally: a different trip; unmatched when it does not run; no reinterpretation |
 | DUK-Q4 | vehicles keep the previous trip's key while parked or positioning, overnight too | yesterday's instance fails the date window: `not_in_service`; never extends the old trip |

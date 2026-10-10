@@ -54,7 +54,7 @@ JrUtil (`BASE_PLAN.md` 19.3). Values were checked with `zoneinfo`.
 | T7 | fall back | `ST(10-25, 02:30)` (repeated), `ST(10-25, 05:00)` | 00:30Z (first occurrence), 04:00Z |
 | T8 | source local time in the repeated hour | bare `02:30` on 10-25, received 00:31Z / 01:31Z | 00:30Z / 01:30Z (the reading closest to `received_at`) |
 | T9 | source local time in the missing hour | bare `02:30` on 03-29, received 00:31Z | rejected; the observation is untimed |
-| T10 | DUK-Q1: Teplice UTC labelled with the local offset | `10:00:00+02:00` in summer, `10:00:00+01:00` in winter | 10:00Z both |
+| T10 | DUK-Q1: the local offset applied twice | `12:00:00+02:00` in summer, `10:00:00+01:00` in winter, activity 08:00:10Z | 08:00Z both; a time not one offset ahead of its activity time is read as labelled |
 | T11 | ARRIVA-Q1: local time labelled UTC | `10:00:00+00:00` in summer | 08:00Z |
 | T12 | SZ-Q2: bare `HH:mm` across midnight | `23:59`, received 00:01 local | 23:59 local of the previous day |
 | T13 | `vehicle_day` across midnight | journeys 22:00–23:30 and 00:15–01:00 | one vehicle day dated by its first journey; split at gaps over 3 h |

@@ -16,7 +16,7 @@ from obehy.realtime.times import (
     candidate_service_dates,
     instant,
     read_digits_as_local,
-    read_digits_as_utc,
+    read_unless_offset_twice,
     resolve_clock,
     resolve_local,
     within_skew,
@@ -76,9 +76,27 @@ def test_t9_a_local_time_in_the_skipped_hour_is_rejected() -> None:
     assert resolve_local(wall, utc("2026-03-29T00:31")) is None
 
 
-@pytest.mark.parametrize("label", ["+02:00", "+01:00"])
-def test_t10_duk_q1_teplice_digits_are_utc_whatever_the_label(label: str) -> None:
-    assert read_digits_as_utc(f"2026-07-01T10:00:00{label}") == utc("2026-07-01T10:00")
+def test_t10_duk_q1_an_offset_applied_twice_is_taken_off_once_more() -> None:
+    five = timedelta(minutes=5)
+    activity = utc("2026-07-01T08:00:10")
+    # Summer and winter: the label's own offset ahead of the right clock.
+    assert read_unless_offset_twice("2026-07-01T12:00:00+02:00", activity, five) == utc(
+        "2026-07-01T08:00"
+    )
+    assert read_unless_offset_twice("2026-07-01T10:00:00+01:00", activity, five) == utc(
+        "2026-07-01T08:00"
+    )
+    # A right time, or one behind its reference (a frozen fix), is read as labelled.
+    assert read_unless_offset_twice("2026-07-01T10:00:00+02:00", activity, five) == utc(
+        "2026-07-01T08:00"
+    )
+    assert read_unless_offset_twice("2026-07-01T08:00:00+02:00", activity, five) == utc(
+        "2026-07-01T06:00"
+    )
+    # UTC-labelled times are never shifted.
+    assert read_unless_offset_twice("2026-07-01T08:00:00+00:00", activity, five) == utc(
+        "2026-07-01T08:00"
+    )
 
 
 def test_t11_arriva_q1_digits_are_local_time_labelled_utc() -> None:
