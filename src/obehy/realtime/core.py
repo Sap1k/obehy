@@ -56,10 +56,15 @@ from obehy.realtime.model import (
 from obehy.realtime.platforms import apply_platform
 from obehy.realtime.policy import Policy
 from obehy.realtime.runs import journey_spans, part_spans, snapshots
-from obehy.realtime.timeline.estimate import estimate, monotone
+from obehy.realtime.timeline.estimate import (
+    estimate,
+    monotone,
+    own_lateness,
+    waiting_is_not_early,
+)
 from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, lead_of, with_lead
 from obehy.realtime.timeline.plan import PlanCache
-from obehy.realtime.timeline.progress import past_first_stop
+from obehy.realtime.timeline.progress import at_origin_or_moving, past_first_stop
 from obehy.realtime.times import PRAGUE, Instant
 
 CORE_VERSION = "r1.0"
@@ -140,7 +145,9 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     instance = state.instances[binding.journey]
     if _leads(instance, vehicle, observation, ctx.policy):
         instance = with_lead(instance, vehicle, observation)
-        instance = _lifecycle(instance, trip, observation, span(trip, binding.journey)[0], ctx)
+        before = previous.position if previous is not None else None
+        start = span(trip, binding.journey)[0]
+        instance = _lifecycle(instance, trip, observation, start, before, ctx)
         instance, timeline_effects = timeline.advance(
             instance,
             trip,
@@ -186,14 +193,17 @@ def estimate_all(state: FeedState, ctx: Context) -> None:
         trip = ctx.index.trip(instance.trip_id)
         plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
         if trip.run_key is None:  # not a rail run (a CZPTT run may start as a bus)
-            state.instances[journey] = estimate(instance, plan.scheduled, ctx.policy.prediction)
+            current = waiting_is_not_early(instance, plan, own_lateness(instance))
+            state.instances[journey] = estimate(
+                instance, plan.scheduled, ctx.policy.prediction, current=current
+            )
             continue
         predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)
         estimated = estimate(
             instance,
             plan.scheduled,
             ctx.policy.prediction,
-            current=current_lateness(instance),
+            current=waiting_is_not_early(instance, plan, current_lateness(instance)),
             anchor=predictor,
         )
         state.instances[journey] = monotone(estimated)
@@ -328,11 +338,19 @@ def snapshot(journey: JourneyKey, index: IndexView, trip_id: str, at: Instant) -
 
 
 def _lifecycle(
-    instance: Instance, trip: Trip, observation: Observation, start: Instant, ctx: Context
+    instance: Instance,
+    trip: Trip,
+    observation: Observation,
+    start: Instant,
+    previous: Position | None,
+    ctx: Context,
 ) -> Instance:
     """`pre_trip` becomes `running` when the source says so, or, for a source without trip
     states, once the scheduled start has passed. A pre-trip source state (DUK-Q5) holds it,
-    unless the source shows a missed departure (DUK-Q18)."""
+    unless the source shows a missed departure (DUK-Q18). Before the scheduled start a
+    running state counts while the vehicle waits at the first stop or once it is seen moving
+    along the path past it, not while it stands beyond it (DUK-Q19): an early departure is
+    observed, never assumed."""
 
     if instance.lifecycle != "pre_trip":
         return instance
@@ -340,10 +358,29 @@ def _lifecycle(
     if source is None:
         started = observation.at >= start
     else:
-        started = source.code == SOURCE_RUNNING or _missed_departure(
-            instance, trip, observation, start, ctx
+        running = source.code == SOURCE_RUNNING and (
+            observation.at >= start or _moving_early(instance, trip, observation, previous, ctx)
         )
+        started = running or _missed_departure(instance, trip, observation, start, ctx)
     return replace(instance, lifecycle="running") if started else instance
+
+
+def _moving_early(
+    instance: Instance,
+    trip: Trip,
+    observation: Observation,
+    previous: Position | None,
+    ctx: Context,
+) -> bool:
+    """DUK-Q19: before its time a vehicle saying it runs has started only at the first stop
+    or seen moving along the trip's path past it (DPmÚL vehicles say they run while laying
+    over on a stand beyond the first stop under the next trip)."""
+
+    position = observation.first(Position)
+    if position is None:
+        return True  # nothing to judge by: the source's state stands
+    plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)
+    return at_origin_or_moving(plan, previous, position, observation.at, ctx.policy.progress)
 
 
 def _missed_departure(

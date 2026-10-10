@@ -69,6 +69,7 @@ class ProgressPolicy:
     gain_sigma_base_s: float
     gain_sigma_rate: float
     start_lateness_sigma_s: float
+    start_early_sigma_s: float
     beam: int
     prune: float
     agree_within: float
@@ -82,6 +83,7 @@ class PredictionPolicy:
     min_dwell_s: ByMode
     long_dwell_s: ByMode
     min_long_dwell_s: ByMode
+    max_early_departure_s: ByMode
 
 
 @dataclass(frozen=True, slots=True)

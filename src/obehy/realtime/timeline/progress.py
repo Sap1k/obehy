@@ -85,6 +85,34 @@ def update(
     return Step(new_track, progress, done.crossed, since, off_route)
 
 
+def at_origin_or_moving(
+    plan: Plan, before: Position | None, after: Position, at: Instant, policy: ProgressPolicy
+) -> bool:
+    """Whether a fix shows the vehicle at its first stop (before the departure trigger), or
+    two consecutive fixes show it moving on along the path after it: forward by more than
+    GPS jitter (a vehicle standing on a stand past the first stop is neither), and no further
+    ahead of the timetable than the start prior allows (a vehicle driving to its start over
+    roads the trip takes later, or rolling onto its stand, is not running half an hour early)."""
+
+    first = plan.zones[0].departure_m if plan.zones else None
+    after_m = plan.path.call_distances_m[0] if first is None else first
+    sigma = _sigma(policy)
+    now = candidates(plan.path, after.lon, after.lat, sigma, policy.reach_sigmas)
+    if any(a.along_m <= after_m for a in now):
+        return True
+    if before is None:
+        return False
+    then = candidates(plan.path, before.lon, before.lat, sigma, policy.reach_sigmas)
+    earliest = -policy.reach_sigmas * policy.start_early_sigma_s
+    return any(
+        b.along_m > after_m
+        and a.along_m - b.along_m > policy.jitter_m
+        and plan.timetable.lateness_s(at, a.along_m) >= earliest
+        for b in then
+        for a in now
+    )
+
+
 def past_first_stop(plan: Plan, position: Position, policy: ProgressPolicy) -> bool:
     """Whether the fix lies on the path after the first stop's departure trigger."""
 
@@ -126,12 +154,14 @@ def _start(
     at: Instant,
     policy: ProgressPolicy,
 ) -> list[Hypothesis]:
-    """The first fix: one hypothesis per candidate, with a broad prior on absolute lateness."""
+    """The first fix: one hypothesis per candidate, with a prior on absolute lateness that is
+    broad for running late and narrow for running early."""
 
     out: list[Hypothesis] = []
     for candidate in found:
         lateness = plan.timetable.lateness_s(at, candidate.along_m)
-        prior = -0.5 * (lateness / policy.start_lateness_sigma_s) ** 2
+        sigma = policy.start_early_sigma_s if lateness < 0 else policy.start_lateness_sigma_s
+        prior = -0.5 * (lateness / sigma) ** 2
         fit = _emission(candidate, position, plan.path, policy)
         history = (Placement(candidate.along_m, at),)
         out.append(Hypothesis(candidate.along_m, at, lateness, fit + prior, history))

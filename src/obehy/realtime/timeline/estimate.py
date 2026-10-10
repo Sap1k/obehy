@@ -8,13 +8,17 @@
   `no_realtime`.
 - A call ahead of progress is `predicted` from the current lateness: the tracker's, measured
   from GPS against the timetable, else the source's own delay; with neither it is `scheduled`.
+  Early running counts only once observed: a vehicle standing at a stop ahead of its time
+  (typically arriving into padded layover time) is waiting, so its lateness counts as zero.
   During a reception gap the last lateness holds; the vehicle is never assumed back on time.
 
 Propagation (BASE_PLAN.md section 20.5) carries the lateness call by call. A late vehicle
 recovers time only where the timetable has a real dwell (departure after arrival): it leaves
-after the minimum dwell, never before the scheduled departure. Early running is carried
-unchanged: whether a vehicle waits for its time is a habit of particular stops, learned from
-history later, not a rule. Predictions never precede an earlier call's estimate or the last fix
+after the minimum dwell, never before the scheduled departure. Early running is carried on,
+but a predicted departure from a passenger stop is at most the mode's `max_early_departure_s`
+ahead of the timetable: trains wait for their time (0); for road vehicles, whether one waits is
+a habit of particular stops, learned from history later. An observed departure is never
+changed. Predictions never precede an earlier call's estimate or the last fix
 (monotone repair). There is no uncertainty: each estimate is the best single prediction.
 """
 
@@ -25,7 +29,7 @@ from datetime import timedelta
 
 from obehy.realtime.model import CallState, CallStatus, Instance, Interval, SourceClass
 from obehy.realtime.policy import PredictionPolicy
-from obehy.realtime.timeline.plan import Scheduled
+from obehy.realtime.timeline.plan import Plan, Scheduled
 from obehy.realtime.times import Instant
 
 
@@ -49,7 +53,23 @@ def _call(
     )
 
 
-def _current_lateness(instance: Instance) -> tuple[timedelta | None, SourceClass | None]:
+Lateness = tuple[timedelta | None, SourceClass | None]
+
+
+def waiting_is_not_early(instance: Instance, plan: Plan, current: Lateness) -> Lateness:
+    """The current lateness, with early running measured while the vehicle stands at a stop
+    taken as zero: ahead of the timetable there it waits, it is not seen running early."""
+
+    lateness, source_class = current
+    track = instance.track
+    if lateness is None or lateness >= timedelta(0) or source_class != "gps":
+        return current
+    if track is None or not track.hypotheses or not plan.at_stop(track.hypotheses[0].along_m):
+        return current
+    return timedelta(0), source_class
+
+
+def own_lateness(instance: Instance) -> Lateness:
     track = instance.track
     if track is not None and track.hypotheses:
         return timedelta(seconds=round(track.hypotheses[0].lateness_s)), "gps"
@@ -63,7 +83,7 @@ def estimate(
     scheduled: Scheduled,
     policy: PredictionPolicy,
     *,
-    current: tuple[timedelta | None, SourceClass | None] | None = None,
+    current: Lateness | None = None,
     anchor: tuple[int, timedelta] | None = None,
 ) -> Instance:
     """Per-call estimates; computed when state is emitted, not on every fix.
@@ -71,7 +91,7 @@ def estimate(
     Rail runs pass the fused current lateness and, from a source's prediction, the lateness at
     one call ahead (`anchor`) from which propagation continues (`timeline.fusion`)."""
 
-    lateness, delay_class = current if current is not None else _current_lateness(instance)
+    lateness, delay_class = current if current is not None else own_lateness(instance)
     reached = instance.progress.call_index if instance.progress is not None else -1
     # A call with a crossing means every earlier call was passed, observed or not.
     for i, state in enumerate(instance.calls):
@@ -105,7 +125,14 @@ def estimate(
                 # arrival (a source's arrival can be later than the last fix).
                 leave_floor = floor if est_arr is None or (floor and floor > est_arr) else est_arr
                 est_dep, lateness = _departure(
-                    est_arr, sched_arr, sched_dep, lateness, leave_floor, instance.mode, policy
+                    est_arr,
+                    sched_arr,
+                    sched_dep,
+                    lateness,
+                    leave_floor,
+                    instance.mode,
+                    policy,
+                    passenger=state.passenger,
                 )
             calls.append(_call(state, est_arr, est_dep, status, "gps"))
             latest = est_dep or est_arr
@@ -122,7 +149,14 @@ def estimate(
             if est_arr is not None:
                 floor = est_arr
             est_dep, lateness = _departure(
-                est_arr, sched_arr, sched_dep, lateness, floor, instance.mode, policy
+                est_arr,
+                sched_arr,
+                sched_dep,
+                lateness,
+                floor,
+                instance.mode,
+                policy,
+                passenger=state.passenger,
             )
             if est_dep is not None:
                 floor = est_dep
@@ -161,14 +195,21 @@ def _departure(
     floor: Instant | None,
     mode: str,
     policy: PredictionPolicy,
+    *,
+    passenger: bool,
 ) -> tuple[Instant | None, timedelta]:
     """The predicted departure and the lateness carried on from it.
 
     Late into a real dwell, the vehicle leaves after the minimum dwell but not before its
-    scheduled departure, so the dwell absorbs lateness. Otherwise the lateness carries over."""
+    scheduled departure, so the dwell absorbs lateness. Early, it leaves a passenger stop at
+    most `max_early_departure_s` ahead of time (the rest of the lead is lost there). Otherwise
+    the lateness carries over."""
 
     if sched_dep is None:
         return None, lateness
+    if passenger:
+        early = -timedelta(seconds=policy.max_early_departure_s(mode))
+        lateness = max(lateness, early)
     dwell = sched_dep - sched_arr if sched_arr is not None else timedelta(0)
     if arrival is None or lateness <= timedelta(0) or dwell <= timedelta(0):
         return _shifted(sched_dep, lateness, floor), lateness

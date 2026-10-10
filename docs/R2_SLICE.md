@@ -146,6 +146,7 @@ The selected values carry provenance: source, channel and reason.
 | Progress and events | An SŽ `PointEvent` commits the call's event with the minute interval and is a floor: hypotheses behind it are pruned. A DÚK GPS crossing inside that minute narrows the interval to the intersection. A GPS crossing outside it by more than `rail.event_tolerance_s` loses to SŽ and is logged as a conflict. |
 | Current delay | GPS lateness while DÚK is fresh, else SŽ `de` at its point. |
 | Prediction | Policy `rail.predictor`: `anchor_change`, `sz` or `propagate` (below). |
+| Early running | A train may be shown arriving early, and an observed early departure stays; a predicted departure is never before the timetable (`prediction.max_early_departure_s`, rail 0), so an early train's lead ends at the next station. |
 | Coverage and staleness | A run is stale only when every source is silent past `stale_after_s(rail)`: its freshness is the latest of all sources, so DÚK falling silent when the train leaves Ústecký kraj never makes the run stale while SŽ reports. No coverage polygon is needed for that, and none is kept. |
 | Platform | §24 order: the fresh board assignment, then a previous still-valid one, then the scheduled boarding point, then unspecified. |
 

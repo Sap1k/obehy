@@ -239,6 +239,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-10** — Early running only when observed. 28 DÚK corpus journeys were "30+ min
+  early": the tracker took a loop route's second pass at the start (Klášterec `527356`), and
+  DPmÚL vehicles say running on a stand past the first stop under the next trip (DUK-Q19).
+  Fixed with an asymmetric first-fix prior (early sigma 2 min); before the start, a running state
+  counts only at the first stop or when the vehicle is seen moving along the path, plausibly
+  early. A vehicle standing at a stop ahead of time is waiting, not running early (7% of bus
+  stop predictions later, median +42 s). Trains never get a predicted early departure
+  (`max_early_departure_s`, rail 0). Now 0 journeys under −30 min; the rest under −10 min are
+  GPS-observed (line `001590` runs ~10 min ahead of its 2024-12 timetable all day). Golden
+  digests regenerated.
 - **2026-10-10** — R2 implemented (`docs/R2_SLICE.md`):
   - SŽ requests only through a proxy pool from secret config, with no User-Agent, failing
     closed; a 403 opens the circuit.

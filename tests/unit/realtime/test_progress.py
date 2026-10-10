@@ -27,7 +27,7 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.policy import load_policy
 from obehy.realtime.times import PRAGUE, Instant, instant
-from tests.realtime.builder import ORIGIN, timetable
+from tests.realtime.builder import ORIGIN, CallSpec, timetable
 
 POLICY = load_policy()
 DAY = date(2026, 10, 8)
@@ -47,7 +47,7 @@ def point(east: float, north: float) -> tuple[float, float]:
     return ORIGIN[0] + east * M_LON, ORIGIN[1] + north * M_LAT
 
 
-def route(stops: Mapping[str, tuple[float, float]], calls: Sequence[tuple[str, str]]) -> Index:
+def route(stops: Mapping[str, tuple[float, float]], calls: Sequence[CallSpec]) -> Index:
     tt = timetable()
     for name, (east, north) in stops.items():
         lon, lat = point(east, north)
@@ -211,6 +211,46 @@ def test_early_and_late_running_are_followed_not_rejected() -> None:
     )
     assert late.arrivals() == [("B", 1), ("C", 1)]
     assert late.instance.lifecycle == "finished"
+
+
+def test_a_route_through_its_own_start_is_not_read_as_far_ahead() -> None:
+    # A Klášterec-style loop: the route comes back past its start (the stand is closer to the
+    # second pass). Waiting at the start, the bus is at the origin, not 15 minutes ahead.
+    loop = route(
+        {"A": (0, 0), "B": (400, 0), "C": (400, 400), "A2": (0, 100), "D": (-400, 100)},
+        [("A", "08:00"), ("B", "08:05"), ("C", "08:10"), ("A2", "08:15"), ("D", "08:20")],
+    )
+    d = Drive(loop).run([("08:00:00", 0, 100)])
+    track = d.instance.track
+    assert track is not None and track.hypotheses[0].along_m < 200
+    assert track.hypotheses[0].lateness_s == 0
+
+
+def test_duk_q19_a_vehicle_on_a_stand_past_the_first_stop_waits_for_its_time() -> None:
+    # DPmÚL: "running" for 35 minutes on a stand 300 m past the first stop under the next trip.
+    d = Drive(STRAIGHT).run(drive([("07:25", 300, 0), ("07:59:45", 300, 0)], every_s=60))
+    assert d.instance.lifecycle == "pre_trip" and d.events() == []
+    d.run(drive([("08:00", 300, 0), ("08:01", 1000, 0), ("08:03", 2000, 0)]))
+    assert d.instance.lifecycle == "finished"
+    assert min(d.times()) >= at("08:00")
+
+
+def test_duk_q19_driving_to_the_start_over_the_trips_later_roads_is_not_running() -> None:
+    # Half an hour before the start, moving along the end of the trip's path towards its start
+    # (vehicle 809, 2026-10-06): not an early departure.
+    d = Drive(STRAIGHT).run(drive([("07:30", 1500, 0), ("07:31", 1900, 0)]))
+    assert d.instance.lifecycle == "pre_trip" and d.events() == []
+
+
+def test_standing_at_a_stop_ahead_of_time_is_waiting_not_early_running() -> None:
+    # Padded layover time: the bus reaches B four minutes before its arrival and waits.
+    layover = route(
+        {"A": (0, 0), "B": (1000, 0), "C": (2000, 0)},
+        [("A", "08:00"), ("B", "08:10", "08:15"), ("C", "08:25")],
+    )
+    d = Drive(layover).run(drive([("08:00", 0, 0), ("08:06", 1000, 0), ("08:08", 1000, 0)]))
+    c = d.instance.calls[2]
+    assert c.estimated_arrival == at("08:25")
 
 
 GAP_ROUTE = route(

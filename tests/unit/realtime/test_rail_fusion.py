@@ -219,6 +219,22 @@ def test_a_train_is_one_vehicle_however_many_report_it() -> None:
     assert abs(entity.vehicle.position.longitude - sz_fix.lon) < 1e-5
 
 
+def test_an_early_train_waits_for_its_departure() -> None:
+    index = _index()
+    state, _, ctx = _run(
+        index,
+        _duk("2026-10-08 08:00:00", 0.0),
+        _duk("2026-10-08 08:01:00", 0.5),
+        _duk("2026-10-08 08:02:00", 1.0),
+        _duk("2026-10-08 08:03:00", 1.4),  # minutes ahead of the timetable
+    )
+    estimate_all(state, ctx)
+    _, _, b, c = state.instances[PA].calls
+    assert b.estimated_arrival is not None and b.estimated_arrival < local("2026-10-08 08:10")
+    assert b.estimated_departure == local("2026-10-08 08:12")  # held to the timetable
+    assert c.estimated_arrival == local("2026-10-08 08:20")  # the lead is lost at B
+
+
 def test_r6_a_run_is_stale_only_when_every_source_is_silent() -> None:
     state, _, _ = _run(
         _index(),

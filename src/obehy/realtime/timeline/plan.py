@@ -181,6 +181,17 @@ class Plan:
                 index = i
         return index
 
+    def at_stop(self, along_m: float) -> bool:
+        """Whether `along_m` lies at a call, between its arrival and departure triggers (at the
+        origin: anywhere before its departure trigger)."""
+
+        for zone in self.zones:
+            if zone.arrival_m is not None and along_m < zone.arrival_m:
+                return False
+            if zone.departure_m is None or along_m < zone.departure_m:
+                return True
+        return False
+
     def scheduled_time(self, call: int, kind: EventKind) -> Instant | None:
         """The call's scheduled time of the event, falling back to its other time."""
 

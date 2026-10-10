@@ -50,8 +50,11 @@ loss_sigma_base_s = 120
 loss_sigma_rate = 0.5
 gain_sigma_base_s = 60
 gain_sigma_rate = 0.2
-# Broad prior for the first fix of a journey (also mid-trip after a restart).
+# Prior for the first fix of a journey (also mid-trip after a restart): broad for lateness,
+# narrow for early running, so a route through its own start (or past the layover stand) is
+# not read as the vehicle being half an hour ahead.
 start_lateness_sigma_s = 900
+start_early_sigma_s = 120
 beam = 8
 # Hypotheses this far (log-likelihood) below the best are dropped.
 prune = 15
@@ -69,10 +72,14 @@ off_route_hold_s = 180
 # Propagation (BASE_PLAN.md 20.5). A late vehicle recovers time only in a real timetabled dwell
 # (departure after arrival): it needs min_dwell_s there, or min_long_dwell_s in a dwell of at
 # least long_dwell_s, and never leaves before the scheduled departure. Early running carries
-# over unchanged.
+# over only once observed (a vehicle standing at a stop ahead of time is waiting, not running
+# early), and a predicted departure from a passenger stop is at most max_early_departure_s
+# ahead of the timetable: trains wait for their time (an observed early departure stays as it
+# is). Road vehicles are not limited (a day): whether a bus waits is a habit of particular stops.
 min_dwell_s = { default = 60 }
 long_dwell_s = { default = 300 }
 min_long_dwell_s = { default = 120 }
+max_early_departure_s = { default = 86400, rail = 0 }
 
 [delay]
 discard_below_s = -1800
