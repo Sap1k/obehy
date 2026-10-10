@@ -227,6 +227,9 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 
 ## Recent log
 
+- **2026-10-10** — `docs/sources/dpmd.md`: dossier for the DPMD (Děčín city buses) vehicle map,
+  from its page script and a 3-minute capture. Keys are `515<line>:<trip>` (all 15 DPMD lines in
+  the release), 8 of 9 live trips resolve; quirks DPMD-Q1–Q9. No connector or 25-hour capture yet.
 - **2026-10-10** — Source-specific readings in the core come from the manifest's
   `[channel.semantics]` (`SourceSemantics`): DÚK sets `pre_trip_delay_is_elapsed` (DUK-Q14)
   and `pre_trip_after_end_is_stale` (DUK-Q15); other sources take their facts at face value.
