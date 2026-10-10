@@ -9,7 +9,8 @@ Short status and the working backlog. Log entries before 2026-10-01 are in git h
 
 One command (`src/obehy/cli.py`) resolves the GVD year, validates or refreshes the shared OSM
 snapshot, builds JrUtil once, and runs these stages. Production runs daily on GitHub Actions
-(`.github/workflows/build.yml`, `BASE_PLAN.md` section 15; not yet run there).
+(`.github/workflows/build.yml`, `BASE_PLAN.md` section 15) and publishes each run as a
+`build-<run-id>` GitHub release; green since 2026-10-08.
 
 0. **fetch-sources** — VLD and dráhy CIS JŘ archives, CZPTT (inventory, KADR, SR70), PID and IDS
    JMK GTFS, all before JrUtil is built; three attempts per source, `sources/fetch-log.json`.
@@ -58,10 +59,13 @@ heap hard limit is configured; memory figures are telemetry.
   - `20261003T144231Z` (serving schema 4, seeded stop registry): 39.2 min (JDF 16.8,
     filtered JDF 0.5, overlay 5.0, CZPTT 16.0, validation 0.8 min). Zero stop, post or
     overlay-place registry candidates.
-  - `20261006T194555Z` (current; local, serving schema 5.0): all three packages valid.
+  - `20261006T194555Z` (local, serving schema 5.0): all three packages valid; the dev
+    database and the pinned corpus use it.
+  - GitHub Actions builds daily since 2026-10-08; the server runs `20261009T030215Z-8cf199243726`.
   - Not run on either: MobilityData GTFS validator, MOTIS import check.
 - JrUtil Release suite: 309 tests (2026-10-06).
-- Oběhy: 116 unit + 13 PostgreSQL tests, ruff and pyright clean (2026-10-07).
+- Oběhy: 232 unit + 36 PostgreSQL tests, ruff, pyright and import contracts clean; the pinned
+  DÚK corpus replays to its golden digests (2026-10-10).
 - Mirror load of `20261006T194555Z` into PostGIS 17 over a ~10 MB/s LAN link: JDF 466 s
   (COPY 352 s, network-bound; trip_call 7.38M rows 270 s), CZPTT 81 s; activation instant.
   Departure boards at Česká Lípa, Duchcov and Nymburk hl.n. mix both feeds with platforms/posts.
@@ -79,8 +83,6 @@ heap hard limit is configured; memory figures are telemetry.
   keep the carrier's Označníky number; only inferred `:est:<k>` posts are pinned.
 - CZPTT `location` rows carry no municipality, district or country metadata (the CZPTT
   package has no stop metadata).
-- The live post estimator still builds the routing graph on every run; there is no persistent
-  graph cache.
 - Serving validation checks keys, hashes and foreign keys; cross-representation content
   validation (GTFS vs serving relations) is incomplete.
 - No route shapes are generated yet (MOTIS shape generation is future work).
@@ -90,8 +92,9 @@ heap hard limit is configured; memory figures are telemetry.
 
 ## Next steps
 
-Work order: §5 (core runtime) in `BASE_PLAN.md` section 34 order. §1, §4 and §6 are done; the
-rest of §2 and §3 and static acceptance wait on the first GitHub Actions build.
+Work order: §5 (core runtime) in `BASE_PLAN.md` section 34 order; next is R2 (DÚK trains + SŽ,
+rail fusion). §1, §4 and §6 are done; §2 and §3 wait on comparing consecutive Actions builds,
+and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ### 1. Stop coordinates and easy `[?]` clusters
 
@@ -176,9 +179,10 @@ rest of §2 and §3 and static acceptance wait on the first GitHub Actions build
 - **Accept:** per step as listed in `BASE_PLAN.md` sections 33–34; scenario tables for inference
   and the timeline engine; deterministic replay; GTFS-RT validator on replayed days.
 - **Status:** step 1 done (2026-10-06; recording continues). Step 2 done (§6). Step 3 done
-  (`release fetch` 2026-10-09; the server runs as `deploy/compose.yaml` from the CI-built
-  image: hourly fetch → load → `activate --if-newer`, worker, nightly jobs, Caddy; not yet
-  deployed).
+  (`release fetch` 2026-10-09). The server runs `deploy/compose.yaml` from the CI-built image
+  since 2026-10-09: hourly fetch → load → `activate --if-newer`, the realtime worker, nightly
+  jobs at 03:30, and nginx serving `/get-feeds/` (static feeds, GTFS-RT, feed list) behind the
+  host's reverse proxy. The MOTIS node takes its feeds from there.
   Step 4: `obehy rt replay` (archive → episodes → trips of a Parquet release, deterministic
   report) done 2026-10-08. The core architecture is decided (2026-10-08, `BASE_PLAN.md`
   sections 5, 18–22, 29–30). The first slice (DÚK buses with history, warm-replay restart,
