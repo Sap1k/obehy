@@ -68,9 +68,9 @@ Storage at 15 s: about 46 KB per round of four polls, about 270 MB a day.
 
 | # | Example | Meaning |
 |---|---|---|
-| 0 | `001630` | CIS line (6 digits); a bare line number for city buses (MPVNET-Q3) |
+| 0 | `001630` | CIS line (6 digits); for city buses the bare public line (MPVNET-Q3) |
 | 1 | `630` | public line |
-| 2 | `4106` | CIS trip number (*spoj*) |
+| 2 | `4106` | CIS trip number (*spoj*); for city buses a course number, not a trip (MPVNET-Q3) |
 | 3 | `Nové Město p.Smrkem,Ludvíkov,Jednota` | the last stop passed (empty before the first one) |
 | 4 | `114` | delay in seconds, signed (hypothesis: at the stop in 3) |
 | 5 | `Nové Město p.Smrkem,Přebytek` | the next stop (hypothesis) |
@@ -88,17 +88,21 @@ equal to `ds` and to 60 × `dm`. The ±1 field is unknown; it was `1` for ČD an
 
 ## Keys against the release
 
-At 17:30 on 2026-10-11, against release `20261006T194555Z`:
+The 40-second recording at 17:33 on 2026-10-11, against release `20261006T194555Z`. A key counts
+as resolved when it names exactly one trip that runs that day (or the day before, after
+midnight) with the fix time inside its scheduled span, widened by 15 minutes:
 
 | Portal | Regional buses → `cis:line_trip` `<cn0>:<cn2>` | City buses | Trains → `czptt:train_number` |
 |---|---|---|---|
-| IDOL | 87 / 87 | none | 47 / 47 |
-| JIKORD | 122 / 122 | none | 84 / 84 |
-| ODIS | 161 / 161 | 110 DPO, unkeyed (MPVNET-Q3) | 61 / 62 |
-| Zlín | 80 / 80 | 23 DSZO, unkeyed (MPVNET-Q3) | 43 / 43 |
+| IDOL | 74 / 89 | none | 41 / 47 (3 several, 3 none) |
+| JIKORD | 124 / 126 | none | 77 / 84 (4 several, 3 none) |
+| ODIS | 158 / 161 | 116 DPO: the key exists, the trip is wrong (MPVNET-Q3) | 56 / 63 (6 several, 1 none) |
+| Zlín | 88 / 89 | 28 DSZO: as DPO (MPVNET-Q3) | 41 / 43 (2 several) |
 
-Regional buses and trains carry literal keys, as DÚK does. Matching is by key, with no
-inference.
+"Several" are train numbers with several trip parts, which rail runs handle. Regional buses and
+trains carry literal keys, as DÚK does. IDOL's 15 misses are trips numbered 4xxx on long lines
+(670700, 670720, 670730, 690405) whose keys exist but are not scheduled at that time; check them
+on the capture. Merely checking that a key exists is not enough here: it hides MPVNET-Q3.
 
 ## Quirks
 
@@ -106,7 +110,7 @@ inference.
 |---|---|---|
 | MPVNET-Q1 | the bounding box hardly filters: each portal returns its whole fleet, including interregional lines after they leave the region (a whole-country box gave 122 vehicles against 119 for the IDOL view) | one request per portal with a fixed whole-country box |
 | MPVNET-Q2 | the trip is a pipe-separated string with different layouts for buses (22 fields) and trains (12 fields); some entries have `cn: null` (`cat: 0`) | the connector splits by kind and checks the field count; a vehicle without `cn` has no trip |
-| MPVNET-Q3 | city buses (DPO Ostrava, DSZO Zlín; `cat: 3`) carry the bare public line (`8`) instead of a CIS line, and a fleet number instead of a plate | open: their lines in the release and the key rule are still to be checked |
+| MPVNET-Q3 | city buses (DPO Ostrava, DSZO Zlín; `cat: 3`) carry the bare public line (`8`), a **course number** in the trip field, and a fleet number instead of a plate. The lines are fixed CIS prefixes plus the 3-digit line: DPO `915` (116 of 116 keys exist), DSZO `825`, and `826` for the Otrokovice lines 55, 56, 57 and 93. But no key named a trip running at that time, and one number serves several lines at once (DPO `47` on lines 39, 46, 55 and 56; DSZO `37` on 31, 32 and 33): it is the vehicle's course (*pořadí*), not the *spoj* | the line resolves by prefix; the trip must be inferred from line, destination, time and stops, as for Arriva Express (no trip key). The course is a circulation hint (`BASE_PLAN.md` section 22) |
 | MPVNET-Q4 | `dt` and `tm` are local times without an offset | `times.resolve_local` against `received_at`, as DPMD-Q1 |
 | MPVNET-Q5 | `x` is the latitude and `y` the longitude | swapped in the connector |
 | MPVNET-Q6 | the delay is signed seconds, but `ds`'s sign letter says `p` for both 0 and early | the number is used, never the letter |
@@ -117,5 +121,5 @@ inference.
 - Which delays and times fields 4, 6 and 7 of a bus are. Settle this on the 25-hour capture,
   against the trips' scheduled times.
 - How the source behaves around midnight, DST and service starts.
-- Whether a city bus's line and trip can be keyed against the release (MPVNET-Q3).
+- Whether DPO or DSZO publish their courses anywhere, which would make MPVNET-Q3 a keyed lookup.
 - Terms of use.

@@ -246,9 +246,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 - **2026-10-11** — Recording two new sources (no connectors yet):
   - `mpvnet` (`docs/sources/mpvnet.md`): the MPV net maps of IDOL, JIKORD, ODIS and IDZK, one
-    channel each, every 15 s. Regional buses carry literal CIS keys and trains their numbers;
-    all of them resolved against the 2026-10-06 release (one ODIS train missed). City buses of
-    DPO and DSZO carry bare line numbers (MPVNET-Q3).
+    channel each, every 15 s. Regional buses carry literal CIS keys and trains their numbers:
+    83–99 % name a trip running at the fix time (2026-10-06 release). City buses of DPO
+    (prefix `915`) and DSZO (`825`/`826`) carry the bare line and a course number, not a trip
+    number, so they need inference (MPVNET-Q3).
   - `dpmd/vehicles` every 10 s. The `dpmd@1` filter reads the JavaScript literals and keeps the
     vehicles in service as JSON, without the stops, shapes or drivers: 530 KB becomes 24 KB.
 
