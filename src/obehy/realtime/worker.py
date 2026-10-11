@@ -119,13 +119,13 @@ class _Worker:
 
     async def on_poll(self, channel: Channel, poll: Poll) -> None:
         stats = self.stats.setdefault(channel.name, ChannelStats())
-        sha256 = archive_poll(self.archive, channel, poll, stats)
+        sha256, body = archive_poll(self.archive, channel, poll, stats)
         decoder = DECODERS.get((channel.source, channel.channel))
-        if decoder is None or not poll.ok or poll.body is None or sha256 is None:
+        if decoder is None or not poll.ok or body is None or sha256 is None:
             return
         try:
             observations = decoder(
-                poll.body,
+                body,
                 sha256,
                 instant(poll.received_at),
                 self.policy.time.max_clock_skew,

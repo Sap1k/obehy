@@ -1,5 +1,6 @@
-# DPMD (Děčín city buses) vehicle map (docs/sources/dpmd.md). Recorded only: no connector yet.
-# `v` is a cache buster (DPMD-Q9); the filter keeps the vehicles in service as JSON.
+# DPMD (Děčín city buses) vehicle map (docs/sources/dpmd.md). `v` is a cache buster (DPMD-Q9);
+# the filter keeps the vehicles in service as JSON, which the connector decodes. Not live yet
+# (`live_feeds = []`): recorded and replayable until a day of capture is checked.
 source = "dpmd"
 manifest_version = 1
 
@@ -10,6 +11,9 @@ backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 8
 filter = "dpmd"
 feeds = ["jdf"]
+live_feeds = []
+capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip" } }
 
 [channel.request]
 method = "GET"

@@ -178,8 +178,9 @@ def _on_poll(
 
 def archive_poll(
     writer: ArchiveWriter, channel: Channel, poll: Poll, stats: ChannelStats
-) -> str | None:
-    """Store a poll (filtered if the channel says so); return the stored payload's sha256."""
+) -> tuple[str | None, bytes | None]:
+    """Store a poll (filtered if the channel says so); return the stored payload's sha256 and
+    the stored body, which is what a decoder reads, live as in replay."""
 
     body, extra = archived_payload(channel, poll)
     if poll.request:
@@ -196,7 +197,7 @@ def archive_poll(
     if not poll.ok:
         stats.errors += 1
         log(f"{channel.name}: {poll.error or f'HTTP {poll.status}'}")
-    return stored.sha256
+    return stored.sha256, body
 
 
 async def record(

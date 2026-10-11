@@ -3,8 +3,9 @@
 Status: **reverse-engineered from the public map page and a 3-minute capture (2026-10-10
 12:25–12:28 local, a Saturday midday: 60 polls, 38 changed bodies, 9 buses in service, 56
 parked).** Keys checked against release `20261006T194555Z-06c0829d89aa` (serving schema 5.0).
-Recorded from 2026-10-11 (channel `dpmd/vehicles`, filter `dpmd@1`). No connector, no replay
-yet. Terms of use are still to be recorded.
+Recorded from 2026-10-11 (channel `dpmd/vehicles`, filter `dpmd@1`). Connector
+`sources/dpmd.py` (decoder version 1) decodes the archived JSON, live as in replay; it is not live
+yet (`live_feeds = []`) until a day of capture is replayed. Terms of use are still to be recorded.
 
 Dopravní podnik města Děčína, a.s. (DPMD) runs the Děčín city buses (lines 2xx). DÚK's vehicle
 list does not carry them: at 12:30 on the same day, none of its 236 vehicles was on a `515xxx`
@@ -120,6 +121,12 @@ The 9 vehicles in service at 12:28:
 
 8 of 9 resolve exactly, with matching first departures.
 
+## Replay
+
+The 40-second capture (2026-10-11 17:33, a Sunday, release `20261006T194555Z`): 11 of 11 running
+key groups bound, GTFS-RT consistency check clean (11 trips, 155 stop time updates). Fixes were
+5–28 s old.
+
 ## Time and delay semantics
 
 - **Times are Prague local time without an offset**: `TimeStamp` (ISO, milliseconds) and `Čas`
@@ -142,7 +149,7 @@ The 9 vehicles in service at 12:28:
 |---|---|---|
 | DPMD-Q1 | `TimeStamp` and `Čas` are local times without an offset | `times.resolve_local` against `received_at`; ambiguous hours resolve to the reading closest to reception |
 | DPMD-Q2 | the payload is JavaScript (backtick literals, unquoted keys, HTML concatenated with page variables), and the trip fields live only inside the popup HTML | the connector parses the literals and the `<br>Label: value` lines with a narrow parser; never evaluated; a shape change is a `PayloadError` |
-| DPMD-Q3 | the next stop is only a `&darr;` marker between two lines of the popup timetable, whose stop names are shortened (`Hl.nádr.`) | `NextStop` by position in the list, checked against the trip's call times, never by name |
+| DPMD-Q3 | the next stop is only a `&darr;` marker between two lines of the popup timetable, whose stop names are shortened (`Hl.nádr.`) | not used yet: the core has no next-stop rule. When it gets one: `NextStop` by position in the list, checked against the trip's call times, never by name |
 | DPMD-Q4 | the delay is whole minutes, absent at 0 and never negative: early running shows as on time | absent `Zpoždění` on a trip is `Delay(0)` as a weak constraint; GPS progress decides |
 | DPMD-Q5 | parked vehicles (`off: 1`, blue) stay in the list with their last position, up to about two weeks old in the capture | dropped by the connector |
 | DPMD-Q6 | a finished trip's key stays on the vehicle at the terminus, with its last delay (`515201:231` ended 12:24 and was still reported at 12:28 with 2 min) | as DUK-Q4: the journey finishes from GPS progress and the vehicle is in layover |
