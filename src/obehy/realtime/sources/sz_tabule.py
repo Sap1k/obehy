@@ -4,9 +4,10 @@ One poll is one station's board: about 20 arrivals and 20 departures. Each row w
 becomes a vehicle-less observation, keyed by train number, carrying a `PlatformAssignment` for
 the station (the request's SR70, kept in the archive's index line). Quirks normalized here:
 SZT-Q1 (the 6-digit request code loses its check digit), SZT-Q2 (the last column's header says
-whether values are platforms or tracks), SZT-Q4 (`-` and `ND` are no assignment), SZT-Q5 (bare
-`HH:mm` scheduled times, resolved near reception). Every value is shown twice (desktop and
-mobile cells); only desktop cells are read, by their column class.
+whether values are platforms or tracks), SZT-Q9 (or both: `Nást./kolej`, `1a / 9`), SZT-Q4 (`-`
+and `ND` are no assignment), SZT-Q5 (bare `HH:mm` scheduled times, resolved near reception).
+Every value is shown twice (desktop and mobile cells); only desktop cells are read, by their
+column class.
 """
 
 from __future__ import annotations
@@ -30,10 +31,17 @@ from obehy.realtime.times import Instant, resolve_clock
 
 SOURCE = "sz-tabule"
 CHANNEL = "board"
-DECODER_VERSION = 1
+DECODER_VERSION = 2
 
 TABLES: dict[str, Literal["arrival", "departure"]] = {"prijezdy": "arrival", "odjezdy": "departure"}
-LABELS: dict[str, PlatformLabel] = {"nástupiště": "platform", "kolej": "track"}
+# SZT-Q2/Q9: the last column's header names what its values are; `Nást./kolej` values are
+# `<platform> / <track>`.
+LABELS: dict[str, tuple[PlatformLabel, ...]] = {
+    "nástupiště": ("platform",),
+    "kolej": ("track",),
+    "nást./kolej": ("platform", "track"),
+}
+PART_SEPARATOR = " / "
 UNASSIGNED = frozenset({"", "-", "ND"})  # SZT-Q4
 HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
 COLUMN = re.compile(r"^inTaCol[PO]-\d+$")
@@ -135,19 +143,18 @@ def decode(
     observations: list[Observation] = []
     item = 0
     for table in board.tables:
-        label = _label(table)
+        labels = _labels(table)
         scheduled_column = next(
             (column for column, name in table.header if name == "Pravidelný"), None
         )
         platform_column = table.header[-1][0] if table.header else None
-        if label is None or scheduled_column is None or platform_column is None:
+        if labels is None or scheduled_column is None or platform_column is None:
             continue
         for row in table.rows:
-            fact = _row(
-                row, table.kind, station, label, scheduled_column, platform_column, received_at
+            facts = _row(
+                row, table.kind, station, labels, scheduled_column, platform_column, received_at
             )
-            if fact is not None:
-                key, assignment = fact
+            for key, assignment in facts:
                 observations.append(
                     Observation(
                         source=SOURCE,
@@ -164,38 +171,45 @@ def decode(
     return observations
 
 
-def _label(table: _Table) -> PlatformLabel | None:
+def _labels(table: _Table) -> tuple[PlatformLabel, ...] | None:
     if not table.header:
         return None
-    return LABELS.get(table.header[-1][1].strip().lower())
+    return LABELS.get(" ".join(table.header[-1][1].split()).lower())
 
 
 def _row(
     row: list[_Cell],
     kind: Literal["arrival", "departure"],
     station: str,
-    label: PlatformLabel,
+    labels: tuple[PlatformLabel, ...],
     scheduled_column: str,
     platform_column: str,
     received_at: Instant,
-) -> tuple[Fact, PlatformAssignment] | None:
+) -> list[tuple[Fact, PlatformAssignment]]:
     desktop = [cell for cell in row if not cell.mobile]
     train = next((cell.train for cell in row if cell.train), None)
     scheduled = next((c.text for c in desktop if c.column == scheduled_column), None)
     value = next((c.text for c in desktop if c.column == platform_column), None)
-    if train is None or not train.isdigit() or scheduled is None:
-        return None
-    if value is None or value in UNASSIGNED:
-        return None
+    if train is None or not train.isdigit() or scheduled is None or value is None:
+        return []
+    parts = value.split(PART_SEPARATOR) if len(labels) > 1 else [value]
+    if len(parts) != len(labels):
+        return []
+    shown: list[tuple[PlatformLabel, str]] = [
+        (label, part.strip())
+        for label, part in zip(labels, parts, strict=True)
+        if part.strip() not in UNASSIGNED
+    ]
+    if not shown:
+        return []
     match = HHMM.match(scheduled)
     if match is None:
-        return None
+        return []
     hours, minutes = int(match.group(1)), int(match.group(2))
     if hours > 23 or minutes > 59:
-        return None
+        return []
     when = resolve_clock(time(hours, minutes), received_at)
     if when is None:
-        return None
-    return TripKey("czptt:train_number", train), PlatformAssignment(
-        station, kind, when, value, label
-    )
+        return []
+    key = TripKey("czptt:train_number", train)
+    return [(key, PlatformAssignment(station, kind, when, part, label)) for label, part in shown]

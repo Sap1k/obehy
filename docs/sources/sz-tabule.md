@@ -74,6 +74,7 @@ SŽ map and are not used.
 | SZT-Q6 | a fixed number of rows (about 20 per table), not a fixed time span | demand scheduling reads busy stations more often (`[boards]` policy) |
 | SZT-Q7 | the `onlyForVlak` per-train variant is mostly empty | not used |
 | SZT-Q8 | addresses running services are reportedly IP-banned | proxy pool, no User-Agent, a 403 opens the circuit, a budget ceiling |
+| SZT-Q9 | a third header, `Nást./kolej` (Ústí n.L. hl.n., Teplice v Čechách), shows both: `<platform> / <track>`, each `-` until assigned (`3 / -`, `1a / 9`, `- / -`). The decoder knew only `Nástupiště` and `Kolej` and skipped these boards whole: read about 20 times a day each, nothing recorded until 2026-10-11 | split into a platform and a track assignment, each with its label; an unassigned part is left out |
 
 ## Demand (measured)
 

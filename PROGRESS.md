@@ -244,6 +244,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-11** — SZT-Q9: boards headed `Nást./kolej` (Ústí n.L. hl.n., Teplice v Čechách)
+  show `<platform> / <track>` and were skipped whole by the decoder (read, never recorded);
+  now split into a platform and a track assignment. Ústí fixture: 14 assignments from 11 rows.
 - **2026-10-10** — DUK-Q1 corrected: Teplice buses and RJÚK trains apply the local offset
   twice to their GPS time (`LastActivityDT` is right); the old "UTC digits" reading put them
   4 h ahead, so all their positions were dropped. Now detected per entry against the unit's

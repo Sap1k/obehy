@@ -124,6 +124,24 @@ def _row(
     return Observation("sz-tabule", "board", "czptt", received, None, RawRef("3" * 64, 0), 1, facts)
 
 
+def test_szt_q9_usti_shows_platform_and_track_in_one_column() -> None:
+    # `Nást./kolej`: `1a / 9` is platform 1a, track 9; `3 / -` platform only; `- / -` nothing.
+    observations = sz_tabule.decode(
+        _board("usti-531798.html"), "a" * 64, local("2026-10-11 14:30"), SKEW, {"sr70": "531798"}
+    )
+    shown = {
+        (f.kind, f.label, f.value)
+        for o in observations
+        if o.first(TripKey) == TripKey("czptt:train_number", "16516")
+        for f in [o.first(PlatformAssignment)]
+        if f is not None
+    }
+    assert shown == {("departure", "platform", "1a"), ("departure", "track", "9")}
+    assert len(observations) == 14
+    labels = {f.label for o in observations for f in [o.first(PlatformAssignment)] if f is not None}
+    assert labels == {"platform", "track"}
+
+
 def test_r10_a_board_row_gives_a_train_without_an_instance_its_track() -> None:
     index = _index()
     state = FeedState("czptt")
