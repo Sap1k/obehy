@@ -76,6 +76,8 @@ def test_shipped_manifests_load() -> None:
     assert arriva.headers["x-enviroment"] == "client"
     assert "OsVlaky" in sz.url
     assert sz.egress == "sz" and duk.egress is None and arriva.egress is None
+    # No `live_feeds`: every feed is live. mpvnet lists none yet.
+    assert duk.live_feeds is None and duk.is_live("czptt") and not idol.is_live("jdf")
     assert (duk.interval_s, duk.backoff_after, duk.max_backoff_s) == (15.0, 5, 300.0)
     assert duk.feeds == ("jdf", "czptt")
     assert duk.semantics["key_namespaces"]["jdf"] == "cis:line_trip"

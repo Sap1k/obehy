@@ -49,9 +49,10 @@ class Channel:
     backoff_after: int = 5
     max_backoff_s: float = 300.0
     feeds: tuple[str, ...] = ()
-    # The feeds whose observations the worker processes live (default: all of `feeds`). Replay
-    # always decodes every feed, so a connector is checked on recorded days before it goes live.
-    live_feeds: tuple[str, ...] = ()
+    # The feeds whose observations the worker processes live; None (no `live_feeds` in the
+    # manifest) is every feed. Replay always decodes every feed, so a connector is checked on
+    # recorded days before it goes live.
+    live_feeds: tuple[str, ...] | None = None
     capabilities: tuple[str, ...] = ()
     semantics: dict[str, Any] = field(default_factory=dict[str, Any])
     # A named proxied, anonymous egress (runtime/egress.py); never fetched directly.
@@ -59,6 +60,9 @@ class Channel:
     # Demand polling: the named query that says what to request (runtime/demand.py); the
     # request body's `{sr70}` is filled per read. Interval channels have none.
     demand: str | None = None
+
+    def is_live(self, feed: str) -> bool:
+        return self.live_feeds is None or feed in self.live_feeds
 
     @property
     def name(self) -> str:
@@ -162,7 +166,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         raise ManifestError(f"{where}: semantics must be a table")
     _core_semantics(cast(dict[str, Any], semantics), where)
     feeds = _strings(table, "feeds", where, FEED_NAMES)
-    live_feeds = _strings(table, "live_feeds", where, feeds) if "live_feeds" in table else feeds
+    live_feeds = _strings(table, "live_feeds", where, feeds) if "live_feeds" in table else None
     egress = table.get("egress")
     if egress is not None and (not isinstance(egress, str) or not _IDENTIFIER.match(egress)):
         raise ManifestError(f"{where}: egress must be a lowercase ASCII name")
