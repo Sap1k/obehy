@@ -7,6 +7,11 @@ osm_file = "D:/obehy-data/osm/obehy-region.osm.pbf"
 jrunify_ext_geodata_dir = "D:/src/jrunify-ext-geodata"
 # Routed post-inference evidence reused across runs (default: <workdir>/cache/routing).
 # routing_cache_dir = "D:/obehy-work/cache/routing"
+# Route shapes (BASE_PLAN.md section 17): the obehy-motis-shapes binary; without it the build
+# makes no route shapes. Its routing PBF, graph and results go to route_shapes_cache_dir
+# (default: <workdir>/cache/route-shapes).
+# route_shapes_companion = "D:/tools/obehy-motis-shapes.exe"
+# route_shapes_cache_dir = "D:/obehy-work/cache/route-shapes"
 
 [jrutil]
 directory = "D:/src/jrutil"

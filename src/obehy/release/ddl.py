@@ -89,12 +89,15 @@ INDEXES = (
 )
 
 
-def static_tables(contract: Contract) -> tuple[Table, ...]:
+def static_tables(contract: Contract, *, base: bool = False) -> tuple[Table, ...]:
+    """The mirror's tables; `base` leaves out the fields later minors added (MINOR_FIELDS)."""
+
     tables: list[Table] = []
     for relation in contract.relations:
         columns = tuple(
             Column(field.name, field.sql_type, not_null=not field.nullable)
             for field in relation.fields
+            if not (base and field.since_minor)
         )
         if relation.name == "location":
             columns = (*columns, LOCATION_GEOM)
@@ -167,7 +170,7 @@ def _lines(contract: Contract, tables: Iterable[Table]) -> Iterable[str]:
 
 def static_ddl(contract: Contract | None = None) -> str:
     contract = contract or load_contract()
-    return "".join(_lines(contract, static_tables(contract)))
+    return "".join(_lines(contract, static_tables(contract, base=True)))
 
 
 def main() -> int:

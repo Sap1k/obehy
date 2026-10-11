@@ -215,8 +215,8 @@ contract enforces this in CI. Live operation and replay run the same core; there
 replay-only twin of any core rule.
 
 JrUtil and JrUnify-Ext-GeoData are developed in their standalone checkouts and pinned here. The
-MOTIS route-shapes companion will live in `converters/motis-route-shapes/`, pinned to MOTIS
-release `v2.11.0` (`dc441d684099afbf4ce82d605f26e46504c70c28`) initially.
+route-shapes companion lives in JrUtil (`route-shapes/`), pinned to the osr commit that MOTIS
+release `v2.11.0` (`dc441d684099afbf4ce82d605f26e46504c70c28`) uses, initially.
 
 ---
 
@@ -720,63 +720,70 @@ claims become `transfer` rows.
 
 # 17. MOTIS route-shapes companion
 
-Shape generation is part of the static build on GitHub Actions: it runs after overlays and before
-final validation, and its output ships in the release. It is an internal build tool, not an Oběhy
+Shape generation is part of the static build on GitHub Actions: an optional phase of JrUtil's
+package writer, switched on for the final packages (the regional overlay for `jdf`, and
+`czptt-to-bundle`), so shapes are in the relations before `gtfs.zip` is projected and the manifest
+is written, and its output ships in the release. It is an internal build tool, not an Oběhy
 API, and has no pfaedle fallback. The application server only loads the resulting shapes.
 
-**Status: not implemented.** `obehy build` has an explicit no-op enrichment stage at this
-position; packages currently carry only source shapes, if any. Until generation exists, the
-realtime core uses stop-to-stop polylines (section 21.2).
+**Status: built and enabled in the nightly build.** Until a release carries generated shapes,
+the realtime core uses stop-to-stop polylines (section 21.2).
 
-```text
-authoritative regional/operator shape
-    else existing acceptable national shape
-    else MOTIS-generated shape
-    else no shape
-```
-
-A trip without a shape is preferable to a build failure. Source and retained national shapes are
-never sent to or overwritten by the companion.
+Every shape is generated: regional feeds' shapes are not taken (the overlay policies leave the
+`shapes` capability off), so all trips get geometry of one method and quality, and distances of
+one meaning. A trip without a shape is preferable to a build failure.
 
 ## 17.1 Companion boundary
 
-A thin C++ CLI in `converters/motis-route-shapes/` against the pinned MOTIS, Nigiri and OSR
-sources invokes MOTIS's import-time `route_shapes` implementation directly, without starting a
-MOTIS server:
+A thin C++ CLI in JrUtil's `route-shapes/` against a pinned **osr** (MOTIS's routing
+library) map-matches stop patterns directly. It does what MOTIS's import-time `route_shapes` does
+per route (`osr::map_match` with the class profile, then segments concatenated by
+`segment_offsets_` into one polyline with per-stop offsets), but without a Nigiri timetable, a
+GTFS round-trip or a MOTIS server:
 
 ```text
-obehy-motis-shapes --gtfs <candidate-projection.zip> --osm <snapshot.osm.pbf>
-                   --work-dir <dir> --output <bundle-dir> --threads <auto|N>
+obehy-motis-shapes extract --osm <routing.osm.pbf> --graph <dir> --key <text>
+obehy-motis-shapes route   --graph <dir> --patterns <patterns.csv> --out <dir>
+                           [--cache <dir>] [--threads auto|N]
 ```
 
-The compiler creates a temporary GTFS projection of trips still lacking a shape, with one
-synthetic service day, and invokes `route_shapes` in `all` mode. Every supported MOTIS routing
-profile is enabled. Unsupported modes and routes with fewer than two distinct positioned stops
-stay unshaped with diagnostics.
+Oběhy prepares the routing PBF and the graph (`extract`) and passes them to JrUtil
+(`--route-shapes=<companion> --route-shapes-graph [--route-shapes-cache]`).
+Without these options a package is exactly what it would be without the phase.
 
-Cache keys cover the exact OSM hash, MOTIS and OSR versions, routing configuration, profile and
-ordered stop coordinates. Cold and warm runs over identical inputs must be byte-identical.
+In its `route-shapes` phase, after `trip_call` is final, JrUtil reduces the trips to distinct
+(class, ordered match-point coordinates). Classes map to osr profiles: bus, coach and trolleybus
+→ `bus`; tram, metro and rail → `railway`; water → `ferry`. Cable modes and funiculars have no
+profile. CZPTT railway points with coordinates (`passenger_service = false`) are extra match
+points that hold the line through junctions. Calls whose coordinate is estimated or missing are
+left out as match points and get no offset. Unsupported modes stay unshaped.
 
-Output: `shapes.txt`, `trip_shapes.csv` (trip → deterministic shape ID, profile, status,
-provenance), `stop_shape_offsets.csv` (trip, stop sequence, point index, cumulative distance),
-`diagnostics.json` and `manifest.json`. Shape IDs derive from the profile and canonicalized
-geometry.
+The cache is keyed by the routing PBF hash, the osr commit, the profile, the simplification
+tolerance and the pattern. Cold and warm runs over identical inputs must be byte-identical.
+
+Output, sorted by pattern: `shapes.csv` (points with cumulative metres), `offsets.csv` (match
+point → point index and metres), `pattern_status.csv` (routed, partially beelined or failed, with
+routed and beelined length), `diagnostics.json` and `manifest.json`. JrUtil writes every shape
+the companion produced: `generation_method = motis`, IDs
+`<feed>:shape:motis:<hash of class and geometry>`, and per-call offsets in
+`trip_call.shape_distance_traveled`. Since serving 5.2 every shape distance in a package is metres
+from the shape's first point. A source's own distance is kept apart, as
+`trip_call.source_kilometre`: the JDF kilometre of the call (tariff distance); CZPTT has none.
+A companion that fails or is missing leaves every trip unshaped; the package's diagnostics carry a
+`route_shapes` section either way.
+`shape-patterns <package>` writes a finished package's patterns without routing them, for pattern
+counts and companion benchmarks.
 
 **Shapes with stop offsets are also the preferred path for the realtime progress engine
 (section 21).** Until they exist, the realtime core uses stop-to-stop polylines.
 
-## 17.2 Validation
+## 17.2 Quality
 
-Accept a generated shape only when it has at least two distinct valid points, every stop offset
-exists and is monotonic, cumulative distances are monotonic, every call is within the mode's
-stop-to-shape distance, and every reference joins to exactly one trip and shape. Beeline
-fallbacks are explicit low-quality diagnostics. A rejected shape leaves the trip unshaped and
-never fails the build.
-
-Maintain golden fixtures for bus, coach, tram or rail, ferry, loops, branches, short turns,
-repeated stops, unsupported modes, missing coordinates, routing failure and beeline fallback.
-Before activation, benchmark against frozen pfaedle outputs and withheld authoritative Czech
-shapes. Every MOTIS upgrade needs an explicit fixture, output and performance review.
+Shapes are best effort: osr's output is taken as it is, partly beelined or not, because the stop
+data is not perfect and any distance gate would reject good shapes with it. Beelined length is
+reported per pattern (`pattern_status.csv`) for review, not used to reject. The companion's
+fixtures cover bus, rail with a branch, ferry, a loop, a beeline and an unsupported class; an osr
+upgrade gets a fixture and output review.
 
 ---
 
@@ -1432,11 +1439,11 @@ mode; `rt evaluate` confirms it on replay.
 
 Once a vehicle is bound:
 
-- **Path:** the trip's shape with stop offsets when available (source shape, or MOTIS shapes),
-  otherwise the stop-to-stop polyline of its calls. No router runs in the realtime core.
+- **Path:** the trip's generated shape with its stop offsets when it has one, otherwise the
+  stop-to-stop polyline of its calls. No router runs in the realtime core.
 - **Progress:** decoded from the sequence of fixes as in section 20.4 (map matching over the
   trip's own path), giving a distance along the path and the gap `(i, i+1)`. Distances always
-  come from the geometry; feed-provided `shape_dist_traveled` is never used (its unit varies).
+  come from the geometry; a package's stop offsets are metres along the shape (serving 5.2).
 - **Stop events from path offsets, not proximity:** arrival and departure trigger points per
   call (section 20.7); an event is committed when every surviving hypothesis has passed it.
   Committed events are the strongest road anchors.

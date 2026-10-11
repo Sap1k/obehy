@@ -115,6 +115,8 @@ class BuildConfig:
     # lets a run download only the objects published since the previous one.
     source_cache_dir: Path | None = None
     download_connections: int = DEFAULT_DOWNLOAD_CONNECTIONS
+    # JrUtil's route-shapes options (obehy.route_shapes.RouteShapes.arguments).
+    route_shapes: tuple[str, ...] = ()
 
 
 class _HrefParser(HTMLParser):
@@ -772,6 +774,7 @@ def _converter_command(
         f"--sr70={messages.parent.parent / 'sources' / 'sr70' / 'SR70.csv'}",
         f"--osm-pbf={config.osm_file}",
         f"--diagnostics-out={bundle.parent / 'diagnostics-detail'}",
+        *config.route_shapes,
         str(messages),
         str(bundle),
     ]

@@ -27,6 +27,10 @@ on:
         description: Publish a GitHub Release
         type: boolean
         default: true
+      route_shapes:
+        description: Generate route shapes
+        type: boolean
+        default: true
 
 concurrency:
   group: build
@@ -72,6 +76,24 @@ jobs:
           df -h / /mnt
           free -h
 
+      # The route-shapes companion that JrUtil's route-shapes.yml built from the checked-out
+      # JrUtil's route-shapes/; without that release the build makes no route shapes.
+      - name: Download route-shapes companion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: Sap1k/jrutil
+        run: |
+          hash=$(git -C jrutil ls-files -s route-shapes | sha256sum | cut -c1-16)
+          echo "SHAPES_HASH=$hash" >> "$GITHUB_ENV"
+          mkdir -p "$WORK/bin"
+          if gh release download "route-shapes-$hash" -p obehy-motis-shapes-linux-x64.tar.gz \
+               -D "$RUNNER_TEMP"; then
+            tar -xzf "$RUNNER_TEMP/obehy-motis-shapes-linux-x64.tar.gz" -C "$WORK/bin"
+            "$WORK/bin/obehy-motis-shapes" version
+          else
+            echo "::warning::No JrUtil release route-shapes-$hash: building without route shapes"
+          fi
+
       - name: Install osmium-tool
         run: |
           sudo apt-get update -q
@@ -103,6 +125,8 @@ jobs:
           artifact_root = "$ARTIFACT_ROOT"
           osm_file = "$WORK/osm/regional-merged.osm.pbf"
           jrunify_ext_geodata_dir = "$GITHUB_WORKSPACE/jrunify-ext-geodata"
+          route_shapes_companion = "$WORK/bin/obehy-motis-shapes"
+          route_shapes_cache_dir = "$WORK/cache/route-shapes"
 
           [jrutil]
           directory = "$GITHUB_WORKSPACE/jrutil"
@@ -130,16 +154,28 @@ jobs:
           path: ${{ env.WORK }}/cache/czptt-sources
           key: czptt-sources-v1-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: czptt-sources-v1-
+      # Routing PBF, osr graph and companion results; each is checked against its inputs
+      # (snapshot, box, osr commit) and rebuilt when stale.
+      - name: Restore route-shapes cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.WORK }}/cache/route-shapes
+          key: route-shapes-v1-${{ env.SHAPES_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            route-shapes-v1-${{ env.SHAPES_HASH }}-
+            route-shapes-v1-
 
       - name: Build
         working-directory: obehy
         env:
           REFRESH_OSM: ${{ steps.osm.outputs.cache-hit != 'true' || inputs.refresh_osm }}
           REFRESH_CZPTT: ${{ inputs.refresh_czptt }}
+          ROUTE_SHAPES: ${{ github.event_name != 'workflow_dispatch' || inputs.route_shapes }}
         run: |
           args=(--estimated-posts --memory-budget "$MEMORY_BUDGET" --progress plain)
           if [ "$REFRESH_OSM" = "true" ]; then args+=(--refresh-osm); fi
           if [ "$REFRESH_CZPTT" = "true" ]; then args+=(--no-czptt-source-cache); fi
+          if [ "$ROUTE_SHAPES" != "true" ]; then args+=(--no-route-shapes); fi
           uv run --no-sync obehy build "${args[@]}"
 
       # Keep a fresh snapshot even when a later stage fails; a refresh costs a Geofabrik download.
@@ -168,6 +204,12 @@ jobs:
         with:
           path: ${{ env.WORK }}/cache/czptt-sources
           key: czptt-sources-v1-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save route-shapes cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.WORK }}/cache/route-shapes
+          key: route-shapes-v1-${{ env.SHAPES_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload run logs and diagnostics
         if: always()
@@ -223,6 +265,8 @@ jobs:
             case "$key" in
               "routing-v1-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" | "osm-v1-$OSM_MONTH") ;;
               "czptt-sources-v1-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT") ;;
-              routing-v1-* | osm-v1-* | czptt-sources-v1-*) gh cache delete "$key" ;;
+              "route-shapes-v1-$SHAPES_HASH-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT") ;;
+              routing-v1-* | osm-v1-* | czptt-sources-v1-* | route-shapes-v1-*)
+                gh cache delete "$key" ;;
             esac
           done

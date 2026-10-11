@@ -60,6 +60,26 @@ def test_declared_schema_accepts_minor_additions() -> None:
     check_declared_schema(CONTRACT, declared)
 
 
+def test_an_older_minor_may_lack_fields_added_since() -> None:
+    # trip_call.source_kilometre came with 5.2: a 5.1 package without it loads (as null), a
+    # 5.2 one without it is broken.
+    declared = _declared()
+    calls = next(relation for relation in declared if relation["name"] == "trip_call")
+    calls["schema"] = [field for field in calls["schema"] if field["name"] != "source_kilometre"]
+    check_declared_schema(CONTRACT, declared, "5.1")
+    with pytest.raises(ContractError, match="lacks source_kilometre"):
+        check_declared_schema(CONTRACT, declared, "5.2")
+    names = [field.name for field in CONTRACT.relation("trip_call").fields_in("5.1")]
+    assert names[-1] == "active_line_code"
+
+
+def test_the_base_migration_leaves_out_minor_fields() -> None:
+    base = {table.name: table for table in static_tables(CONTRACT, base=True)}
+    full = {table.name: table for table in static_tables(CONTRACT)}
+    assert "source_kilometre" not in base["trip_call"].view_columns
+    assert full["trip_call"].view_columns[-1] == "source_kilometre"
+
+
 Change = Callable[[list[dict[str, Any]]], object]
 MAJOR_CHANGES: list[tuple[Change, str]] = [
     (lambda d: d.pop(), "lacks relation"),
@@ -128,6 +148,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "rt",
         "history",
         "rail",
+        "trip_call_source_kilometre",
     ]
 
 

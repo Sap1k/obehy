@@ -94,7 +94,7 @@ def verify_package(
     if manifest_sha256 != entry.get("manifest_sha256"):
         raise LoadError(f"{package}: manifest.json does not match release.json")
     try:
-        check_declared_schema(contract, manifest["relations"])
+        check_declared_schema(contract, manifest["relations"], manifest["serving_schema_version"])
     except ContractError as error:
         raise LoadError(f"{package}: {error}") from error
 
@@ -156,11 +156,14 @@ def _create_partition_table(connection: psycopg.Connection, table: Table, load_i
 
 
 def _copy_relation(
-    connection: psycopg.Connection, relation: Relation, path: Path, load_id: int
+    connection: psycopg.Connection, relation: Relation, path: Path, load_id: int, version: str
 ) -> int:
-    """Stream one Parquet file into its standalone table as CSV; returns the server row count."""
+    """Stream one Parquet file into its standalone table as CSV; returns the server row count.
 
-    names = list(relation.column_names)
+    Fields a later minor added than the package's `version` are not in the file and stay null.
+    """
+
+    names = [field.name for field in relation.fields_in(version)]
     statement = sql.SQL("COPY {} ({}) FROM STDIN (FORMAT csv)").format(
         partition_name(relation.name, load_id), _columns(names)
     )
@@ -365,7 +368,11 @@ def _load_package(
             for relation in contract.relations:
                 relation_started = time.monotonic()
                 counts[relation.name] = _copy_relation(
-                    connection, relation, package.relation_paths[relation.name], load_id
+                    connection,
+                    relation,
+                    package.relation_paths[relation.name],
+                    load_id,
+                    package.manifest["serving_schema_version"],
                 )
                 report(
                     f"{package.package}: {relation.name} {counts[relation.name]:,} rows "

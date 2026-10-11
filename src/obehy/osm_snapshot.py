@@ -645,6 +645,32 @@ def filter_jdf_transit_routing_base(
     )
 
 
+# The route-shapes companion's graph (BASE_PLAN.md section 17): roads a bus may use, every
+# railway osr's railway profile routes on, ferries, barriers and turn restrictions.
+ROUTE_SHAPES_FILTERS = (
+    "w/highway=motorway,motorway_link,trunk,trunk_link,primary,primary_link,secondary,"
+    "secondary_link,tertiary,tertiary_link,unclassified,residential,living_street,service,road,"
+    "busway,bus_guideway",
+    "w/railway=rail,light_rail,narrow_gauge,tram,subway,funicular,monorail,construction",
+    "w/route=ferry",
+    "n/barrier=*",
+    "r/type=restriction",
+)
+
+
+def filter_route_shapes(source: Path, destination: Path, *, source_key: str | None = None) -> Path:
+    """Extract the route-shapes routing network; reused while the snapshot is unchanged."""
+    return _filter_jdf_osm(
+        source,
+        destination,
+        filter_schema="route-shapes-v1",
+        generator="Obehy route-shapes filter/1",
+        filters=ROUTE_SHAPES_FILTERS,
+        omit_referenced=False,
+        source_key=source_key,
+    )
+
+
 def jdf_post_candidates_path(workdir: Path) -> Path:
     return workdir.resolve() / "osm" / "jdf-post-candidates.osm.pbf"
 

@@ -24,6 +24,7 @@ from obehy import (
     national_jdf,
     osm_snapshot,
     regional_overlay,
+    route_shapes,
 )
 from obehy.pipeline import jrutil
 from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
@@ -59,6 +60,7 @@ class BuildOptions:
     filtered_jdf: bool = True
     routing_cache: bool = True
     czptt_source_cache: bool = True
+    route_shapes: bool = True
 
 
 @dataclass(frozen=True)
@@ -200,7 +202,10 @@ def _jdf_config(
 
 
 def _czptt_config(
-    options: BuildOptions, output: Path, source_snapshot: Path | None = None
+    options: BuildOptions,
+    output: Path,
+    source_snapshot: Path | None = None,
+    route_shapes_arguments: Sequence[str] = (),
 ) -> national_czptt.BuildConfig:
     runtime = options.runtime
     return national_czptt.BuildConfig(
@@ -220,6 +225,7 @@ def _czptt_config(
         progress=options.progress,
         build_jrutil=False,
         source_cache_dir=(runtime.czptt_source_cache_dir if options.czptt_source_cache else None),
+        route_shapes=tuple(route_shapes_arguments),
     )
 
 
@@ -282,6 +288,7 @@ def _release_record(
             "filtered_jdf": options.filtered_jdf,
             "routing_cache": options.routing_cache,
             "czptt_source_cache": options.czptt_source_cache,
+            "route_shapes": options.route_shapes,
         },
         "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
         "retrieval": fetched.retrieval,
@@ -291,6 +298,9 @@ def _release_record(
         },
         "packages": packages,
         "outputs": outputs,
+        "route_shapes": route_shapes.summaries(
+            {"jdf": run.partial_release / "jdf", "czptt": run.partial_release / "czptt"}
+        ),
         "stages": stages,
     }
 
@@ -396,6 +406,29 @@ def build(
             )
             completed("filtered-jdf")
 
+        # Optional: JrUtil's route-shapes phase in the overlay and CZPTT packages.
+        shapes: route_shapes.RouteShapes | None = None
+        if options.route_shapes:
+            shapes, skipped = route_shapes.prepare(
+                companion=runtime.route_shapes_companion,
+                osm_file=runtime.osm_file,
+                osm_key=lambda: cast(
+                    str,
+                    osm_snapshot.validate_snapshot(runtime.osm_file, runtime.workdir)["merge_key"],
+                ),
+                run_dir=run.root,
+                cache=runtime.route_shapes_cache_dir or runtime.workdir / "cache" / "route-shapes",
+                log=run.logs / "route-shapes-graph.process.log",
+                reporter=reporter,
+                command_runner=command_runner,
+            )
+            if shapes is None:
+                reporter.stage(f"Route shapes skipped: {skipped}")
+                stages.append({"name": "route-shapes-graph", "skipped": cast(str, skipped)})
+            else:
+                completed("route-shapes-graph")
+        shape_arguments = shapes.arguments() if shapes is not None else []
+
         regional_overlay.run(
             runtime_command=_runtime_command(runtime),
             cwd=runtime.jrutil.directory or Path.cwd(),
@@ -413,10 +446,14 @@ def build(
             stop_registry_candidates=registry_review / "place-candidates.csv",
             overrides_root=_overlay_overrides(runtime),
             route_rules=_route_rules(runtime),
+            route_shapes=shape_arguments,
         )
         completed("regional-overlay")
 
-        czptt_builder(_czptt_config(options, run.czptt_output, fetched.czptt), reporter=reporter)
+        czptt_builder(
+            _czptt_config(options, run.czptt_output, fetched.czptt, shape_arguments),
+            reporter=reporter,
+        )
         shutil.move(run.czptt_output / "bundle", run.partial_release / "czptt")
         completed("national-czptt")
 
@@ -469,6 +506,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="download every CZPTT source object instead of reusing the source cache",
     )
+    command.add_argument(
+        "--no-route-shapes",
+        action="store_true",
+        help="build without generated route shapes (BASE_PLAN.md section 17)",
+    )
     realtime_commands.add_parsers(commands)
     release_commands.add_parsers(commands)
     return parser
@@ -501,6 +543,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 filtered_jdf=not cast(bool, args.skip_filtered_jdf),
                 routing_cache=not cast(bool, args.no_routing_cache),
                 czptt_source_cache=not cast(bool, args.no_czptt_source_cache),
+                route_shapes=not cast(bool, args.no_route_shapes),
             )
         )
     except (

@@ -19,6 +19,12 @@ SQL_TYPES = {
 }
 
 
+# Fields a minor added after its major's base version, by that minor. The base migration
+# (0003_static.sql) leaves them out and a migration of their own adds them; a package of an
+# older minor lacks them, so they are not copied and load as null.
+MINOR_FIELDS: dict[tuple[str, str], int] = {("trip_call", "source_kilometre"): 2}
+
+
 class ContractError(RuntimeError):
     """The serving contract or a package's declared schema is unusable."""
 
@@ -29,6 +35,7 @@ class Field:
     type: str
     nullable: bool
     enum: str | None = None
+    since_minor: int = 0
 
     @property
     def sql_type(self) -> str:
@@ -53,6 +60,11 @@ class Relation:
     def column_names(self) -> tuple[str, ...]:
         return tuple(field.name for field in self.fields)
 
+    def fields_in(self, version: str) -> tuple[Field, ...]:
+        """The fields a package of serving `version` carries."""
+
+        return tuple(field for field in self.fields if field.since_minor <= minor(version))
+
 
 @dataclass(frozen=True)
 class Contract:
@@ -67,15 +79,26 @@ class Contract:
         raise KeyError(name)
 
 
-def _field(value: dict[str, Any]) -> Field:
+def minor(version: str) -> int:
+    major, _, value = version.partition(".")
+    if not major.isdigit() or not value.isdigit():
+        raise ContractError(f"Not a major.minor version: {version!r}")
+    return int(value)
+
+
+def _field(relation: str, value: dict[str, Any]) -> Field:
     field_type = value["type"]
     if field_type not in SQL_TYPES:
         raise ContractError(f"Unsupported contract type {field_type!r} for {value['name']}")
+    since = MINOR_FIELDS.get((relation, value["name"]), 0)
+    if since and not value["nullable"]:
+        raise ContractError(f"{relation}.{value['name']}: a minor can only add nullable fields")
     return Field(
         name=value["name"],
         type=field_type,
         nullable=bool(value["nullable"]),
         enum=value.get("enum"),
+        since_minor=since,
     )
 
 
@@ -83,7 +106,7 @@ def parse_contract(document: dict[str, Any]) -> Contract:
     relations = tuple(
         Relation(
             name=relation["name"],
-            fields=tuple(_field(field) for field in relation["fields"]),
+            fields=tuple(_field(relation["name"], field) for field in relation["fields"]),
             primary_key=tuple(relation["primary_key"]),
             foreign_keys=tuple(
                 ForeignKey(
@@ -111,11 +134,14 @@ def load_contract(path: Path = CONTRACT_PATH) -> Contract:
     return parse_contract(json.loads(path.read_text(encoding="utf-8")))
 
 
-def check_declared_schema(contract: Contract, declared: list[dict[str, Any]]) -> None:
+def check_declared_schema(
+    contract: Contract, declared: list[dict[str, Any]], version: str | None = None
+) -> None:
     """Require every contract relation and field in a package's declared schema.
 
     Later minors may add relations and nullable fields; those are ignored here and never
-    copied. Anything missing or retyped is a different major and is rejected.
+    copied. A package of an older minor (`version`) may lack the fields added since. Anything
+    else missing or retyped is a different major and is rejected.
     """
 
     by_name = {relation["name"]: relation for relation in declared}
@@ -126,7 +152,7 @@ def check_declared_schema(contract: Contract, declared: list[dict[str, Any]]) ->
         fields = {
             field["name"]: field for field in cast(list[dict[str, Any]], package_relation["schema"])
         }
-        for field in relation.fields:
+        for field in relation.fields_in(version) if version else relation.fields:
             package_field = fields.get(field.name)
             if package_field is None:
                 raise ContractError(f"Package relation {relation.name} lacks {field.name}")

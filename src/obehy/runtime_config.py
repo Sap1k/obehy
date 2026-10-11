@@ -32,6 +32,10 @@ class RuntimeConfig:
     czptt_source_cache_dir: Path
     jrunify_ext_geodata_dir: Path
     jrutil: JrUtilRuntime
+    # The route-shapes companion binary (BASE_PLAN.md section 17); None skips route shapes.
+    route_shapes_companion: Path | None = None
+    # Routing PBF, osr graph and companion results reused across runs.
+    route_shapes_cache_dir: Path | None = None
 
 
 def default_config_path() -> Path:
@@ -173,4 +177,14 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
         osm_file=_absolute_path(paths, "osm_file", source),
         jrunify_ext_geodata_dir=_absolute_path(paths, "jrunify_ext_geodata_dir", source),
         jrutil=JrUtilRuntime(directory=directory, command=command),
+        route_shapes_companion=(
+            _absolute_path(paths, "route_shapes_companion", source)
+            if paths.get("route_shapes_companion") is not None
+            else None
+        ),
+        route_shapes_cache_dir=(
+            _absolute_path(paths, "route_shapes_cache_dir", source)
+            if paths.get("route_shapes_cache_dir") is not None
+            else workdir / "cache" / "route-shapes"
+        ),
     )

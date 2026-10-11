@@ -14,8 +14,8 @@ after JrUtil validation and publication-eligibility checks pass.
 
 Source snapshots, orchestration manifests, process logs and detailed diagnostics remain outside the
 closed package trees. The release loader (`obehy release load`, `src/obehy/release/`) mirrors the
-packages into PostgreSQL. MOTIS shape generation will be inserted between compilation and final
-validation when it is built.
+packages into PostgreSQL. Route-shape generation runs between compilation and final validation
+(see "Route shapes" below).
 
 Memory budgets are soft admission/spill targets, with no process or .NET heap hard limit. See
 `PROGRESS.md` for measured results, acceptance and the actual verification state.
@@ -114,6 +114,35 @@ Oběhy never parses notes or invents targets. Only unique final resolution emits
 National-sized relations are streamed once per stage. The compiler may not retain or emit a second
 17-million-row JDF call relation. After the first production benchmark, unexplained performance
 regressions above 15 percent fail the build gate.
+
+## Route shapes
+
+See `BASE_PLAN.md` section 17. Route shapes are an optional phase of JrUtil's
+package writer, between the route-stop order and the `gtfs.zip` projection, so nothing is
+repackaged:
+
+1. Before the overlay, `obehy build` filters the OSM snapshot to a routing PBF: bus-usable
+   `highway` ways, every railway osr's railway profile uses, `route=ferry`, barriers and turn
+   restrictions. It is cached and manifest-validated like the other OSM filters.
+2. `obehy-motis-shapes extract` builds the osr graph from it (cached by PBF hash and osr commit).
+3. `regional-gtfs-overlay` (the final `jdf` package) and `czptt-to-bundle` get
+   `--route-shapes=<companion> --route-shapes-graph=<graph> --route-shapes-cache=<dir>`. JrUtil
+   collapses trips into match-point patterns, runs `obehy-motis-shapes route`, and writes every
+   shape it produced
+   (`generation_method = motis`, per-call offsets in metres) into the relations.
+   `jdf-to-bundle` runs without them: overlay shapes come first.
+
+Every shape is generated: the overlay policies leave the regional feeds' `shapes` capability off.
+Shapes are best effort: a pattern osr could not route or an
+unsupported mode leaves its trips unshaped with a diagnostic; a missing companion binary means
+the options are not passed. Neither fails the build. Counts (patterns; shaped and unshaped by
+reason; trips shaped)
+are in each package's `diagnostics.json` (`route_shapes`) and copied into `release.json`.
+`jdf-filtered` keeps no generated shapes for now.
+
+The companion lives in JrUtil (`route-shapes/`), next to the phase that calls it. JrUtil's
+`route-shapes.yml` builds it and publishes a release `route-shapes-<source hash>`; the nightly
+build downloads the one matching its JrUtil checkout and never compiles C++.
 
 ## Overlay policy
 

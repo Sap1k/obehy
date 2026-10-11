@@ -119,8 +119,7 @@ class Location:
 
 @dataclass(frozen=True, slots=True)
 class Shape:
-    """Vertices and metres travelled at each, computed from the geometry. Feed-provided
-    `shape_dist_traveled` values are never used: their unit is not fixed (PID overlays use km)."""
+    """Vertices and metres travelled at each, computed from the geometry."""
 
     shape_id: str
     points: tuple[tuple[float, float], ...]  # (lon, lat)

@@ -106,6 +106,7 @@ def run(
     stop_registry_candidates: Path | None = None,
     overrides_root: Path | None = None,
     route_rules: Path | None = None,
+    route_shapes: Sequence[str] = (),
 ) -> None:
     command = [
         *runtime_command,
@@ -128,7 +129,7 @@ def run(
     if overrides_root is not None:
         command.append(f"--overrides-root={overrides_root}")
     command += route_rule_arguments(route_rules, transport_modes=False)
-    command += [f"--diagnostics-out={diagnostics}", str(base), str(output)]
+    command += [*route_shapes, f"--diagnostics-out={diagnostics}", str(base), str(output)]
     command_runner(
         command,
         cwd,
