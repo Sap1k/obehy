@@ -64,7 +64,7 @@ def decode(*entries: dict[str, Any]) -> list[Observation]:
     return mpvnet.decode(body, "f" * 64, RECEIVED, SKEW, "idol")
 
 
-def test_a_regional_bus_becomes_a_keyed_jdf_observation() -> None:
+def test_mpvnet_q4_q5_a_regional_bus_becomes_a_keyed_jdf_observation() -> None:
     # MPVNET-Q4 (local time), Q5 (x is the latitude), Q6 (signed seconds).
     (obs,) = decode(bus())
     assert (obs.source, obs.channel, obs.feed) == ("mpvnet", "idol", "jdf")
@@ -92,7 +92,7 @@ def test_mpvnet_q3_city_buses_and_entries_without_a_trip_are_dropped() -> None:
     assert decode(city, bus(cn=None, cat=0), bus(cn="1|2|3")) == []
 
 
-def test_a_train_is_keyed_by_number_and_standing_has_no_bearing() -> None:
+def test_mpvnet_q8_a_train_is_its_own_vehicle_and_standing_has_no_bearing() -> None:
     (obs,) = decode(train())
     assert obs.feed == "czptt"
     assert obs.first(TripKey) == TripKey("czptt:train_number", "6615")
@@ -102,7 +102,7 @@ def test_a_train_is_keyed_by_number_and_standing_has_no_bearing() -> None:
     assert obs.first(Delay) == Delay(-180, "unknown")
 
 
-def test_a_time_beyond_the_skew_keeps_the_trip_but_drops_the_position() -> None:
+def test_mpvnet_q8_an_old_event_time_keeps_the_trip_but_drops_the_position() -> None:
     # Trains often report the time of their last event, 15-20 minutes back.
     (obs,) = decode(train(tm="17:01:00"))
     assert obs.observed_at is None and obs.first(Position) is None

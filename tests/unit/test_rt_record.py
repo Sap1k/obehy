@@ -106,6 +106,7 @@ EVERY_5S = 'poll = { kind = "interval", seconds = 5 }\n'
             "only POST",
         ),
         (EVERY_5S + 'feeds = ["gtfs"]\n' + GET, "unknown feeds"),
+        (EVERY_5S + 'feeds = ["jdf"]\nlive_feeds = ["czptt"]\n' + GET, "unknown live_feeds"),
         (EVERY_5S + GET + "semantics = { pre_trip_after_end_is_stale = 1 }\n", "true or false"),
         (EVERY_5S + GET + 'egress = "SZ proxy"\n', "egress"),
     ],
