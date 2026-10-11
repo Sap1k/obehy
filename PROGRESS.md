@@ -249,14 +249,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
     channel each, every 15 s. Regional buses carry literal CIS keys and trains their numbers:
     83–99 % name a trip running at the fix time (2026-10-06 release). City buses of DPO
     (prefix `915`) and DSZO (`825`/`826`) carry the bare line and a course number, not a trip
-    number, so they need inference (MPVNET-Q3).
+    number; they are out of scope (MPVNET-Q3).
   - `dpmd/vehicles` every 10 s. The `dpmd@1` filter reads the JavaScript literals and keeps the
     vehicles in service as JSON, without the stops, shapes or drivers: 530 KB becomes 24 KB.
 
-  The fetcher fills `{epoch_ms}` in a URL and stores gzip responses decompressed. Planned order:
-  an IDOL-first `mpvnet` connector, then DPMD, then matching to a trip with an identical
-  timetable (DPmÚL, DPMD) as a per-source binding option, then shapes, then Arriva Express,
-  then the API.
+  The fetcher fills `{epoch_ms}` in a URL and stores gzip responses decompressed. The `mpvnet`
+  connector is written and replayable but not live (new manifest field `live_feeds`, empty for
+  now): on the 40-second capture 95.9 % of running bus key groups bound and the GTFS-RT check is
+  clean. Next: about 24 h of capture, then settle the bus delay fields, replay and set
+  `live_feeds = ["jdf"]`; trains only once their positions prove to be GPS (MPVNET-Q8). Then
+  DPMD, then matching to a trip with an identical timetable (DPmÚL, DPMD) as a per-source
+  binding option, then shapes, then Arriva Express, then the API.
 - **2026-10-11** — SZT-Q9: boards headed `Nást./kolej` (Ústí n.L. hl.n., Teplice v Čechách)
   show `<platform> / <track>` and were skipped whole by the decoder (read, never recorded);
   now split into a platform and a track assignment. Ústí fixture: 14 assignments from 11 rows.

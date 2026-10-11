@@ -49,6 +49,9 @@ class Channel:
     backoff_after: int = 5
     max_backoff_s: float = 300.0
     feeds: tuple[str, ...] = ()
+    # The feeds whose observations the worker processes live (default: all of `feeds`). Replay
+    # always decodes every feed, so a connector is checked on recorded days before it goes live.
+    live_feeds: tuple[str, ...] = ()
     capabilities: tuple[str, ...] = ()
     semantics: dict[str, Any] = field(default_factory=dict[str, Any])
     # A named proxied, anonymous egress (runtime/egress.py); never fetched directly.
@@ -158,6 +161,8 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     if not isinstance(semantics, dict):
         raise ManifestError(f"{where}: semantics must be a table")
     _core_semantics(cast(dict[str, Any], semantics), where)
+    feeds = _strings(table, "feeds", where, FEED_NAMES)
+    live_feeds = _strings(table, "live_feeds", where, feeds) if "live_feeds" in table else feeds
     egress = table.get("egress")
     if egress is not None and (not isinstance(egress, str) or not _IDENTIFIER.match(egress)):
         raise ManifestError(f"{where}: egress must be a lowercase ASCII name")
@@ -173,7 +178,8 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         filter=cast(str | None, filter_name),
         backoff_after=int(_positive(backoff, "after_failures", where)),
         max_backoff_s=_positive(backoff, "max_s", where),
-        feeds=_strings(table, "feeds", where, FEED_NAMES),
+        feeds=feeds,
+        live_feeds=live_feeds,
         capabilities=_strings(table, "capabilities", where, CAPABILITIES),
         semantics=dict(cast(dict[str, Any], semantics)),
         egress=egress,

@@ -3,8 +3,10 @@
 Status: **probed on 2026-10-11** (Sunday, about 17:30 local): a few requests per portal, and
 a 40-second recording of all four channels. Keys checked against release
 `20261006T194555Z-06c0829d89aa` (serving schema 5.0). Recorded from 2026-10-11 on (`obehy
-realtime` archives every manifest channel). No connector or replay yet. Terms of use are still
-to be recorded.
+realtime` archives every manifest channel). Connector `sources/mpvnet.py` (decoder version 1)
+is replayable but not live: the manifest's `live_feeds = []` keeps the worker from processing
+it until a day of capture settles the delay fields (buses first, trains after). Terms of use are
+still to be recorded.
 
 MPV net runs the public vehicle maps of several regional integrated systems on one piece of
 software. Each portal is one channel of this source:
@@ -104,22 +106,33 @@ trains carry literal keys, as DÚK does. IDOL's 15 misses are trips numbered 4xx
 (670700, 670720, 670730, 690405) whose keys exist but are not scheduled at that time; check them
 on the capture. Merely checking that a key exists is not enough here: it hides MPVNET-Q3.
 
+## Replay
+
+The 40-second capture (2026-10-11 17:33, release `20261006T194555Z`, jdf only):
+
+- 443 of 462 running bus key groups bound (95.9 %); unbound: 54 observations `not_active`
+  (mostly the IDOL 4xxx trips above), 3 `no_line`;
+- the GTFS-RT consistency check is clean (413 trips, 9,026 stop time updates);
+- bus fixes are 15–21 s old at the median and at most about 2 minutes. Train times are the time
+  of the last event, often 15–20 minutes old, so most train positions fall outside the skew and
+  are dropped (MPVNET-Q8).
+
 ## Quirks
 
 | ID | Quirk | Handling |
 |---|---|---|
 | MPVNET-Q1 | the bounding box hardly filters: each portal returns its whole fleet, including interregional lines after they leave the region (a whole-country box gave 122 vehicles against 119 for the IDOL view) | one request per portal with a fixed whole-country box |
 | MPVNET-Q2 | the trip is a pipe-separated string with different layouts for buses (22 fields) and trains (12 fields); some entries have `cn: null` (`cat: 0`) | the connector splits by kind and checks the field count; a vehicle without `cn` has no trip |
-| MPVNET-Q3 | city buses (DPO Ostrava, DSZO Zlín; `cat: 3`) carry the bare public line (`8`), a **course number** in the trip field, and a fleet number instead of a plate. The lines are fixed CIS prefixes plus the 3-digit line: DPO `915` (116 of 116 keys exist), DSZO `825`, and `826` for the Otrokovice lines 55, 56, 57 and 93. But no key named a trip running at that time, and one number serves several lines at once (DPO `47` on lines 39, 46, 55 and 56; DSZO `37` on 31, 32 and 33): it is the vehicle's course (*pořadí*), not the *spoj* | the line resolves by prefix; the trip must be inferred from line, destination, time and stops, as for Arriva Express (no trip key). The course is a circulation hint (`BASE_PLAN.md` section 22) |
+| MPVNET-Q3 | city buses (DPO Ostrava, DSZO Zlín; `cat: 3`) carry the bare public line (`8`), a **course number** in the trip field, and a fleet number instead of a plate. The lines are fixed CIS prefixes plus the 3-digit line: DPO `915` (116 of 116 keys exist), DSZO `825`, and `826` for the Otrokovice lines 55, 56, 57 and 93. But no key named a trip running at that time, and one number serves several lines at once (DPO `47` on lines 39, 46, 55 and 56; DSZO `37` on 31, 32 and 33): it is the vehicle's course (*pořadí*), not the *spoj* | out of scope (decided 2026-10-11): neither operator publishes its courses, and the regional buses are the coverage that matters. The connector drops `cat: 3` entries |
 | MPVNET-Q4 | `dt` and `tm` are local times without an offset | `times.resolve_local` against `received_at`, as DPMD-Q1 |
 | MPVNET-Q5 | `x` is the latitude and `y` the longitude | swapped in the connector |
 | MPVNET-Q6 | the delay is signed seconds, but `ds`'s sign letter says `p` for both 0 and early | the number is used, never the letter |
 | MPVNET-Q7 | a request without `origin` gets HTTP 400 | the manifest sends it |
+| MPVNET-Q8 | a train's `dt`/`tm` is the time of its last event, not of the position (ČD in whole minutes); trains have no unit identity | the train number is its vehicle key; positions older than the skew are dropped; trains stay off live until it is known whether their positions are GPS or derived (from SŽ, which would duplicate `sz-mapa`) |
 
 ## Open questions
 
 - Which delays and times fields 4, 6 and 7 of a bus are. Settle this on the 25-hour capture,
   against the trips' scheduled times.
 - How the source behaves around midnight, DST and service starts.
-- Whether DPO or DSZO publish their courses anywhere, which would make MPVNET-Q3 a keyed lookup.
 - Terms of use.

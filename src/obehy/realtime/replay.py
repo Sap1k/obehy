@@ -47,7 +47,7 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.policy import Policy
 from obehy.realtime.runner import Runner
-from obehy.realtime.sources import duk, sz, sz_tabule
+from obehy.realtime.sources import duk, mpvnet, sz, sz_tabule
 from obehy.realtime.times import Instant, instant, local_date
 
 REPORT_SCHEMA_VERSION = 2
@@ -60,6 +60,12 @@ DECODERS: dict[tuple[str, str], Decoder] = {
     (duk.SOURCE, duk.CHANNEL): lambda body, sha, at, skew, _: duk.decode(body, sha, at, skew),
     (sz.SOURCE, sz.CHANNEL): lambda body, sha, at, skew, _: sz.decode(body, sha, at, skew),
     (sz_tabule.SOURCE, sz_tabule.CHANNEL): sz_tabule.decode,
+    **{
+        (mpvnet.SOURCE, name): (
+            lambda body, sha, at, skew, _, name=name: mpvnet.decode(body, sha, at, skew, name)
+        )
+        for name in mpvnet.CHANNELS
+    },
 }
 
 
@@ -302,7 +308,12 @@ def _report(
     fleets: dict[str, Counter[str]] = defaultdict(Counter)
     for (source, vehicle, key, _), bound in groups.items():
         feed: Feed = "czptt" if key.namespace.startswith("czptt:") else "jdf"
-        name = f"{source}/{duk.fleet(vehicle, feed)}" if source == duk.SOURCE else source
+        if source == duk.SOURCE:
+            name = f"{source}/{duk.fleet(vehicle, feed)}"
+        elif source == mpvnet.SOURCE:
+            name = f"{source}/{'train' if feed == 'czptt' else 'bus'}"
+        else:
+            name = source
         fleets[name]["key_groups"] += 1
         fleets[name]["bound"] += int(bound)
     return {

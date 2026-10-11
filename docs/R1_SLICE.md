@@ -125,6 +125,8 @@ backoff = { initial_s = 15, max_s = 300 }
 timeout_s = 20
 request = { method = "GET", url = "https://tabule.portabo.cz/api/v1-tabule/cis/GetTraffic/0" }
 feeds = ["jdf", "czptt"]            # decode routes each observation to exactly one feed
+# live_feeds = ["jdf"]              # optional: feeds the worker processes live (default: all);
+                                    # replay decodes every feed, so a new source is checked first
 capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 
 [channel.semantics]

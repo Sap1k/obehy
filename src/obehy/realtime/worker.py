@@ -134,6 +134,9 @@ class _Worker:
         except ValueError as error:
             _log(f"{channel.name}: undecodable payload: {error}")
             return
+        observations = [o for o in observations if o.feed in channel.live_feeds]
+        if not observations:
+            return
         async with self.lock:
             self.runner.process(observations)
 
