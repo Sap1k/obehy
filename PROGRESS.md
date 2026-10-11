@@ -244,6 +244,18 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-11** — Recording two new sources (no connectors yet):
+  - `mpvnet` (`docs/sources/mpvnet.md`): the MPV net maps of IDOL, JIKORD, ODIS and IDZK, one
+    channel each, every 15 s. Regional buses carry literal CIS keys and trains their numbers;
+    all of them resolved against the 2026-10-06 release (one ODIS train missed). City buses of
+    DPO and DSZO carry bare line numbers (MPVNET-Q3).
+  - `dpmd/vehicles` every 10 s. The `dpmd@1` filter reads the JavaScript literals and keeps the
+    vehicles in service as JSON, without the stops, shapes or drivers: 530 KB becomes 24 KB.
+
+  The fetcher fills `{epoch_ms}` in a URL and stores gzip responses decompressed. Planned order:
+  an IDOL-first `mpvnet` connector, then DPMD, then matching to a trip with an identical
+  timetable (DPmÚL, DPMD) as a per-source binding option, then shapes, then Arriva Express,
+  then the API.
 - **2026-10-11** — SZT-Q9: boards headed `Nást./kolej` (Ústí n.L. hl.n., Teplice v Čechách)
   show `<platform> / <track>` and were skipped whole by the decoder (read, never recorded);
   now split into a platform and a track assignment. Ústí fixture: 14 assignments from 11 rows.

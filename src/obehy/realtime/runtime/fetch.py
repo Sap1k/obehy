@@ -2,10 +2,16 @@
 
 A channel that declares an egress is never fetched directly: `fetch` refuses it, and only
 `runtime.egress` sends it, through its proxy pool (docs/R2_SLICE.md section 7).
+
+`{epoch_ms}` in a channel's URL is filled with the current time at each request (a cache
+buster, DPMD-Q9). A gzip-encoded response, which a manifest asks for with its own
+`accept-encoding` header, is stored decompressed.
 """
 
 from __future__ import annotations
 
+import gzip
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
@@ -17,6 +23,7 @@ from obehy.realtime.archive import Poll
 from obehy.realtime.manifest import Channel
 
 KEPT_HEADERS = ("age", "date", "etag", "last-modified")
+EPOCH_MS = "{epoch_ms}"
 
 Clock = Callable[[], datetime]
 
@@ -67,6 +74,8 @@ def send(
         )
         with cast(_Response, response) as response:
             body = response.read()
+            if response.headers.get("Content-Encoding") == "gzip":
+                body = gzip.decompress(body)
             return Poll(
                 requested_at=requested_at,
                 received_at=clock(),
@@ -89,7 +98,7 @@ def send(
             headers=_kept_headers(error.headers) if error.headers else {},
             error=f"HTTP {error.code} {error.reason}",
         )
-    except (OSError, ValueError) as error:
+    except (OSError, EOFError, ValueError) as error:  # gzip: BadGzipFile, truncated
         return Poll(
             requested_at=requested_at,
             received_at=clock(),
@@ -103,10 +112,11 @@ def channel_request(channel: Channel, *, anonymous: bool, body: bytes | None = N
     """The channel's request; an anonymous one carries only the manifest's own headers."""
 
     data = channel.body if body is None else body
+    url = channel.url.replace(EPOCH_MS, str(time.time_ns() // 1_000_000))
     if anonymous:
-        request = Request(channel.url, data=data, headers=dict(channel.headers))
+        request = Request(url, data=data, headers=dict(channel.headers))
     else:
-        request = http_request(channel.url, data=data, headers=channel.headers)
+        request = http_request(url, data=data, headers=channel.headers)
     request.method = channel.method
     return request
 

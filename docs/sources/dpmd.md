@@ -3,7 +3,8 @@
 Status: **reverse-engineered from the public map page and a 3-minute capture (2026-10-10
 12:25–12:28 local, a Saturday midday: 60 polls, 38 changed bodies, 9 buses in service, 56
 parked).** Keys checked against release `20261006T194555Z-06c0829d89aa` (serving schema 5.0).
-No connector, no replay yet. Terms of use are still to be recorded.
+Recorded from 2026-10-11 (channel `dpmd/vehicles`, filter `dpmd@1`). No connector, no replay
+yet. Terms of use are still to be recorded.
 
 Dopravní podnik města Děčína, a.s. (DPMD) runs the Děčín city buses (lines 2xx). DÚK's vehicle
 list does not carry them: at 12:30 on the same day, none of its 236 vehicles was on a `515xxx`
@@ -55,7 +56,7 @@ Top-level fields:
 | `id` | `02f766f8` | record hash |
 | `line` | `201` | public line number; empty when parked |
 | `vehicle` | `834` | fleet number |
-| `driver` | `1310` | driver number: personal data, never stored (DPMD-Q8) |
+| `driver` | `1310` | driver number, not stored (DPMD-Q8) |
 | `course` | `6119` | duty / block (*turnus*), also `Turnus` in the body |
 | `coords` | `50.78115082N, 14.22463036E` | position, a string with hemisphere letters |
 | `arrow` | `67` | heading in degrees; it moves even when standing (0 km/h) |
@@ -146,17 +147,22 @@ The 9 vehicles in service at 12:28:
 | DPMD-Q5 | parked vehicles (`off: 1`, blue) stay in the list with their last position, up to about two weeks old in the capture | dropped by the connector |
 | DPMD-Q6 | a finished trip's key stays on the vehicle at the terminus, with its last delay (`515201:231` ended 12:24 and was still reported at 12:28 with 2 min) | as DUK-Q4: the journey finishes from GPS progress and the vehicle is in layover |
 | DPMD-Q7 | now and then a bus is logged into the wrong trip: bus 705 reported `515216:303` at 12:28 on 2026-10-10, a trip of seasonal line 216, which is not running (its last day was 2026-09-28; DPMD's own popup showed no timetable for it). A transient driver selection error, not a numbering scheme | taken literally: `not_in_service` until the driver selects the right trip |
-| DPMD-Q8 | every vehicle carries its driver's number (`driver`, `Řidič`) | personal data: a recorder filter removes it before archiving; the core never sees it |
+| DPMD-Q8 | every vehicle carries its driver's number (`driver`, `Řidič`) | public on DPMD's own map, but Oběhy has no use for it: the recorder filter drops it, so the archive and the core never see it |
 | DPMD-Q9 | without a fresh `v` the server returns a cached copy (5 minutes old on 2026-10-10) | always send `v=<epoch ms>`, and compare `TimeStamp` with reception (a stale body is skipped) |
 
-## Recording plan
+## Recording
 
 - **Channel `dpmd/vehicles`, polled every 10 s.** Data regenerates every 5 s, but fixes move at
-  bus speeds and DÚK runs at 15 s. Send `Accept-Encoding: gzip`, `If-None-Match` and a fresh
-  `v`; a `304` costs nothing.
-- **Recorder filter `dpmd@1`.** It keeps `TimeStamp`, `datahash` and the vehicles in service, and
-  drops the driver fields (DPMD-Q8), `busstops`, `shapes` and the parked vehicles. As with
-  `arriva-express@1`, the index line keeps the source size and SHA-256. The stop list and the
+  bus speeds and DÚK runs at 15 s. The URL's `v={epoch_ms}` is filled per request (DPMD-Q9);
+  `Accept-Encoding: gzip` cuts the transfer to about 35 KB, and the recorder stores the body
+  decompressed. `If-None-Match` is not sent: at 10 s against a 5 s regeneration it would never
+  hit.
+- **Recorder filter `dpmd@1`** (`sources/dpmd.py`). It reads the JavaScript literals (never
+  evaluating them; a page variable stays as `${name}` in its string) and stores JSON: `TimeStamp`,
+  `datahash` and the vehicles in service, without the driver fields (DPMD-Q8), `busstops`,
+  `shapes`, `header`, `hint` and the parked vehicles. About 530 KB becomes about 24 KB (3 KB
+  compressed). As with `arriva-express@1`, the index line keeps the source size and SHA-256 and
+  the kept and dropped counts; a payload the filter cannot read is stored unfiltered. The stop list and the
   shapes can be snapshotted daily if they are ever needed (stop matching, variant names).
 - **Facts:**
   - `VehicleKey(vehicle)`;

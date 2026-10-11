@@ -1,7 +1,8 @@
 """`obehy rt record`: poll realtime channels and archive their payloads without processing them.
 
 The only exception is a channel with a named filter, which drops entries Oběhy never uses
-before the payload is stored (Arriva's fleet-wide feed is reduced to Arriva Express).
+before the payload is stored (Arriva's fleet-wide feed is reduced to Arriva Express, DPMD's
+JavaScript to its vehicles in service).
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from obehy.realtime.policy import BoardPolicy
 from obehy.realtime.runtime.demand import DueCalls, FetchBody, run_demand
 from obehy.realtime.runtime.fetch import fetch, fetch_body
 from obehy.realtime.runtime.scheduler import backoff_interval, run_channel
+from obehy.realtime.sources import dpmd
 from obehy.realtime.times import Instant
 
 MANIFEST = SOURCES
@@ -84,8 +86,19 @@ def _arriva_express(body: bytes) -> Filtered:
     return Filtered(encoded, kept, dropped)
 
 
+def _dpmd(body: bytes) -> Filtered:
+    """DPMD's `TrafficState.js` as JSON: vehicles in service, no stops, shapes or drivers."""
+
+    try:
+        encoded, kept, dropped = dpmd.recorded(body)
+    except dpmd.PayloadError as error:
+        raise FilterError(str(error)) from error
+    return Filtered(encoded, kept, dropped)
+
+
 FILTERS: dict[str, PayloadFilter] = {
     "arriva-express": PayloadFilter(version=1, apply=_arriva_express),
+    "dpmd": PayloadFilter(version=1, apply=_dpmd),
 }
 
 

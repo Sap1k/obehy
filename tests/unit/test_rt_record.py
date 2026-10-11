@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ from obehy import cli
 from obehy.realtime import record
 from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls
 from obehy.realtime.model import SourceSemantics
+from obehy.realtime.runtime import fetch
 
 T0 = datetime(2026, 10, 5, 23, 59, 50, tzinfo=UTC)
 
@@ -54,11 +56,18 @@ def test_shipped_manifests_load() -> None:
     channels = record.load_channels()
     assert [channel.name for channel in channels] == [
         "arriva-express/buses",
+        "dpmd/vehicles",
         "duk/vehicles",
+        "mpvnet/idol",
+        "mpvnet/jikord",
+        "mpvnet/odis",
+        "mpvnet/zlin",
         "sz-mapa/trains",
         "sz-tabule/board",
     ]
-    arriva, duk, sz, boards = channels
+    arriva, dpmd, duk, idol, *_, sz, boards = channels
+    assert (dpmd.filter, dpmd.method) == ("dpmd", "GET") and "{epoch_ms}" in dpmd.url
+    assert idol.headers["origin"] == "https://www.mpvnet.cz" and idol.feeds == ("jdf", "czptt")
     assert (boards.demand, boards.egress, boards.method) == ("station_boards", "sz", "POST")
     assert boards.body is not None and b"SR70={sr70}" in boards.body
     assert arriva.method == "POST"
@@ -215,6 +224,94 @@ def test_arriva_filter_stores_unexpected_shape_unfiltered() -> None:
 
     assert body == source
     assert "GraphQL batch" in str(extra["filter_error"])
+
+
+DPMD_BODY = (
+    '/* {"TimeStamp":"2026-10-11T17:30:16.391"} */'
+    " busstops=[{id:`c8e1d1e7`,coords:`50.1N, 14.2E`}];"
+    " buspositions=[{id:`3f2172e3`,line:`201`,vehicle:`842`,driver:`1103`,course:`7115`,"
+    "header:`<span>Autobus: 842</span>`,body:`<br>Čas: 11.10.2026 17:30:03<br>Řidič: 1103"
+    '<br>Linka: 201<br>Spoj: 351<br><img src="`+vehicleImageUrl + `842.jpg" '
+    "onclick=\"window.open('x')\">`,hint:`Autobus: 842\nLinka: 201\n`,fuel:`C`,arrow:`85`,"
+    "coords:`50.78264999N, 14.22869015E`,final1: {name:`Chrochvice`,coords:`50.7N, 14.1E`},"
+    " final2: null, shapes:`<gpx></gpx>`,off: 0},"
+    " {id:`aa`,line:``,vehicle:`900`,driver:`77`,body:`<br>Autobus: 900`,off: 1}];"
+    " legends=[{id:`c5`,text:`Jízda načas`,mark:``}]; datahash='0b221b33';"
+).encode()
+
+
+def test_dpmd_filter_keeps_vehicles_in_service_without_drivers() -> None:
+    # DPMD-Q2 (JavaScript literals), DPMD-Q5 (parked vehicles), DPMD-Q8 (driver numbers).
+    channel = _channel("dpmd", "vehicles", filter="dpmd")
+    body, extra = record.archived_payload(channel, _poll(DPMD_BODY))
+    assert body is not None
+    document = json.loads(body)
+    assert (document["TimeStamp"], document["datahash"]) == ("2026-10-11T17:30:16.391", "0b221b33")
+    (bus,) = document["buspositions"]
+    assert (bus["line"], bus["vehicle"], bus["course"]) == ("201", "842", "7115")
+    assert bus["body"] == (
+        "<br>Čas: 11.10.2026 17:30:03<br>Linka: 201<br>Spoj: 351"
+        '<br><img src="${vehicleImageUrl}842.jpg" onclick="window.open(\'x\')">'
+    )
+    assert bus["final1"]["name"] == "Chrochvice" and bus["final2"] is None
+    assert not {"driver", "header", "hint", "shapes"} & set(bus)
+    assert b"1103" not in body and "Řidič".encode() not in body and b"busstops" not in body
+    assert (extra["filter"], extra["kept"], extra["dropped"]) == ("dpmd@1", 1, 1)
+
+
+def test_dpmd_filter_stores_unexpected_shape_unfiltered() -> None:
+    channel = _channel("dpmd", "vehicles", filter="dpmd")
+    source = b'/* {"TimeStamp":"2026-10-11T17:30:16"} */ buspositions=eval(`x`);'
+    body, extra = record.archived_payload(channel, _poll(source))
+    assert body == source
+    assert "eval" in str(extra["filter_error"])
+
+
+class _Response:
+    def __init__(self, body: bytes, headers: dict[str, str]) -> None:
+        self.status = 200
+        self.headers = headers
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _Response:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
+class _Opener:
+    def __init__(self, response: _Response) -> None:
+        self.response = response
+        self.urls: list[str] = []
+
+    def open(self, request: object, timeout: float) -> _Response:
+        del timeout
+        self.urls.append(request.full_url)  # type: ignore[attr-defined]
+        return self.response
+
+
+def test_a_cache_busted_gzip_channel_is_stored_decompressed() -> None:
+    # DPMD-Q9: `{epoch_ms}` is filled per request; a gzip body is stored as plain bytes.
+    channel = record.Channel(
+        source="dpmd",
+        channel="vehicles",
+        method="GET",
+        url="https://x.invalid/TrafficState.js?v={epoch_ms}",
+        interval_s=10.0,
+        timeout_s=5.0,
+        headers={"accept-encoding": "gzip"},
+    )
+    opener = _Opener(_Response(gzip.compress(b"plain"), {"Content-Encoding": "gzip"}))
+    request = fetch.channel_request(channel, anonymous=True)
+    poll = fetch.send(request, 5.0, opener=opener)  # type: ignore[arg-type]
+    assert poll.body == b"plain"
+    (url,) = opener.urls
+    stamp = url.rsplit("=", 1)[1]
+    assert stamp.isdigit() and len(stamp) == 13
 
 
 def test_backoff_doubles_after_repeated_failures() -> None:

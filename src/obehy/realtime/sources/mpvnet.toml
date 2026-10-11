@@ -1,0 +1,61 @@
+# MPV net regional vehicle maps (docs/sources/mpvnet.md). Recorded only: no connector yet.
+# One portal per channel, same payload. The bounding box is fixed to the whole country: the
+# portal returns its whole fleet anyway (MPVNET-Q1). Buses go to jdf, trains to czptt.
+source = "mpvnet"
+manifest_version = 1
+
+# IDOL, Liberecký kraj
+[[channel]]
+name = "idol"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 10
+feeds = ["jdf", "czptt"]
+
+[channel.request]
+method = "POST"
+url = "https://www.mpvnet.cz/idol/map/mapData"
+body = '{"w":12.0,"s":48.5,"e":19.0,"n":51.1,"zoom":10,"showStops":false,"mapFilterId":null}'
+headers = { content-type = "application/json; charset=UTF-8", origin = "https://www.mpvnet.cz" }
+
+# JIKORD, Jihočeský kraj
+[[channel]]
+name = "jikord"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 10
+feeds = ["jdf", "czptt"]
+
+[channel.request]
+method = "POST"
+url = "https://www.mpvnet.cz/jikord/map/mapData"
+body = '{"w":12.0,"s":48.5,"e":19.0,"n":51.1,"zoom":10,"showStops":false,"mapFilterId":null}'
+headers = { content-type = "application/json; charset=UTF-8", origin = "https://www.mpvnet.cz" }
+
+# ODIS, Moravskoslezský kraj
+[[channel]]
+name = "odis"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 10
+feeds = ["jdf", "czptt"]
+
+[channel.request]
+method = "POST"
+url = "https://www.mpvnet.cz/odis/map/mapData"
+body = '{"w":12.0,"s":48.5,"e":19.0,"n":51.1,"zoom":10,"showStops":false,"mapFilterId":null}'
+headers = { content-type = "application/json; charset=UTF-8", origin = "https://www.mpvnet.cz" }
+
+# IDZK, Zlínský kraj
+[[channel]]
+name = "zlin"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 10
+feeds = ["jdf", "czptt"]
+
+[channel.request]
+method = "POST"
+url = "https://www.mpvnet.cz/zlin/map/mapData"
+body = '{"w":12.0,"s":48.5,"e":19.0,"n":51.1,"zoom":10,"showStops":false,"mapFilterId":null}'
+headers = { content-type = "application/json; charset=UTF-8", origin = "https://www.mpvnet.cz" }

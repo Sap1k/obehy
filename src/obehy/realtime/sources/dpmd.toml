@@ -1,0 +1,17 @@
+# DPMD (Děčín city buses) vehicle map (docs/sources/dpmd.md). Recorded only: no connector yet.
+# `v` is a cache buster (DPMD-Q9); the filter keeps the vehicles in service as JSON.
+source = "dpmd"
+manifest_version = 1
+
+[[channel]]
+name = "vehicles"
+poll = { kind = "interval", seconds = 10 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 8
+filter = "dpmd"
+feeds = ["jdf"]
+
+[channel.request]
+method = "GET"
+url = "https://tabla.dpmdas.cz/data/TrafficState.js?v={epoch_ms}"
+headers = { accept-encoding = "gzip" }
