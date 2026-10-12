@@ -321,3 +321,31 @@ def test_committed_progress_never_goes_back() -> None:
         assert track is not None
         assert track.committed_m >= last
         last = track.committed_m
+
+
+def test_off_the_shape_the_delay_follows_the_leg_instead_of_freezing() -> None:
+    # The shape misses the road the bus takes: from 600 m it drives a parallel road 400 m north
+    # of it to B, running later and later. No fix fits the shape there, yet the delay follows
+    # the bus along the leg A → B; B's arrival comes from the fixes back on the shape.
+    tt = timetable()
+    for name, east in (("A", 0), ("B", 2000), ("C", 4000)):
+        tt.stop(name, *point(east, 0))
+    shaped = tt.trip(
+        "582492:143", days=[DAY], calls=[("A", "08:00"), ("B", "08:10"), ("C", "08:20")]
+    ).index()
+    fixes = drive([("08:00", 0, 0), ("08:02", 400, 0), ("08:03", 600, 400)])
+    fixes += drive([("08:03:15", 650, 400), ("08:12", 1600, 400)])
+    d = Drive(shaped).run(fixes)
+    track = d.instance.track
+    assert track is not None and track.off_path is not None
+    # At 08:12, 1600 m east and 400 m north: about 1.5 km along the leg, due there at 08:07:40.
+    assert track.lateness_s is not None and 180 < track.lateness_s < 420
+    assert track.hypotheses[0].lateness_s < 60  # the held reading alone would say on time
+    assert d.instance.off_route and d.arrivals() == []  # no events off the shape
+    b = d.instance.calls[1]
+    assert b.estimated_arrival is not None and b.estimated_arrival > at("08:13")
+
+    d.run(drive([("08:12:30", 1800, 0), ("08:14", 2000, 0), ("08:16", 2600, 0)]))
+    track = d.instance.track
+    assert track is not None and track.off_path is None and not d.instance.off_route
+    assert ("B", 1) in d.arrivals()

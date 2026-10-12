@@ -1238,7 +1238,13 @@ a loop every pass does. Nothing is chosen at this step.
   chord) says nothing about where along the trip the vehicle is. Every hypothesis may also hold
   as if that fix were missing, at a fixed cost about that of a fit at the edge of reach. A
   reading is never killed by one fix the path cannot explain; it loses to a reading that
-  explains the fixes. Holding longer than `T` is off-route (section 20.7).
+  explains the fixes. Holding longer than `T` is off-route (section 20.7). Shapes are never
+  perfect (OSM roads, router choices), so while the best reading holds, the lateness is not
+  frozen: the fix is placed on the current leg, between the last stop left and the next one, by
+  its share of distance to the two (it keeps growing on a detour that runs sideways, where a
+  projection onto the stop-to-stop line would stall). That estimate never goes back, never
+  passes the next stop's arrival trigger and gives no events; it is dropped when the fix is
+  too far off the leg to say anything.
 - *Heading*, when the source sends a bearing: the angle to the segment's direction. Opposite
   legs of a *závlek* or an out-and-back road are told apart by this alone.
 
@@ -1408,7 +1414,8 @@ deviations are expected and some are correct.
   between distant stops is trusted less than a short urban hop or a real shape.
 - Fixes matching no segment for less than `T` (default 3 min): hold. No progress, binding kept.
 - For longer: set `off_route` (detour or diversion). A keyed binding is never dropped for
-  geometry. GPS progress pauses and the source's delay is the fallback.
+  geometry. Committed progress and events pause; the lateness follows the leg estimate of
+  section 20.4, and only without one the last measured lateness holds.
 - On rejoining, decoding resumes (section 20.4). Calls passed without matching fixes get no
   event and are shown as passed without realtime, never as departed.
 

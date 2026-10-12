@@ -1,8 +1,8 @@
 # Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
-# docs/R2_SLICE.md section 8; v3 adds [keyless]).
+# docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "3"
+policy_version = "4"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -67,6 +67,12 @@ max_commit_lag_s = 900
 # is passed without realtime (e.g. inside a reception gap).
 max_event_interval_s = 300
 off_route_hold_s = 180
+# While fixes are off the path (a detour, or a shape that misses the road taken), lateness is
+# estimated on the leg between the last stop left and the next one by the fix's distances to
+# them, never past the next stop. No estimate when those distances add up to more than
+# factor x the leg plus this many metres: the vehicle is too far off to say where it is.
+off_path_detour_factor = 2
+off_path_detour_m = 3000
 
 [prediction]
 # Propagation (BASE_PLAN.md 20.5). A late vehicle recovers time only in a real timetabled dwell

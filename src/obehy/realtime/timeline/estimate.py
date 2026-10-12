@@ -71,8 +71,9 @@ def waiting_is_not_early(instance: Instance, plan: Plan, current: Lateness) -> L
 
 def own_lateness(instance: Instance) -> Lateness:
     track = instance.track
-    if track is not None and track.hypotheses:
-        return timedelta(seconds=round(track.hypotheses[0].lateness_s)), "gps"
+    lateness = track.lateness_s if track is not None else None
+    if lateness is not None:
+        return timedelta(seconds=round(lateness)), "gps"
     if instance.delay_s is not None:
         return timedelta(seconds=instance.delay_s), "source"
     return None, None

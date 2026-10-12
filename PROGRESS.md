@@ -247,6 +247,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-12** — Off-path lateness (policy v4): while a vehicle is held off its path, its
+  lateness follows a leg estimate instead of freezing. The share of the way between the last call
+  left and the next call comes from the straight-line distances to both, is mapped onto the path,
+  and is never behind the held reading, never faster than the speed cap and never past the next
+  stop. There is no estimate on a detour longer than twice the leg plus 3 km. It gives lateness
+  only, never events. Next-stop arrival predicted while off the path, error p50/p90, estimate
+  vs frozen, against `20261012T080259Z` (shaped): Arriva 2026-10-09 to 10-12, 8.7 % of fixes
+  off the path, 3.2/8.8 vs 4.5/10.1 min, better on 68 % of 1694 predictions, worse on 31 %;
+  DÚK 2026-10-05/06, 3.9 % off the path, 1.1/6.3 vs 1.2/7.2 min, better on 62 % of 16755,
+  worse on 36 %. Against `20261006T194555Z`, where Arriva trips had no shape (stop-to-stop chords
+  5–12 km off the motorway, 50 % of fixes off the path): 3.0/9.1 vs 5.4/10.6 min.
 - **2026-10-12** — Arriva Express on the server's capture (2026-10-09 to 10-12, over a weekend):
   158/158 episodes with a departure bound, 98.8 % of reports, none to two trips, every binding
   within its trip's scheduled times, GTFS-RT check clean. Found ARRIVA-Q9: the next stop can stay

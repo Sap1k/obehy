@@ -301,13 +301,13 @@ def current_lateness(instance: Instance) -> tuple[timedelta | None, SourceClass 
         default=None,
     )
     track = instance.track
-    measured = track is not None and bool(track.hypotheses)
+    measured = track is not None and track.lateness_s is not None
     by_point = instance.track_source is not None and any(
         t.source == instance.track_source and t.delay_reference == POINT for t in instance.sources
     )
     if measured and not (by_point and point is not None):
-        assert track is not None
-        return timedelta(seconds=round(track.hypotheses[0].lateness_s)), "gps"
+        assert track is not None and track.lateness_s is not None
+        return timedelta(seconds=round(track.lateness_s)), "gps"
     if point is not None and point.delay_s is not None:
         return timedelta(seconds=point.delay_s), "source"
     if instance.delay_s is not None:

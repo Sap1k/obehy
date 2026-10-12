@@ -10,7 +10,9 @@ segment), scored by three terms:
 - change of lateness: time lost or gained against the timetable between the two fixes, with a
   spread growing with the time between them. Absolute lateness is never penalised.
 
-A fix the path does not explain holds a hypothesis as if the fix were missing, at a fixed cost.
+A fix the path does not explain holds a hypothesis as if the fix were missing, at a fixed cost;
+meanwhile the lateness comes from an estimate on the current leg (`OffPath`), so a detour or a
+shape that misses the road taken does not freeze the delay.
 The most likely hypothesis is the live position; crossings are committed once the readings
 agree (`commit.py`). GPS fixes are the only evidence in R1; source-reported progress (SŽ
 passages, a next stop) will be scored against the same hypotheses as a further term.
@@ -23,10 +25,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import timedelta
 
-from obehy.realtime.model import Hypothesis, Placement, Position, Progress, Track
+from obehy.realtime.geo import distance_m
+from obehy.realtime.model import Hypothesis, OffPath, Placement, Position, Progress, Track
 from obehy.realtime.policy import ProgressPolicy
 from obehy.realtime.timeline.commit import Crossing, commit
-from obehy.realtime.timeline.path import Candidate, Path, candidates
+from obehy.realtime.timeline.path import Candidate, Path, candidates, point_at
 from obehy.realtime.timeline.plan import Plan
 from obehy.realtime.times import Instant
 
@@ -81,7 +84,11 @@ def update(
     progress = Progress(best.along_m, plan.call_index_at(best.along_m), at)
     since = best.off_path_since
     off_route = since is not None and at - since >= timedelta(seconds=policy.off_route_hold_s)
-    new_track = Track(done.beam, done.committed_m, seen_at=at, crossed_at=done.crossed_at)
+    previous = track.off_path if track is not None else None
+    estimate = _off_path(plan, best, previous, position, at, speed, policy)
+    new_track = Track(
+        done.beam, done.committed_m, seen_at=at, crossed_at=done.crossed_at, off_path=estimate
+    )
     return Step(new_track, progress, done.crossed, since, off_route)
 
 
@@ -209,6 +216,48 @@ def _held(live: tuple[Hypothesis, ...], at: Instant, policy: ProgressPolicy) -> 
         h.evolve(log_p=h.log_p + policy.off_path_log_p, off_path_since=h.off_path_since or at)
         for h in live
     ]
+
+
+def _off_path(
+    plan: Plan,
+    best: Hypothesis,
+    previous: OffPath | None,
+    position: Position,
+    at: Instant,
+    speed: float,
+    policy: ProgressPolicy,
+) -> OffPath | None:
+    """While the best reading holds off the path, where the fix puts the vehicle on its leg:
+    between the last stop left and the next one, by the share of its distance to the last stop
+    in its distances to both. Unlike a projection onto the stop-to-stop line, the share keeps
+    growing on a detour that runs sideways. Never behind the held reading or an earlier
+    estimate, never faster than the mode allows, never past the next stop's arrival trigger:
+    events come only from fixes on the path."""
+
+    if best.off_path_since is None or best.at >= at:
+        return None  # this fix is on the path
+    calls = plan.path.call_distances_m
+    last = max(plan.call_index_at(best.along_m), 0)
+    if last + 1 >= len(calls):
+        return None
+    start, end = calls[last], calls[last + 1]
+    here = (position.lon, position.lat)
+    a, b = point_at(plan.path, start), point_at(plan.path, end)
+    to_last, to_next = distance_m(here, a), distance_m(here, b)
+    leg = distance_m(a, b)
+    if to_last + to_next > policy.off_path_detour_factor * leg + policy.off_path_detour_m:
+        return None  # too far off to say where along the leg it is
+    share = 1.0 if to_last + to_next <= 0 else to_last / (to_last + to_next)
+    floor = best.along_m
+    if previous is not None and start <= previous.along_m <= end:
+        floor = max(floor, previous.along_m)
+    trigger = plan.zones[last + 1].arrival_m
+    ceiling = min(
+        end if trigger is None else trigger,
+        best.along_m + speed * (at - best.at).total_seconds(),
+    )
+    along = min(max(start + share * (end - start), floor), max(floor, ceiling))
+    return OffPath(along, at, plan.timetable.lateness_s(at, along))
 
 
 def _prune(extended: list[Hypothesis], policy: ProgressPolicy) -> tuple[Hypothesis, ...]:

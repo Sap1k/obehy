@@ -269,6 +269,17 @@ class Hypothesis:
 
 
 @dataclass(frozen=True, slots=True)
+class OffPath:
+    """Where the vehicle is estimated to be along the path while its fixes are off it (a detour,
+    or a shape that misses the road it takes): placed on the leg between the last stop left
+    and the next one by its distances to the two (`progress.py`). Lateness only, never events."""
+
+    along_m: float
+    at: Instant
+    lateness_s: float
+
+
+@dataclass(frozen=True, slots=True)
 class Track:
     """The live hypotheses of a journey and how far events are committed."""
 
@@ -280,6 +291,16 @@ class Track:
     # Time of the last committed crossing: crossings are committed in path order, so their
     # times never decrease.
     crossed_at: Instant | None = None
+    # While the best reading is held off the path: the estimate from the latest fix.
+    off_path: OffPath | None = None
+
+    @property
+    def lateness_s(self) -> float | None:
+        """The measured lateness: off the path the estimate, else the best reading's."""
+
+        if self.off_path is not None:
+            return self.off_path.lateness_s
+        return self.hypotheses[0].lateness_s if self.hypotheses else None
 
 
 @dataclass(frozen=True, slots=True)

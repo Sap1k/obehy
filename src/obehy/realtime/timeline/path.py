@@ -74,6 +74,17 @@ def project_all(path: Path, lon: float, lat: float) -> list[Projection]:
     return out
 
 
+def point_at(path: Path, along_m: float) -> tuple[float, float]:
+    """The (lon, lat) point `along_m` metres along the path (clamped to its ends)."""
+
+    distances = path.distances_m
+    i = min(max(bisect_right(distances, along_m) - 1, 0), len(distances) - 2)
+    span = distances[i + 1] - distances[i]
+    t = 0.0 if span <= 0 else min(1.0, max(0.0, (along_m - distances[i]) / span))
+    (ax, ay), (bx, by) = path.points[i], path.points[i + 1]
+    return ax + t * (bx - ax), ay + t * (by - ay)
+
+
 def make_path(
     points: tuple[tuple[float, float], ...],
     distances: tuple[float, ...],
