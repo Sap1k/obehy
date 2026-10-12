@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v4.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v5.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v4.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v5.toml"
 
 
 class PolicyError(ValueError):
@@ -161,6 +161,9 @@ class Policy:
     delay_discard_below_s: int
     warm_replay_hours: int
     emit_tick_s: int
+    sweep_index_every_s: int
+    keep_index_s: int
+    compact_index_at_s: int
     observation_retention_days: int
     egress: EgressPolicy
     rail: RailPolicy
@@ -264,6 +267,9 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         delay_discard_below_s=root.table("delay").integer("discard_below_s"),
         warm_replay_hours=root.table("warm_replay").integer("hours"),
         emit_tick_s=root.table("emit").integer("tick_s"),
+        sweep_index_every_s=root.table("emit").integer("sweep_index_every_s"),
+        keep_index_s=root.table("emit").integer("keep_index_s"),
+        compact_index_at_s=root.table("emit").integer("compact_index_at_s"),
         observation_retention_days=root.table("retention").integer("observation_days"),
         egress=root.section("egress", EgressPolicy),
         rail=_rail(root.table("rail")),

@@ -189,7 +189,7 @@ def _extend(
     out: list[Hypothesis] = []
     for candidate in found:
         fit = _emission(candidate, position, plan.path, policy)
-        best: Hypothesis | None = None
+        best: tuple[float, Hypothesis, float, float] | None = None  # score, from, along, late
         for h in live:
             if candidate.along_m < h.along_m - policy.jitter_m:
                 continue  # backwards beyond GPS noise: impossible
@@ -199,12 +199,23 @@ def _extend(
             if move is None:
                 continue
             score = h.log_p + move + fit
-            if best is None or score > best.log_p:
-                history = (*h.history, Placement(along, at))
-                best = Hypothesis(along, at, lateness, score, history)
+            if best is None or score > best[0]:
+                best = (score, h, along, lateness)
         if best is not None:
-            out.append(best)
+            score, h, along, lateness = best
+            out.append(Hypothesis(along, at, lateness, score, _placed(h.history, along, at)))
     return out
+
+
+def _placed(history: tuple[Placement, ...], along_m: float, at: Instant) -> tuple[Placement, ...]:
+    """`history` with a fix at `along_m`. Of a run of fixes at one place only the first and the
+    last are kept: a crossing is bracketed by the last fix before it and the first fix past it,
+    so the fixes in between are never read, and a long dwell stays two placements."""
+
+    placement = Placement(along_m, at)
+    if len(history) >= 2 and history[-1].along_m == along_m == history[-2].along_m:
+        return (*history[:-1], placement)
+    return (*history, placement)
 
 
 def _held(live: tuple[Hypothesis, ...], at: Instant, policy: ProgressPolicy) -> list[Hypothesis]:

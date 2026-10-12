@@ -115,9 +115,8 @@ def _note(
     delay_s = instance.delay_s
     if delay is not None and not elapsed and delay.seconds > policy.delay_discard_below_s:
         delay_s = delay.seconds
-    freshness = replace(instance.freshness, updated_at=observation.at)
-    if fresh:
-        freshness = replace(freshness, heard_at=observation.received_at)
+    heard_at = observation.received_at if fresh else instance.freshness.heard_at
+    freshness = replace(instance.freshness, updated_at=observation.at, heard_at=heard_at)
     return replace(instance, freshness=freshness, delay_s=delay_s)
 
 
@@ -133,6 +132,8 @@ def _cross(
     source's point event already holds keeps that event, narrowed by the crossing if they
     agree (`fusion.merge`)."""
 
+    if not crossed:
+        return instance.calls, []
     calls = list(instance.calls)
     effects: list[Effect] = []
     for crossing in crossed:

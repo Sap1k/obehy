@@ -11,12 +11,13 @@ buster, DPMD-Q9). A gzip-encoded response, which a manifest asks for with its ow
 from __future__ import annotations
 
 import gzip
+import ssl
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 from urllib.error import HTTPError
-from urllib.request import OpenerDirector, Request, urlopen
+from urllib.request import HTTPSHandler, OpenerDirector, Request, build_opener
 
 from obehy.pipeline.download import http_request
 from obehy.realtime.archive import Poll
@@ -26,6 +27,11 @@ KEPT_HEADERS = ("age", "date", "etag", "last-modified")
 EPOCH_MS = "{epoch_ms}"
 
 Clock = Callable[[], datetime]
+
+# One TLS context for every request: without it each HTTPS connection builds its own and loads
+# the CA bundle again, which at a few polls a second is real CPU. Contexts are thread-safe.
+TLS = ssl.create_default_context()
+_DIRECT = build_opener(HTTPSHandler(context=TLS))
 
 
 class _Response(Protocol):
@@ -67,11 +73,7 @@ def send(
 ) -> Poll:
     requested_at = clock()
     try:
-        response = (
-            opener.open(request, timeout=timeout_s)
-            if opener is not None
-            else urlopen(request, timeout=timeout_s)
-        )
+        response = (opener or _DIRECT).open(request, timeout=timeout_s)
         with cast(_Response, response) as response:
             body = response.read()
             if response.headers.get("Content-Encoding") == "gzip":

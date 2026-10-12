@@ -1,8 +1,9 @@
 # Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
-# docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness).
+# docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness,
+# v5 the index sweep and daily compaction).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "4"
+policy_version = "5"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -95,6 +96,13 @@ hours = 4
 
 [emit]
 tick_s = 10
+# The worker loads static data lazily, per key as observations name it. Every
+# `sweep_index_every_s` it drops the data of keys no observation named in `keep_index_s` that no
+# live journey needs, and once a day at `compact_index_at_s` (local seconds after midnight) it
+# rebuilds the index from the live journeys alone. Dropped data reloads when named again.
+sweep_index_every_s = 3600
+keep_index_s = 14400
+compact_index_at_s = 12600
 
 [retention]
 # Daily rt.observation partitions older than this are dropped by `obehy jobs nightly`. Warm

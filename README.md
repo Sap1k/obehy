@@ -270,6 +270,15 @@ It writes `report.json` (results by reason and, per DÚK fleet, the share of run
 bound to a journey) and GTFS-RT snapshots. `--write-history` rebuilds `rt.observation` and the
 history of the replayed days. `obehy rt corpus pin` copies archive days into a pinned corpus.
 
+`obehy rt bench` times the live worker's own path (archive, decode, core, estimates, GTFS-RT)
+over archived polls, without database writes, and writes `bench.json` with CPU per phase as a
+share of a core plus hourly memory and container sizes (`--profile` adds a cProfile dump):
+
+```powershell
+uv run obehy rt bench --release <run-id> --from 2026-10-12 --to 2026-10-12 --sources dpmd,mpvnet `
+  --since 2026-10-12T04:00Z --until 2026-10-12T05:00Z --out ../work/bench/peak
+```
+
 ## Running the realtime worker
 
 ```powershell
@@ -281,7 +290,9 @@ observations (warm replay), polls and archives every channel, runs the DÚK, SŽ
 station board connectors through the core, writes `data/gtfs-rt/jdf.pb` (buses) and
 `data/gtfs-rt/czptt.pb` (trains: DÚK GPS and the SŽ map fused per run, platforms where the board
 numbers tracks) every emit tick and history continuously, and rebases live journeys when a new
-release is activated. SŽ channels poll only with the egress proxy list configured (see
+release is activated. Every 10 minutes it logs each channel's polls and the CPU and wall time
+of each phase (archive, decode, index, core, write, estimate, GTFS-RT, state) as a share of a
+core. SŽ channels poll only with the egress proxy list configured (see
 "Recording realtime payloads"); station boards are read per station while trains are due there,
 at most 60 a minute. Rail point events and the SŽ station codes need a release with serving 5.1
 `sr70` keys. `obehy jobs vehicle-day --from DAY` builds the

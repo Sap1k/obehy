@@ -916,7 +916,15 @@ changes). Its manifest semantics must be backed by captured examples.
   `NOTIFY` announces a new publication. Instances are re-keyed through their timetable-stable
   key and service date (section 9.3), never through `trip_id`. A file cache of the built index
   keyed by `release_id` may be added if restarts are slow; it is a cache, never a source of
-  truth.
+  truth. In the worker the index is loaded lazily, per key as observations name it, and so only
+  grows. Every hour the data of keys no observation named in the last hours (policy, 4 h) that
+  no live journey needs is swept out in place, and once a day at a quiet hour the index is
+  rebuilt from the live journeys alone; anything dropped reloads when named again. Memory
+  follows the working set of the last hours, not the day.
+- An observation that repeats a vehicle's last one (the same fix time and the same facts: an
+  unchanged payload, a vehicle listed by two portals) is no news: it is neither stepped nor
+  stored. Each emit tick does work in proportion to what changed: estimates of journeys with new
+  fixes, GTFS-RT entities re-serialized only for changed journeys, state rows upserted.
 - **Every realtime row and output carries `release_id`.** The API joins only realtime state
   whose `release_id` matches the active publication, so a release swap never mixes releases.
 - Releases normally activate at night. A mid-day activation (a hotfix rerun) is allowed: every

@@ -22,15 +22,24 @@ import time
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
-from urllib.request import OpenerDirector, ProxyHandler, build_opener
+from urllib.request import HTTPSHandler, OpenerDirector, ProxyHandler, build_opener
 
 from obehy.realtime.archive import Poll
 from obehy.realtime.manifest import Channel
 from obehy.realtime.policy import EgressPolicy
-from obehy.realtime.runtime.fetch import Clock, channel_request, fetch, refused, send, utc_clock
+from obehy.realtime.runtime.fetch import (
+    TLS,
+    Clock,
+    channel_request,
+    fetch,
+    refused,
+    send,
+    utc_clock,
+)
 from obehy.runtime_config import ConfigurationError, default_config_path
 
 BENCH_STATUSES = frozenset({403, 407, 429})
@@ -94,10 +103,13 @@ def _read_list(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
+@lru_cache(maxsize=256)  # one per proxy, reused: building one per request is wasted work
 def anonymous_opener(proxy_url: str) -> OpenerDirector:
     """An opener through one proxy that sends no User-Agent (urllib adds one by default)."""
 
-    opener = build_opener(ProxyHandler({"http": proxy_url, "https": proxy_url}))
+    opener = build_opener(
+        ProxyHandler({"http": proxy_url, "https": proxy_url}), HTTPSHandler(context=TLS)
+    )
     opener.addheaders = []
     return opener
 

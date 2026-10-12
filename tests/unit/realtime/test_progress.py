@@ -349,3 +349,19 @@ def test_off_the_shape_the_delay_follows_the_leg_instead_of_freezing() -> None:
     track = d.instance.track
     assert track is not None and track.off_path is None and not d.instance.off_route
     assert ("B", 1) in d.arrivals()
+
+
+def test_a_long_standstill_keeps_the_history_short_and_the_events_unchanged() -> None:
+    # Stuck between stops for 20 minutes: 80 fixes in one place before the next commit.
+    d = Drive(STRAIGHT).run(drive([("08:00", 0, 0), ("08:01", 500, 0), ("08:21", 500, 0)]))
+    track = d.instance.track
+    assert track is not None
+    assert max(len(h.history) for h in track.hypotheses) <= 8  # the drive in, then 2
+    d.run(drive([("08:21", 500, 0), ("08:22", 1000, 0), ("08:24", 2000, 0)])[1:])
+    assert d.events() == [
+        ("A", 1, "departure"),
+        ("B", 1, "arrival"),
+        ("B", 1, "departure"),
+        ("C", 1, "arrival"),
+    ]
+    assert at("08:21") <= d.times()[1] <= at("08:22")

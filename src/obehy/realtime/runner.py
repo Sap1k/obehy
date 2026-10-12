@@ -10,14 +10,22 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import psycopg
 
-from obehy.realtime.core import Context, estimate_all, rebase, refresh, step, vehicle_of
+from obehy.realtime.core import (
+    Context,
+    estimate_all,
+    rebase,
+    refresh,
+    resolve,
+    step,
+    vehicle_of,
+)
 from obehy.realtime.emit.db import Writer
-from obehy.realtime.emit.gtfs_rt import feed_message, write_feed
+from obehy.realtime.emit.gtfs_rt import FeedEmitter, write_feed
 from obehy.realtime.index import KeyRef
 from obehy.realtime.index_sql import IndexLoader, ReleaseLoads
 from obehy.realtime.infer.keyed import Match, in_window, span
@@ -33,9 +41,16 @@ from obehy.realtime.model import (
     SourceSemantics,
     TripKey,
 )
+from obehy.realtime.phases import Phases
 from obehy.realtime.policy import Policy
 from obehy.realtime.record import load_channels
-from obehy.realtime.times import Instant, candidate_service_dates
+from obehy.realtime.times import (
+    Instant,
+    ServiceTime,
+    candidate_service_dates,
+    instant,
+    local_date,
+)
 
 
 class InvariantError(AssertionError):
@@ -93,6 +108,10 @@ class Runner:
     semantics: Mapping[tuple[str, str], SourceSemantics] = field(default_factory=shipped_semantics)
     runtimes: dict[Feed, FeedRuntime] = field(default_factory=dict[Feed, FeedRuntime])
     skipped: int = 0
+    phases: Phases = field(default_factory=Phases)
+    next_compaction: Instant | None = None
+    next_sweep: Instant | None = None
+    emitters: dict[Feed, FeedEmitter] = field(default_factory=dict[Feed, FeedEmitter])
 
     def __post_init__(self) -> None:
         for feed in self.feeds:
@@ -138,11 +157,15 @@ class Runner:
                 refs.update(_refs(observation))
                 lines.update(_lines(observation))
                 days.update(observation_days(observation))
-            runtime.loader.ensure(refs, days, lines)
-            for observation in batch:
-                effects.extend(self._step(runtime, observation))
+            with self.phases.time("index"):
+                runtime.loader.ensure(refs, days, lines)
+                runtime.loader.touch(refs, lines, batch[-1].received_at)
+            with self.phases.time("core"):
+                for observation in batch:
+                    effects.extend(self._step(runtime, observation))
         if self.writer is not None and effects:
-            self.writer.write(effects)
+            with self.phases.time("write"):
+                self.writer.write(effects)
         return effects
 
     def _step(self, runtime: FeedRuntime, observation: Observation) -> list[Effect]:
@@ -178,14 +201,78 @@ class Runner:
     def tick(self, now: Instant, *, emit: bool = True) -> None:
         """Housekeeping at `now`; with `emit`, also GTFS-RT files and the state tables."""
 
+        if self.next_compaction is None:
+            self.next_compaction = self._compaction_after(now)
+        elif now >= self.next_compaction:
+            with self.phases.time("compact"):
+                self.compact()
+            self.next_compaction = self._compaction_after(now)
+        if self.next_sweep is None:
+            self.next_sweep = instant(now + timedelta(seconds=self.policy.sweep_index_every_s))
+        elif now >= self.next_sweep:
+            with self.phases.time("sweep"):
+                self.sweep(now)
+            self.next_sweep = instant(now + timedelta(seconds=self.policy.sweep_index_every_s))
         for feed, runtime in sorted(self.runtimes.items()):
-            refresh(runtime.state, now, self.policy)
+            with self.phases.time("refresh"):
+                refresh(runtime.state, now, self.policy)
             if emit:
-                estimate_all(runtime.state, runtime.ctx)
+                with self.phases.time("estimate"):
+                    estimate_all(runtime.state, runtime.ctx)
             if emit and self.gtfs_rt_dir is not None:
-                write_feed(self.gtfs_rt_dir / f"{feed}.pb", feed_message(runtime.state, now))
+                with self.phases.time("gtfs_rt"):
+                    emitter = self.emitters.setdefault(feed, FeedEmitter())
+                    write_feed(
+                        self.gtfs_rt_dir / f"{feed}.pb", emitter.serialize(runtime.state, now)
+                    )
         if emit and self.writer is not None:
-            self.writer.write_state({feed: r.state for feed, r in self.runtimes.items()})
+            with self.phases.time("state"):
+                self.writer.write_state({feed: r.state for feed, r in self.runtimes.items()})
+
+    def _compaction_after(self, now: Instant) -> Instant:
+        day = local_date(now)
+        while True:
+            at = ServiceTime(day, self.policy.compact_index_at_s).instant()
+            if at > now:
+                return at
+            day += timedelta(days=1)
+
+    def sweep(self, now: Instant) -> None:
+        """Drop the static data and plans of keys not named for `keep_index_s` that no live
+        journey needs, in place (BASE_PLAN.md section 18.3); they reload when named again.
+        Loading is deterministic, so this never changes output."""
+
+        since = instant(now - timedelta(seconds=self.policy.keep_index_s))
+        for runtime in self.runtimes.values():
+            state = runtime.state
+            bindings = [v.binding for v in state.vehicles.values() if v.binding is not None]
+            journeys = set(state.instances) | {b.journey for b in bindings}
+            trip_ids = {i.trip_id for i in state.instances.values()} | {b.trip_id for b in bindings}
+            day = min([local_date(now) - timedelta(days=1), *(j.service_date for j in journeys)])
+            runtime.loader.sweep(since, trip_ids, {(j.namespace, j.key) for j in journeys}, day)
+            runtime.ctx.plans.sweep(set(runtime.loader.index.trips), day)
+
+    def compact(self) -> None:
+        """Drop the static data and plans no live journey needs (BASE_PLAN.md section 18.3).
+
+        The lazy index only ever grows: every key seen during the day keeps its trips, shapes
+        and service dates. A fresh index with just the live journeys' data replaces it, and the
+        rest reloads when an observation names it again. Loading is deterministic, so this
+        never changes output."""
+
+        for feed, runtime in sorted(self.runtimes.items()):
+            state = runtime.state
+            journeys = set(state.instances) | {
+                v.binding.journey for v in state.vehicles.values() if v.binding is not None
+            }
+            loader = IndexLoader(self.connection, self.loads, feed)
+            loader.ensure(
+                {(j.namespace, j.key) for j in journeys}, {j.service_date for j in journeys}
+            )
+            for journey in sorted(journeys):
+                resolve(journey, loader.index)  # rebuilds the run trips of rail journeys
+            ctx = Context(loader.index, self.policy, semantics=self.semantics)
+            self.runtimes[feed] = FeedRuntime(loader, state, ctx)
 
     def switch_release(self, loads: ReleaseLoads, writer: Writer | None) -> list[Effect]:
         """Rebase live journeys onto a newly activated release (mid-day activation)."""

@@ -124,9 +124,18 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
             lambda o: _bind(o, ctx, platform.scheduled),
             lambda match: _open(state, match, ctx, observation),
         )
+    previous = state.vehicles.get(vehicle) if vehicle is not None else None
+    if (
+        previous is not None
+        and observation.observed_at is not None
+        and previous.last_seen == observation.observed_at
+        and previous.facts == observation.facts
+    ):
+        # The same fix again (a payload that did not change, a vehicle listed twice): stepping
+        # it would change nothing, and it is not stored again.
+        return effects
     key = observation.first(TripKey)
     line = observation.first(LineRef)
-    previous = state.vehicles.get(vehicle) if vehicle is not None else None
     episode: KeylessEpisode | None = None
     if key is None and line is not None and vehicle is not None:
         prior = previous.episode if previous is not None else None
@@ -467,6 +476,7 @@ def _set_vehicle(
         position=position,
         reason=reason,
         episode=episode,
+        facts=observation.facts,
     )
 
 
@@ -483,7 +493,7 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
     effects: list[Effect] = []
     moved: dict[JourneyKey, str] = {}
     for journey, instance in sorted(state.instances.items()):
-        trip = _resolve(journey, index)
+        trip = resolve(journey, index)
         if trip is None:
             del state.instances[journey]
             continue
@@ -525,7 +535,9 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
     return effects
 
 
-def _resolve(journey: JourneyKey, index: IndexView) -> Trip | None:
+def resolve(journey: JourneyKey, index: IndexView) -> Trip | None:
+    """The (run) trip a journey's key names on its service date, if it runs."""
+
     for entry in index.keys(journey.namespace, journey.key):
         if not entry.valid_on(journey.service_date):
             continue

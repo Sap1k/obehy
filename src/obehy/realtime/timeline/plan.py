@@ -244,6 +244,14 @@ class PlanCache:
     paths: dict[str, Path] = field(default_factory=dict[str, Path])
     plans: dict[tuple[str, date], Plan] = field(default_factory=dict[tuple[str, date], Plan])
 
+    def sweep(self, trip_ids: set[str], since: date) -> None:
+        """Keep the paths of `trip_ids` and their plans from `since` on."""
+
+        self.paths = {t: path for t, path in self.paths.items() if t in trip_ids}
+        self.plans = {
+            key: plan for key, plan in self.plans.items() if key[0] in trip_ids and key[1] >= since
+        }
+
     def plan(self, trip: Trip, day: date, index: IndexView, policy: Policy) -> Plan:
         if index.release_id != self.release_id:
             self.release_id = index.release_id

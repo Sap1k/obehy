@@ -223,7 +223,7 @@ def test_a_real_arriva_express_trip_binds_from_its_first_report() -> None:
     # an hour; the 11:00 one (580916:9) is the one it drives.
     index, observations = load("arriva-580916-9")
     state, steps = run(index, *observations)
-    bound = {result(s) for s in steps}
+    bound = {result(s) for s in steps if s}  # a repeated report is no news: no result
     assert bound == {(journey(9, date(2026, 10, 6)), None)}
     binding = state.vehicles[VehicleId("arriva-express", "6SA3453")].binding
     assert binding is not None and binding.confirmed

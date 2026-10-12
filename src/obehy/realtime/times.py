@@ -12,8 +12,10 @@ in wall-clock time, which silently breaks durations across a DST change.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from functools import lru_cache
 from typing import NewType
 from zoneinfo import ZoneInfo
 
@@ -42,8 +44,13 @@ class ServiceTime:
     def instant(self) -> Instant:
         """The instant of this wall-clock schedule time (first occurrence when repeated)."""
 
-        wall = datetime.combine(self.service_date, time()) + timedelta(seconds=self.seconds)
-        return instant(wall.replace(tzinfo=PRAGUE, fold=0))
+        return _schedule_instant(self.service_date, self.seconds)
+
+
+@lru_cache(maxsize=1 << 16)  # schedule times repeat on every fix of a journey; bounded
+def _schedule_instant(service_date: date, seconds: int) -> Instant:
+    wall = datetime.combine(service_date, time()) + timedelta(seconds=seconds)
+    return instant(wall.replace(tzinfo=PRAGUE, fold=0))
 
 
 def local_date(value: Instant) -> date:
@@ -59,7 +66,8 @@ def candidate_service_dates(value: Instant) -> tuple[date, date, date]:
     return today - timedelta(days=1), today, today + timedelta(days=1)
 
 
-def _readings(wall: datetime) -> list[Instant]:
+@lru_cache(maxsize=4096)  # a payload's vehicles share their seconds; bounded
+def _readings(wall: datetime) -> tuple[Instant, ...]:
     """Every instant that reads as the naive local time `wall`: none, one or two."""
 
     found: list[Instant] = []
@@ -67,10 +75,10 @@ def _readings(wall: datetime) -> list[Instant]:
         candidate = instant(wall.replace(tzinfo=PRAGUE, fold=fold))
         if candidate.astimezone(PRAGUE).replace(tzinfo=None) == wall and candidate not in found:
             found.append(candidate)
-    return found
+    return tuple(found)
 
 
-def _closest(readings: list[Instant], received_at: Instant) -> Instant | None:
+def _closest(readings: tuple[Instant, ...], received_at: Instant) -> Instant | None:
     if not readings:
         return None
     return min(readings, key=lambda reading: (abs(reading - received_at), reading))
@@ -90,10 +98,25 @@ def read_local(text: str, layout: str, received_at: Instant) -> Instant | None:
     `resolve_local`; None if it does not parse or does not exist."""
 
     try:
-        wall = datetime.strptime(text.strip(), layout)  # noqa: DTZ007 - local, resolved below
+        fast = _LAYOUTS.get(layout)
+        match = fast.fullmatch(text.strip()) if fast is not None else None
+        if match is not None:
+            a, month, c, hour, minute, second = (int(part) for part in match.groups())
+            year, day = (c, a) if layout.startswith("%d") else (a, c)
+            wall = datetime(year, month, day, hour, minute, second)  # noqa: DTZ001 - local
+        else:
+            wall = datetime.strptime(text.strip(), layout)  # noqa: DTZ007 - local, resolved below
     except ValueError:
         return None
     return resolve_local(wall, received_at)
+
+
+# The layouts sources use on every entry, read without `strptime` (much slower); anything they
+# do not match goes to `strptime`, which decides.
+_LAYOUTS = {
+    "%d.%m.%Y %H:%M:%S": re.compile(r"(\d{1,2})\.(\d{1,2})\.(\d{4}) (\d{1,2}):(\d{1,2}):(\d{1,2})"),
+    "%Y-%m-%dT%H:%M:%S": re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})T(\d{1,2}):(\d{1,2}):(\d{1,2})"),
+}
 
 
 def resolve_clock(clock: time, received_at: Instant) -> Instant | None:
@@ -104,7 +127,7 @@ def resolve_clock(clock: time, received_at: Instant) -> Instant | None:
     for day in candidate_service_dates(received_at):
         readings.extend(_readings(datetime.combine(day, clock)))
     near = [r for r in readings if abs(r - received_at) <= timedelta(hours=12)]
-    return _closest(near, received_at)
+    return _closest(tuple(near), received_at)
 
 
 def read_unless_offset_twice(text: str, reference: Instant, tolerance: timedelta) -> Instant | None:

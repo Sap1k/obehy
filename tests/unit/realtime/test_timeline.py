@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 
 from obehy.realtime.core import Context, estimate_all, step
@@ -258,6 +259,25 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
     assert len(feed_message(run.state, lost).entity) == 0
 
 
+def test_gtfs_rt_bytes_reused_across_ticks_match_a_fresh_serialization() -> None:
+    from obehy.realtime.core import refresh
+    from obehy.realtime.emit.gtfs_rt import FeedEmitter, feed_message
+
+    emitter = FeedEmitter()
+    run = Run().at("08:00", east(0))
+    for clock, metres in (("08:01", 150), ("08:02", 300), ("08:03", 500), ("08:04", 700)):
+        run.at(clock, east(metres))
+        now = local(f"2026-10-08 {clock}:10")
+        refresh(run.state, now, POLICY)
+        estimate_all(run.state, run.ctx)
+        payload = emitter.serialize(run.state, now)
+        # The same bytes as serializing the whole message at once, with nothing cached.
+        assert payload == feed_message(run.state, now).SerializeToString(deterministic=True)
+        assert payload == FeedEmitter().serialize(run.state, now)
+        assert emitter.serialize(run.state, now) == payload  # all from cache
+    assert len(emitter.trips) == 1 and len(emitter.positions) == 1
+
+
 def test_duk_q11_only_the_lead_vehicle_drives_the_timeline() -> None:
     run = Run().at("08:00", east(0)).at("08:03", east(600))
     run.at("08:03:10", east(100), vehicle="1002")  # a second claimant far behind
@@ -387,3 +407,17 @@ def test_a_bus_standing_at_a_stop_gets_a_predicted_departure() -> None:
     b = run.instance.calls[1]
     assert b.status == "actual" and b.estimated_arrival is not None
     assert b.estimated_departure == local("2026-10-08 08:10")  # waits for its time
+
+
+def test_the_same_fix_again_is_no_news() -> None:
+    run = Run().at("08:00", east(0)).at("08:03", east(500), delay=60)
+    (vehicle,) = run.state.vehicles.values()
+    before = dict(run.state.instances)
+    again = observe("2026-10-08 08:03", position=east(500), delay=60)
+    again = replace(again, received_at=local("2026-10-08 08:03:15"))  # polled again
+    assert step(run.state, again, run.ctx) == []
+    assert run.state.instances == before
+    assert next(iter(run.state.vehicles.values())) is vehicle
+    # A new fix time is news even where nothing else changed (a vehicle standing).
+    still = observe("2026-10-08 08:03:15", position=east(500), delay=60)
+    assert step(run.state, still, run.ctx) != []

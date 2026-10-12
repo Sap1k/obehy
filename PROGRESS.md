@@ -247,6 +247,22 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-12** — Realtime worker CPU and memory pass (policy v5). Memory: the lazy index and
+  plan cache are swept hourly in place of keys not named for 4 h that no live journey needs,
+  and rebuilt daily at 03:30 from the live journeys; tracker history keeps only
+  the ends of a standstill (was one placement per fix, copied per fix); warm start streams
+  stored observations in chunks; worker poll stats are summarized and cleared every 10 min;
+  `MALLOC_ARENA_MAX=2` and `gc.freeze()` after warm start. CPU: current-state tables are
+  upserted by change instead of deleted and re-COPYed with every journey's calls JSON every
+  10 s; GTFS-RT reuses each entity's bytes while its journey is unchanged (byte-identical
+  output); estimates skip `dataclasses.replace` for unchanged calls; a repeated identical fix
+  is no news (not stepped, not stored); faster path building, MPV net/DPMD time parsing and
+  DPMD reader (4×, same output); one shared TLS context and proxy openers. New
+  `obehy rt bench` (worker path over archived polls, CPU per phase, no DB writes): MPV net +
+  DPMD 2026-10-12 06–07 local, under cProfile, 9.6 % → 6.6 % of a core (estimate 95 → 41 s,
+  GTFS-RT 75 → 46 s, decode 29 → 18 s); the state-table rewrite, not in the bench, was the
+  largest prod cost. Unit and DB tests pass; no soak run, and the corpus replay diff against
+  the old code was skipped.
 - **2026-10-12** — Off-path lateness (policy v4): while a vehicle is held off its path, its
   lateness follows a leg estimate instead of freezing. The share of the way between the last call
   left and the next call comes from the straight-line distances to both, is mapped onto the path,

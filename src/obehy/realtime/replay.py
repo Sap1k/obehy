@@ -102,17 +102,27 @@ class _Stats:
 
 
 def _stream(
-    options: ReplayOptions, source: str, channel: str
+    archive: Path, source: str, channel: str, start: date, end: date
 ) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
-    for poll in iter_polls(options.archive, source, channel, options.start, options.end):
+    for poll in iter_polls(archive, source, channel, start, end):
         yield poll.received_at, source, channel, poll
 
 
-def _polls(options: ReplayOptions) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
+def merged_polls(
+    archive: Path, channels: Sequence[tuple[str, str]], start: date, end: date
+) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
+    """The archived polls of `channels` on the UTC days `start`..`end`, in reception order."""
+
     # One generator function per channel: a generator expression here would read the loop's
     # last (source, channel) for every stream.
-    streams = [_stream(options, source, channel) for source, channel in sorted(options.channels)]
+    streams = [
+        _stream(archive, source, channel, start, end) for source, channel in sorted(channels)
+    ]
     return heapq.merge(*streams, key=lambda item: (item[0], item[1], item[2]))
+
+
+def _polls(options: ReplayOptions) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
+    return merged_polls(options.archive, options.channels, options.start, options.end)
 
 
 def _next_tick(at: datetime, every_s: int) -> Instant:
@@ -261,19 +271,32 @@ def _decoded(
 def _writer(
     connection: psycopg.Connection, loads: ReleaseLoads, options: ReplayOptions, policy: Policy
 ) -> Writer:
-    writer = Writer(connection, Derivation(CORE_VERSION, policy.version, loads.run_id))
-    first = datetime(options.start.year, options.start.month, options.start.day, tzinfo=UTC)
-    last = datetime(options.end.year, options.end.month, options.end.day, tzinfo=UTC)
-    clear_observations(
+    return history_writer(
         connection,
-        first,
-        last + timedelta(days=1),
+        loads,
+        policy,
+        options.start,
+        options.end,
         sorted({source for source, _ in options.channels}),
     )
-    days = [
-        options.start + timedelta(days=n) for n in range((options.end - options.start).days + 1)
-    ]
-    writer.clear_history(days)
+
+
+def history_writer(
+    connection: psycopg.Connection,
+    loads: ReleaseLoads,
+    policy: Policy,
+    start: date,
+    end: date,
+    sources: Sequence[str],
+) -> Writer:
+    """A writer for rebuilding the UTC days `start`..`end`: their observations of `sources`
+    and their service dates' history are cleared first."""
+
+    writer = Writer(connection, Derivation(CORE_VERSION, policy.version, loads.run_id))
+    first = datetime(start.year, start.month, start.day, tzinfo=UTC)
+    last = datetime(end.year, end.month, end.day, tzinfo=UTC)
+    clear_observations(connection, first, last + timedelta(days=1), sources)
+    writer.clear_history([start + timedelta(days=n) for n in range((end - start).days + 1)])
     return writer
 
 

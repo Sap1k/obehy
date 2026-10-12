@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 
 from google.transit import gtfs_realtime_pb2 as rt
@@ -76,6 +77,7 @@ def _current_part(instance: Instance) -> str:
     return parts[-1].trip_id
 
 
+@lru_cache(maxsize=8192)  # bounded: the worker runs for weeks
 def run_vehicle_id(journey: JourneyKey) -> str:
     """A rail run's public vehicle ID: opaque, the same for the whole run whichever unit or
     source reports it."""
@@ -114,12 +116,9 @@ def _run_position(instance: Instance, bound: list[VehicleState]) -> VehicleState
     return placed[0] if placed else None
 
 
-def _vehicle_position(
-    message: rt.FeedMessage, instance: Instance, current: VehicleState, vehicle_id: str
-) -> None:
-    if current.position is None:
-        return
-    entity = message.entity.add()
+def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str) -> bytes:
+    assert current.position is not None
+    entity = rt.FeedEntity()
     entity.id = f"vehicle:{vehicle_id}"
     position = entity.vehicle
     _trip(position.trip, _current_part(instance), instance.journey)
@@ -133,75 +132,129 @@ def _vehicle_position(
     if current.position.bearing is not None:
         position.position.bearing = current.position.bearing
     position.timestamp = _epoch(current.last_seen)
+    return entity.SerializeToString(deterministic=True)
+
+
+def _trip_updates(instance: Instance, vehicle_id: str | None) -> tuple[bytes, ...]:
+    """The serialized TripUpdate entities of a live journey, one per published part."""
+
+    journey = instance.journey
+    parts = _parts(instance)
+    out: list[bytes] = []
+    for n, part in enumerate(parts):
+        updates: list[tuple[CallState, bool, bool]] = []
+        for i in range(part.first, part.last + 1):
+            call = instance.calls[i]
+            if not call.passenger:
+                continue
+            timed = call.status in TIMED
+            if not timed and _mapped(call) is None:
+                continue
+            # A junction shared with the neighbouring part: arrival before, departure after.
+            arrival = not (n > 0 and i == part.first)
+            departure = not (n < len(parts) - 1 and i == part.last)
+            updates.append((call, arrival and timed, departure and timed))
+        if not updates:
+            continue
+        entity = rt.FeedEntity()
+        entity.id = _entity_id(instance, part)
+        update = entity.trip_update
+        _trip(update.trip, part.trip_id, journey)
+        if vehicle_id is not None:
+            update.vehicle.id = vehicle_id
+        update.timestamp = _epoch(instance.freshness.updated_at)
+        for call, arrival, departure in updates:
+            stop = update.stop_time_update.add()
+            stop.stop_sequence = call.sequence
+            if arrival and call.estimated_arrival is not None:
+                stop.arrival.time = _epoch(call.estimated_arrival)
+            if departure and call.estimated_departure is not None:
+                stop.departure.time = _epoch(call.estimated_departure)
+            assigned = _mapped(call)
+            if assigned is not None:
+                stop.stop_time_properties.assigned_stop_id = assigned
+        out.append(entity.SerializeToString(deterministic=True))
+    return tuple(out)
+
+
+def _field(number: int, payload: bytes) -> bytes:
+    """A length-delimited protobuf field: the tag, the varint length, the bytes."""
+
+    out = bytearray([number << 3 | 2])
+    length = len(payload)
+    while length > 0x7F:
+        out.append(length & 0x7F | 0x80)
+        length >>= 7
+    out.append(length)
+    return bytes(out) + payload
+
+
+class FeedEmitter:
+    """Serializes a feed's GTFS-RT from core state, keeping each entity's bytes while its
+    journey and vehicle are unchanged (state objects are immutable and replaced on change, so
+    identity says unchanged). The output is exactly `SerializeToString(deterministic=True)` of
+    the whole message: a header field followed by entity fields in order."""
+
+    def __init__(self) -> None:
+        self.trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
+        self.positions: dict[str, tuple[Instance, VehicleState, bytes]] = {}
+
+    def serialize(self, state: FeedState, now: Instant) -> bytes:
+        header = rt.FeedHeader()
+        header.gtfs_realtime_version = "2.0"
+        header.incrementality = rt.FeedHeader.FULL_DATASET
+        header.timestamp = _epoch(now)
+        chunks = [_field(1, header.SerializeToString(deterministic=True))]
+
+        vehicles_of: dict[JourneyKey, list[VehicleId]] = defaultdict(list)
+        for vehicle, current in sorted(state.vehicles.items()):
+            if current.binding is not None:
+                vehicles_of[current.binding.journey].append(vehicle)
+
+        trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
+        for journey, instance in sorted(state.instances.items()):
+            if instance.lifecycle not in LIVE or instance.freshness.lost:
+                continue  # a stale journey keeps its predictions through a reception gap
+            if instance.parts:
+                vehicle_id: str | None = run_vehicle_id(journey)
+            elif vehicles_of.get(journey):
+                vehicle_id = str(vehicles_of[journey][0])
+            else:
+                vehicle_id = None
+            cached = self.trips.get(journey)
+            if cached is None or cached[0] is not instance or cached[1] != vehicle_id:
+                cached = (instance, vehicle_id, _trip_updates(instance, vehicle_id))
+            trips[journey] = cached
+            chunks.extend(_field(2, entity) for entity in cached[2])
+        self.trips = trips
+
+        chosen: list[tuple[str, Instance, VehicleState]] = []
+        for journey, vehicles in vehicles_of.items():
+            instance = state.instances.get(journey)
+            if instance is None or instance.lifecycle not in LIVE or instance.freshness.stale:
+                continue
+            bound = [state.vehicles[v] for v in vehicles]
+            if instance.parts:
+                lead = _run_position(instance, bound)
+                if lead is not None:
+                    chosen.append((run_vehicle_id(journey), instance, lead))
+                continue
+            chosen.extend((str(v.vehicle), instance, v) for v in bound if v.position is not None)
+        positions: dict[str, tuple[Instance, VehicleState, bytes]] = {}
+        for vehicle_id, instance, current in sorted(chosen, key=lambda p: p[0]):
+            hit = self.positions.get(vehicle_id)
+            if hit is None or hit[0] is not instance or hit[1] is not current:
+                hit = (instance, current, _vehicle_position(instance, current, vehicle_id))
+            positions[vehicle_id] = hit
+            chunks.append(_field(2, hit[2]))
+        self.positions = positions
+        return b"".join(chunks)
 
 
 def feed_message(state: FeedState, now: Instant) -> rt.FeedMessage:
-    message = rt.FeedMessage()
-    message.header.gtfs_realtime_version = "2.0"
-    message.header.incrementality = rt.FeedHeader.FULL_DATASET
-    message.header.timestamp = _epoch(now)
-
-    vehicles_of: dict[JourneyKey, list[VehicleId]] = defaultdict(list)
-    for vehicle, current in sorted(state.vehicles.items()):
-        if current.binding is not None:
-            vehicles_of[current.binding.journey].append(vehicle)
-
-    for journey, instance in sorted(state.instances.items()):
-        if instance.lifecycle not in LIVE or instance.freshness.lost:
-            continue  # a stale journey keeps its predictions through a reception gap
-        parts = _parts(instance)
-        for n, part in enumerate(parts):
-            updates: list[tuple[CallState, bool, bool]] = []
-            for i in range(part.first, part.last + 1):
-                call = instance.calls[i]
-                if not call.passenger:
-                    continue
-                timed = call.status in TIMED
-                if not timed and _mapped(call) is None:
-                    continue
-                # A junction shared with the neighbouring part: arrival before, departure after.
-                arrival = not (n > 0 and i == part.first)
-                departure = not (n < len(parts) - 1 and i == part.last)
-                updates.append((call, arrival and timed, departure and timed))
-            if not updates:
-                continue
-            entity = message.entity.add()
-            entity.id = _entity_id(instance, part)
-            update = entity.trip_update
-            _trip(update.trip, part.trip_id, journey)
-            if instance.parts:
-                update.vehicle.id = run_vehicle_id(journey)
-            elif vehicles_of[journey]:
-                update.vehicle.id = str(vehicles_of[journey][0])
-            update.timestamp = _epoch(instance.freshness.updated_at)
-            for call, arrival, departure in updates:
-                stop = update.stop_time_update.add()
-                stop.stop_sequence = call.sequence
-                if arrival and call.estimated_arrival is not None:
-                    stop.arrival.time = _epoch(call.estimated_arrival)
-                if departure and call.estimated_departure is not None:
-                    stop.departure.time = _epoch(call.estimated_departure)
-                assigned = _mapped(call)
-                if assigned is not None:
-                    stop.stop_time_properties.assigned_stop_id = assigned
-
-    positions: list[tuple[str, Instance, VehicleState]] = []
-    for journey, vehicles in vehicles_of.items():
-        instance = state.instances.get(journey)
-        if instance is None or instance.lifecycle not in LIVE or instance.freshness.stale:
-            continue
-        bound = [state.vehicles[v] for v in vehicles]
-        if instance.parts:
-            chosen = _run_position(instance, bound)
-            if chosen is not None:
-                positions.append((run_vehicle_id(journey), instance, chosen))
-            continue
-        positions.extend((str(v.vehicle), instance, v) for v in bound if v.position is not None)
-    for vehicle_id, instance, current in sorted(positions, key=lambda p: p[0]):
-        _vehicle_position(message, instance, current, vehicle_id)
-    return message
+    return rt.FeedMessage.FromString(FeedEmitter().serialize(state, now))
 
 
-def write_feed(path: Path, message: rt.FeedMessage) -> None:
+def write_feed(path: Path, payload: bytes) -> None:
     with atomic_output_path(path) as temporary:
-        temporary.write_bytes(message.SerializeToString(deterministic=True))
+        temporary.write_bytes(payload)

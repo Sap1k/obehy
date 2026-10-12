@@ -87,16 +87,17 @@ def note_source(
         return instance, previous, False
     track = previous or SourceTrack(observation.source, observation.received_at)
     delay = observation.first(Delay)
-    if delay is not None:
-        track = replace(track, delay_s=delay.seconds, delay_at=observation.at)
-        if delay.reference == POINT:
-            track = replace(track, delay_reference=POINT)
     track = replace(
         track,
         heard_at=observation.received_at,
         fingerprint=fingerprint,
         next_point=observation.first(NextPoint) or track.next_point,
         prediction=observation.first(NextStopPrediction) or track.prediction,
+        delay_s=track.delay_s if delay is None else delay.seconds,
+        delay_at=track.delay_at if delay is None else observation.at,
+        delay_reference=(
+            POINT if delay is not None and delay.reference == POINT else track.delay_reference
+        ),
     )
     return _with_track(instance, track), previous, True
 

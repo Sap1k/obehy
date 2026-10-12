@@ -238,6 +238,53 @@ class Index:
         if location_id not in named:
             self.keyed[(namespace, identifier)] = tuple(sorted((*named, location_id)))
 
+    def sweep(
+        self, refs: Iterable[KeyRef], lines: Iterable[KeyRef], trip_ids: Iterable[str], since: date
+    ) -> None:
+        """Keep only what the kept keys, lines and trips need; drop the rest in place.
+
+        Kept: the keys `refs`, their parents and the trip keys of the kept `lines`; their trips,
+        the trips `trip_ids` (live journeys, run trips included), every part of a kept trip's
+        run; and those trips' shapes, locations and service dates, for dates from `since` on.
+        Whatever is dropped reloads when an observation names it again (the loader loads what
+        is not in the index). Location source keys (one per station) are kept: they are few."""
+
+        kept_lines = {ref: self.lines[ref] for ref in lines if ref in self.lines}
+        wanted = set(refs)
+        for ref, identifiers in kept_lines.items():
+            wanted.update((CHILD_NAMESPACE[ref[0]], identifier) for identifier in identifiers)
+        wanted |= {parent for ref in wanted if (parent := parent_ref(ref)) is not None}
+        key_entries = {ref: self.key_entries[ref] for ref in wanted if ref in self.key_entries}
+        named = {entry.public_id for entries in key_entries.values() for entry in entries}
+        trips = {t for t in (*named, *trip_ids) if t in self.trips}
+        runs = {self.trips[t].run_key for t in trips} - {None}
+        kept_runs = {run: self.runs[run] for run in runs if run is not None and run in self.runs}
+        trips |= {t for parts in kept_runs.values() for t in parts if t in self.trips}
+        kept_trips = {t: self.trips[t] for t in trips}
+        dates = frozenset(d for d in self.loaded_dates if d >= since)
+        services = {trip.service_id for trip in kept_trips.values()}
+        self.key_entries = key_entries
+        self.lines = kept_lines
+        self.trips = kept_trips
+        self.runs = kept_runs
+        self.shapes = {
+            trip.shape_id: self.shapes[trip.shape_id]
+            for trip in kept_trips.values()
+            if trip.shape_id is not None and trip.shape_id in self.shapes
+        }
+        self.locations = {
+            call.location_id: self.locations[call.location_id]
+            for trip in kept_trips.values()
+            for call in trip.calls
+            if call.location_id in self.locations
+        }
+        self.service_dates = {
+            service: self.service_dates[service] & dates
+            for service in services
+            if service in self.service_dates
+        }
+        self.loaded_dates = dates
+
     def run(self, trip: Trip, day: date) -> Trip:
         if trip.run_key is None or trip.parts:
             return trip

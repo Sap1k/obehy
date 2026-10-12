@@ -1,7 +1,8 @@
 # The Oběhy server image: the realtime worker, release updates and nightly jobs
 # (deploy/compose.yaml). Static builds run on GitHub Actions, not from this image.
 # uv's build of the official python:3.13-slim (Debian trixie), from GHCR, so the image build
-# does not depend on Docker Hub.
+# does not depend on Docker Hub. MALLOC_ARENA_MAX: the worker's fetch threads would otherwise
+# each grow a glibc arena that is never given back, which reads as a memory leak.
 FROM ghcr.io/astral-sh/uv:0.12.7-python3.13-trixie-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata \

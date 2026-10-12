@@ -36,6 +36,9 @@ CIS_PREFIX = "515"
 TIMESTAMP = re.compile(r"\s*/\*\s*(\{.*?\})\s*\*/", re.DOTALL)
 NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
+SPACE = re.compile(r"\s*")
+# Where a string's plain run ends: its closing quote, an escape, or (backticks) a substitution.
+STRING_STOPS = {"`": re.compile(r"`|\\|\$\{"), "'": re.compile(r"'|\\")}
 ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "`": "`", "'": "'", '"': '"', "/": "/"}
 KEPT = ("id", "line", "vehicle", "course", "body", "fuel", "color", "hue", "arrow", "coords")
 KEPT_STOPS = ("final1", "final2")
@@ -54,14 +57,15 @@ class PayloadError(ValueError):
 class _Reader:
     def __init__(self, text: str) -> None:
         self.text = text
-        self.at = 0
+        self.at: int = 0
 
     def fail(self, what: str) -> PayloadError:
         return PayloadError(f"{what} at offset {self.at}: {self.text[self.at : self.at + 40]!r}")
 
     def space(self) -> None:
-        while self.at < len(self.text) and self.text[self.at].isspace():
-            self.at += 1
+        match = SPACE.match(self.text, self.at)
+        assert match is not None  # `\s*` matches anywhere
+        self.at = match.end()
 
     def peek(self) -> str:
         self.space()
@@ -132,12 +136,17 @@ class _Reader:
 
     def string(self) -> str:
         quote = self.text[self.at]
+        stops = STRING_STOPS[quote]
         self.at += 1
         out: list[str] = []
         while True:
-            if self.at >= len(self.text):
+            stop = stops.search(self.text, self.at)
+            if stop is None:
+                self.at = len(self.text)
                 raise self.fail("unterminated string")
-            char = self.text[self.at]
+            out.append(self.text[self.at : stop.start()])
+            self.at = stop.start()
+            char = stop.group()
             if char == quote:
                 self.at += 1
                 return "".join(out)
@@ -148,10 +157,7 @@ class _Reader:
                 out.append(ESCAPES[escaped])
                 self.at += 2
                 continue
-            if quote == "`" and self.text.startswith("${", self.at):
-                raise self.fail("template substitution")
-            out.append(char)
-            self.at += 1
+            raise self.fail("template substitution")  # `${` inside a backtick string
 
 
 def read_traffic_state(body: bytes) -> dict[str, Any]:

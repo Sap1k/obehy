@@ -217,6 +217,32 @@ class CallState:
     passenger: bool = True
     platform: Platform | None = None
 
+    def estimated(
+        self,
+        arrival: Instant | None,
+        departure: Instant | None,
+        status: CallStatus,
+        source_class: SourceClass | None,
+    ) -> CallState:
+        """A copy with new estimates; `dataclasses.replace` is too slow for estimating every
+        call of every moving journey each tick."""
+
+        return CallState(
+            self.sequence,
+            self.location_id,
+            self.visit_n,
+            self.arrival,
+            self.departure,
+            arrival,
+            departure,
+            status,
+            source_class,
+            self.passed_arrival,
+            self.passed_departure,
+            self.passenger,
+            self.platform,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Progress:
@@ -425,6 +451,9 @@ class VehicleState:
     position: Position | None = None
     reason: Reason | None = None
     episode: KeylessEpisode | None = None
+    # The facts of the last observation: the same fix again (`last_seen` is its own fix time)
+    # is no news and is not processed again.
+    facts: tuple[Fact, ...] = ()
 
 
 @dataclass(slots=True)

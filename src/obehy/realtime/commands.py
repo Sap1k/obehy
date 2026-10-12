@@ -1,4 +1,4 @@
-"""CLI: `obehy rt record|replay|corpus pin`, `obehy realtime`, `obehy jobs vehicle-day`."""
+"""CLI: `obehy rt record|replay|bench|corpus pin`, `obehy realtime`, `obehy jobs vehicle-day`."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import cast
 
 import psycopg
 
-from obehy.realtime import record, replay
+from obehy.realtime import bench, record, replay
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError, active_loads
 from obehy.realtime.jobs import drop_observations, vehicle_day
@@ -23,7 +23,7 @@ from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
 from obehy.realtime.runtime.demand import StationDemand
 from obehy.realtime.runtime.egress import Egress, EgressError, build_egress
-from obehy.realtime.times import instant, local_date
+from obehy.realtime.times import Instant, instant, local_date
 from obehy.realtime.worker import WorkerOptions, run_worker
 from obehy.runtime_config import ConfigurationError, load_database_url
 
@@ -38,6 +38,13 @@ def _feeds(text: str) -> tuple[Feed, ...]:
     if unknown:
         raise argparse.ArgumentTypeError(f"unknown feeds {unknown}")
     return tuple(cast(Feed, feed) for feed in chosen)
+
+
+def _utc(text: str) -> Instant:
+    value = datetime.fromisoformat(text)
+    if value.tzinfo is None:
+        raise argparse.ArgumentTypeError(f"{text!r} needs a UTC offset (Z)")
+    return instant(value)
 
 
 def _database(parser: argparse.ArgumentParser) -> None:
@@ -81,6 +88,25 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
         "--gtfs-rt-every", type=int, metavar="SECONDS", help="write GTFS-RT snapshots"
     )
     _database(replayer)
+
+    bencher = rt.add_parser(
+        "bench", help="time the live worker's path over archived polls (development database)"
+    )
+    bencher.add_argument(
+        "--release", required=True, help="release directory or a run ID already in the database"
+    )
+    bencher.add_argument("--from", dest="start", type=date.fromisoformat, required=True)
+    bencher.add_argument("--to", dest="end", type=date.fromisoformat, required=True)
+    bencher.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
+    bencher.add_argument("--sources", type=_list, help="source IDs (default: every archived)")
+    bencher.add_argument("--feeds", type=_feeds, default=FEEDS, help="default: jdf,czptt")
+    bencher.add_argument("--manifest", type=Path, default=record.MANIFEST)
+    bencher.add_argument("--out", type=Path, required=True, help="output directory")
+    bencher.add_argument("--trace-memory", action="store_true", help="tracemalloc (slow)")
+    bencher.add_argument("--profile", action="store_true", help="write a cProfile dump")
+    bencher.add_argument("--since", type=_utc, help="start inside the days, e.g. 2026-10-12T04:00Z")
+    bencher.add_argument("--until", type=_utc, help="stop before this time")
+    _database(bencher)
 
     checker = rt.add_parser("check-gtfs-rt", help="check GTFS-RT snapshots against a static GTFS")
     checker.add_argument("--gtfs", type=Path, required=True, help="the static gtfs.zip")
@@ -131,6 +157,8 @@ def run(args: argparse.Namespace) -> int:
             return _pin(args)
         if args.rt_command == "check-gtfs-rt":
             return _check(args)
+        if args.rt_command == "bench":
+            return _bench(args)
         return _replay(args)
     except (
         OSError,
@@ -219,6 +247,39 @@ def _replay(args: argparse.Namespace) -> int:
     with psycopg.connect(_url(args), autocommit=True) as connection:
         document = replay.replay(connection, options, load_policy())
     for line in replay.summary_lines(document):
+        print(line)
+    return 0
+
+
+def _bench(args: argparse.Namespace) -> int:
+    archive = cast(Path, args.archive)
+    channels = [
+        channel
+        for channel in select_channels(
+            record.load_channels(cast(Path, args.manifest)), cast(list[str] | None, args.sources)
+        )
+        if (channel.source, channel.channel) in replay.DECODERS
+        and (archive / channel.source / channel.channel).is_dir()
+    ]
+    if not channels:
+        print(f"error: no decodable channel is archived in {archive}", file=sys.stderr)
+        return 1
+    options = bench.BenchOptions(
+        release=cast(str, args.release),
+        archive=archive,
+        start=cast(date, args.start),
+        end=cast(date, args.end),
+        channels=channels,
+        out=cast(Path, args.out),
+        feeds=cast(tuple[Feed, ...], args.feeds),
+        trace_memory=cast(bool, args.trace_memory),
+        profile=cast(bool, args.profile),
+        since=cast(Instant | None, args.since),
+        until=cast(Instant | None, args.until),
+    )
+    with psycopg.connect(_url(args), autocommit=True) as connection:
+        document = bench.bench(connection, options, load_policy())
+    for line in bench.summary_lines(document):
         print(line)
     return 0
 

@@ -44,13 +44,20 @@ def _call(
     status: CallStatus,
     source_class: SourceClass | None,
 ) -> CallState:
-    return replace(
-        state,
-        estimated_arrival=arrival,
-        estimated_departure=departure,
-        status=status,
-        source_class=source_class,
-    )
+    if (
+        state.estimated_arrival == arrival
+        and state.estimated_departure == departure
+        and state.status == status
+        and state.source_class == source_class
+    ):
+        return state  # unchanged: the same object, so emitters can reuse what they made of it
+    return state.estimated(arrival, departure, status, source_class)
+
+
+def _with_calls(instance: Instance, calls: list[CallState]) -> Instance:
+    if all(new is old for new, old in zip(calls, instance.calls, strict=True)):
+        return instance
+    return replace(instance, calls=tuple(calls))
 
 
 Lateness = tuple[timedelta | None, SourceClass | None]
@@ -162,7 +169,7 @@ def estimate(
             if est_dep is not None:
                 floor = est_dep
             calls.append(_call(state, est_arr, est_dep, "predicted", delay_class))
-    return replace(instance, calls=tuple(calls))
+    return _with_calls(instance, calls)
 
 
 def monotone(instance: Instance) -> Instance:
@@ -185,7 +192,7 @@ def monotone(instance: Instance) -> Instance:
         if (arrival, departure) != (state.estimated_arrival, state.estimated_departure):
             state = replace(state, estimated_arrival=arrival, estimated_departure=departure)
         calls.append(state)
-    return replace(instance, calls=tuple(calls))
+    return _with_calls(instance, calls)
 
 
 def _departure(

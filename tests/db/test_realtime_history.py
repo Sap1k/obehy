@@ -180,3 +180,32 @@ def test_retention_drops_only_observation_days_before_the_cutoff(
         " WHERE i.inhparent = 'rt.observation'::regclass ORDER BY 1"
     ).fetchall()
     assert remaining == [("observation_20260909",), ("observation_20261009",)]
+
+
+def _state_tables(connection: psycopg.Connection) -> tuple[list[Any], list[Any]]:
+    vehicles = connection.execute(
+        "SELECT * FROM rt.vehicle_state_current ORDER BY feed, source, source_vehicle_id"
+    ).fetchall()
+    trips = connection.execute(
+        "SELECT * FROM rt.trip_state_current ORDER BY feed, key_namespace, key, service_date"
+    ).fetchall()
+    return vehicles, trips
+
+
+def test_state_written_by_changes_matches_a_full_rewrite(connection: psycopg.Connection) -> None:
+    state, _, ctx = _run()
+    writer = _writer(connection)
+    writer.write_state({"jdf": state})
+    # A second vehicle appears, the first drives on, then the second disappears again.
+    step(state, observe("2026-10-08 08:07", vehicle="2002", key=None), ctx)
+    step(state, observe("2026-10-08 08:08", position=_east(1600), delay=60), ctx)
+    writer.write_state({"jdf": state})
+    assert len(_state_tables(connection)[0]) == 2
+    del state.vehicles[VehicleId("duk", "2002")]
+    step(state, observe("2026-10-08 08:09", position=_east(1800), delay=60), ctx)
+    writer.write_state({"jdf": state})
+    incremental = _state_tables(connection)
+
+    _writer(connection).write_state({"jdf": state})  # a fresh writer rewrites in full
+    assert _state_tables(connection) == incremental
+    assert len(incremental[0]) == 1 and len(incremental[1]) == 1

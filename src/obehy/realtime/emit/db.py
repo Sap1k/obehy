@@ -8,10 +8,10 @@ month. Each `write` is one transaction. History rows carry the writer's derivati
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, cast
+from typing import Any, LiteralString, cast
 
 import psycopg
 from psycopg import sql
@@ -23,6 +23,7 @@ from obehy.realtime.model import (
     Effect,
     Feed,
     FeedState,
+    Instance,
     JourneyKey,
     LinkJourneys,
     Observation,
@@ -30,7 +31,9 @@ from obehy.realtime.model import (
     RawRef,
     RecordPlatform,
     SnapshotJourney,
+    VehicleId,
     VehicleKey,
+    VehicleState,
     WriteEvent,
 )
 from obehy.realtime.model_json import facts_from_json, facts_to_json
@@ -67,6 +70,9 @@ class Writer:
     derivation_id: int = 0
     _observation_days: set[date] = field(default_factory=set[date])
     _history_months: set[date] = field(default_factory=set[date])
+    # Per feed, the current-state rows last written (a feed not in it is rewritten in full)
+    # and each journey's calls JSON with the calls tuple it was made from.
+    _state: dict[Feed, _Written] = field(default_factory=dict[Feed, "_Written"])
 
     def __post_init__(self) -> None:
         d = self.derivation
@@ -396,59 +402,97 @@ class Writer:
     # --- current state and rebuilds -------------------------------------------------------------
 
     def write_state(self, states: Mapping[Feed, FeedState]) -> None:
+        """Bring the current-state tables in line with `states`.
+
+        A feed's first write replaces its rows; later writes upsert the rows that changed since
+        and delete the ones that went, so a tick costs what changed, not the whole state."""
+
         release_id = self.derivation.release_id
-        with self.connection.transaction():
-            for feed, state in sorted(states.items()):
-                self.connection.execute(
-                    "DELETE FROM rt.vehicle_state_current WHERE feed = %s", (feed,)
-                )
-                self.connection.execute(
-                    "DELETE FROM rt.trip_state_current WHERE feed = %s", (feed,)
-                )
-                with self.connection.cursor().copy(
-                    "COPY rt.vehicle_state_current (feed, source, source_vehicle_id, status,"
-                    " last_seen, key_namespace, key, service_date, trip_id, latitude, longitude,"
-                    " bearing, reason, release_id) FROM STDIN"
-                ) as copy:
-                    for vehicle, v in sorted(state.vehicles.items()):
-                        b = v.binding
-                        copy.write_row(
-                            (
-                                feed,
-                                vehicle.source,
-                                vehicle.source_vehicle_id,
-                                v.status,
-                                v.last_seen,
-                                None if b is None else b.journey.namespace,
-                                None if b is None else b.journey.key,
-                                None if b is None else b.journey.service_date,
-                                None if b is None else b.trip_id,
-                                None if v.position is None else v.position.lat,
-                                None if v.position is None else v.position.lon,
-                                None if v.position is None else v.position.bearing,
-                                None if v.reason is None else v.reason.value,
-                                release_id,
+        written: dict[Feed, _Written] = {}
+        try:
+            with self.connection.transaction():
+                for feed, state in sorted(states.items()):
+                    before = self._state.get(feed)
+                    now = _Written(
+                        {
+                            (feed, v.source, v.source_vehicle_id): _vehicle_row(
+                                feed, v, current, release_id
                             )
-                        )
-                with self.connection.cursor().copy(
-                    "COPY rt.trip_state_current (feed, key_namespace, key, service_date,"
-                    " release_id, trip_id, lifecycle, delay_s, off_route, stale, updated_at,"
-                    " calls) FROM STDIN"
-                ) as copy:
-                    for journey, i in sorted(state.instances.items()):
-                        copy.write_row(
-                            (
-                                *_key(journey),
-                                i.release_id,
-                                i.trip_id,
-                                i.lifecycle,
-                                i.delay_s,
-                                i.off_route,
-                                i.freshness.stale,
-                                i.freshness.updated_at,
-                                json.dumps([_call_json(c) for c in i.calls]),
-                            )
-                        )
+                            for v, current in state.vehicles.items()
+                        },
+                        {},
+                        {},
+                    )
+                    for journey, instance in state.instances.items():
+                        calls = None if before is None else before.calls.get(journey)
+                        if calls is None or calls[0] is not instance.calls:
+                            encoded = json.dumps([_call_json(c) for c in instance.calls])
+                            calls = (instance.calls, encoded)
+                        now.calls[journey] = calls
+                        now.trips[_key(journey)] = _trip_row(instance, calls[1])
+                    self._write_table(feed, _VEHICLES, now.vehicles, before and before.vehicles)
+                    self._write_table(feed, _TRIPS, now.trips, before and before.trips)
+                    written[feed] = now
+        except BaseException:
+            self._state.clear()  # unknown what was written: rewrite in full next time
+            raise
+        self._state.update(written)
+
+    def _write_table(self, feed: Feed, table: _Table, rows: _Rows, old: _Rows | None) -> None:
+        columns = sql.SQL(", ").join(sql.Identifier(c) for c in table.columns)
+        if old is None:
+            self.connection.execute(
+                sql.SQL("DELETE FROM rt.{} WHERE feed = %s").format(table.name), (feed,)
+            )
+            with self.connection.cursor().copy(
+                sql.SQL("COPY rt.{} ({}) FROM STDIN").format(table.name, columns)
+            ) as copy:
+                for key in sorted(rows):
+                    copy.write_row(rows[key])
+            return
+        gone = sorted(old.keys() - rows.keys())
+        if gone:
+            self.connection.execute(
+                sql.SQL("DELETE FROM rt.{} WHERE ({}) IN (SELECT * FROM unnest({}))").format(
+                    table.name,
+                    sql.SQL(", ").join(sql.Identifier(c) for c in table.key),
+                    sql.SQL(", ").join(
+                        sql.SQL("%s::{}[]").format(sql.SQL(t)) for t in table.key_types
+                    ),
+                ),
+                [list(column) for column in zip(*gone, strict=True)],
+            )
+        changed = [rows[key] for key in sorted(rows) if old.get(key) != rows[key]]
+        if not changed:
+            return
+        stage = sql.Identifier(f"{table.name_text}_stage")
+        self.connection.execute(
+            sql.SQL("CREATE TEMP TABLE IF NOT EXISTS {} (LIKE rt.{}) ON COMMIT DELETE ROWS").format(
+                stage, table.name
+            )
+        )
+        with self.connection.cursor().copy(
+            sql.SQL("COPY {} ({}) FROM STDIN").format(stage, columns)
+        ) as copy:
+            for row in changed:
+                copy.write_row(row)
+        updates = [c for c in table.columns if c not in table.key]
+        self.connection.execute(
+            sql.SQL(
+                "INSERT INTO rt.{} ({}) SELECT {} FROM {}"
+                " ON CONFLICT ({}) DO UPDATE SET ({}) = ({})"
+            ).format(
+                table.name,
+                columns,
+                columns,
+                stage,
+                sql.SQL(", ").join(sql.Identifier(c) for c in table.key),
+                sql.SQL(", ").join(sql.Identifier(c) for c in updates),
+                sql.SQL(", ").join(
+                    sql.SQL("EXCLUDED.{}").format(sql.Identifier(c)) for c in updates
+                ),
+            )
+        )
 
     def clear_history(self, days: Iterable[date]) -> None:
         """Delete the history of service dates before a rebuild by replay."""
@@ -464,6 +508,106 @@ class Writer:
                     ),
                     (chosen,),
                 )
+
+
+_Rows = dict[tuple[Any, ...], tuple[Any, ...]]
+
+
+@dataclass(frozen=True, slots=True)
+class _Table:
+    name_text: str
+    columns: tuple[str, ...]
+    key: tuple[str, ...]
+    key_types: tuple[LiteralString, ...]
+
+    @property
+    def name(self) -> sql.Identifier:
+        return sql.Identifier(self.name_text)
+
+
+_VEHICLES = _Table(
+    "vehicle_state_current",
+    (
+        "feed",
+        "source",
+        "source_vehicle_id",
+        "status",
+        "last_seen",
+        "key_namespace",
+        "key",
+        "service_date",
+        "trip_id",
+        "latitude",
+        "longitude",
+        "bearing",
+        "reason",
+        "release_id",
+    ),
+    ("feed", "source", "source_vehicle_id"),
+    ("text", "text", "text"),
+)
+_TRIPS = _Table(
+    "trip_state_current",
+    (
+        "feed",
+        "key_namespace",
+        "key",
+        "service_date",
+        "release_id",
+        "trip_id",
+        "lifecycle",
+        "delay_s",
+        "off_route",
+        "stale",
+        "updated_at",
+        "calls",
+    ),
+    ("feed", "key_namespace", "key", "service_date"),
+    ("text", "text", "text", "date"),
+)
+
+
+@dataclass(slots=True)
+class _Written:
+    vehicles: _Rows
+    trips: _Rows
+    calls: dict[JourneyKey, tuple[tuple[CallState, ...], str]]
+
+
+def _vehicle_row(
+    feed: Feed, vehicle: VehicleId, v: VehicleState, release_id: str
+) -> tuple[Any, ...]:
+    b = v.binding
+    return (
+        feed,
+        vehicle.source,
+        vehicle.source_vehicle_id,
+        v.status,
+        v.last_seen,
+        None if b is None else b.journey.namespace,
+        None if b is None else b.journey.key,
+        None if b is None else b.journey.service_date,
+        None if b is None else b.trip_id,
+        None if v.position is None else v.position.lat,
+        None if v.position is None else v.position.lon,
+        None if v.position is None else v.position.bearing,
+        None if v.reason is None else v.reason.value,
+        release_id,
+    )
+
+
+def _trip_row(i: Instance, calls: str) -> tuple[Any, ...]:
+    return (
+        *_key(i.journey),
+        i.release_id,
+        i.trip_id,
+        i.lifecycle,
+        i.delay_s,
+        i.off_route,
+        i.freshness.stale,
+        i.freshness.updated_at,
+        calls,
+    )
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -503,30 +647,46 @@ def clear_observations(
     )
 
 
-def load_observations(
-    connection: psycopg.Connection, since: datetime, until: datetime
-) -> list[Observation]:
-    """Stored observations received in [since, until), in processing order (warm replay)."""
+def stored_observations(
+    connection: psycopg.Connection, since: datetime, until: datetime, chunk: int = 20_000
+) -> Iterator[list[Observation]]:
+    """Stored observations received in [since, until), in processing order, `chunk` at a time
+    (warm replay); read through a server-side cursor, so hours of them are never in memory at
+    once."""
 
-    rows = connection.execute(
-        "SELECT source, channel, feed, received_at, observed_at, raw_sha256, raw_item,"
-        " decoder_version, facts FROM rt.observation"
-        " WHERE received_at >= %s AND received_at < %s"
-        " ORDER BY received_at, source, raw_sha256, raw_item",
-        (since, until),
-    ).fetchall()
-    observations: list[Observation] = []
-    for source, channel, feed, received_at, observed_at, sha256, item, version, facts in rows:
-        observations.append(
-            Observation(
-                source=source,
-                channel=channel,
-                feed=feed,
-                received_at=instant(received_at),
-                observed_at=None if observed_at is None else instant(observed_at),
-                raw=RawRef(sha256, item),
-                decoder_version=version,
-                facts=facts_from_json(facts),
-            )
+    with (
+        connection.transaction(),
+        connection.cursor(name="warm_replay") as cursor,
+    ):
+        cursor.execute(
+            "SELECT source, channel, feed, received_at, observed_at, raw_sha256, raw_item,"
+            " decoder_version, facts FROM rt.observation"
+            " WHERE received_at >= %s AND received_at < %s"
+            " ORDER BY received_at, source, raw_sha256, raw_item",
+            (since, until),
         )
-    return observations
+        while rows := cursor.fetchmany(chunk):
+            yield [_stored(*row) for row in rows]
+
+
+def _stored(
+    source: str,
+    channel: str,
+    feed: Feed,
+    received_at: datetime,
+    observed_at: datetime | None,
+    sha256: str,
+    item: int,
+    version: int,
+    facts: Any,
+) -> Observation:
+    return Observation(
+        source=source,
+        channel=channel,
+        feed=feed,
+        received_at=instant(received_at),
+        observed_at=None if observed_at is None else instant(observed_at),
+        raw=RawRef(sha256, item),
+        decoder_version=version,
+        facts=facts_from_json(facts),
+    )

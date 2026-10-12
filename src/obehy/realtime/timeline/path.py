@@ -138,13 +138,26 @@ def _locate(
     lat: float,
     after_m: float,
 ) -> float:
-    """Distance of a stop on the path: its nearest projection at or after `after_m`."""
+    """Distance of a stop on the path: its nearest projection at or after `after_m`. Only the
+    segments reaching past `after_m` can hold one (built for every new trip: kept lean)."""
 
-    probe = Path(path_points, distances, ())
-    candidates = [p for p in project_all(probe, lon, lat) if p.along_m >= after_m - 1e-6]
-    if not candidates:
-        return after_m
-    return min(candidates, key=lambda p: (p.lateral_m, p.along_m)).along_m
+    kx, ky = _plane(lat)
+    floor = after_m - 1e-6
+    best: tuple[float, float] | None = None  # (lateral, along), the nearest
+    for i in range(max(bisect_left(distances, floor) - 1, 0), len(path_points) - 1):
+        (ax, ay), (bx, by) = path_points[i], path_points[i + 1]
+        ux, uy = (bx - ax) * kx, (by - ay) * ky
+        px, py = (lon - ax) * kx, (lat - ay) * ky
+        length2 = ux * ux + uy * uy
+        t = 0.0 if length2 == 0 else max(0.0, min(1.0, (px * ux + py * uy) / length2))
+        start, end = distances[i], distances[i + 1]
+        along = start + t * (end - start)
+        if along < floor:
+            continue
+        found = (math.hypot(px - t * ux, py - t * uy), along)
+        if best is None or found < best:
+            best = found
+    return after_m if best is None else best[1]
 
 
 # About 5 m: far below any off-route tolerance, and dense shapes shrink to a few dozen vertices.

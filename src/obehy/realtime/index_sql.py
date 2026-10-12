@@ -34,6 +34,7 @@ from obehy.realtime.index import (
     parent_ref,
 )
 from obehy.realtime.model import Feed
+from obehy.realtime.times import Instant
 from obehy.release.contract import load_contract
 from obehy.release.load import load_release
 
@@ -104,6 +105,26 @@ class IndexLoader:
         self.connection = connection
         self.load_id = loads.load_ids[feed]
         self.index = Index(loads.run_id, feed)
+        # When an observation last named each key and line: what `sweep` keeps.
+        self.used: dict[KeyRef, Instant] = {}
+        self.lines_used: dict[KeyRef, Instant] = {}
+
+    def touch(self, refs: Iterable[KeyRef], lines: Iterable[KeyRef], at: Instant) -> None:
+        for ref in refs:
+            self.used[ref] = at
+        for ref in lines:
+            self.lines_used[ref] = at
+
+    def sweep(
+        self, since: Instant, trip_ids: Iterable[str], refs: Iterable[KeyRef], day: date
+    ) -> None:
+        """Drop the static data of keys and lines no observation named since `since`, unless
+        a live journey (its key `refs`, its `trip_ids`) needs it; service dates before `day`
+        go too. It all reloads when named again."""
+
+        self.used = {ref: at for ref, at in self.used.items() if at >= since}
+        self.lines_used = {ref: at for ref, at in self.lines_used.items() if at >= since}
+        self.index.sweep({*self.used, *refs}, self.lines_used, trip_ids, day)
 
     def ensure(
         self, refs: Iterable[KeyRef], dates: Iterable[date], lines: Iterable[KeyRef] = ()
