@@ -111,7 +111,7 @@ def test_arriva_q7_only_arriva_express_and_an_empty_fleet_is_a_bad_payload() -> 
         arriva_express.decode(body, "0" * 64, RECEIVED, SKEW)
 
 
-def test_arriva_express_decodes_and_is_not_live() -> None:
+def test_arriva_express_decodes_and_is_live() -> None:
     (channel,) = [c for c in record.load_channels() if c.source == "arriva-express"]
     assert (channel.source, channel.channel) in DECODERS
-    assert channel.live_feeds == () and not channel.is_live("jdf")
+    assert channel.live_feeds == ("jdf",) and channel.is_live("jdf")

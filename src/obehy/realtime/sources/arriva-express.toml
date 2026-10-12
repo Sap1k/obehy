@@ -1,7 +1,7 @@
 # Arriva bus positions (docs/sources/arriva-express.md). The endpoint returns Arriva's whole
 # fleet and takes no arguments; the filter keeps only Arriva Express. No trip key: bound by
-# keyless inference (`infer/keyless`). Not live (`live_feeds = []`) until replay has measured
-# the inference.
+# keyless inference (`infer/keyless`). Live on jdf since 2026-10-12, after two captures replayed
+# with every episode that shows a departure bound to its trip.
 source = "arriva-express"
 manifest_version = 1
 
@@ -12,7 +12,7 @@ backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 25
 filter = "arriva-express"
 feeds = ["jdf"]
-live_feeds = []
+live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "line_ref", "destination", "next_stop", "position", "delay"]
 
 [channel.semantics]

@@ -212,9 +212,8 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   learning and circulations (section 22). JrUtil's
   `serving-v5.json` time description still says noon − 12 h and needs correcting.
   Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
-  only; the server capture of 2026-10-09 to 10-12 replays clean too. Open: `live_feeds =
-  ["jdf"]`, `rt evaluate` of own GPS delay against the source's, the travel-time provider
-  interface.
+  replayed clean on the server capture of 2026-10-09 to 10-12, live on jdf. Open: `rt evaluate`
+  of own GPS delay against the source's, the travel-time provider interface.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -254,7 +253,7 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   on the origin for a whole motorway leg, so a late name change looked like a departure an hour
   later (one episode briefly bound to the wrong trip). A change far from the stop left now gives
   no time, and the position falls back to the whole path; the 2026-10-05/06 capture now binds
-  64/65 episodes.
+  64/65 episodes. Arriva Express is live on jdf.
 - **2026-10-12** — Arriva Express connector and keyless inference (`infer/keyless/`, policy v3
   `[keyless]`), replay only. Candidates are the line's trips to the destination; the departures
   seen as next-stop changes, else the position, pick one by time with a 15-minute margin; the

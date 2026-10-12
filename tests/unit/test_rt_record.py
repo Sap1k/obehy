@@ -87,7 +87,7 @@ def test_shipped_manifests_load() -> None:
         pre_trip_delay_is_elapsed=True, pre_trip_after_end_is_stale=True
     )
     assert arriva.core_semantics == SourceSemantics(delay_floor_minute=True)  # ARRIVA-Q3
-    assert arriva.live_feeds == () and not arriva.is_live("jdf")
+    assert arriva.live_feeds == ("jdf",) and arriva.is_live("jdf")
     assert sz.core_semantics == SourceSemantics(unchanged_entry_is_no_news=True)  # SZ-Q6
 
 

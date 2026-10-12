@@ -1,7 +1,7 @@
 # Source dossier: Arriva Express (`arriva-express`)
 
 Status: **connector `sources/arriva_express.py` (decoder version 1) and keyless inference
-(`infer/keyless/`, 2026-10-12), replay only (`live_feeds = []`).** Two captures (2026-10-05/06,
+(`infer/keyless/`), live on jdf since 2026-10-12.** Two captures (2026-10-05/06,
 25 hours; 2026-10-09 to 10-12 from the server, over a weekend) replay against release
 `20261006T194555Z-06c0829d89aa` (serving schema 5.0) with every episode that shows a departure
 bound to the trip its vehicle drives (see Matching). Terms of use are still to be recorded.
