@@ -131,33 +131,99 @@ def candidates(
     return out
 
 
-def _locate(
+# A stop farther than this from every part of the shape is left unplaced (its distance is then
+# interpolated by schedule time) rather than pinned somewhere it is not.
+OFF_SHAPE_M = 500.0
+
+
+def _stop_candidates(
     path_points: tuple[tuple[float, float], ...],
     distances: tuple[float, ...],
     lon: float,
     lat: float,
-    after_m: float,
-) -> float:
-    """Distance of a stop on the path: its nearest projection at or after `after_m`. Only the
-    segments reaching past `after_m` can hold one (built for every new trip: kept lean)."""
+) -> list[tuple[float, float]]:
+    """Where a stop may lie on the path: (along, lateral) of each local minimum of its distance
+    from the shape within OFF_SHAPE_M. A road driven out and back gives one per leg."""
 
     kx, ky = _plane(lat)
-    floor = after_m - 1e-6
-    best: tuple[float, float] | None = None  # (lateral, along), the nearest
-    for i in range(max(bisect_left(distances, floor) - 1, 0), len(path_points) - 1):
+    projected: list[tuple[float, float]] = []
+    for i in range(len(path_points) - 1):
         (ax, ay), (bx, by) = path_points[i], path_points[i + 1]
         ux, uy = (bx - ax) * kx, (by - ay) * ky
         px, py = (lon - ax) * kx, (lat - ay) * ky
         length2 = ux * ux + uy * uy
         t = 0.0 if length2 == 0 else max(0.0, min(1.0, (px * ux + py * uy) / length2))
         start, end = distances[i], distances[i + 1]
-        along = start + t * (end - start)
-        if along < floor:
+        projected.append((start + t * (end - start), math.hypot(px - t * ux, py - t * uy)))
+    out: list[tuple[float, float]] = []
+    last = len(projected) - 1
+    for i, (along, lateral) in enumerate(projected):
+        if lateral > OFF_SHAPE_M:
             continue
-        found = (math.hypot(px - t * ux, py - t * uy), along)
-        if best is None or found < best:
-            best = found
-    return after_m if best is None else best[1]
+        if i > 0 and projected[i - 1][1] < lateral:
+            continue
+        if i < last and projected[i + 1][1] <= lateral:
+            continue
+        out.append((along, lateral))
+    return out
+
+
+def _place_stops(
+    path_points: tuple[tuple[float, float], ...],
+    distances: tuple[float, ...],
+    located: list[tuple[float, float] | None],
+) -> list[float | None]:
+    """Each stop's distance along the path, chosen for all stops at once: in call order, as
+    close to the shape as possible in total. Choosing stop by stop (the nearest after the last)
+    goes wrong where a road is driven out and back: a stop a metre nearer the far lane takes
+    the return visit's place, and every later stop is pushed past where it belongs. A stop is
+    left unplaced, at the cost OFF_SHAPE_M, when no candidate fits."""
+
+    stops = [
+        (i, _stop_candidates(path_points, distances, point[0], point[1]))
+        for i, point in enumerate(located)
+        if point is not None
+    ]
+    # best[k][c]: (cost, along, previous (k, c) or None) with stop k placed at its candidate c
+    # and the last placed stop before it at `previous`; skipped stops cost OFF_SHAPE_M each.
+    best: list[list[tuple[float, float, tuple[int, int] | None]]] = []
+    for k, (_, candidates) in enumerate(stops):
+        row: list[tuple[float, float, tuple[int, int] | None]] = []
+        for along, lateral in candidates:
+            choice: tuple[float, float, tuple[int, int] | None] = (
+                lateral + k * OFF_SHAPE_M,
+                along,
+                None,
+            )
+            for j in range(k):
+                skipped = (k - j - 1) * OFF_SHAPE_M
+                for c, (cost, before, _) in enumerate(best[j]):
+                    if before <= along and (cost + skipped + lateral, along) < choice[:2]:
+                        choice = (cost + skipped + lateral, along, (j, c))
+            row.append(choice)
+        best.append(row)
+    end: tuple[float, tuple[int, int] | None] = (len(stops) * OFF_SHAPE_M, None)
+    for k, row in enumerate(best):
+        for c, (cost, _, _) in enumerate(row):
+            total = cost + (len(stops) - k - 1) * OFF_SHAPE_M
+            if total < end[0]:
+                end = (total, (k, c))
+    out: list[float | None] = [None] * len(located)
+    at = end[1]
+    while at is not None:
+        k, c = at
+        out[stops[k][0]] = best[k][c][1]
+        at = best[k][c][2]
+    return out
+
+
+def _straight(
+    located: list[tuple[float, float] | None], distances: tuple[float, ...]
+) -> list[float | None]:
+    """Without a shape the path is the located stops themselves, in order."""
+
+    vertices = iter(distances)
+    return [None if point is None else next(vertices) for point in located]
 
 
 # About 5 m: far below any off-route tolerance, and dense shapes shrink to a few dozen vertices.
@@ -203,15 +269,7 @@ def build_path(trip: Trip, index: IndexView) -> Path:
         distances = cumulative_m(points)
     if len(points) < 2:
         return make_path(points, distances, tuple(0.0 for _ in trip.calls))
-    known: list[float | None] = []
-    after = 0.0
-    for point in located:
-        value: float | None = None
-        if point is not None:
-            value = _locate(points, distances, point[0], point[1], after)
-        if value is not None:
-            after = value
-        known.append(value)
+    known = _place_stops(points, distances, located) if shaped else _straight(located, distances)
     times = [call.time for call in trip.calls]
     return make_path(points, distances, _fill(known, times, distances[-1]), shaped=shaped)
 

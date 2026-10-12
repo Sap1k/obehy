@@ -247,6 +247,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-12** — Stops on a *závlek* were placed on the wrong leg of the path: each stop took
+  its nearest projection after the previous one, so a stop pin a metre nearer the return lane
+  took the return visit's place and pushed every later stop to the end of the path (552650:1135
+  stuck before Brozany, off route). Stops are now placed all at once, in call order, nearest to
+  the shape in total; a stop over 500 m from every part of the shape is interpolated by time.
+  On the Litoměřice-area lines (5526xx) 144 of 1571 trips change, none left unplaced. Unit test;
+  not replayed.
 - **2026-10-12** — A bus reported by several sources (DÚK and a city's own feed) was two
   vehicles in GTFS-RT. Its journey now publishes the vehicles of one source only, the one the
   tracker follows, and its TripUpdate names that vehicle. Unit test; not replayed.
