@@ -229,3 +229,14 @@ def test_a_real_arriva_express_trip_binds_from_its_first_report() -> None:
     assert binding is not None and binding.confirmed
     events = [e for effects in steps for e in effects if isinstance(e, WriteEvent)]
     assert events  # history once confirmed
+
+
+def test_arriva_q9_a_next_stop_stuck_on_the_origin_is_no_departure_time() -> None:
+    # The name stays on A while the bus drives the leg, then changes far from A: that change is
+    # not when it left A. The position, anywhere on the path, places it on the 11:00 trip.
+    _, steps = run(
+        express(),
+        seen("2026-10-08 11:25", following="A", where=2.5),
+        seen("2026-10-08 11:41", following="E", where=4.1),
+    )
+    assert [result(s) for s in steps] == [(journey(3), None)] * 2

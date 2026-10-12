@@ -1,11 +1,10 @@
 # Source dossier: Arriva Express (`arriva-express`)
 
 Status: **connector `sources/arriva_express.py` (decoder version 1) and keyless inference
-(`infer/keyless/`, 2026-10-12), replay only (`live_feeds = []`).** A 25-hour capture
-(2026-10-05 21:57 to 2026-10-06 22:43 local, 2,972 polls, 12 vehicles on three lines) replays
-against release `20261006T194555Z-06c0829d89aa` (serving schema 5.0) with every episode that
-shows a departure bound to the trip its vehicle drives (see Matching). Going live waits for a
-replay of a recent day. Terms of use are still to be recorded.
+(`infer/keyless/`, 2026-10-12), replay only (`live_feeds = []`).** Two captures (2026-10-05/06,
+25 hours; 2026-10-09 to 10-12 from the server, over a weekend) replay against release
+`20261006T194555Z-06c0829d89aa` (serving schema 5.0) with every episode that shows a departure
+bound to the trip its vehicle drives (see Matching). Terms of use are still to be recorded.
 
 ## Endpoint
 
@@ -85,8 +84,10 @@ without a report).
    is rounded down, ARRIVA-Q3), and the residual is how far the candidate's departure from A
    lies outside that minute; the score is the median over the episode. The stop left is placed
    on the candidate after the previous one; a name the candidate lacks is no evidence (ARRIVA-Q8).
-3. **Position**, before the first departure: the fix's timetable time on the candidate's path
-   (within 300 m), against the delay.
+   A change seen more than 2 km from the stop left gives no time (ARRIVA-Q9).
+3. **Position**, before the first timed departure: the fix's timetable time on the candidate's
+   path (within 300 m; between the stop before the next stop and the next stop, else anywhere),
+   against the delay.
 4. **Decision:** the best candidate binds when its residual is at most 3 minutes (10 for a
    position alone) and the runner-up is at least 15 minutes worse; otherwise `ambiguous`.
 
@@ -96,22 +97,31 @@ line or destination, or a departure off by 15 minutes, infers again. Stop events
 only once two departures agree with the trip. Express trips run back and forth on the same
 line, so the circulation prior (section 22) will help pick the next trip.
 
-Replay of the 25-hour capture (release `20261006T194555Z`, which has no route shapes for these
-lines, so positions are judged on straight lines between stops):
+Replays against release `20261006T194555Z`, which has no route shapes for these lines, so
+positions are judged on straight lines between stops. Each bound episode was checked against
+its trip's scheduled times (local), and each vehicle's trips alternate direction with
+plausible layovers:
 
-- 65 episodes, 60 of them with a departure: all 60 bound, each to one trip for its whole
-  length, and each to the trip whose scheduled times it fits (each vehicle's trips alternate
-  direction with plausible layovers). 61 episodes bound in all, 96.2 % of reports.
-- Unbound: three episodes `ambiguous` throughout. 7AT9085 reported destination Praha with next
-  stop Litvínov (its origin) for two hours before turning into a Litvínov trip, and 6SA3614 an
-  hour the same way; 7AT9084 sent nine reports at 14:39. One episode at 04:48, before any trip of
-  its line, is `not_in_service`.
-- The GTFS-RT consistency check is clean (60 trips, 6,446 stop time updates, 297 snapshots).
-- Own GPS lateness against the source delay on 10,585 bound reports: median difference +61 s,
-  absolute p50 132 s and p90 421 s. The source's delay is frozen since the last stop, which on
-  motorway legs is 20 minutes and more. Which is closer to what happened is for `rt evaluate` on
-  actual departures (milestone R4).
-- Two polls returned `busesCurrentLocations: null` and count as bad payloads.
+| Capture | Episodes | With a departure, bound | Bound in all | Reports bound | Bound to two trips | GTFS-RT check |
+|---|---|---|---|---|---|---|
+| 2026-10-05/06 (25 h, 2,972 polls) | 65 | 60 / 60 | 64 | 98.3 % | 0 | clean (63 trips) |
+| 2026-10-09 to 10-12 (7,802 polls) | 173 | 158 / 158 | 162 | 98.8 % | 0 | clean (101 trips) |
+
+- Unbound episodes are fragments of one to five reports, reports before the line's first trip
+  (`not_in_service`), and two that stay `ambiguous` (6SA3614 on 2026-10-12, 22 minutes;
+  1TS5949 on Sunday 2026-10-11, mostly outside any trip).
+- ARRIVA-Q9 was found on the second capture: 6SA3598 kept its origin as the next stop for the
+  whole Praha – Teplice motorway leg, and the late name change first bound it to the trip an
+  hour later. Since the fix it binds the right trip only, and three episodes of the first
+  capture that had looked unbindable (7AT9085, 6SA3614: the origin as next stop for one or two
+  hours while driving the trip) bind to the trips their positions show. On straight-line paths
+  such a vehicle stays `ambiguous` on the motorway until the name changes; route shapes let the
+  position bind it.
+- Own GPS lateness against the source delay on 10,585 bound reports of the first capture:
+  median difference +61 s, absolute p50 132 s and p90 421 s. The source's delay is frozen since
+  the last stop, which on motorway legs is 20 minutes and more. Which is closer to what
+  happened is for `rt evaluate` on actual departures (milestone R4).
+- Three polls returned `busesCurrentLocations: null` and count as bad payloads.
 
 ## Time and delay semantics
 
@@ -142,6 +152,7 @@ lines, so positions are judged on straight lines between stops):
 | ARRIVA-Q6 | destination names keep empty JDF parts and differ in comma spacing | compared without commas and spaces, against the candidate's own calls only |
 | ARRIVA-Q7 | the response is the whole fleet; a batch request without `referer` fails | request headers as above; only Arriva Express entries are kept (filter and connector) |
 | ARRIVA-Q8 | `lastStopName` also names places that are not stops of the timetable (`křížení D46 na D1`, a motorway junction on 721341) | a departure from a name the candidate lacks is neither evidence nor contradiction |
+| ARRIVA-Q9 | `lastStopName` can stay on a stop long after the bus left it (the origin, for a whole motorway leg of an hour or two), with delay 0 | a name change more than `departure_radius_m` (2 km) from the stop left gives no time; the position is judged on the whole path when it is not between the stop before the next stop and the next stop |
 
 ## Open questions
 

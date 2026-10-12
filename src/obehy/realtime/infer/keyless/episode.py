@@ -20,6 +20,7 @@ from obehy.realtime.model import (
     LineRef,
     NextStopName,
     Observation,
+    Position,
     SourceSemantics,
 )
 from obehy.realtime.policy import KeylessPolicy
@@ -68,7 +69,12 @@ def advance(
         and not same_name(name, previous.next_stop)
         and observation.observed_at is not None
     ):
-        left = Departure(previous.next_stop, at, _scheduled(observation, semantics))
+        left = Departure(
+            previous.next_stop,
+            at,
+            _scheduled(observation, semantics),
+            observation.first(Position),
+        )
         departures = (*departures, left)[-MAX_DEPARTURES:]
     return KeylessEpisode(
         previous.line,

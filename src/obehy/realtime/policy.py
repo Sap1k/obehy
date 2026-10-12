@@ -145,6 +145,7 @@ class KeylessPolicy:
     gps_accept_s: int
     margin_s: int
     max_path_distance_m: float
+    departure_radius_m: float
     confirm_departures: int
 
 

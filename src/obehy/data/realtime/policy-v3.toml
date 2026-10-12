@@ -145,5 +145,8 @@ accept_s = 180
 gps_accept_s = 600
 margin_s = 900
 max_path_distance_m = 300
+# A departure counts as time evidence only if the vehicle was this close to the stop it left
+# when the name changed (ARRIVA-Q9: the name can stay on a stop long after leaving it).
+departure_radius_m = 2000
 # Stop events go to history once this many departures agree with the bound trip.
 confirm_departures = 2

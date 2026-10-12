@@ -162,6 +162,7 @@ class Departure:
     stop: str
     left_at: Instant
     scheduled: Interval | None
+    position: Position | None = None  # where the vehicle was when the name changed
 
 
 @dataclass(frozen=True, slots=True)

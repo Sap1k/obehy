@@ -70,7 +70,7 @@ def bind(
     by_position: list[tuple[float, Match]] = []
     survivors = 0
     for match in found:
-        placed = place(match, episode, index)
+        placed = place(match, episode, index, policy)
         if placed is None:
             continue  # its calls contradict the episode
         survivors += 1

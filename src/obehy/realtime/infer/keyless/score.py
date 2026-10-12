@@ -5,19 +5,30 @@
   the candidate's scheduled departure there lies outside the interval the source's delay
   implies. A name the candidate does not have is no evidence (ARRIVA-Q8: the source also names
   motorway junctions); one the candidate has only before an earlier departure contradicts it.
+  A departure seen further than `departure_radius_m` from the stop left keeps its place in
+  the order but gives no time (ARRIVA-Q9: the name changed long after the vehicle left).
 - **Position.** The fix projected onto the candidate's path, within `max_path_distance_m` and
-  (with a next stop) between the call before it and the next stop: the residual is the
-  timetable's lateness there minus the source's delay. The smallest over the projections counts.
+  (with a next stop) between the call before it and the next stop, else anywhere on the path
+  (ARRIVA-Q9): the residual is the timetable's lateness there minus the source's delay. The
+  smallest over the projections counts.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from obehy.realtime.index import IndexView, Trip
+from obehy.realtime.geo import distance_m
+from obehy.realtime.index import Call, IndexView, Trip
 from obehy.realtime.infer.keyed import Match
 from obehy.realtime.infer.keyless.episode import normal
-from obehy.realtime.model import Delay, Interval, KeylessEpisode, Observation, Position
+from obehy.realtime.model import (
+    Delay,
+    Departure,
+    Interval,
+    KeylessEpisode,
+    Observation,
+    Position,
+)
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.path import project_all
 from obehy.realtime.timeline.plan import PlanCache
@@ -49,7 +60,7 @@ def _outside(value: Instant, interval: Interval) -> float:
     return 0.0
 
 
-def place(match: Match, episode: KeylessEpisode, index: IndexView) -> Placed | None:
+def place(match: Match, episode: KeylessEpisode, index: IndexView, policy: Policy) -> Placed | None:
     """The episode on the candidate, or None if it contradicts the candidate's calls."""
 
     stops = _stops(match.trip, index)
@@ -66,7 +77,7 @@ def place(match: Match, episode: KeylessEpisode, index: IndexView) -> Placed | N
             continue  # not a stop of the candidate (ARRIVA-Q8): no evidence either way
         call = match.trip.calls[stops[found][0]]
         seconds = call.departure if call.departure is not None else call.arrival
-        if departure.scheduled is None or seconds is None:
+        if departure.scheduled is None or seconds is None or _away(departure, call, index, policy):
             residuals.append(None)
         else:
             scheduled = ServiceTime(day, seconds).instant()
@@ -78,6 +89,17 @@ def place(match: Match, episode: KeylessEpisode, index: IndexView) -> Placed | N
         found = next((n for n in range(k, len(stops)) if names[n] == name), None)
         current = None if found is None else stops[found][0]
     return Placed(tuple(residuals), current)
+
+
+def _away(departure: Departure, call: Call, index: IndexView, policy: Policy) -> bool:
+    """Whether the vehicle was far from the stop when its name changed (ARRIVA-Q9)."""
+
+    where = departure.position
+    location = index.location(call.location_id)
+    if where is None or location.lon is None or location.lat is None:
+        return False
+    gap = distance_m((where.lon, where.lat), (location.lon, location.lat))
+    return gap > policy.keyless.departure_radius_m
 
 
 def position_residual(
@@ -104,17 +126,14 @@ def position_residual(
     delay = observation.first(Delay)
     expected = 0.0 if delay is None else float(delay.seconds)
     at = observation.observed_at
-    best: float | None = None
-    for projection in project_all(plan.path, position.lon, position.lat):
-        if projection.lateral_m > policy.keyless.max_path_distance_m:
-            continue
-        if not lo <= projection.along_m <= hi:
-            continue
-        lateness = plan.timetable.lateness_s(at, projection.along_m)
-        residual = abs(lateness - expected)
-        if best is None or residual < best:
-            best = residual
-    return best
+    near = [
+        p
+        for p in project_all(plan.path, position.lon, position.lat)
+        if p.lateral_m <= policy.keyless.max_path_distance_m
+    ]
+    ranged = [p for p in near if lo <= p.along_m <= hi] or near
+    residuals = [abs(plan.timetable.lateness_s(at, p.along_m) - expected) for p in ranged]
+    return min(residuals) if residuals else None
 
 
 def bound_contradicts(
@@ -124,7 +143,7 @@ def bound_contradicts(
     order, or the last one off by `margin_s`), and how many departures agree within
     `accept_s`."""
 
-    placed = place(match, episode, index)
+    placed = place(match, episode, index, policy)
     if placed is None:
         return True, 0
     keyless = policy.keyless
