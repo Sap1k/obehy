@@ -15,7 +15,9 @@ from obehy.realtime.times import Instant
 Feed = Literal["jdf", "czptt"]
 FEEDS: tuple[Feed, ...] = ("jdf", "czptt")
 
-FACT_SCHEMA_VERSION = 1
+FACT_SCHEMA_VERSION = 2
+# Stored facts of these versions still read: a new version only adds fact types.
+READABLE_FACT_SCHEMAS = (1, 2)
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -81,6 +83,8 @@ class SourceSemantics:
     pre_trip_after_end_is_stale: bool = False
     # A vehicle's entry repeated unchanged is no news: no fix, no event, no freshness (SZ-Q6).
     unchanged_entry_is_no_news: bool = False
+    # The delay is whole minutes rounded down: `d` means `[d, d + 59 s]` (ARRIVA-Q3).
+    delay_floor_minute: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +107,29 @@ class StopEvent:
 @dataclass(frozen=True, slots=True)
 class NextStop:
     call_ref: str
+
+
+@dataclass(frozen=True, slots=True)
+class LineRef:
+    """The line a keyless source names (`cis:line`): generates the candidate trips."""
+
+    namespace: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
+class Destination:
+    """The destination stop's name, matched only against a candidate's own last stop."""
+
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class NextStopName:
+    """The next stop by name, matched only against a candidate's own calls; a change means the
+    vehicle has just left the call before it."""
+
+    name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +195,9 @@ class PlatformAssignment:
 Fact = (
     VehicleKey
     | TripKey
+    | LineRef
+    | Destination
+    | NextStopName
     | Position
     | Delay
     | SourceState

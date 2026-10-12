@@ -34,6 +34,7 @@ from obehy.realtime.emit.db import Writer, clear_observations
 from obehy.realtime.emit.gtfs_rt import feed_message
 from obehy.realtime.evaluate import SAMPLE_EVERY, PredictorLog
 from obehy.realtime.index_sql import ReleaseLoads, ensure_release
+from obehy.realtime.keyless_report import KeylessLog
 from obehy.realtime.model import (
     Derivation,
     Effect,
@@ -47,7 +48,7 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.policy import Policy
 from obehy.realtime.runner import Runner
-from obehy.realtime.sources import dpmd, duk, mpvnet, sz, sz_tabule
+from obehy.realtime.sources import arriva_express, dpmd, duk, mpvnet, sz, sz_tabule
 from obehy.realtime.times import Instant, instant, local_date
 
 REPORT_SCHEMA_VERSION = 2
@@ -61,6 +62,9 @@ DECODERS: dict[tuple[str, str], Decoder] = {
     (sz.SOURCE, sz.CHANNEL): lambda body, sha, at, skew, _: sz.decode(body, sha, at, skew),
     (sz_tabule.SOURCE, sz_tabule.CHANNEL): sz_tabule.decode,
     (dpmd.SOURCE, dpmd.CHANNEL): lambda body, sha, at, skew, _: dpmd.decode(body, sha, at, skew),
+    (arriva_express.SOURCE, arriva_express.CHANNEL): (
+        lambda body, sha, at, skew, _: arriva_express.decode(body, sha, at, skew)
+    ),
     **{
         (mpvnet.SOURCE, name): (
             lambda body, sha, at, skew, _, name=name: mpvnet.decode(body, sha, at, skew, name)
@@ -137,6 +141,7 @@ def replay(
     groups: dict[tuple[str, str, Any, date], bool] = {}
     reasons: Counter[str] = Counter()
     unresolved: Counter[str] = Counter()
+    keyless = KeylessLog(policy.keyless.episode_gap_s)
     predictors = PredictorLog() if "czptt" in runner.runtimes else None
     clock = _Clock(runner, options, policy.emit_tick_s, predictors)
     last: Instant | None = None
@@ -147,7 +152,9 @@ def replay(
             clock.advance(at)
             if observations is None:
                 continue
-            _count(runner.process(observations), groups, reasons, unresolved)
+            effects = runner.process(observations)
+            _count(effects, groups, reasons, unresolved)
+            keyless.observe(effects)
             last = at
     if last is not None:
         _finish(runner, last, writer)
@@ -156,6 +163,10 @@ def replay(
         document["unresolved"] = dict(sorted(unresolved.items()))
         document["predictors"] = predictors.report()
     options.out.mkdir(parents=True, exist_ok=True)
+    if keyless.groups:
+        document["keyless"] = keyless.report()
+        with atomic_output_path(options.out / "keyless.jsonl") as temporary:
+            keyless.write(temporary)
     with atomic_output_path(options.out / "report.json") as temporary:
         temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", "utf-8")
     return document

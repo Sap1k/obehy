@@ -21,10 +21,16 @@ from obehy.realtime.facts import (
     FEEDS as FEEDS,
 )
 from obehy.realtime.facts import (
+    READABLE_FACT_SCHEMAS as READABLE_FACT_SCHEMAS,
+)
+from obehy.realtime.facts import (
     Delay as Delay,
 )
 from obehy.realtime.facts import (
     DelayReference as DelayReference,
+)
+from obehy.realtime.facts import (
+    Destination as Destination,
 )
 from obehy.realtime.facts import (
     EventKind as EventKind,
@@ -39,10 +45,16 @@ from obehy.realtime.facts import (
     Interval as Interval,
 )
 from obehy.realtime.facts import (
+    LineRef as LineRef,
+)
+from obehy.realtime.facts import (
     NextPoint as NextPoint,
 )
 from obehy.realtime.facts import (
     NextStop as NextStop,
+)
+from obehy.realtime.facts import (
+    NextStopName as NextStopName,
 )
 from obehy.realtime.facts import (
     NextStopPrediction as NextStopPrediction,
@@ -126,7 +138,7 @@ class Reason(StrEnum):
     STALE_KEY = "stale_key"
 
 
-BindingMethod = Literal["keyed"]
+BindingMethod = Literal["keyed", "inferred"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +148,33 @@ class Binding:
     trip_id: str
     method: BindingMethod
     bound_at: Instant
+    # An inferred binding's stop events go to history only once continuity confirms it
+    # (BASE_PLAN.md 19.2); a keyed binding is confirmed by its key.
+    confirmed: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class Departure:
+    """A keyless vehicle left the stop named `stop` (its next stop until then: the next-stop
+    name changed, ARRIVA-Q2) at `left_at`; `scheduled` is the departure time the source's delay
+    implies, if it gave one."""
+
+    stop: str
+    left_at: Instant
+    scheduled: Interval | None
+
+
+@dataclass(frozen=True, slots=True)
+class KeylessEpisode:
+    """What a keyless vehicle has shown since its line and destination last changed
+    (`infer/keyless/episode.py`)."""
+
+    line: str
+    destination: str
+    started_at: Instant
+    last_at: Instant
+    next_stop: str | None
+    departures: tuple[Departure, ...] = ()
 
 
 # --- instance state ----------------------------------------------------------------------------
@@ -363,6 +402,7 @@ class VehicleState:
     binding: Binding | None = None
     position: Position | None = None
     reason: Reason | None = None
+    episode: KeylessEpisode | None = None
 
 
 @dataclass(slots=True)

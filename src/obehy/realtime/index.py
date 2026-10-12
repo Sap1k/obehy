@@ -26,6 +26,9 @@ KeyRef = tuple[str, str]  # (namespace, identifier)
 # A composite source key and the namespace of its leading part, so a missing trip can be told
 # apart from a missing line. The split is the source's own key format, never a public ID.
 PARENT_NAMESPACE = {"cis:line_trip": "cis:line"}
+# The reverse, for keyless sources that name only the line: its trips' keys are
+# `<line>:<trip>` in the child namespace.
+CHILD_NAMESPACE = {parent: child for child, parent in PARENT_NAMESPACE.items()}
 
 
 def parent_ref(ref: KeyRef) -> KeyRef | None:
@@ -155,6 +158,11 @@ class IndexView(Protocol):
         """Locations a source key names (rail: `sr70:track` boarding points)."""
         ...
 
+    def line_keys(self, namespace: str, line: str) -> tuple[str, ...]:
+        """The trip keys of a line (`cis:line` → its `cis:line_trip` identifiers), each loaded
+        like any key."""
+        ...
+
 
 @dataclass(slots=True)
 class Index:
@@ -175,6 +183,8 @@ class Index:
     # Location source keys: by location and namespace, and the locations each key names.
     location_keys: dict[str, dict[str, str]] = field(default_factory=dict[str, dict[str, str]])
     keyed: dict[KeyRef, tuple[str, ...]] = field(default_factory=dict[KeyRef, tuple[str, ...]])
+    # Keyless sources: the trip keys of each loaded line.
+    lines: dict[KeyRef, tuple[str, ...]] = field(default_factory=dict[KeyRef, tuple[str, ...]])
 
     def missing(self, refs: Iterable[KeyRef]) -> set[KeyRef]:
         """Keys whose static data has not been loaded (or looked up and found absent) yet."""
@@ -215,6 +225,12 @@ class Index:
 
     def keyed_locations(self, namespace: str, identifier: str) -> tuple[str, ...]:
         return self.keyed.get((namespace, identifier), ())
+
+    def line_keys(self, namespace: str, line: str) -> tuple[str, ...]:
+        try:
+            return self.lines[(namespace, line)]
+        except KeyError:
+            raise IndexMiss(f"line {namespace}:{line} was not loaded") from None
 
     def add_location_key(self, location_id: str, namespace: str, identifier: str) -> None:
         self.location_keys.setdefault(location_id, {})[namespace] = identifier

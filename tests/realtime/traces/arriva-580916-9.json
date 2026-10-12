@@ -1,0 +1,6876 @@
+{
+"release_id": "20261006T194555Z-06c0829d89aa",
+"feed": "jdf",
+"keys": [
+[
+[
+"cis:line",
+"580916"
+],
+[
+[
+"jdf:route:580916",
+"2026-08-30",
+"2026-12-12"
+]
+]
+],
+[
+[
+"cis:line_trip",
+"580916:11"
+],
+[
+[
+"jdf:trip:580916:260830:11",
+"2026-08-30",
+"2026-12-12"
+]
+]
+],
+[
+[
+"cis:line_trip",
+"580916:29"
+],
+[
+[
+"jdf:trip:580916:260830:29",
+"2026-08-30",
+"2026-12-12"
+]
+]
+],
+[
+[
+"cis:line_trip",
+"580916:34"
+],
+[
+[
+"jdf:trip:580916:260830:34",
+"2026-08-31",
+"2026-12-11"
+]
+]
+],
+[
+[
+"cis:line_trip",
+"580916:6"
+],
+[
+[
+"jdf:trip:580916:260830:6",
+"2026-08-30",
+"2026-12-12"
+]
+]
+],
+[
+[
+"cis:line_trip",
+"580916:7"
+],
+[
+[
+"jdf:trip:580916:260830:7",
+"2026-08-30",
+"2026-12-12"
+]
+]
+],
+[
+[
+"cis:line_trip",
+"580916:8"
+],
+[
+[
+"jdf:trip:580916:260830:8",
+"2026-08-30",
+"2026-12-12"
+]
+]
+],
+[
+[
+"cis:line_trip",
+"580916:9"
+],
+[
+[
+"jdf:trip:580916:260830:9",
+"2026-08-30",
+"2026-12-12"
+]
+]
+]
+],
+"lines": [
+[
+[
+"cis:line",
+"580916"
+],
+[
+"580916:11",
+"580916:29",
+"580916:34",
+"580916:6",
+"580916:7",
+"580916:8",
+"580916:9"
+]
+]
+],
+"trips": [
+{
+"trip_id": "jdf:trip:580916:260830:11",
+"route_id": "jdf:route:580916",
+"route_name": "916",
+"mode": "bus",
+"service_id": "overlay:service:6bdc624f41aeaa3b",
+"headsign": "Praha,Nádraží Holešovice",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:28967",
+1,
+true,
+46800,
+46800
+],
+[
+2,
+"jdf:stop:21160",
+1,
+true,
+47400,
+47400
+],
+[
+3,
+"jdf:stop:34246",
+1,
+true,
+47580,
+47580
+],
+[
+5,
+"jdf:stop:10272",
+1,
+true,
+51000,
+51000
+]
+]
+},
+{
+"trip_id": "jdf:trip:580916:260830:29",
+"route_id": "jdf:route:580916",
+"route_name": "916",
+"mode": "bus",
+"service_id": "overlay:service:6bdc624f41aeaa3b",
+"headsign": "Praha,Nádraží Holešovice",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:28967",
+1,
+true,
+36000,
+36000
+],
+[
+2,
+"jdf:stop:21160",
+1,
+true,
+36600,
+36600
+],
+[
+3,
+"jdf:stop:34246",
+1,
+true,
+36780,
+36780
+],
+[
+5,
+"jdf:stop:10272",
+1,
+true,
+40200,
+40200
+]
+]
+},
+{
+"trip_id": "jdf:trip:580916:260830:34",
+"route_id": "jdf:route:580916",
+"route_name": "916",
+"mode": "bus",
+"service_id": "overlay:service:1021e2fff6ce606a",
+"headsign": "Teplice,Celní",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:10272",
+1,
+true,
+34200,
+34200
+],
+[
+2,
+"jdf:stop:34246",
+1,
+true,
+37980,
+37980
+],
+[
+3,
+"jdf:stop:21160",
+1,
+true,
+38160,
+38160
+],
+[
+4,
+"jdf:stop:36049",
+1,
+true,
+38280,
+38280
+],
+[
+5,
+"jdf:stop:28967",
+1,
+true,
+38400,
+38400
+]
+]
+},
+{
+"trip_id": "jdf:trip:580916:260830:6",
+"route_id": "jdf:route:580916",
+"route_name": "916",
+"mode": "bus",
+"service_id": "overlay:service:6bdc624f41aeaa3b",
+"headsign": "Teplice,Celní",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:10272",
+1,
+true,
+37800,
+37800
+],
+[
+2,
+"jdf:stop:34246",
+1,
+true,
+41580,
+41580
+],
+[
+3,
+"jdf:stop:21160",
+1,
+true,
+41760,
+41760
+],
+[
+4,
+"jdf:stop:36049",
+1,
+true,
+41880,
+41880
+],
+[
+5,
+"jdf:stop:28967",
+1,
+true,
+42000,
+42000
+]
+]
+},
+{
+"trip_id": "jdf:trip:580916:260830:7",
+"route_id": "jdf:route:580916",
+"route_name": "916",
+"mode": "bus",
+"service_id": "overlay:service:6bdc624f41aeaa3b",
+"headsign": "Praha,Nádraží Holešovice",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:28967",
+1,
+true,
+32400,
+32400
+],
+[
+2,
+"jdf:stop:21160",
+1,
+true,
+33000,
+33000
+],
+[
+3,
+"jdf:stop:34246",
+1,
+true,
+33180,
+33180
+],
+[
+4,
+"jdf:stop:33144",
+1,
+true,
+36120,
+36120
+],
+[
+5,
+"jdf:stop:10272",
+1,
+true,
+36600,
+36600
+]
+]
+},
+{
+"trip_id": "jdf:trip:580916:260830:8",
+"route_id": "jdf:route:580916",
+"route_name": "916",
+"mode": "bus",
+"service_id": "overlay:service:6bdc624f41aeaa3b",
+"headsign": "Teplice,Celní",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:10272",
+1,
+true,
+45000,
+45000
+],
+[
+2,
+"jdf:stop:34246",
+1,
+true,
+48780,
+48780
+],
+[
+3,
+"jdf:stop:21160",
+1,
+true,
+48960,
+48960
+],
+[
+4,
+"jdf:stop:36049",
+1,
+true,
+49080,
+49080
+],
+[
+5,
+"jdf:stop:28967",
+1,
+true,
+49200,
+49200
+]
+]
+},
+{
+"trip_id": "jdf:trip:580916:260830:9",
+"route_id": "jdf:route:580916",
+"route_name": "916",
+"mode": "bus",
+"service_id": "overlay:service:6bdc624f41aeaa3b",
+"headsign": "Praha,Nádraží Holešovice",
+"shape_id": null,
+"calls": [
+[
+0,
+"jdf:stop:28967",
+1,
+true,
+39600,
+39600
+],
+[
+2,
+"jdf:stop:21160",
+1,
+true,
+40200,
+40200
+],
+[
+3,
+"jdf:stop:34246",
+1,
+true,
+40380,
+40380
+],
+[
+5,
+"jdf:stop:10272",
+1,
+true,
+43800,
+43800
+]
+]
+}
+],
+"service_dates": {
+"overlay:service:6bdc624f41aeaa3b": [
+"2026-10-05",
+"2026-10-06",
+"2026-10-07"
+],
+"overlay:service:1021e2fff6ce606a": [
+"2026-10-05",
+"2026-10-06",
+"2026-10-07"
+]
+},
+"loaded_dates": [
+"2026-10-05",
+"2026-10-06",
+"2026-10-07"
+],
+"locations": [
+[
+"jdf:stop:10272",
+"Praha,Nádraží Holešovice",
+14.4394113670501,
+50.1091793782597
+],
+[
+"jdf:stop:21160",
+"Teplice,Benešovo náměstí",
+13.8263529971669,
+50.642341516304
+],
+[
+"jdf:stop:28967",
+"Teplice,Celní",
+13.832432419743,
+50.6469094631284
+],
+[
+"jdf:stop:33144",
+"Praha,Kobylisy",
+14.4546167560766,
+50.124339219293
+],
+[
+"jdf:stop:34246",
+"Teplice,Pražská",
+13.8365978496209,
+50.638823127947
+],
+[
+"jdf:stop:36049",
+"Teplice,Hlavní nádraží",
+13.8289797165774,
+50.6459400594144
+]
+],
+"shapes": [],
+"observations": [
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:00:29.661631+00:00",
+"observed_at": "2026-10-06T09:00:06+00:00",
+"sha256": "5be5f1c4494df308f858c29293f83b5472a12b7acf3f679cea748229cc25517a",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64690017700195,
+"lon": 13.832389831542969,
+"bearing": 305.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:00:59.664461+00:00",
+"observed_at": "2026-10-06T09:00:27+00:00",
+"sha256": "f61327a8c092360c4eb0cd003344a7595e4ef8b82a7fe462f5eefa7ac3d6ba06",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64665985107422,
+"lon": 13.831290245056152,
+"bearing": 236.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:01:29.672360+00:00",
+"observed_at": "2026-10-06T09:01:12+00:00",
+"sha256": "da015ad2091688d0a59f28cbb27d9c7dc1fb696b43e06eeadcbe6c290bc5c66b",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.6461181640625,
+"lon": 13.830060005187988,
+"bearing": 320.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:01:59.670986+00:00",
+"observed_at": "2026-10-06T09:01:38+00:00",
+"sha256": "db9e8e6eda8cf632569693feba948a8b99b0e2487903dda3fad10e362febac2e",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.6461181640625,
+"lon": 13.829279899597168,
+"bearing": 240.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:02:29.680380+00:00",
+"observed_at": "2026-10-06T09:01:55+00:00",
+"sha256": "e092ba37ee8a0ccf1ce20683077a3c61e1ee34372a5ecc2f3ec0c2312160f87e",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64556884765625,
+"lon": 13.827879905700684,
+"bearing": 237.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:02:59.664629+00:00",
+"observed_at": "2026-10-06T09:02:36+00:00",
+"sha256": "ab86debbc29cded0ea058b27b3050ae24a1793ccfa598822a4d18ce586ee5cf6",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.644859313964844,
+"lon": 13.826089859008789,
+"bearing": 241.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:03:29.665155+00:00",
+"observed_at": "2026-10-06T09:03:06+00:00",
+"sha256": "a724a2a29983db1987a3e15fb24f46eca83c7d6c663b19f4e580b2a6c7f61e76",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64448165893555,
+"lon": 13.824970245361328,
+"bearing": 240.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:03:59.665920+00:00",
+"observed_at": "2026-10-06T09:03:23+00:00",
+"sha256": "52beea24ae4545341770c146c5eccf2238de2413b846fd3047d0901d3f8075f2",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64445877075195,
+"lon": 13.824899673461914,
+"bearing": 241.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:04:29.661454+00:00",
+"observed_at": "2026-10-06T09:03:57+00:00",
+"sha256": "1d82a67b6ad4308c04b12d9ab2f8c397aa8a328f502d5e04a2f9cc7a15c0a28d",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64377975463867,
+"lon": 13.822620391845703,
+"bearing": 248.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:04:59.667657+00:00",
+"observed_at": "2026-10-06T09:04:38+00:00",
+"sha256": "6742bd994c1b0e8f0c9e9200f6b9820035035cf7db047deb9ca52784497cb1de",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64352035522461,
+"lon": 13.822389602661133,
+"bearing": 151.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:05:29.666919+00:00",
+"observed_at": "2026-10-06T09:04:38+00:00",
+"sha256": "074573b442a998a33ad2b2a35075032304ff3b502c3b4ffc9bad6c7ce974e16b",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Benešovo náměstí"
+},
+{
+"t": "position",
+"lat": 50.64352035522461,
+"lon": 13.822389602661133,
+"bearing": 151.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:05:59.675070+00:00",
+"observed_at": "2026-10-06T09:05:50+00:00",
+"sha256": "0272177c1c41cb3a9c068b436dec9014e5a85dcb90c5cf8937bfa1a2ebd4ef08",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64216995239258,
+"lon": 13.826279640197754,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -300,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:06:29.672710+00:00",
+"observed_at": "2026-10-06T09:05:50+00:00",
+"sha256": "abd11f56ad1a8abb79d860db1d4f6379e2133af0e1c5728317abf643d7ab719b",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64216995239258,
+"lon": 13.826279640197754,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -300,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:06:59.677989+00:00",
+"observed_at": "2026-10-06T09:05:50+00:00",
+"sha256": "7208706fe266ce2f16b48adbabaa6c7b45733d627100aaa88857a840cc0eb2c9",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64216995239258,
+"lon": 13.826279640197754,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -300,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:07:29.668218+00:00",
+"observed_at": "2026-10-06T09:05:50+00:00",
+"sha256": "7208706fe266ce2f16b48adbabaa6c7b45733d627100aaa88857a840cc0eb2c9",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64216995239258,
+"lon": 13.826279640197754,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -300,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:07:59.679600+00:00",
+"observed_at": "2026-10-06T09:05:50+00:00",
+"sha256": "7083ea84d88341883cc54a9eaffe593af4f04c447700362c08f953b1765e8108",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64216995239258,
+"lon": 13.826279640197754,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -300,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:08:29.671156+00:00",
+"observed_at": "2026-10-06T09:07:50+00:00",
+"sha256": "693f05acecd23160998af2b87ac84d2f566b594c87734560b60eed07799b9fdb",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64215850830078,
+"lon": 13.826299667358398,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -180,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:08:59.677808+00:00",
+"observed_at": "2026-10-06T09:07:50+00:00",
+"sha256": "ed79cfd5b0b9c7929a9c98e09ffe45e46dedc5012201a829735bfa748e75589e",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64215850830078,
+"lon": 13.826299667358398,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -180,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:09:29.672543+00:00",
+"observed_at": "2026-10-06T09:07:50+00:00",
+"sha256": "89676390eb24631a0f0e1347a64863a6717933e4843bb20adb476243931c5313",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64215850830078,
+"lon": 13.826299667358398,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -180,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:09:59.667863+00:00",
+"observed_at": "2026-10-06T09:07:50+00:00",
+"sha256": "1e93c6b4367ab4803ffc21ef244a8f486f4eb466816b7658215328c57717010e",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64215850830078,
+"lon": 13.826299667358398,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -180,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:10:29.671140+00:00",
+"observed_at": "2026-10-06T09:09:50+00:00",
+"sha256": "faed0466e2fbec2d1df7a9d332c01169fac615f366ba6a0282e26a525abe910f",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64215850830078,
+"lon": 13.826299667358398,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": -60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:10:59.670229+00:00",
+"observed_at": "2026-10-06T09:10:31+00:00",
+"sha256": "409b92235bb1c07753669e5e68855e4d5ac3ca19abf60689bb84e6b58b7613c8",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.641841888427734,
+"lon": 13.827239990234375,
+"bearing": 135.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:11:29.669634+00:00",
+"observed_at": "2026-10-06T09:11:00+00:00",
+"sha256": "ee0a4ecc2d79d259614e5f1c8eb15c39d6b761039d179d87665149440e28bfbb",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.64162063598633,
+"lon": 13.827779769897461,
+"bearing": 125.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:11:59.682184+00:00",
+"observed_at": "2026-10-06T09:11:33+00:00",
+"sha256": "f49078b774ad0cb9fd74b8b477e408b3fe5f2ff42f48b18a9bef6aed7fd6c8ad",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.640281677246094,
+"lon": 13.828530311584473,
+"bearing": 125.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:12:29.661694+00:00",
+"observed_at": "2026-10-06T09:12:04+00:00",
+"sha256": "69b359d168f69782826d584ada07f791358b5ac67f3fde4846f4c00ae7940f48",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Teplice,Pražská"
+},
+{
+"t": "position",
+"lat": 50.6392707824707,
+"lon": 13.831899642944336,
+"bearing": 72.0
+},
+{
+"t": "delay",
+"s": 0,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:12:59.702720+00:00",
+"observed_at": "2026-10-06T09:12:34+00:00",
+"sha256": "94cacab9f78f465d52add55ac40d869646ff31300ce94750da6844c528352a00",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.63888168334961,
+"lon": 13.8360595703125,
+"bearing": 123.0
+},
+{
+"t": "delay",
+"s": -60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:13:29.667677+00:00",
+"observed_at": "2026-10-06T09:12:56+00:00",
+"sha256": "cd2b8a7b27ff1b6f36ab609b07f48459606ba8bb71ab8be9e0a051bdbb801440",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.6380500793457,
+"lon": 13.837479591369629,
+"bearing": 127.0
+},
+{
+"t": "delay",
+"s": -60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:13:59.664988+00:00",
+"observed_at": "2026-10-06T09:12:56+00:00",
+"sha256": "5fdbe7029ec89d34f20a53c86b47b7c64f035044db61265f31b4277f8f188de1",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.6380500793457,
+"lon": 13.837479591369629,
+"bearing": 127.0
+},
+{
+"t": "delay",
+"s": -60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:14:29.660751+00:00",
+"observed_at": "2026-10-06T09:14:04+00:00",
+"sha256": "c258caa0daeeaa19434464cd2b41697a349e973329ec676d09daa736dde31d30",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.638038635253906,
+"lon": 13.837530136108398,
+"bearing": 113.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:14:59.674710+00:00",
+"observed_at": "2026-10-06T09:14:16+00:00",
+"sha256": "1ee49b61e3e665279b0490486e63d1b585518fd6cabfeec5c9f1559eb6c7c400",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.63774871826172,
+"lon": 13.838459968566895,
+"bearing": 112.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:15:29.671544+00:00",
+"observed_at": "2026-10-06T09:15:06+00:00",
+"sha256": "67f4a950abdcdfb12bb5bfa1dcf91d0ebe2d1f7408dcae290ee35c59370b2b8f",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.63454055786133,
+"lon": 13.845919609069824,
+"bearing": 130.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:15:59.669598+00:00",
+"observed_at": "2026-10-06T09:15:29+00:00",
+"sha256": "909e5c3af7928de657e13e9463c366c46b26f427bd29f995415e3177b4840bd9",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.632720947265625,
+"lon": 13.849209785461426,
+"bearing": 131.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:16:29.663592+00:00",
+"observed_at": "2026-10-06T09:16:07+00:00",
+"sha256": "58e7b0805e029723a8a797514048bdd0b1ae09338fbea9888938c40a0dae9c5f",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.629119873046875,
+"lon": 13.855730056762695,
+"bearing": 130.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:16:59.669303+00:00",
+"observed_at": "2026-10-06T09:16:38+00:00",
+"sha256": "c91ea316c8a035039bfa69254e118606543755b7ef311c2327284dc377c731c2",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.6279182434082,
+"lon": 13.855870246887207,
+"bearing": 324.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:17:29.660347+00:00",
+"observed_at": "2026-10-06T09:17:01+00:00",
+"sha256": "4c86d44d72c8119258a9042fc45d1ecb232228598cc8ed0ab65961edfe1e0d6c",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.62831115722656,
+"lon": 13.855870246887207,
+"bearing": 52.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:17:59.660827+00:00",
+"observed_at": "2026-10-06T09:17:40+00:00",
+"sha256": "421338a01c230420458a3c48f7f3890eec990ac50b743a9a1c3ad764f2dada88",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.62730026245117,
+"lon": 13.864500045776367,
+"bearing": 116.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:18:29.664187+00:00",
+"observed_at": "2026-10-06T09:17:58+00:00",
+"sha256": "866de4bfbd153fdcbe3569e71cddbefcadfb125df076fb0d8f6f63993fad7308",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.625431060791016,
+"lon": 13.86870002746582,
+"bearing": 131.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:18:59.659648+00:00",
+"observed_at": "2026-10-06T09:18:40+00:00",
+"sha256": "0eedef32028ad2d20030d6429f8940dba0fe2401a40511742ff06073719a9fd1",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.62226867675781,
+"lon": 13.873519897460938,
+"bearing": 124.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:19:29.668125+00:00",
+"observed_at": "2026-10-06T09:19:10+00:00",
+"sha256": "57ea5ff1b41e0f8b54462e101a0cccadfec01c66cfb382163553493dc70251e0",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.62123107910156,
+"lon": 13.882269859313965,
+"bearing": 100.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:19:59.653745+00:00",
+"observed_at": "2026-10-06T09:19:35+00:00",
+"sha256": "7ed15fdf5d0db921ed0f09c7b36a5a42f14e437f1925cc5d9ccb8d77770805a8",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.619850158691406,
+"lon": 13.890910148620605,
+"bearing": 93.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:20:29.671266+00:00",
+"observed_at": "2026-10-06T09:20:09+00:00",
+"sha256": "d53a78693a675cbf71c77ae8f1180027d625b3feebe3a3e1253077f5022aac0d",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.61851119995117,
+"lon": 13.903619766235352,
+"bearing": 116.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:20:59.686548+00:00",
+"observed_at": "2026-10-06T09:20:31+00:00",
+"sha256": "6f6f6c18aacb75fd6130c87d7aa3f87fe75705bc2f9c1440bec9a4d7b2697620",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.616329193115234,
+"lon": 13.911490440368652,
+"bearing": 107.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:21:29.721751+00:00",
+"observed_at": "2026-10-06T09:21:04+00:00",
+"sha256": "f251930ea2b227eaf1e178fc0dd01792b0aaf3870665a563741bd721cbd2ffef",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.613609313964844,
+"lon": 13.924240112304688,
+"bearing": 112.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:21:59.667993+00:00",
+"observed_at": "2026-10-06T09:21:39+00:00",
+"sha256": "6731e23b7b350ada026f1632ee493f8448e4f4aa4405a514b76b6ba7750170fc",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.6148681640625,
+"lon": 13.93729019165039,
+"bearing": 71.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:22:29.674832+00:00",
+"observed_at": "2026-10-06T09:22:03+00:00",
+"sha256": "b352f9612c02f7f938b344db23e1060d1611371910c335c81b4e25327403a5c4",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.616458892822266,
+"lon": 13.945810317993164,
+"bearing": 78.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:22:59.662383+00:00",
+"observed_at": "2026-10-06T09:22:38+00:00",
+"sha256": "4cedbcba48a0dc9deed8ab896e33db874a29326059761400bc5d8282bb190542",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.61486053466797,
+"lon": 13.958319664001465,
+"bearing": 127.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:23:29.659562+00:00",
+"observed_at": "2026-10-06T09:23:13+00:00",
+"sha256": "f510cc107b3064495c7b75d43294aec93b6628dad5cab50277775f3ce71c9216",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.61027908325195,
+"lon": 13.961190223693848,
+"bearing": 194.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:23:59.674671+00:00",
+"observed_at": "2026-10-06T09:23:36+00:00",
+"sha256": "1efb4524ecee13dec2d5ae62777f22ba530ef318500adb056d77f6dd13ba1978",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.60591125488281,
+"lon": 13.961159706115723,
+"bearing": 164.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:24:29.663786+00:00",
+"observed_at": "2026-10-06T09:24:11+00:00",
+"sha256": "ac53157b3ef5f892e7fecbfd33e4208d153bbf74396c099916d14854aa325ab0",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.5997314453125,
+"lon": 13.968330383300781,
+"bearing": 136.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:24:59.660878+00:00",
+"observed_at": "2026-10-06T09:24:23+00:00",
+"sha256": "2acf6cdd7da2c128e559351691e1266d1c0a90e1c6044d5b49d57a3aa579cdb5",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.59757995605469,
+"lon": 13.970990180969238,
+"bearing": 148.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:25:29.683564+00:00",
+"observed_at": "2026-10-06T09:25:09+00:00",
+"sha256": "121a2d581eac3b505a53084b84b5a6e31bc269091b9706f84300992c2d1380ef",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.58864974975586,
+"lon": 13.979999542236328,
+"bearing": 127.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:25:59.666849+00:00",
+"observed_at": "2026-10-06T09:25:42+00:00",
+"sha256": "d34ebf18edb54e77a583809bde87c47f996300e3a732ec243f9b09a2e5637421",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.586429595947266,
+"lon": 13.992179870605469,
+"bearing": 93.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:26:29.670213+00:00",
+"observed_at": "2026-10-06T09:26:04+00:00",
+"sha256": "0a45fe447af75a5f35b012b829f8b959bac26de85bdfc7d34439b33aefe9acf8",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.585121154785156,
+"lon": 14.000439643859863,
+"bearing": 115.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:26:59.660582+00:00",
+"observed_at": "2026-10-06T09:26:25+00:00",
+"sha256": "2880bd73083dcfca9a59a0078c028f0c9f4d2ee01cee7395eaed96ac15c27901",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.582889556884766,
+"lon": 14.007049560546875,
+"bearing": 117.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:27:29.672050+00:00",
+"observed_at": "2026-10-06T09:27:16+00:00",
+"sha256": "3c176c79bf28d4d5375040e6eac70221db22c75e47d2dcc4b3716c58c03dc849",
+"item": 3,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.57577133178711,
+"lon": 14.019789695739746,
+"bearing": 161.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:27:59.666613+00:00",
+"observed_at": "2026-10-06T09:27:38+00:00",
+"sha256": "ce65b8ba0cf592016822f05bc1e98b53138097c9982bd9beaa67f3e625a5ba67",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.57035827636719,
+"lon": 14.020170211791992,
+"bearing": 189.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:28:29.661671+00:00",
+"observed_at": "2026-10-06T09:28:00+00:00",
+"sha256": "c9b58fc41966902c407c0546defcb41ecfbcb8aab863880096e6bb155e9aff66",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.565128326416016,
+"lon": 14.01768970489502,
+"bearing": 202.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:28:59.665314+00:00",
+"observed_at": "2026-10-06T09:28:43+00:00",
+"sha256": "3624065a52d838459d8e2b00cb0e99fa00c35a062092cef719619dc2b1abbf1f",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.55434036254883,
+"lon": 14.012689590454102,
+"bearing": 192.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:29:29.664340+00:00",
+"observed_at": "2026-10-06T09:29:17+00:00",
+"sha256": "fab6fb8c2bbd6fd9590702bb4bd5affd246af55a2537d908d157bfe64786eb57",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.546791076660156,
+"lon": 14.006620407104492,
+"bearing": 228.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:29:59.671138+00:00",
+"observed_at": "2026-10-06T09:29:51+00:00",
+"sha256": "fc17cd8108838d2aba8be17336b204a0bc63ee2552175473aed952a8a4a27b66",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.541439056396484,
+"lon": 13.99882984161377,
+"bearing": 206.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:30:29.669210+00:00",
+"observed_at": "2026-10-06T09:30:15+00:00",
+"sha256": "edfd74f3d906774d4875a97ebaec1b7a835e1a1ba45f915fe7d17d7c5d7f3286",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.53594970703125,
+"lon": 13.99666976928711,
+"bearing": 183.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:30:59.669173+00:00",
+"observed_at": "2026-10-06T09:30:48+00:00",
+"sha256": "8ac976dfdede286c875ce16001aa22c4f707051afd2b461e06b7e4fc15e3c133",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.527950286865234,
+"lon": 13.999150276184082,
+"bearing": 154.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:31:29.668036+00:00",
+"observed_at": "2026-10-06T09:31:20+00:00",
+"sha256": "d7d484bdbb9c3076a7bfcad6172be83edf9ee233af13405afc3b64912bfc90b5",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.521488189697266,
+"lon": 14.007550239562988,
+"bearing": 129.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:31:59.654247+00:00",
+"observed_at": "2026-10-06T09:31:52+00:00",
+"sha256": "f81173f677ad86849c8693ce83b47826036d01f3c0527b565508ca154bfa962d",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.51622009277344,
+"lon": 14.017640113830566,
+"bearing": 129.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:32:29.671648+00:00",
+"observed_at": "2026-10-06T09:32:25+00:00",
+"sha256": "2e7bccae4ec38b1775d4f20cebdda731deae2b95886532ea6aae440da6056ceb",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.51076889038086,
+"lon": 14.028180122375488,
+"bearing": 124.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:32:59.670492+00:00",
+"observed_at": "2026-10-06T09:32:48+00:00",
+"sha256": "4bc1ab5aa17a9a6d4f6f854b71ed544b1b7128d7bf9c268faf92aad1772fb30e",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.50802993774414,
+"lon": 14.03579044342041,
+"bearing": 114.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:33:29.665650+00:00",
+"observed_at": "2026-10-06T09:33:24+00:00",
+"sha256": "843d6e85c59554e9fa3eef50f7f9e4d6899359d4d16df98added6e6aeba1b6ec",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.50489044189453,
+"lon": 14.047800064086914,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:33:59.667544+00:00",
+"observed_at": "2026-10-06T09:33:24+00:00",
+"sha256": "843d6e85c59554e9fa3eef50f7f9e4d6899359d4d16df98added6e6aeba1b6ec",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.50489044189453,
+"lon": 14.047800064086914,
+"bearing": 111.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:34:29.668358+00:00",
+"observed_at": "2026-10-06T09:33:50+00:00",
+"sha256": "448b86dceee58f25a028cf0e2d79860284c6f72cbbf81be339a288c25e9b5f80",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.50276184082031,
+"lon": 14.05620002746582,
+"bearing": 113.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:34:59.674724+00:00",
+"observed_at": "2026-10-06T09:34:18+00:00",
+"sha256": "69d5ecfe7ab3b930d9e0b81fe78cb08d0d8eb90baffc000c32227ddf1ac80e02",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.499778747558594,
+"lon": 14.063929557800293,
+"bearing": 129.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:35:29.661533+00:00",
+"observed_at": "2026-10-06T09:34:48+00:00",
+"sha256": "c0eac061087ed44e7c3fb45ce9330038f855593597028382b22d98eca253e73e",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.49536895751953,
+"lon": 14.070579528808594,
+"bearing": 143.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:35:59.668786+00:00",
+"observed_at": "2026-10-06T09:35:22+00:00",
+"sha256": "b483050f62c4a745b595e38c3d3cda1775aae0f554e570f900f9dd39ef6b51dd",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.48931884765625,
+"lon": 14.075570106506348,
+"bearing": 157.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:36:29.672249+00:00",
+"observed_at": "2026-10-06T09:36:02+00:00",
+"sha256": "14a677d06703a1a51fd931db973a70a1441986d6e005c8138874683bca20edd2",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.48196029663086,
+"lon": 14.081419944763184,
+"bearing": 147.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:36:59.686103+00:00",
+"observed_at": "2026-10-06T09:36:18+00:00",
+"sha256": "3044fb4be9249f9186b025abdd6ee86077d4bf57b1ced1543d9b5dd70946d9f9",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.47964096069336,
+"lon": 14.084030151367188,
+"bearing": 142.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:37:29.658370+00:00",
+"observed_at": "2026-10-06T09:36:56+00:00",
+"sha256": "bd621dd65f3837b6c8a8caaccd1a7f7810534fc9fbd8be96f41c21c7bb4556c7",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.47550964355469,
+"lon": 14.089810371398926,
+"bearing": 133.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:37:59.658121+00:00",
+"observed_at": "2026-10-06T09:37:27+00:00",
+"sha256": "ee36564970bbab4a53200a42c4899c4627b725cd8072a86e23898743b1da25c1",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.47188186645508,
+"lon": 14.096719741821289,
+"bearing": 127.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:38:29.667453+00:00",
+"observed_at": "2026-10-06T09:37:55+00:00",
+"sha256": "d9ddfb5317a38599d0265bd4a42d32b930f312890decf6bd624a6b4e627276aa",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.46818923950195,
+"lon": 14.103190422058105,
+"bearing": 139.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:38:59.667455+00:00",
+"observed_at": "2026-10-06T09:38:26+00:00",
+"sha256": "2a4e8cb8d7b46fc4570a69f01242bbb907e72ff56fba8a3794b331a1a2f9bb24",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.46335983276367,
+"lon": 14.107769966125488,
+"bearing": 155.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:39:29.660866+00:00",
+"observed_at": "2026-10-06T09:38:57+00:00",
+"sha256": "68def5949974ad1495b76266cb9e8783cedeaa6042ec91ad41b119127ea5477f",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.458248138427734,
+"lon": 14.111650466918945,
+"bearing": 149.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:39:59.677185+00:00",
+"observed_at": "2026-10-06T09:39:28+00:00",
+"sha256": "0777df8714da80c6c1619cb622dddeb775dedfc03fbb3c569f3ca09d304e449e",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.452720642089844,
+"lon": 14.118060111999512,
+"bearing": 136.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:40:29.658112+00:00",
+"observed_at": "2026-10-06T09:40:02+00:00",
+"sha256": "0f4cafbdbbb71ddc98c0bee2df9e7e5b4c766caccf79ae117909899857c757fa",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.447391510009766,
+"lon": 14.12794017791748,
+"bearing": 122.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:40:59.657386+00:00",
+"observed_at": "2026-10-06T09:40:28+00:00",
+"sha256": "6d9efdbd9eaac524ae562a960b161a7d0ed4bbca9cec901d10058ca143e70e27",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.44485092163086,
+"lon": 14.135649681091309,
+"bearing": 112.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:41:29.666724+00:00",
+"observed_at": "2026-10-06T09:40:57+00:00",
+"sha256": "98f0870569e9565e1d6c947e40049838a35a4232f7e065695789e748b437b300",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.443180084228516,
+"lon": 14.143810272216797,
+"bearing": 103.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:41:59.664458+00:00",
+"observed_at": "2026-10-06T09:41:27+00:00",
+"sha256": "44630b67b77e18f1e1dc1f5246f28a88cedafc07c999e01bf239fe1931a390a0",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.442039489746094,
+"lon": 14.15237045288086,
+"bearing": 101.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:42:29.675154+00:00",
+"observed_at": "2026-10-06T09:42:09+00:00",
+"sha256": "4f12716d68c7e1590672d64cef6754fdf1efb7814ba65943259eabfb192bfdd6",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.44036865234375,
+"lon": 14.165470123291016,
+"bearing": 101.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:42:59.662495+00:00",
+"observed_at": "2026-10-06T09:42:40+00:00",
+"sha256": "c2157b65504d2e2331fa8ed27288eb543a2695447b37344d6ad0090230a24aa1",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.43832015991211,
+"lon": 14.176619529724121,
+"bearing": 112.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:43:29.663994+00:00",
+"observed_at": "2026-10-06T09:43:02+00:00",
+"sha256": "c8a1fc076f6d6d2688cbe162abee29661118d7ee4fecbc41768d843c3b900fe3",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.435821533203125,
+"lon": 14.184240341186523,
+"bearing": 121.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:43:59.663842+00:00",
+"observed_at": "2026-10-06T09:43:35+00:00",
+"sha256": "706fc304955d6cb47d38d6f22bb0f0dea9f3e7f6e85d4255c9097fe144fe2764",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.430660247802734,
+"lon": 14.194230079650879,
+"bearing": 133.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:44:29.668652+00:00",
+"observed_at": "2026-10-06T09:44:08+00:00",
+"sha256": "635993020c34da1301222141220b69e615c7690c99ce022a4bae3cb800714516",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.42464828491211,
+"lon": 14.202969551086426,
+"bearing": 139.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:44:59.650315+00:00",
+"observed_at": "2026-10-06T09:44:30+00:00",
+"sha256": "7520d2a2c6127a5ce9855f5abc9279a8678d54a5365fd38ce8a0784778ad149c",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.420291900634766,
+"lon": 14.208089828491211,
+"bearing": 145.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:45:29.666798+00:00",
+"observed_at": "2026-10-06T09:45:04+00:00",
+"sha256": "81a0237870c7e39d330efc12dc826a9ebb29e3064b734abf4efb192c73574f2b",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.41307830810547,
+"lon": 14.2147798538208,
+"bearing": 153.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:45:59.671709+00:00",
+"observed_at": "2026-10-06T09:45:32+00:00",
+"sha256": "c836d8281dc463b2bce82d7085b6eac7b913fb52e5e74b47fef10567768c90dd",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.40726852416992,
+"lon": 14.21897029876709,
+"bearing": 156.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:46:29.660025+00:00",
+"observed_at": "2026-10-06T09:46:06+00:00",
+"sha256": "5b86bcab26ba7631b6728cbd4bea281a9275e646283b6fd9eb89d8a6561a2521",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.39945983886719,
+"lon": 14.223979949951172,
+"bearing": 154.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:46:59.695557+00:00",
+"observed_at": "2026-10-06T09:46:37+00:00",
+"sha256": "5a525fb112df095aa7443469f270fb43974fd99946e8cbe291d8ce6810bafca7",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.392799377441406,
+"lon": 14.230019569396973,
+"bearing": 144.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:47:29.670018+00:00",
+"observed_at": "2026-10-06T09:47:10+00:00",
+"sha256": "4a6972a880862e09fb1a6d9f2a8738f6c9b495bcf72b160930ef5c61effb84bf",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.38644027709961,
+"lon": 14.238240242004395,
+"bearing": 138.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:47:59.669368+00:00",
+"observed_at": "2026-10-06T09:47:32+00:00",
+"sha256": "4fbea6c1e84c3590214ad6930bd8f55194c4e7e275dc31f80ca9941f28db261f",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.38216018676758,
+"lon": 14.243619918823242,
+"bearing": 145.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:48:29.658774+00:00",
+"observed_at": "2026-10-06T09:48:05+00:00",
+"sha256": "767c9132a3e28c45d57e82e02c7798a80df270ebdabdd4bc1f662cdb053293e5",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.3749885559082,
+"lon": 14.249939918518066,
+"bearing": 152.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:48:59.666916+00:00",
+"observed_at": "2026-10-06T09:48:38+00:00",
+"sha256": "e01e5c06d850c8df63241568064c28adbbcc2f5e8cb575cf38783c66edde2f80",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.36804962158203,
+"lon": 14.256830215454102,
+"bearing": 142.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:49:29.668720+00:00",
+"observed_at": "2026-10-06T09:49:00+00:00",
+"sha256": "2c1c50f5ced50cf1016e719073b096a60c72572001cd8ae858e2767325015f6b",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.36402893066406,
+"lon": 14.26257038116455,
+"bearing": 135.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:49:59.682627+00:00",
+"observed_at": "2026-10-06T09:49:33+00:00",
+"sha256": "5aec7a4cc3088cd1157cf7863c64aca1f09908778e8d59c4236245d6a3a410e1",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.35776138305664,
+"lon": 14.270930290222168,
+"bearing": 144.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:50:29.665004+00:00",
+"observed_at": "2026-10-06T09:50:06+00:00",
+"sha256": "456f15f6e4c3ccaa75929585cb3f4f3a7ddbc21191a2129acddd0435ca97df9b",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.35042190551758,
+"lon": 14.276610374450684,
+"bearing": 161.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:50:59.670571+00:00",
+"observed_at": "2026-10-06T09:50:39+00:00",
+"sha256": "664932d835b50e230e19a6c2fb75e582d4bae7b7e2db7d3417953d488fd11c98",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.342491149902344,
+"lon": 14.28003978729248,
+"bearing": 163.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:51:29.665314+00:00",
+"observed_at": "2026-10-06T09:51:02+00:00",
+"sha256": "10343a6bf4c13673b42ef704c9d11384efd4f6aeb9e4291765b25f30ab8952b4",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.33729934692383,
+"lon": 14.283340454101562,
+"bearing": 152.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:51:59.669240+00:00",
+"observed_at": "2026-10-06T09:51:32+00:00",
+"sha256": "aae8f9792bbc1d01c368dd2717ec6f918d05e7813b200d4753b70af734298759",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.33156967163086,
+"lon": 14.289349555969238,
+"bearing": 140.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:52:29.667620+00:00",
+"observed_at": "2026-10-06T09:52:06+00:00",
+"sha256": "5a2f88080920539580aefc96aaa6c4b441c10759085f8f447f35121637bc79dd",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.32575988769531,
+"lon": 14.298930168151855,
+"bearing": 128.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:52:59.664740+00:00",
+"observed_at": "2026-10-06T09:52:39+00:00",
+"sha256": "933f3b5658ab3745b1657433365248e56fb3b296daa4a6fb459aa7d425958fad",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.31970977783203,
+"lon": 14.308730125427246,
+"bearing": 143.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:53:29.673550+00:00",
+"observed_at": "2026-10-06T09:53:10+00:00",
+"sha256": "2717362e3a73d9e29893afd42ed3ab8deea70c9ef4604dfa17a8f7ee189bb622",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.312740325927734,
+"lon": 14.314390182495117,
+"bearing": 156.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:53:59.665249+00:00",
+"observed_at": "2026-10-06T09:53:37+00:00",
+"sha256": "0bd9f3ee962c25f0de3f6f0e3945c3f5445616c06dd9d077bd52616e9fc1af71",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.30738067626953,
+"lon": 14.320639610290527,
+"bearing": 129.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:54:29.671858+00:00",
+"observed_at": "2026-10-06T09:54:10+00:00",
+"sha256": "a341a5ecc858a984f29f5a6d2cef729494a5dd0370e42170437068b2989549df",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.30270004272461,
+"lon": 14.331230163574219,
+"bearing": 124.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:54:59.669808+00:00",
+"observed_at": "2026-10-06T09:54:43+00:00",
+"sha256": "90a49f845182c1fa2162af7da7e1baab08e197e4fc2851a7266570274aeb6925",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.29777908325195,
+"lon": 14.341500282287598,
+"bearing": 133.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:55:29.669079+00:00",
+"observed_at": "2026-10-06T09:55:07+00:00",
+"sha256": "a4c9781a8681cfd273aad9714c3ad48b7bef77813f3fcc61688ef8365bc38362",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.29338073730469,
+"lon": 14.34712028503418,
+"bearing": 147.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:55:59.684399+00:00",
+"observed_at": "2026-10-06T09:55:40+00:00",
+"sha256": "34e7aa255a2416e73da33e275e2ca870b3da0993cec275ad873957f856b235d4",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.285770416259766,
+"lon": 14.351710319519043,
+"bearing": 169.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:56:29.666981+00:00",
+"observed_at": "2026-10-06T09:56:13+00:00",
+"sha256": "d25c9a2691a1eff5a8044fdd75493a2fa2930e8c59702c221c04dd694f4e7a5b",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.2777099609375,
+"lon": 14.354280471801758,
+"bearing": 162.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:56:59.673181+00:00",
+"observed_at": "2026-10-06T09:56:46+00:00",
+"sha256": "8d811331dd532a0a234039a9d3931dad2c454c3b34da766eedd31a24d9ea43fd",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.27029037475586,
+"lon": 14.359769821166992,
+"bearing": 147.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:57:29.661508+00:00",
+"observed_at": "2026-10-06T09:57:19+00:00",
+"sha256": "314e6a15d2c05e3c7dae0104449baab9c3ced3390608febb589890dff38d1ed3",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.26361846923828,
+"lon": 14.36719036102295,
+"bearing": 151.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:57:59.672253+00:00",
+"observed_at": "2026-10-06T09:57:41+00:00",
+"sha256": "2c5a428a38ecf2f05d32a72ba4025a38c01ade38c7874f6ae3006bf27e5486d0",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.258419036865234,
+"lon": 14.369839668273926,
+"bearing": 171.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:58:29.655873+00:00",
+"observed_at": "2026-10-06T09:58:14+00:00",
+"sha256": "84f2ae973624f1538b17c0169f54582d9647080e8dd0634e7ba960dc38779dcd",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.25040054321289,
+"lon": 14.372389793395996,
+"bearing": 160.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:58:59.672141+00:00",
+"observed_at": "2026-10-06T09:58:47+00:00",
+"sha256": "07e7719eed429710119f46ff4fe0b60d9b2defbfba6a3f8ba35157e746fa4266",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.24325180053711,
+"lon": 14.378660202026367,
+"bearing": 141.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:59:29.669697+00:00",
+"observed_at": "2026-10-06T09:59:20+00:00",
+"sha256": "25bd4790922c0e334115dda89be98dd8ac33ced3c9ae339ae13cefdc0da06216",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.237640380859375,
+"lon": 14.38794994354248,
+"bearing": 131.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T09:59:59.671810+00:00",
+"observed_at": "2026-10-06T09:59:53+00:00",
+"sha256": "4aecca4ebc5d3944bba5c370cd9b21dd102916af83ede209ec55d10f35c7e61a",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.2318115234375,
+"lon": 14.396849632263184,
+"bearing": 139.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:00:29.662145+00:00",
+"observed_at": "2026-10-06T10:00:15+00:00",
+"sha256": "59b91c7faf8d9644c246562838abcfe00a35bc21733ea422e31d531ceeb652f2",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.22772979736328,
+"lon": 14.4025297164917,
+"bearing": 134.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:00:59.661128+00:00",
+"observed_at": "2026-10-06T10:00:48+00:00",
+"sha256": "ce17a0afb5028092d247eb507db52e66f915a75269b80eb7847047c663fb65a7",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.22262954711914,
+"lon": 14.412630081176758,
+"bearing": 123.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:01:29.667720+00:00",
+"observed_at": "2026-10-06T10:01:21+00:00",
+"sha256": "fc671d279935cc6fa789a6a4bf1164737b85a4d7754a7e541a4a007394221081",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.217559814453125,
+"lon": 14.422650337219238,
+"bearing": 134.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:01:59.658857+00:00",
+"observed_at": "2026-10-06T10:01:54+00:00",
+"sha256": "0d1a670288a5c4aea877d12c85d98f9e4e245ae2876e676d3ebe4277d48f9cc0",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.21126174926758,
+"lon": 14.430879592895508,
+"bearing": 146.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:02:29.664305+00:00",
+"observed_at": "2026-10-06T10:01:54+00:00",
+"sha256": "0d1a670288a5c4aea877d12c85d98f9e4e245ae2876e676d3ebe4277d48f9cc0",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.21126174926758,
+"lon": 14.430879592895508,
+"bearing": 146.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:02:59.671112+00:00",
+"observed_at": "2026-10-06T10:02:27+00:00",
+"sha256": "3dd0f77044f6d12ca601768d5e44556fd59a0bea0258e6d6fdb500eadebaa53f",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.20399856567383,
+"lon": 14.436949729919434,
+"bearing": 157.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:03:29.665625+00:00",
+"observed_at": "2026-10-06T10:02:49+00:00",
+"sha256": "a5dd90228b3398fa193a129f41c20431fe8bce0c67cee44d1f6f5922d0cd4226",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.198829650878906,
+"lon": 14.439729690551758,
+"bearing": 163.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:03:59.683905+00:00",
+"observed_at": "2026-10-06T10:03:26+00:00",
+"sha256": "8956a7db405caf1dd6bc9717afacc959962ff4aac29ba72bf3d1e8a824b902fd",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.19020080566406,
+"lon": 14.443340301513672,
+"bearing": 165.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:04:29.669302+00:00",
+"observed_at": "2026-10-06T10:04:00+00:00",
+"sha256": "de88293b5f5aa99665d100ca9fa308adeebe76338ffb8552bc1b1b6f5ae7543a",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.182369232177734,
+"lon": 14.447310447692871,
+"bearing": 156.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:04:59.669926+00:00",
+"observed_at": "2026-10-06T10:04:28+00:00",
+"sha256": "801fb32b648dc5e47473a13982990e1c714a9a3bf4b0e22e1696a9b178756292",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.17634963989258,
+"lon": 14.452400207519531,
+"bearing": 147.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:05:29.680889+00:00",
+"observed_at": "2026-10-06T10:04:57+00:00",
+"sha256": "15a6c4236dc3a1217685ab2f27d3c0c68de1f42a240d5d98668773d721c1b1b1",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.17089080810547,
+"lon": 14.459019660949707,
+"bearing": 137.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:05:59.660272+00:00",
+"observed_at": "2026-10-06T10:05:30+00:00",
+"sha256": "aec7e20df307561b3ea6dc7e62ab27cb597cc3db5dc8e8d860374db79842d147",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.16545867919922,
+"lon": 14.468620300292969,
+"bearing": 125.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:06:29.674317+00:00",
+"observed_at": "2026-10-06T10:06:01+00:00",
+"sha256": "e8be4248af10053d1b1c39881ff97bf456a6ff04df302d2e0a3b0d95f531525a",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.16127014160156,
+"lon": 14.477629661560059,
+"bearing": 126.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:06:59.675223+00:00",
+"observed_at": "2026-10-06T10:06:24+00:00",
+"sha256": "7ec24ab1519488b12e965a3d61e21bf7d34763a692d570feec784a512848bb00",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.157569885253906,
+"lon": 14.484479904174805,
+"bearing": 135.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:07:29.671265+00:00",
+"observed_at": "2026-10-06T10:07:01+00:00",
+"sha256": "a163992a923b0adc5085068abb5b69bf8f9ff0a4a26018d43c18179648bf6584",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.14992904663086,
+"lon": 14.492440223693848,
+"bearing": 157.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:07:59.669245+00:00",
+"observed_at": "2026-10-06T10:07:26+00:00",
+"sha256": "4e84ddb43eb3f0d51f575e6989ef3d47b5487d06e649e620c56844901850ee0f",
+"item": 1,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.14390182495117,
+"lon": 14.494500160217285,
+"bearing": 176.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:08:29.680840+00:00",
+"observed_at": "2026-10-06T10:08:02+00:00",
+"sha256": "0629c7e7422fbe40d3de00fdd5f07d48bf811853ea21413b8f18b93b5ee7bfb5",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.13555145263672,
+"lon": 14.492549896240234,
+"bearing": 200.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:08:59.671663+00:00",
+"observed_at": "2026-10-06T10:08:30+00:00",
+"sha256": "f0a3746d680c9c580f0b50ea2e383a2adc30d005414c3e1af560ae20b7681290",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.13064956665039,
+"lon": 14.48838996887207,
+"bearing": 216.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:09:29.657068+00:00",
+"observed_at": "2026-10-06T10:08:53+00:00",
+"sha256": "c18e2b15aeddb6c71d2f4ef7aa42291424afa7159b1cf43df2e204100ec82367",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.1268310546875,
+"lon": 14.483189582824707,
+"bearing": 221.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:09:59.658297+00:00",
+"observed_at": "2026-10-06T10:09:29+00:00",
+"sha256": "5d36d1a91c5d1b053a35e4a396fe241ea9b41365bdd7e1d90c947c17679a6f4c",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.12042999267578,
+"lon": 14.474160194396973,
+"bearing": 224.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:10:29.671192+00:00",
+"observed_at": "2026-10-06T10:10:01+00:00",
+"sha256": "aedc15eaeffadb00cef3e5da84523151fdadeaf846583c1d918df952865c8f8e",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.11769104003906,
+"lon": 14.466309547424316,
+"bearing": 267.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:10:59.665072+00:00",
+"observed_at": "2026-10-06T10:10:23+00:00",
+"sha256": "14fa507b3dd0cc8b1b4a514fd022dfa27319bd245cf7f01402bd79c3810ea4e4",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.117801666259766,
+"lon": 14.461529731750488,
+"bearing": 268.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:11:29.679561+00:00",
+"observed_at": "2026-10-06T10:10:44+00:00",
+"sha256": "b9c9080e78a53ef671af05340476b1265fd7a35cb90ba15785f4df69b4c0e895",
+"item": 0,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.11748123168945,
+"lon": 14.457269668579102,
+"bearing": 286.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:11:59.674755+00:00",
+"observed_at": "2026-10-06T10:11:13+00:00",
+"sha256": "abc2a85086db622ec4e65d0523c4051a60233e012f24b8627a92b38ce55367a8",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.11737060546875,
+"lon": 14.451290130615234,
+"bearing": 247.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:12:29.660315+00:00",
+"observed_at": "2026-10-06T10:12:01+00:00",
+"sha256": "304152bdb938114498caf86d887a41af1e2e697f6188fab31f1fcf4dce0d6f49",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.11302185058594,
+"lon": 14.445119857788086,
+"bearing": 182.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:12:59.683003+00:00",
+"observed_at": "2026-10-06T10:12:25+00:00",
+"sha256": "3bb33fbc7992b12922b3fa143a53351a4f6fee301ee153ec96a6455f9d02a80d",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "next_stop_name",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.110328674316406,
+"lon": 14.444439888000488,
+"bearing": 229.0
+},
+{
+"t": "delay",
+"s": 60,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:13:29.684251+00:00",
+"observed_at": "2026-10-06T10:13:03+00:00",
+"sha256": "18ac43aefb61205b6f644788e0c9f701ce19c30d93d96cc69783888ea45a0008",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.11056900024414,
+"lon": 14.442330360412598,
+"bearing": 239.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "departure"
+}
+]
+}
+},
+{
+"source": "arriva-express",
+"channel": "buses",
+"feed": "jdf",
+"received_at": "2026-10-06T10:13:59.670752+00:00",
+"observed_at": "2026-10-06T10:13:28+00:00",
+"sha256": "cf135259e80c53f3794f8f3fed696002edea0b1dbb748003ccac5a06c5c396bf",
+"item": 2,
+"decoder_version": 1,
+"facts": {
+"v": 2,
+"facts": [
+{
+"t": "vehicle_key",
+"id": "6SA3453"
+},
+{
+"t": "line_ref",
+"ns": "cis:line",
+"value": "580916"
+},
+{
+"t": "destination",
+"name": "Praha, Nádraží Holešovice"
+},
+{
+"t": "position",
+"lat": 50.110130310058594,
+"lon": 14.441169738769531,
+"bearing": 175.0
+},
+{
+"t": "delay",
+"s": 120,
+"ref": "departure"
+}
+]
+}
+}
+]
+}

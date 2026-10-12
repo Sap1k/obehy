@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v2.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v3.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v2.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v3.toml"
 
 
 class PolicyError(ValueError):
@@ -136,6 +136,19 @@ class RailPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class KeylessPolicy:
+    """Keyless inference (`infer/keyless`, BASE_PLAN.md section 19.2)."""
+
+    candidate_window_s: int
+    episode_gap_s: int
+    accept_s: int
+    gps_accept_s: int
+    margin_s: int
+    max_path_distance_m: float
+    confirm_departures: int
+
+
+@dataclass(frozen=True, slots=True)
 class Policy:
     version: str
     time: TimePolicy
@@ -149,6 +162,7 @@ class Policy:
     egress: EgressPolicy
     rail: RailPolicy
     boards: BoardPolicy
+    keyless: KeylessPolicy
 
 
 class _Table:
@@ -251,6 +265,7 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         egress=root.section("egress", EgressPolicy),
         rail=_rail(root.table("rail")),
         boards=root.section("boards", BoardPolicy),
+        keyless=root.section("keyless", KeylessPolicy),
     )
 
 

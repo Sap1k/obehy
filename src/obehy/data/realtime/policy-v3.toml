@@ -1,8 +1,8 @@
 # Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
-# docs/R2_SLICE.md section 8).
+# docs/R2_SLICE.md section 8; v3 adds [keyless]).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "2"
+policy_version = "3"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -130,3 +130,20 @@ imminent_refresh_s = 300
 ceiling_per_min = 60
 slowdown_s = 900
 slow_latency_factor = 2.0
+
+[keyless]
+# Keyless inference (BASE_PLAN.md 19.2, `infer/keyless`; first source Arriva Express). Candidates
+# are the line's trips to the destination whose schedule, widened by candidate_window_s, covers
+# the observation. Evidence: each departure seen as a next-stop change, against the candidate's
+# scheduled departure from the call before (median residual); before any, the position's
+# timetable time on the candidate's path within max_path_distance_m. The best candidate binds
+# when its residual is at most accept_s (gps_accept_s for a position alone) and the runner-up's
+# is at least margin_s larger; otherwise ambiguous. Express trips run about hourly.
+candidate_window_s = 1800
+episode_gap_s = 1800
+accept_s = 180
+gps_accept_s = 600
+margin_s = 900
+max_path_distance_m = 300
+# Stop events go to history once this many departures agree with the bound trip.
+confirm_departures = 2

@@ -26,6 +26,7 @@ from obehy.realtime.model import (
     Effect,
     Feed,
     FeedState,
+    LineRef,
     Observation,
     PlatformAssignment,
     ServiceDay,
@@ -56,6 +57,14 @@ def shipped_semantics() -> dict[tuple[str, str], SourceSemantics]:
 
 def _refs(observation: Observation) -> set[KeyRef]:
     return {(key.namespace, key.key) for key in observation.all(TripKey)}
+
+
+def _lines(observation: Observation) -> set[KeyRef]:
+    """Lines whose trips a keyless observation is inferred among."""
+
+    if observation.first(TripKey) is not None:
+        return set()
+    return {(line.namespace, line.value) for line in observation.all(LineRef)}
 
 
 def observation_days(observation: Observation) -> set[date]:
@@ -98,14 +107,16 @@ class Runner:
         """Load the static data of the observations' keys ahead of processing them."""
 
         refs: dict[Feed, set[KeyRef]] = defaultdict(set)
+        lines: dict[Feed, set[KeyRef]] = defaultdict(set)
         days: dict[Feed, set[date]] = defaultdict(set)
         for observation in observations:
             if observation.feed not in self.runtimes:
                 continue
             refs[observation.feed].update(_refs(observation))
+            lines[observation.feed].update(_lines(observation))
             days[observation.feed].update(observation_days(observation))
         for feed in sorted(days):
-            self.runtimes[feed].loader.ensure(refs[feed], days[feed])
+            self.runtimes[feed].loader.ensure(refs[feed], days[feed], lines[feed])
 
     def process(self, observations: Sequence[Observation]) -> list[Effect]:
         by_feed: dict[Feed, list[Observation]] = defaultdict(list)
@@ -121,11 +132,13 @@ class Runner:
                 by_feed[feed], key=lambda o: (o.received_at, o.source, o.raw.sha256, o.raw.item)
             )
             refs: set[KeyRef] = set()
+            lines: set[KeyRef] = set()
             days: set[date] = set()
             for observation in batch:
                 refs.update(_refs(observation))
+                lines.update(_lines(observation))
                 days.update(observation_days(observation))
-            runtime.loader.ensure(refs, days)
+            runtime.loader.ensure(refs, days, lines)
             for observation in batch:
                 effects.extend(self._step(runtime, observation))
         if self.writer is not None and effects:

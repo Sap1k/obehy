@@ -211,6 +211,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   uncertainty); per-stop holding and knock-on to the next trip of a tour wait for history
   learning and circulations (section 22). JrUtil's
   `serving-v5.json` time description still says noon − 12 h and needs correcting.
+  Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
+  only. Open: a replay of a recent day before `live_feeds = ["jdf"]`, `rt evaluate` of own GPS
+  delay against the source's, the travel-time provider interface.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -244,6 +247,15 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-12** — Arriva Express connector and keyless inference (`infer/keyless/`, policy v3
+  `[keyless]`), replay only. Candidates are the line's trips to the destination; the departures
+  seen as next-stop changes, else the position, pick one by time with a 15-minute margin; the
+  plate keeps the binding while its episode agrees, and stop events reach history after two
+  agreeing departures. New facts `LineRef`, `Destination`, `NextStopName` (fact schema 2; 1
+  still reads). The 25 h capture against `20261006T194555Z`: all 60 episodes with a departure
+  bound, each to the trip it fits, 96.2 % of reports; GTFS-RT check clean. ARRIVA-Q8: the
+  source's next stop can be a motorway junction. Own GPS lateness differs from the source's
+  delay by 132 s at the median; not yet evaluated against actual departures.
 - **2026-10-12** — DPMD and MPV net buses live on jdf. A day of capture (2026-10-11 16:09 UTC to
   2026-10-12 12:51 UTC, over midnight and the Monday start) replayed against `20261006T194555Z`:
   DPMD 617/617 running key groups bound, MPV net buses 20,685/20,941 (98.8 %), GTFS-RT check clean

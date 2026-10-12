@@ -10,13 +10,17 @@ from typing import Any, cast
 
 from obehy.realtime.model import (
     FACT_SCHEMA_VERSION,
+    READABLE_FACT_SCHEMAS,
     Delay,
     DelayReference,
+    Destination,
     EventKind,
     Fact,
     Interval,
+    LineRef,
     NextPoint,
     NextStop,
+    NextStopName,
     NextStopPrediction,
     PlatformAssignment,
     PlatformLabel,
@@ -45,6 +49,12 @@ def fact_to_json(fact: Fact) -> Json:
             return {"t": "vehicle_key", "id": source_vehicle_id}
         case TripKey(namespace, key):
             return {"t": "trip_key", "ns": namespace, "key": key}
+        case LineRef(namespace, value):
+            return {"t": "line_ref", "ns": namespace, "value": value}
+        case Destination(name):
+            return {"t": "destination", "name": name}
+        case NextStopName(name):
+            return {"t": "next_stop_name", "name": name}
         case Position(lat, lon, bearing):
             return {"t": "position", "lat": lat, "lon": lon, "bearing": bearing}
         case Delay(seconds, reference):
@@ -97,6 +107,12 @@ def fact_from_json(data: Json) -> Fact:
             return VehicleKey(str(data["id"]))
         case "trip_key":
             return TripKey(str(data["ns"]), str(data["key"]))
+        case "line_ref":
+            return LineRef(str(data["ns"]), str(data["value"]))
+        case "destination":
+            return Destination(str(data["name"]))
+        case "next_stop_name":
+            return NextStopName(str(data["name"]))
         case "position":
             bearing = data.get("bearing")
             return Position(
@@ -170,6 +186,6 @@ def facts_to_json(facts: tuple[Fact, ...]) -> Json:
 
 
 def facts_from_json(data: Json) -> tuple[Fact, ...]:
-    if data.get("v") != FACT_SCHEMA_VERSION:
-        raise FactSchemaError(f"fact schema {data.get('v')!r} is not {FACT_SCHEMA_VERSION}")
+    if data.get("v") not in READABLE_FACT_SCHEMAS:
+        raise FactSchemaError(f"fact schema {data.get('v')!r} is not {READABLE_FACT_SCHEMAS}")
     return tuple(fact_from_json(cast(Json, item)) for item in cast(list[Any], data["facts"]))

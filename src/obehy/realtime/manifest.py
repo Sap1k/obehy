@@ -22,6 +22,8 @@ DEMAND_QUERIES = ("station_boards",)
 CAPABILITIES = (
     "vehicle_key",
     "trip_key",
+    "line_ref",
+    "destination",
     "position",
     "delay",
     "source_state",

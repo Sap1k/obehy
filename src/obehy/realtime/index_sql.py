@@ -22,7 +22,17 @@ from typing import Any, LiteralString, cast
 import psycopg
 
 from obehy.realtime.geo import cumulative_m
-from obehy.realtime.index import Call, Index, KeyEntry, KeyRef, Location, Shape, Trip, parent_ref
+from obehy.realtime.index import (
+    CHILD_NAMESPACE,
+    Call,
+    Index,
+    KeyEntry,
+    KeyRef,
+    Location,
+    Shape,
+    Trip,
+    parent_ref,
+)
 from obehy.realtime.model import Feed
 from obehy.release.contract import load_contract
 from obehy.release.load import load_release
@@ -95,12 +105,19 @@ class IndexLoader:
         self.load_id = loads.load_ids[feed]
         self.index = Index(loads.run_id, feed)
 
-    def ensure(self, refs: Iterable[KeyRef], dates: Iterable[date]) -> Index:
-        """Load every key in `refs` (and its parent) not seen yet, and service dates for
-        `dates`; return the index."""
+    def ensure(
+        self, refs: Iterable[KeyRef], dates: Iterable[date], lines: Iterable[KeyRef] = ()
+    ) -> Index:
+        """Load every key in `refs` (and its parent) not seen yet, every trip key of the
+        `lines` (keyless sources), and service dates for `dates`; return the index."""
 
-        wanted = set(refs)
+        new_lines = sorted(
+            ref for ref in set(lines) if ref[0] in CHILD_NAMESPACE and ref not in self.index.lines
+        )
+        wanted = set(refs) | set(new_lines)
         wanted |= {parent for ref in wanted if (parent := parent_ref(ref)) is not None}
+        if new_lines:
+            wanted |= self._line_keys(new_lines)
         missing = self.index.missing(wanted)
         new_dates = set(dates) - self.index.loaded_dates
         if missing:
@@ -133,6 +150,29 @@ class IndexLoader:
         )
         if trips:
             self._load_trips(trips)
+
+    def _line_keys(self, lines: list[KeyRef]) -> set[KeyRef]:
+        """The trip keys of each line, by the source's key format (`<line>:<trip>`, as
+        `parent_ref` splits it); recorded in `Index.lines`."""
+
+        found: dict[KeyRef, set[str]] = defaultdict(set)
+        for namespace in sorted({namespace for namespace, _ in lines}):
+            child = CHILD_NAMESPACE[namespace]
+            values = sorted(line for ns, line in lines if ns == namespace)
+            for line, identifier in self._rows_first(
+                "SELECT DISTINCT split_part(identifier, ':', 1), identifier"
+                " FROM static.source_key WHERE namespace = %s"
+                " AND split_part(identifier, ':', 1) = ANY(%s) AND load_id = %s",
+                child,
+                values,
+            ):
+                found[(namespace, cast(str, line))].add(cast(str, identifier))
+        keys: set[KeyRef] = set()
+        for ref in lines:
+            identifiers = tuple(sorted(found.get(ref, ())))
+            self.index.lines[ref] = identifiers
+            keys |= {(CHILD_NAMESPACE[ref[0]], identifier) for identifier in identifiers}
+        return keys
 
     def _rows_first(self, query: LiteralString, *params: Any) -> list[tuple[Any, ...]]:
         # The load_id parameter goes last for queries that bind arrays first.

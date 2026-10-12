@@ -88,6 +88,27 @@ def test_unknown_keys_are_remembered_and_dates_extend(
     assert index.runs_on(service, later)
 
 
+def test_a_keyless_line_loads_its_trip_keys_and_trips(
+    connection: psycopg.Connection, tmp_path: Path
+) -> None:
+    tt = _timetable()
+    _load(connection, tmp_path, tt)
+    loads = run_loads(connection, "run-rt")
+    assert loads is not None
+    loader = IndexLoader(connection, loads, "jdf")
+    expected = tt.index()
+
+    index = loader.ensure([], [DAY], [("cis:line", "582492"), ("cis:line", "999999")])
+
+    assert index.line_keys("cis:line", "582492") == ("582492:143", "582492:144")
+    assert index.line_keys("cis:line", "999999") == ()
+    assert index.keys("cis:line", "999999") == ()  # no line: inference says no_line
+    for key in index.line_keys("cis:line", "582492"):
+        for entry in index.keys("cis:line_trip", key):
+            assert index.trip(entry.public_id) == expected.trip(entry.public_id)
+    assert "582493:1" not in {k for _, k in index.key_entries}  # another line stays unloaded
+
+
 def test_runs_are_found_by_run_id(connection: psycopg.Connection, tmp_path: Path) -> None:
     assert run_loads(connection, "missing") is None
     _load(connection, tmp_path, _timetable())

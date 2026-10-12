@@ -18,6 +18,12 @@ Rail runs (docs/R2_SLICE.md section 2): the instance of a CZPTT train is its who
 the service date, whichever source key bound it; history and assignments go to its public
 train-number journeys (`runs.py`). A source key that is ambiguous on its own (SZ-Q5: one TR,
 two timetables) falls back to the observation's further keys, in order.
+
+Keyless sources (`infer/keyless`, BASE_PLAN.md sections 19.2 and 19.5): an observation with a
+`LineRef` and no `TripKey` is bound by inference over its episode, keyed by the trip's own key
+(method `inferred`). The binding is kept without re-inference while the episode (line and
+destination) continues, the time stays in the journey's window and the episode does not
+contradict the trip; its stop events go to history only once enough departures confirm it.
 """
 
 from __future__ import annotations
@@ -28,7 +34,9 @@ from datetime import timedelta
 
 from obehy.realtime import timeline
 from obehy.realtime.index import IndexView, Trip
+from obehy.realtime.infer import keyless
 from obehy.realtime.infer.keyed import Match, bind, in_window, span
+from obehy.realtime.infer.keyless.episode import advance
 from obehy.realtime.model import (
     AssignVehicle,
     Binding,
@@ -38,6 +46,8 @@ from obehy.realtime.model import (
     Freshness,
     Instance,
     JourneyKey,
+    KeylessEpisode,
+    LineRef,
     Observation,
     ObservationResult,
     PlatformAssignment,
@@ -52,6 +62,7 @@ from obehy.realtime.model import (
     VehicleKey,
     VehicleState,
     VehicleStatus,
+    WriteEvent,
 )
 from obehy.realtime.platforms import apply_platform
 from obehy.realtime.policy import Policy
@@ -114,23 +125,53 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
             lambda match: _open(state, match, ctx, observation),
         )
     key = observation.first(TripKey)
-    if vehicle is None or key is None:
+    line = observation.first(LineRef)
+    previous = state.vehicles.get(vehicle) if vehicle is not None else None
+    episode: KeylessEpisode | None = None
+    if key is None and line is not None and vehicle is not None:
+        prior = previous.episode if previous is not None else None
+        semantics = ctx.semantics_of(observation)
+        episode = advance(prior, observation, semantics, ctx.policy.keyless)
+    if vehicle is None or (key is None and episode is None):
         effects.append(ObservationResult(observation, None, Reason.NO_KEY))
         if vehicle is not None:
             _set_vehicle(state, observation, vehicle, "unmatched", None, None, Reason.NO_KEY)
         return effects
 
-    previous = state.vehicles.get(vehicle)
-    binding = _continued(previous, key, observation, state, ctx)
+    if key is None:
+        assert line is not None and episode is not None
+        binding = keyless.continued(
+            previous, episode, observation.at, state.instances, ctx.index, ctx.policy
+        )
+        if binding is None:
+            found = keyless.bind(line, episode, observation, ctx.index, ctx.policy, ctx.plans)
+            result = found.result
+            if not isinstance(result, Match):
+                status: VehicleStatus = (
+                    "not_in_service" if result is Reason.NOT_IN_SERVICE else "unmatched"
+                )
+                _set_vehicle(state, observation, vehicle, status, None, None, result, episode)
+                effects.append(ObservationResult(observation, None, result))
+                return effects
+            binding = Binding(
+                vehicle, result.journey, result.trip.trip_id, "inferred", observation.at, False
+            )
+            effects.extend(_open(state, result, ctx, observation))
+            effects.extend(
+                AssignVehicle(vehicle, journey, observation.at)
+                for journey in state.instances[result.journey].public
+            )
+        binding = keyless.confirm(binding, episode, ctx.index, ctx.policy)
+    else:
+        binding = _continued(previous, key, observation, state, ctx)
     if binding is None:
+        assert key is not None
         result = _bind(observation, ctx)
         if isinstance(result, Match) and _stale(result, observation, ctx):
             _drop_unstarted(state, result.journey, vehicle)
             result = Reason.STALE_KEY
         if not isinstance(result, Match):
-            status: VehicleStatus = (
-                "not_in_service" if result is Reason.NOT_IN_SERVICE else "unmatched"
-            )
+            status = "not_in_service" if result is Reason.NOT_IN_SERVICE else "unmatched"
             _set_vehicle(state, observation, vehicle, status, key, None, result)
             effects.append(ObservationResult(observation, None, result))
             return effects
@@ -159,11 +200,13 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         )
         state.instances[binding.journey] = instance
         state.dirty.add(binding.journey)
+        if not binding.confirmed:  # realtime only until continuity confirms the inference
+            timeline_effects = [e for e in timeline_effects if not isinstance(e, WriteEvent)]
         effects.extend(timeline_effects)
     status = "positioning" if instance.lifecycle in ("forecast", "pre_trip") else "running"
     if instance.lifecycle == "finished":
         status = "layover"
-    _set_vehicle(state, observation, vehicle, status, key, binding, None)
+    _set_vehicle(state, observation, vehicle, status, key, binding, None, episode)
     effects.append(ObservationResult(observation, binding.journey, None, instance.public))
     return effects
 
@@ -408,6 +451,7 @@ def _set_vehicle(
     key: TripKey | None,
     binding: Binding | None,
     reason: Reason | None,
+    episode: KeylessEpisode | None = None,
 ) -> None:
     previous = state.vehicles.get(vehicle)
     position = observation.first(Position)
@@ -422,6 +466,7 @@ def _set_vehicle(
         binding=binding,
         position=position,
         reason=reason,
+        episode=episode,
     )
 
 

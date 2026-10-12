@@ -12,7 +12,7 @@ from tests.realtime.builder import timetable, with_unknown
 
 def test_policy_loads_and_resolves_modes() -> None:
     policy = load_policy()
-    assert policy.version == "2"
+    assert policy.version == "3"
     assert policy.time.max_delay_s("rail") == 14400
     assert policy.time.max_delay_s("bus") == 7200
     assert policy.progress.max_speed_mps("rail") == 45
@@ -72,8 +72,11 @@ def test_facts_round_trip_through_json() -> None:
 
     from obehy.realtime.model import (
         Delay,
+        Destination,
         Fact,
+        LineRef,
         NextStop,
+        NextStopName,
         Position,
         SourceDeparture,
         SourceState,
@@ -93,6 +96,11 @@ def test_facts_round_trip_through_json() -> None:
         SourceDeparture(instant(datetime(2026, 10, 10, 22, 54, tzinfo=UTC))),
         StopEvent("A", "departure", instant(datetime(2026, 10, 8, 10, tzinfo=UTC))),
         NextStop("B"),
+        LineRef("cis:line", "580916"),
+        Destination("Teplice,Celní"),
+        NextStopName("Teplice,Pražská"),
     )
     stored = json.loads(json.dumps(facts_to_json(facts)))
     assert facts_from_json(stored) == facts
+    # Version 2 only added fact types: warm replay still reads facts stored as version 1.
+    assert facts_from_json({**stored, "v": 1, "facts": stored["facts"][:2]}) == facts[:2]

@@ -193,6 +193,7 @@ class Timetable:
                 route = KeyEntry(spec.route_id, spec.valid_from, spec.valid_to)
                 if route not in index.key_entries.get(parent, ()):
                     index.key_entries[parent] = (*index.key_entries.get(parent, ()), route)
+                index.lines[parent] = tuple(sorted({*index.lines.get(parent, ()), spec.key}))
         for namespace, key, trip_id in self.aliases:
             spec = next(t for t in self.trips if t.trip_id == trip_id)
             entry = KeyEntry(trip_id, spec.valid_from, spec.valid_to)
