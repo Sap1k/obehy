@@ -83,7 +83,7 @@ def test_a_standing_bus_has_no_bearing() -> None:
     assert position is not None and position.bearing is None
 
 
-def test_dpmd_decodes_but_is_not_live_yet() -> None:
+def test_dpmd_decodes_and_is_live() -> None:
     (channel,) = [c for c in record.load_channels() if c.source == "dpmd"]
     assert (channel.source, channel.channel) in DECODERS
-    assert channel.feeds == ("jdf",) and channel.live_feeds == ()
+    assert channel.feeds == ("jdf",) and channel.live_feeds == ("jdf",)

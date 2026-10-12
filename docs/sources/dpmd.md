@@ -4,8 +4,9 @@ Status: **reverse-engineered from the public map page and a 3-minute capture (20
 12:25–12:28 local, a Saturday midday: 60 polls, 38 changed bodies, 9 buses in service, 56
 parked).** Keys checked against release `20261006T194555Z-06c0829d89aa` (serving schema 5.0).
 Recorded from 2026-10-11 (channel `dpmd/vehicles`, filter `dpmd@1`). Connector
-`sources/dpmd.py` (decoder version 1) decodes the archived JSON, live as in replay; it is not live
-yet (`live_feeds = []`) until a day of capture is replayed. Terms of use are still to be recorded.
+`sources/dpmd.py` (decoder version 1) decodes the archived JSON, live as in replay. Live on jdf
+since 2026-10-12, after a day of capture replayed clean (see Replay). Terms of use are still to be
+recorded.
 
 Dopravní podnik města Děčína, a.s. (DPMD) runs the Děčín city buses (lines 2xx). DÚK's vehicle
 list does not carry them: at 12:30 on the same day, none of its 236 vehicles was on a `515xxx`
@@ -127,6 +128,12 @@ The 40-second capture (2026-10-11 17:33, a Sunday, release `20261006T194555Z`): 
 key groups bound, GTFS-RT consistency check clean (11 trips, 155 stop time updates). Fixes were
 5–28 s old.
 
+The first day of capture (2026-10-11 16:09 UTC to 2026-10-12 12:51 UTC, 7,403 polls, over
+midnight and the Monday start, same release): 617 of 617 running key groups bound, GTFS-RT check
+clean (615 trips, 56,046 stop time updates). 4 bodies were unreadable: three cut off mid-transfer
+(106–377 KB of about 500 KB) and one empty; the recorder stored them unfiltered and replay skips
+them.
+
 ## Time and delay semantics
 
 - **Times are Prague local time without an offset**: `TimeStamp` (ISO, milliseconds) and `Čas`
@@ -199,7 +206,6 @@ Note it for R2 arbitration.
 ## Open questions
 
 - Terms of use: the endpoint is public with CORS `*`, and nothing is published about reuse.
-- How the source behaves around midnight, DST and service starts: the capture covers only
-  3 minutes at midday. A 25-hour capture (`obehy rt record`) is the next step, as for the other
-  sources.
+- How the source behaves around DST. Midnight and the service start were clean on the first
+  day of capture.
 - Does `Zpoždění` ever show early running at another time of day, or larger delays as hours?

@@ -244,6 +244,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-12** — DPMD and MPV net buses live on jdf. A day of capture (2026-10-11 16:09 UTC to
+  2026-10-12 12:51 UTC, over midnight and the Monday start) replayed against `20261006T194555Z`:
+  DPMD 617/617 running key groups bound, MPV net buses 20,685/20,941 (98.8 %), GTFS-RT check clean
+  for both. The MPV bus fields are settled against the timetable: field 6 is the current delay,
+  field 4 the delay at the last stop (frozen on departure), field 7 the scheduled departure at
+  the next stop. `ds` lags field 6 (MPVNET-Q9), so buses now read field 6 (decoder version 2).
+  MPV trains stay off live (MPVNET-Q8).
 - **2026-10-11** — Recording two new sources (no connectors yet):
   - `mpvnet` (`docs/sources/mpvnet.md`): the MPV net maps of IDOL, JIKORD, ODIS and IDZK, one
     channel each, every 15 s. Regional buses carry literal CIS keys and trains their numbers:

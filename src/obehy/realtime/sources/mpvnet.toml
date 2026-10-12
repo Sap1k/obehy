@@ -1,6 +1,6 @@
 # MPV net regional vehicle maps (docs/sources/mpvnet.md). One portal per channel, same payload.
 # The bounding box is fixed to the whole country: the portal returns its whole fleet anyway
-# (MPVNET-Q1). Buses go to jdf, trains to czptt. Not live yet (`live_feeds = []`): recorded and
+# (MPVNET-Q1). Buses go to jdf, trains to czptt. Not live yet (`live_feeds = ["jdf"]`): recorded and
 # replayable until a day of capture settles the delay fields; then buses first, trains after.
 source = "mpvnet"
 manifest_version = 1
@@ -12,7 +12,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = []
+live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
 semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 
@@ -29,7 +29,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = []
+live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
 semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 
@@ -46,7 +46,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = []
+live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
 semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 
@@ -63,7 +63,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = []
+live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
 semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 

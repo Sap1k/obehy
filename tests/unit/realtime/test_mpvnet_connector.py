@@ -65,7 +65,7 @@ def decode(*entries: dict[str, Any]) -> list[Observation]:
 
 
 def test_mpvnet_q4_q5_a_regional_bus_becomes_a_keyed_jdf_observation() -> None:
-    # MPVNET-Q4 (local time), Q5 (x is the latitude), Q6 (signed seconds).
+    # MPVNET-Q4 (local time), Q5 (x is the latitude), Q9 (field 6 is the delay).
     (obs,) = decode(bus())
     assert (obs.source, obs.channel, obs.feed) == ("mpvnet", "idol", "jdf")
     assert obs.first(VehicleKey) == VehicleKey("6L19269")
@@ -76,12 +76,27 @@ def test_mpvnet_q4_q5_a_regional_bus_becomes_a_keyed_jdf_observation() -> None:
 
 
 def test_mpvnet_q6_early_running_is_negative_whatever_the_letter() -> None:
-    (early,) = decode(bus(ds="$p-3~min.~58~s"))
-    (on_time,) = decode(bus(ds="$p0~min.~00~s"))
-    (just_early,) = decode(bus(ds="$p-0~min.~25~s"))
+    (early,) = decode(train(ds="$p-3~min.~58~s"))
+    (on_time,) = decode(train(ds="$p0~min.~00~s"))
+    (just_early,) = decode(train(ds="$p-0~min.~25~s"))
     assert early.first(Delay) == Delay(-238, "unknown")
     assert on_time.first(Delay) == Delay(0, "unknown")
     assert just_early.first(Delay) == Delay(-25, "unknown")
+
+
+def test_mpvnet_q9_a_bus_delay_is_field_6_not_the_lagging_ds() -> None:
+    # Bus 5L53480 on 670951:3 at 06:03:37 on 2026-10-12: held 174 s at its last stop (field 4),
+    # 191 s now (field 6), while `ds` still showed 174.
+    record = BUS.split("|")
+    record[4], record[6] = "174", "191"
+    (obs,) = decode(bus(cn="|".join(record), ds="$z2~min.~54~s"))
+    assert obs.first(Delay) == Delay(191, "unknown")
+    record[6] = "-25"
+    (early,) = decode(bus(cn="|".join(record)))
+    assert early.first(Delay) == Delay(-25, "unknown")
+    record[6] = ""
+    (unknown,) = decode(bus(cn="|".join(record)))
+    assert unknown.first(Delay) is None
 
 
 def test_mpvnet_q3_city_buses_and_entries_without_a_trip_are_dropped() -> None:
@@ -109,8 +124,8 @@ def test_mpvnet_q8_an_old_event_time_keeps_the_trip_but_drops_the_position() -> 
     assert obs.first(TripKey) == TripKey("czptt:train_number", "6615")
 
 
-def test_every_portal_decodes_but_none_is_live_yet() -> None:
+def test_every_portal_decodes_and_only_buses_are_live() -> None:
     channels = [c for c in record.load_channels() if c.source == "mpvnet"]
     assert [c.channel for c in channels] == list(mpvnet.CHANNELS)
     assert all((c.source, c.channel) in DECODERS for c in channels)
-    assert all(c.live_feeds == () and c.feeds == ("jdf", "czptt") for c in channels)
+    assert all(c.live_feeds == ("jdf",) and c.feeds == ("jdf", "czptt") for c in channels)

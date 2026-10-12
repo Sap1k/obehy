@@ -3,10 +3,10 @@
 Status: **probed on 2026-10-11** (Sunday, about 17:30 local): a few requests per portal, and
 a 40-second recording of all four channels. Keys checked against release
 `20261006T194555Z-06c0829d89aa` (serving schema 5.0). Recorded from 2026-10-11 on (`obehy
-realtime` archives every manifest channel). Connector `sources/mpvnet.py` (decoder version 1)
-is replayable but not live: the manifest's `live_feeds = []` keeps the worker from processing
-it until a day of capture settles the delay fields (buses first, trains after). Terms of use are
-still to be recorded.
+realtime` archives every manifest channel). Connector `sources/mpvnet.py` (decoder version 2).
+Buses are live on jdf since 2026-10-12, after a day of capture settled the delay fields and
+replayed clean (see Replay). Trains are not live (`live_feeds = ["jdf"]`) until their positions
+prove to be GPS (MPVNET-Q8). Terms of use are still to be recorded.
 
 MPV net runs the public vehicle maps of several regional integrated systems on one piece of
 software. Each portal is one channel of this source:
@@ -74,10 +74,10 @@ Storage at 15 s: about 46 KB per round of four polls, about 270 MB a day.
 | 1 | `630` | public line |
 | 2 | `4106` | CIS trip number (*spoj*); for city buses a course number, not a trip (MPVNET-Q3) |
 | 3 | `Nové Město p.Smrkem,Ludvíkov,Jednota` | the last stop passed (empty before the first one) |
-| 4 | `114` | delay in seconds, signed (hypothesis: at the stop in 3) |
-| 5 | `Nové Město p.Smrkem,Přebytek` | the next stop (hypothesis) |
-| 6 | `137` | delay in seconds, signed (hypothesis: current or at the stop in 5); `ds` equals 4 or 6 |
-| 7 | `1046` | a minute of the day (`17:26`); which scheduled time is open |
+| 4 | `114` | delay at the stop in 3, signed seconds: it grows while the bus stands there and freezes when it leaves |
+| 5 | `Nové Město p.Smrkem,Přebytek` | the next stop |
+| 6 | `137` | current delay, signed seconds, updated between stops (MPVNET-Q9) |
+| 7 | `1046` | scheduled departure at the stop in 5, as a minute of the day (`17:26`) |
 | 8, 9 | `Świeradów-Zdrój,…`, `Liberec,aut.nádr.` | first and last stop of the trip |
 | 10 | `0` / `1` | unknown flag |
 | 11 | `6SJ4698`, `Ev. č. 226` | licence plate, or fleet number for city buses |
@@ -117,6 +117,25 @@ The 40-second capture (2026-10-11 17:33, release `20261006T194555Z`, jdf only):
   of the last event, often 15–20 minutes old, so most train positions fall outside the skew and
   are dropped (MPVNET-Q8).
 
+The first day of capture (2026-10-11 16:09 UTC to 2026-10-12 12:51 UTC, about 4,930 polls per
+portal, over midnight and the Monday start, same release, jdf only, decoder version 1):
+
+- 20,685 of 20,941 running bus key groups bound (98.8 %); unbound observations: 52,230
+  `not_active`, 1,703 `no_line`, 1,176 `no_trip`, 467 `not_in_service`, against 2.80 M bound;
+- the GTFS-RT consistency check is clean (20,584 trips, 3.15 M stop time updates);
+- 6–10 timeouts per portal, no unreadable body, 4 gaps of at most 157 s.
+
+The bus fields against the timetable over the same day (2.86 M regional bus records; the stop
+names in fields 3 and 5 match the trip's calls for 96 % and 94 %):
+
+- field 7 equals the scheduled departure at the stop in field 5 to the minute in 94.3 %, and the
+  scheduled times at the stop in 3 in about 3 %;
+- within one stretch between stops field 4 does not change in 80.6 % of consecutive readings, and
+  grows by one second per second while the bus stands at the stop in 3; it equals field 6 when
+  the bus reaches a stop;
+- field 6 changes in 77 % of consecutive readings, falling while a late bus catches up;
+- `ds` equals field 6 in 66 % and field 4 in 62 % (MPVNET-Q9).
+
 ## Quirks
 
 | ID | Quirk | Handling |
@@ -129,10 +148,11 @@ The 40-second capture (2026-10-11 17:33, release `20261006T194555Z`, jdf only):
 | MPVNET-Q6 | the delay is signed seconds, but `ds`'s sign letter says `p` for both 0 and early | the number is used, never the letter |
 | MPVNET-Q7 | a request without `origin` gets HTTP 400 | the manifest sends it |
 | MPVNET-Q8 | a train's `dt`/`tm` is the time of its last event, not of the position (ČD in whole minutes); trains have no unit identity | the train number is its vehicle key; positions older than the skew are dropped; trains stay off live until it is known whether their positions are GPS or derived (from SŽ, which would duplicate `sz-mapa`) |
+| MPVNET-Q9 | a bus's `ds` lags its current delay: it often still shows field 4, the delay at the last stop, while field 6 has moved on (bus 5L53480 on `670951:3`, 2026-10-12 06:03–06:04 UTC: field 6 191 → 182 → 169 s, `ds` 174 s throughout) | the bus delay is field 6; `ds` is used for trains only, where it equals field 4 |
 
 ## Open questions
 
-- Which delays and times fields 4, 6 and 7 of a bus are. Settle this on the 25-hour capture,
-  against the trips' scheduled times.
-- How the source behaves around midnight, DST and service starts.
+- Field 4 is an observed departure delay at a named stop. The core has no stop-event fact from
+  a vehicle source yet; use it when it does.
+- How the source behaves around DST.
 - Terms of use.
