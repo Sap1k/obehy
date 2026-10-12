@@ -421,3 +421,20 @@ def test_the_same_fix_again_is_no_news() -> None:
     # A new fix time is news even where nothing else changed (a vehicle standing).
     still = observe("2026-10-08 08:03:15", position=east(500), delay=60)
     assert step(run.state, still, run.ctx) != []
+
+
+def test_a_bus_reported_by_two_sources_is_one_vehicle_in_gtfs_rt() -> None:
+    from obehy.realtime.core import refresh
+    from obehy.realtime.emit.gtfs_rt import feed_message
+
+    run = Run().at("08:00", east(0)).at("08:03", east(500), delay=60)
+    run.at("08:03", east(510), vehicle="842", source="dpmd")  # the same bus, the city's feed
+    now = local("2026-10-08 08:03:10")
+    refresh(run.state, now, POLICY)
+    estimate_all(run.state, run.ctx)
+    message = feed_message(run.state, now)
+    assert len(run.state.vehicles) == 2  # both bound to the journey
+    positions = [e for e in message.entity if e.HasField("vehicle")]
+    (update,) = [e.trip_update for e in message.entity if e.HasField("trip_update")]
+    assert [e.id for e in positions] == ["vehicle:duk:1001"]  # the source the tracker follows
+    assert update.vehicle.id == "duk:1001"

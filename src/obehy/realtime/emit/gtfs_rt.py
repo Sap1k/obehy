@@ -10,10 +10,12 @@ passenger stops are never published. A platform mapped to a static boarding poin
 becomes `assigned_stop_id`, even on a call without predicted times; a platform that only has a
 label (a big station's platform number) is not published here.
 
-A rail run is one train however many vehicles report it: coupled DÚK units each have a GPS,
-and the SŽ map is a vehicle of its own. It gets one VehiclePosition under an opaque vehicle ID
-that is stable for the run's day, labelled with the current train number; the position is the
-leading vehicle's of the source fusion last tracked (`track_source`), else any bound one's.
+A bus reported by several sources (DÚK and a city's own feed) is published once, from the
+source the tracker follows. A rail run is one train however many vehicles report it: coupled
+DÚK units each have a GPS, and the SŽ map is a vehicle of its own. It gets one VehiclePosition
+under an opaque vehicle ID that is stable for the run's day, labelled with the current train
+number; the position is the leading vehicle's of the source fusion last tracked
+(`track_source`), else any bound one's.
 """
 
 from __future__ import annotations
@@ -116,6 +118,26 @@ def _run_position(instance: Instance, bound: list[VehicleState]) -> VehicleState
     return placed[0] if placed else None
 
 
+def _one_source(instance: Instance, vehicles: list[VehicleId], state: FeedState) -> list[VehicleId]:
+    """The vehicles that stand for a journey (not a rail run): those of one source. Several
+    sources report some buses (DÚK and a city's own feed); each would be a vehicle of its own,
+    one bus twice on the map. The source the tracker follows is chosen (the preferred fresh
+    one), else the first source with a position; several vehicles of one source stay
+    (DUK-Q11)."""
+
+    sources = {v.source for v in vehicles}
+    if len(sources) <= 1:
+        return vehicles
+    placed = sorted({v.source for v in vehicles if state.vehicles[v].position is not None})
+    if instance.track_source in placed:
+        source = instance.track_source
+    elif placed:
+        source = placed[0]
+    else:
+        source = min(sources)
+    return [v for v in vehicles if v.source == source]
+
+
 def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str) -> bytes:
     assert current.position is not None
     entity = rt.FeedEntity()
@@ -210,6 +232,10 @@ class FeedEmitter:
         for vehicle, current in sorted(state.vehicles.items()):
             if current.binding is not None:
                 vehicles_of[current.binding.journey].append(vehicle)
+        for journey, vehicles in vehicles_of.items():
+            instance = state.instances.get(journey)
+            if instance is not None and not instance.parts:
+                vehicles_of[journey] = _one_source(instance, vehicles, state)
 
         trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
         for journey, instance in sorted(state.instances.items()):

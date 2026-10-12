@@ -247,6 +247,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-12** — A bus reported by several sources (DÚK and a city's own feed) was two
+  vehicles in GTFS-RT. Its journey now publishes the vehicles of one source only, the one the
+  tracker follows, and its TripUpdate names that vehicle. Unit test; not replayed.
 - **2026-10-12** — Realtime worker CPU and memory pass (policy v5). Memory: the lazy index and
   plan cache are swept hourly in place of keys not named for 4 h that no live journey needs,
   and rebuilt daily at 03:30 from the live journeys; tracker history keeps only
