@@ -91,11 +91,14 @@ without a report).
 4. **Decision:** the best candidate binds when its residual is at most 3 minutes (10 for a
    position alone) and the runner-up is at least 15 minutes worse; otherwise `ambiguous`.
 
+A bus is matched once, when it logs on and leaves its first stop (or by position before that).
 Once bound, the plate keeps the binding (`BASE_PLAN.md` section 19.5) while the episode
-continues, the time stays in the journey's window and its departures agree with the trip; a new
-line or destination, or a departure off by 15 minutes, infers again. Stop events go to history
-only once two departures agree with the trip. Express trips run back and forth on the same
-line, so the circulation prior (section 22) will help pick the next trip.
+continues and the time stays in the journey's window; only a new line or destination, or 30
+minutes of silence, infers again. The bound trip is never re-scored on the way, because the
+source's delay is stale between stops (ARRIVA-Q10): its delay comes from GPS progress. Stop
+events go to history once the bus has left two stops of the trip, in order. Express trips run
+back and forth on the same line, so the circulation prior (section 22) will help pick the next
+trip.
 
 Replays against release `20261006T194555Z`, which has no route shapes for these lines, so
 positions are judged on straight lines between stops. Each bound episode was checked against
@@ -153,6 +156,7 @@ plausible layovers:
 | ARRIVA-Q7 | the response is the whole fleet; a batch request without `referer` fails | request headers as above; only Arriva Express entries are kept (filter and connector) |
 | ARRIVA-Q8 | `lastStopName` also names places that are not stops of the timetable (`křížení D46 na D1`, a motorway junction on 721341) | a departure from a name the candidate lacks is neither evidence nor contradiction |
 | ARRIVA-Q9 | `lastStopName` can stay on a stop long after the bus left it (the origin, for a whole motorway leg of an hour or two), with delay 0 | a name change more than `departure_radius_m` (2 km) from the stop left gives no time; the position is judged on the whole path when it is not between the stop before the next stop and the next stop |
+| ARRIVA-Q10 | `delay` changes only when the bus leaves a stop: between stops it stays at the last stop's value however late the bus gets (a bus stuck on the D8 at Zdiby, due in Praha 20 minutes ago, still reports 3 minutes) | used only at the moment of a departure, to match the trip once; a bound trip is never re-scored, and the delay shown comes from GPS progress (`estimate.own_lateness`) |
 
 ## Open questions
 

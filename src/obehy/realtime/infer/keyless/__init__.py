@@ -18,7 +18,7 @@ from typing import Literal
 from obehy.realtime.index import IndexView
 from obehy.realtime.infer.keyed import Match, in_window, span
 from obehy.realtime.infer.keyless.candidates import candidates
-from obehy.realtime.infer.keyless.score import bound_contradicts, place, position_residual
+from obehy.realtime.infer.keyless.score import place, position_residual
 from obehy.realtime.model import (
     Binding,
     JourneyKey,
@@ -107,9 +107,10 @@ def continued(
     index: IndexView,
     policy: Policy,
 ) -> Binding | None:
-    """An inferred binding continues while its episode does, the time stays in the journey's
-    window and the episode does not contradict the trip (section 19.5); otherwise None, and the
-    vehicle is inferred again."""
+    """An inferred binding continues while its episode does (same line and destination, no long
+    silence) and the time stays in the journey's window (section 19.5); otherwise None, and the
+    vehicle is inferred again. A bound trip is never re-scored on the way: the source's delay is
+    stale between stops (ARRIVA-Q10), and the delay comes from GPS progress."""
 
     if previous is None or previous.binding is None or previous.binding.method != "inferred":
         return None
@@ -120,21 +121,18 @@ def continued(
         return None
     trip = index.trip(binding.trip_id)
     match = Match(binding.journey, trip, *span(trip, binding.journey))
-    if not in_window(match, at, policy):
-        return None
-    contradicted, _ = bound_contradicts(match, episode, index, policy)
-    return None if contradicted else binding
+    return binding if in_window(match, at, policy) else None
 
 
 def confirm(binding: Binding, episode: KeylessEpisode, index: IndexView, policy: Policy) -> Binding:
-    """An inferred binding is confirmed once `confirm_departures` of its episode's departures
-    agree with the trip."""
+    """An inferred binding is confirmed once the vehicle has left `confirm_departures` stops of
+    the trip, in its order; times are not compared (ARRIVA-Q10)."""
 
     if binding.confirmed:
         return binding
     trip = index.trip(binding.trip_id)
     match = Match(binding.journey, trip, *span(trip, binding.journey))
-    _, agreeing = bound_contradicts(match, episode, index, policy)
-    if agreeing >= policy.keyless.confirm_departures:
+    placed = place(match, episode, index, policy)
+    if placed is not None and len(placed.residuals) >= policy.keyless.confirm_departures:
         return replace(binding, confirmed=True)
     return binding

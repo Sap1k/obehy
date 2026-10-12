@@ -21,9 +21,9 @@ two timetables) falls back to the observation's further keys, in order.
 
 Keyless sources (`infer/keyless`, BASE_PLAN.md sections 19.2 and 19.5): an observation with a
 `LineRef` and no `TripKey` is bound by inference over its episode, keyed by the trip's own key
-(method `inferred`). The binding is kept without re-inference while the episode (line and
-destination) continues, the time stays in the journey's window and the episode does not
-contradict the trip; its stop events go to history only once enough departures confirm it.
+(method `inferred`), once. The binding is kept without re-inference while the episode (line
+and destination) continues and the time stays in the journey's window; its stop events go to
+history once the vehicle has left enough of the trip's stops.
 """
 
 from __future__ import annotations

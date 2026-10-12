@@ -134,21 +134,3 @@ def position_residual(
     ranged = [p for p in near if lo <= p.along_m <= hi] or near
     residuals = [abs(plan.timetable.lateness_s(at, p.along_m) - expected) for p in ranged]
     return min(residuals) if residuals else None
-
-
-def bound_contradicts(
-    match: Match, episode: KeylessEpisode, index: IndexView, policy: Policy
-) -> tuple[bool, int]:
-    """For a bound vehicle: whether its episode now contradicts the trip (departures out of
-    order, or the last one off by `margin_s`), and how many departures agree within
-    `accept_s`."""
-
-    placed = place(match, episode, index, policy)
-    if placed is None:
-        return True, 0
-    keyless = policy.keyless
-    timed = [r for r in placed.residuals if r is not None]
-    agreeing = sum(1 for r in timed if r <= keyless.accept_s)
-    if timed and timed[-1] > keyless.margin_s:
-        return True, agreeing
-    return False, agreeing

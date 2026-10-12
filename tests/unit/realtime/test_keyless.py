@@ -240,3 +240,20 @@ def test_arriva_q9_a_next_stop_stuck_on_the_origin_is_no_departure_time() -> Non
         seen("2026-10-08 11:41", following="E", where=4.1),
     )
     assert [result(s) for s in steps] == [(journey(3), None)] * 2
+
+
+def test_arriva_q10_a_bound_trip_is_not_rescored_by_a_stale_delay() -> None:
+    # Bound on the 11:00 trip, the bus is stuck: it leaves C 25 minutes late claiming 3. The
+    # departure fits no trip, but the binding holds, and the lateness is the tracker's.
+    state, steps = run(
+        express(),
+        seen("2026-10-08 10:59", following="A", where=0),
+        seen("2026-10-08 11:01", following="B", delay_min=1, where=0.2),
+        seen("2026-10-08 11:11", following="C", delay_min=1, where=1.2),
+        seen("2026-10-08 11:40", following="C", delay_min=1, where=1.9),
+        seen("2026-10-08 11:45", following="D", delay_min=3, where=2.2),
+    )
+    assert [result(s) for s in steps] == [(journey(3), None)] * 5
+    track = state.instances[journey(3)].track
+    assert track is not None and track.hypotheses
+    assert track.hypotheses[0].lateness_s > 20 * 60  # GPS, not the source's 3 minutes
