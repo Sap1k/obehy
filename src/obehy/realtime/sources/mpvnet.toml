@@ -1,9 +1,12 @@
 # MPV net regional vehicle maps (docs/sources/mpvnet.md). One portal per channel, same payload.
 # The bounding box is fixed to the whole country: the portal returns its whole fleet anyway
-# (MPVNET-Q1). Buses go to jdf, trains to czptt. Not live yet (`live_feeds = ["jdf"]`): recorded and
-# replayable until a day of capture settles the delay fields; then buses first, trains after.
+# (MPVNET-Q1). Buses go to jdf, trains to czptt. Buses are live since 2026-10-12; trains are not
+# (`live_feeds = ["jdf"]`) until their positions prove to be GPS (MPVNET-Q8).
 source = "mpvnet"
 manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "MPV net regional vehicle maps"
+covers = "Vehicles of IDOL (Liberecký kraj), JIKORD (Jihočeský kraj), ODIS (Moravskoslezský kraj) and IDZK (Zlínský kraj): positions and delays."
 
 # IDOL, Liberecký kraj
 [[channel]]

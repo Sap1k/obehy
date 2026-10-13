@@ -2,13 +2,15 @@
 
 nginx serves each static feed under a stable name straight from ``releases/active``
 (``deploy/nginx.conf``), so the URLs never change; this writes the page that lists them, with
-sizes and the release they come from, as ``index.html`` and ``feeds.json``.
+sizes and the release they come from, as ``index.html`` and ``feeds.json``. The realtime sources
+it names come from the connector manifests (`title`, `covers` and the channels' live feeds).
 """
 
 from __future__ import annotations
 
 import html
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +18,7 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from obehy.pipeline.files import atomic_output_path
+from obehy.realtime.record import Source, load_sources
 
 
 @dataclass(frozen=True)
@@ -32,33 +35,18 @@ STATIC_FEEDS = (
     Feed("cz-jdf-filtered-gtfs.zip", "jdf-filtered/gtfs.zip", "Buses (JDF), filtered"),
     Feed("cz-czptt-gtfs.zip", "czptt/gtfs.zip", "Rail (CZPTT), national"),
 )
-REALTIME_FEEDS = (
-    Feed("cz-jdf-gtfs-rt.pb", "", "Buses (JDF), GTFS-RT, updated every 10 s"),
-    Feed("cz-czptt-gtfs-rt.pb", "", "Rail (CZPTT), GTFS-RT, updated every 10 s"),
-)
 
 
 @dataclass(frozen=True)
-class RealtimeSource:
+class RealtimeFeed:
+    feed: str  # the core feed that writes it (a manifest's `feeds`)
     name: str
-    feed: str  # the GTFS-RT file it feeds
-    covers: str
+    title: str
 
 
-# What the worker currently runs (realtime/sources/*.toml); update with it.
-REALTIME_SOURCES = (
-    RealtimeSource(
-        "DÚK vehicle positions (Ústecký kraj)",
-        "cz-jdf-gtfs-rt.pb",
-        "DÚK regional buses, Teplice city buses; Ústí nad Labem city buses (DPmÚL) only in "
-        "part. Positions, and delays measured from GPS against the timetable.",
-    ),
-    RealtimeSource(
-        "DÚK train positions and SŽ train map, fused",
-        "cz-czptt-gtfs-rt.pb",
-        "Trains nationwide from the SŽ map (positions, passages at railway points, delays), "
-        "DÚK GPS in Ústecký kraj, and platforms from SŽ station boards where they are tracks.",
-    ),
+REALTIME_FEEDS = (
+    RealtimeFeed("jdf", "cz-jdf-gtfs-rt.pb", "Buses (JDF), GTFS-RT, updated every 10 s"),
+    RealtimeFeed("czptt", "cz-czptt-gtfs-rt.pb", "Rail (CZPTT), GTFS-RT, updated every 10 s"),
 )
 
 
@@ -82,7 +70,23 @@ def _size(size: int) -> str:
     raise AssertionError("unreachable")
 
 
-def feed_list(release_dir: Path) -> dict[str, Any]:
+def _realtime_sources(sources: Sequence[Source]) -> list[dict[str, Any]]:
+    """The sources live on at least one feed, with the GTFS-RT files they feed."""
+
+    files = {feed.feed: feed.name for feed in REALTIME_FEEDS}
+    return [
+        {
+            "source": source.source,
+            "name": source.title,
+            "feeds": [files[feed] for feed in source.live_feeds],
+            "covers": source.covers,
+        }
+        for source in sources
+        if source.live_feeds
+    ]
+
+
+def feed_list(release_dir: Path, sources: Sequence[Source] | None = None) -> dict[str, Any]:
     release = cast(
         dict[str, Any], json.loads((release_dir / "release.json").read_text(encoding="utf-8"))
     )
@@ -106,10 +110,7 @@ def feed_list(release_dir: Path) -> dict[str, Any]:
         "run_id": release["run_id"],
         "completed_at": release.get("completed_at"),
         "feeds": feeds,
-        "realtime_sources": [
-            {"name": source.name, "feed": source.feed, "covers": source.covers}
-            for source in REALTIME_SOURCES
-        ],
+        "realtime_sources": _realtime_sources(load_sources() if sources is None else sources),
     }
 
 
@@ -124,9 +125,12 @@ def _html(listing: dict[str, Any]) -> str:
         for feed in listing["feeds"]
     )
     sources = "\n".join(
-        '<li><strong>{name}</strong> → <a href="{feed}">{feed}</a>: {covers}</li>'.format(
+        "<li><strong>{name}</strong> → {feeds}: {covers}</li>".format(
             name=html.escape(source["name"]),
-            feed=html.escape(source["feed"], quote=True),
+            feeds=", ".join(
+                f'<a href="{html.escape(feed, quote=True)}">{html.escape(feed)}</a>'
+                for feed in source["feeds"]
+            ),
             covers=html.escape(source["covers"]),
         )
         for source in listing["realtime_sources"]

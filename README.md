@@ -37,7 +37,7 @@ there is no sibling-checkout or parent-directory fallback.
 
 ## Recording realtime payloads
 
-`obehy rt record` polls the realtime sources (DÚK, SŽ, Arriva Express) and archives their
+`obehy rt record` polls every realtime source with a connector manifest and archives their
 payloads, unprocessed, for later replay. Channels are declared per connector in
 `src/obehy/realtime/sources/<source>.toml`. Recording needs no `obehy.local.toml`:
 

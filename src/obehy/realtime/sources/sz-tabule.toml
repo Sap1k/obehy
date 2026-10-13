@@ -2,6 +2,9 @@
 # on demand per station: only while trains are due there, within the [boards] policy budget.
 source = "sz-tabule"
 manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "SŽ station boards"
+covers = "Platforms of trains due at a station, where they are tracks; read only while trains are due there."
 
 [[channel]]
 name = "board"

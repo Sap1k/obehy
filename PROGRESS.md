@@ -247,6 +247,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-13** — The feed list's realtime sources come from the connector manifests: each
+  manifest has a `title` and `covers`, and the GTFS-RT files a source feeds follow its
+  channels' `live_feeds`, so the list no longer goes stale (it named only DÚK and SŽ). Unit
+  tests, ruff, pyright and import-linter pass; the page was not regenerated on the server.
 - **2026-10-12** — Stops on a *závlek* were placed on the wrong leg of the path: each stop took
   its nearest projection after the previous one, so a stop pin a metre nearer the return lane
   took the return visit's place and pushed every later stop to the end of the path (552650:1135

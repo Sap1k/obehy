@@ -1,6 +1,9 @@
 # SŽ train map (docs/sources/sz.md), decoded by realtime/sources/sz.py.
 source = "sz-mapa"
 manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "SŽ train map"
+covers = "Trains nationwide: positions, passages at railway points and delays."
 
 [[channel]]
 name = "trains"

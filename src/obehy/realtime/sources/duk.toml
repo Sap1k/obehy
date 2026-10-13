@@ -1,6 +1,9 @@
 # DÚK vehicle positions (docs/sources/duk.md). Buses go to jdf, trains (CISLineID = 0) to czptt.
 source = "duk"
 manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "DÚK vehicle positions (Ústecký kraj)"
+covers = "DÚK regional buses and trains, Teplice city buses; Ústí nad Labem city buses (DPmÚL) only in part. Positions, and delays measured from GPS against the timetable."
 
 [[channel]]
 name = "vehicles"

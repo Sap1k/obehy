@@ -75,6 +75,26 @@ class Channel:
         return _core_semantics(self.semantics, self.name)
 
 
+@dataclass(frozen=True)
+class Source:
+    """One connector manifest: its channels and how the public feed list names it."""
+
+    source: str
+    title: str  # e.g. "DÚK vehicle positions (Ústecký kraj)"
+    covers: str  # what it covers and contributes, one or two sentences
+    channels: tuple[Channel, ...]
+
+    @property
+    def live_feeds(self) -> tuple[str, ...]:
+        """The feeds any of its channels feeds live, in `FEED_NAMES` order."""
+
+        return tuple(
+            feed
+            for feed in FEED_NAMES
+            if any(feed in channel.feeds and channel.is_live(feed) for channel in self.channels)
+        )
+
+
 CORE_SEMANTICS = tuple(SourceSemantics.__dataclass_fields__)
 
 
@@ -193,7 +213,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     )
 
 
-def load_manifest(path: Path, filters: Sequence[str] = ()) -> list[Channel]:
+def load_source(path: Path, filters: Sequence[str] = ()) -> Source:
     try:
         with path.open("rb") as stream:
             document = tomllib.load(stream)
@@ -213,16 +233,35 @@ def load_manifest(path: Path, filters: Sequence[str] = ()) -> list[Channel]:
         if any(existing.name == channel.name for existing in channels):
             raise ManifestError(f"{path}: duplicate channel {channel.name}")
         channels.append(channel)
-    return channels
+    return Source(
+        source=source,
+        title=_string(document, "title", str(path)),
+        covers=_string(document, "covers", str(path)),
+        channels=tuple(channels),
+    )
+
+
+def load_manifest(path: Path, filters: Sequence[str] = ()) -> list[Channel]:
+    return list(load_source(path, filters).channels)
+
+
+def _manifest_files(path: Path) -> list[Path]:
+    files = sorted(path.glob("*.toml")) if path.is_dir() else [path]
+    if not files:
+        raise ManifestError(f"no connector manifests in {path}")
+    return files
+
+
+def load_sources(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Source]:
+    """Every connector manifest in a directory (by file name), or one manifest file."""
+
+    return [load_source(file, filters) for file in _manifest_files(path)]
 
 
 def load_channels(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Channel]:
     """Every channel of a manifest file, or of every `*.toml` in a directory (by file name)."""
 
-    files = sorted(path.glob("*.toml")) if path.is_dir() else [path]
-    if not files:
-        raise ManifestError(f"no connector manifests in {path}")
-    return [channel for file in files for channel in load_manifest(file, filters)]
+    return [channel for source in load_sources(path, filters) for channel in source.channels]
 
 
 def select_channels(channels: Sequence[Channel], sources: Sequence[str] | None) -> list[Channel]:

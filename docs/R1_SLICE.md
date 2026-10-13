@@ -117,6 +117,9 @@ split into these.
 ```toml
 source = "duk"
 manifest_version = 1
+title = "DÚK vehicle positions (Ústecký kraj)"   # the public feed list (obehy release feed-list)
+covers = "DÚK regional buses and trains, …"      # names the source by these, and lists the
+                                                 # GTFS-RT files its channels feed live
 
 [[channel]]
 name = "vehicles"

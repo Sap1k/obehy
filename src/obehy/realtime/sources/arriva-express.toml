@@ -4,6 +4,9 @@
 # with every episode that shows a departure bound to its trip.
 source = "arriva-express"
 manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "Arriva Express bus positions"
+covers = "Arriva Express long-distance buses: positions and delays. The source has no trip key; trips are inferred from line, destination and position."
 
 [[channel]]
 name = "buses"

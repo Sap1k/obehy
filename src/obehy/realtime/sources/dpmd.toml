@@ -1,8 +1,11 @@
 # DPMD (Děčín city buses) vehicle map (docs/sources/dpmd.md). `v` is a cache buster (DPMD-Q9);
-# the filter keeps the vehicles in service as JSON, which the connector decodes. Not live yet
-# (`live_feeds = ["jdf"]`): recorded and replayable until a day of capture is checked.
+# the filter keeps the vehicles in service as JSON, which the connector decodes. Live on jdf
+# since 2026-10-12, after a day of capture replayed clean.
 source = "dpmd"
 manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "DPMD vehicle map (Děčín)"
+covers = "Děčín city buses (DPMD): positions and delays."
 
 [[channel]]
 name = "vehicles"
