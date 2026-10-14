@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -11,12 +12,14 @@ import psycopg
 import pytest
 
 from obehy.realtime.archive import ArchiveWriter, Poll
+from obehy.realtime.emit.stored import stored_observations
 from obehy.realtime.index_sql import ensure_release, run_loads
+from obehy.realtime.model import Observation
 from obehy.realtime.policy import load_policy
 from obehy.realtime.replay import ReplayOptions, replay
 from obehy.realtime.runner import Runner
 from obehy.realtime.times import Instant, instant
-from obehy.realtime.worker import warm_start
+from obehy.realtime.warm import warm_start
 from tests.db.serving_fixture import write_release
 from tests.realtime.builder import ORIGIN, STEP_LON, Timetable, serving_rows, timetable
 
@@ -101,6 +104,11 @@ def _history(connection: psycopg.Connection) -> list[tuple[Any, ...]]:
     ).fetchall()
 
 
+def _stored(connection: psycopg.Connection, until: Instant) -> Iterator[list[Observation]]:
+    since = until - timedelta(hours=POLICY.warm_replay_hours)
+    return stored_observations(connection, since, until)
+
+
 @pytest.fixture
 def release(tmp_path: Path) -> Path:
     _archive(tmp_path / "archive")
@@ -151,7 +159,7 @@ def test_warm_restart_continues_like_an_uninterrupted_run(
     loads = run_loads(connection, "run-a")
     assert loads is not None
     runner = Runner(connection, loads, POLICY, ("jdf",))
-    assert warm_start(runner, connection, restart, POLICY.warm_replay_hours) > 0
+    assert warm_start(runner, _stored(connection, restart), restart) > 0
     replay(
         connection,
         _options(tmp_path, "after", release, since=restart),
@@ -178,7 +186,7 @@ def test_a_mid_day_release_switch_adds_a_revision(
     loads = run_loads(connection, "run-a")
     assert loads is not None
     runner = Runner(connection, loads, POLICY, ("jdf",))
-    warm_start(runner, connection, halfway, POLICY.warm_replay_hours)
+    warm_start(runner, _stored(connection, halfway), halfway)
 
     second = write_release(tmp_path / "b", "run-b", jdf=serving_rows(_timetable(drop_b=True)))
     from obehy.realtime.core import CORE_VERSION

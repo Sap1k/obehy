@@ -66,6 +66,13 @@ def candidate_service_dates(value: Instant) -> tuple[date, date, date]:
     return today - timedelta(days=1), today, today + timedelta(days=1)
 
 
+def next_multiple(at: Instant, every_s: int) -> Instant:
+    """The first instant after `at` on a round multiple of `every_s` seconds (emit ticks)."""
+
+    seconds = (int(at.timestamp()) // every_s + 1) * every_s
+    return instant(datetime.fromtimestamp(seconds, UTC))
+
+
 @lru_cache(maxsize=4096)  # a payload's vehicles share their seconds; bounded
 def _readings(wall: datetime) -> tuple[Instant, ...]:
     """Every instant that reads as the naive local time `wall`: none, one or two."""

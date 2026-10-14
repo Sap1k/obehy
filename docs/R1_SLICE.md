@@ -160,9 +160,13 @@ policy values: a missing key is a load error.
 ## 5. Restart by warm replay
 
 On start the worker loads the release index, then runs the core over the stored observations of
-the last `warm_replay.hours` with the replay clock, discarding effects except the final state
-rows. Polling starts after that. There is no checkpoint file and no second serialization format;
-the replay path is exercised on every restart.
+the last `warm_replay.hours` with the replay clock (housekeeping ticks on round multiples of the
+emit tick, as in `obehy rt replay`), discarding effects except the final state rows. The replay
+runs on a thread that reads ahead of the core on its own connection. Channels are polled and
+archived from the start; their observations wait in a backlog that runs with the writer attached
+once the replay is done, so a restart leaves no gap in the archive or `rt.observation`. There is
+no checkpoint file and no second serialization format; the replay path is exercised on every
+restart.
 
 A binding made before the window starts is re-made from its key inside the window, and the
 date rule (section 19.3: date chosen once from the admissible window) gives the same service date

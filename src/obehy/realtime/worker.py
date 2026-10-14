@@ -1,7 +1,9 @@
 """`obehy realtime`: the long-running realtime worker (BASE_PLAN.md section 18.3).
 
 1. Warm replay: the stored observations of the last `warm_replay.hours` run through the core
-   with no side effects, rebuilding in-memory state (there is no checkpoint format).
+   with no side effects on a thread, rebuilding in-memory state (there is no checkpoint
+   format). Channels are polled and archived meanwhile; their observations wait in a backlog
+   that runs, with the writer attached, once the replay is done, so a restart leaves no gap.
 2. Every channel is polled by the generic scheduler and archived; channels with a connector are
    decoded and their observations go through the shared `Runner` (core, effects, history).
    Demand channels (SŽ station boards) are read per station while trains are due there
@@ -17,6 +19,7 @@ import asyncio
 import gc
 import signal
 import sys
+import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -27,10 +30,12 @@ import psycopg
 
 from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.core import CORE_VERSION
-from obehy.realtime.emit.db import Writer, stored_observations
+from obehy.realtime.emit.db import Writer
+from obehy.realtime.emit.stored import stream_observations
 from obehy.realtime.index_sql import ReleaseLoads, active_loads
 from obehy.realtime.manifest import Channel, semantics_by_channel
-from obehy.realtime.model import Derivation, Feed
+from obehy.realtime.model import Derivation, Feed, Observation
+from obehy.realtime.phases import Phases
 from obehy.realtime.policy import Policy
 from obehy.realtime.record import SUMMARY_INTERVAL_S, ChannelStats, archive_poll, fetch
 from obehy.realtime.replay import DECODERS
@@ -39,6 +44,7 @@ from obehy.realtime.runtime.demand import FetchBody, StationDemand, run_demand
 from obehy.realtime.runtime.fetch import fetch_body
 from obehy.realtime.runtime.scheduler import FetchFn, run_channel
 from obehy.realtime.times import Instant, instant
+from obehy.realtime.warm import warm_start
 
 
 def _now() -> Instant:
@@ -51,22 +57,6 @@ def _log(message: str) -> None:
 
 def _writer(connection: psycopg.Connection, loads: ReleaseLoads, policy: Policy) -> Writer:
     return Writer(connection, Derivation(CORE_VERSION, policy.version, loads.run_id))
-
-
-def warm_start(runner: Runner, connection: psycopg.Connection, now: Instant, hours: int) -> int:
-    """Rebuild state from stored observations without side effects; returns how many."""
-
-    writer, runner.writer = runner.writer, None
-    count = 0
-    try:
-        for chunk in stored_observations(connection, now - timedelta(hours=hours), now):
-            runner.process(chunk)
-            count += len(chunk)
-        if count:
-            runner.tick(now, emit=False)
-        return count
-    finally:
-        runner.writer = writer
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,13 +81,19 @@ class PollHandler:
         self.stats: dict[str, ChannelStats] = {}
 
     def handle(self, channel: Channel, poll: Poll) -> None:
-        phases = self.runner.phases
+        observations = self.decode(channel, poll, self.runner.phases)
+        if observations:
+            self.runner.process(observations)
+
+    def decode(self, channel: Channel, poll: Poll, phases: Phases) -> list[Observation]:
+        """Archive the poll and decode the observations of its live feeds."""
+
         stats = self.stats.setdefault(channel.name, ChannelStats())
         with phases.time("archive"):
             sha256, body = archive_poll(self.archive, channel, poll, stats)
         decoder = DECODERS.get((channel.source, channel.channel))
         if decoder is None or not poll.ok or body is None or sha256 is None:
-            return
+            return []
         with phases.time("decode"):
             try:
                 observations = decoder(
@@ -109,10 +105,8 @@ class PollHandler:
                 )
             except ValueError as error:
                 _log(f"{channel.name}: undecodable payload: {error}")
-                return
-            observations = [o for o in observations if channel.is_live(o.feed)]
-        if observations:
-            self.runner.process(observations)
+                return []
+            return [o for o in observations if channel.is_live(o.feed)]
 
     def summary(self, over_s: float) -> list[str]:
         """The channels' poll counts and the phases' share of a core since the last summary."""
@@ -153,33 +147,68 @@ class _Worker:
             semantics_by_channel(channels),
         )
         self.handler = PollHandler(self.runner, ArchiveWriter(options.archive), policy)
+        # Until warm replay is done, polls are only archived and decoded into the backlog.
+        self.ready = asyncio.Event()
+        self.backlog: list[Observation] = []
+        self.backlog_phases = Phases()  # the runner's belong to the warm replay thread meanwhile
+        self.warm_stop = threading.Event()
         self.demand: StationDemand | None = None
         if any(channel.demand is not None for channel in channels):
             # Its own connection: due calls are queried off the event loop's thread.
             demand_connection = psycopg.connect(database_url, autocommit=True)
             self.demand = StationDemand(demand_connection, loads.load_ids["czptt"], policy.boards)
 
-    def start(self) -> None:
-        warmed = warm_start(self.runner, self.connection, _now(), self.policy.warm_replay_hours)
-        self.runner.writer = _writer(self.connection, self.runner.loads, self.policy)
-        self.runner.tick(_now())
+    async def start(self) -> None:
+        """Warm replay on a thread while the channels are polled, then the backlog."""
+
+        until = _now()
+        since = until - timedelta(hours=self.policy.warm_replay_hours)
+        chunks = stream_observations(self.database_url, since, until)
+        stopping = asyncio.create_task(self._stop_warm_replay())
+        try:
+            warmed = await asyncio.to_thread(
+                warm_start, self.runner, chunks, until, self.warm_stop, _log
+            )
+        finally:
+            stopping.cancel()
+        async with self.lock:
+            self.runner.writer = _writer(self.connection, self.runner.loads, self.policy)
+            backlog, self.backlog = self.backlog, []
+            if backlog:
+                self.runner.process(backlog)
+            self.runner.phases.reset()
+            self.runner.tick(_now())
+            self.ready.set()
         # What is alive now lives as long as the worker: keep it out of every GC pass.
         gc.collect()
         gc.freeze()
         release = self.runner.loads.run_id
-        _log(f"realtime worker on release {release}; warm replay of {warmed} observations")
+        _log(
+            f"realtime worker on release {release}; warm replay of {warmed} observations,"
+            f" {len(backlog)} more received meanwhile"
+        )
+
+    async def _stop_warm_replay(self) -> None:
+        await self.stop.wait()
+        self.warm_stop.set()
 
     async def on_poll(self, channel: Channel, poll: Poll) -> None:
+        if not self.ready.is_set():
+            # Nothing awaits between the check and the append: `start` takes the backlog whole.
+            self.backlog.extend(self.handler.decode(channel, poll, self.backlog_phases))
+            return
         async with self.lock:
             self.handler.handle(channel, poll)
 
     async def ticks(self) -> None:
+        await self.ready.wait()
         while not self.stop.is_set():
             await asyncio.sleep(self.policy.emit_tick_s)
             async with self.lock:
                 self.runner.tick(_now())
 
     async def summaries(self) -> None:
+        await self.ready.wait()
         last = time.monotonic()
         while not self.stop.is_set():
             await asyncio.sleep(SUMMARY_INTERVAL_S)
@@ -202,6 +231,7 @@ class _Worker:
                 )
                 if not notes:
                     continue
+                await self.ready.wait()
                 current = active_loads(self.connection)
                 if current.run_id == self.runner.loads.run_id:
                     continue
@@ -256,9 +286,16 @@ async def run_worker(
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, stop.set)
     worker = _Worker(database_url, channels, policy, options, stop)
-    worker.start()
     for channel in channels:
         worker.handler.stats[channel.name] = ChannelStats()
+
+    async def start() -> None:
+        try:
+            await worker.start()
+        except BaseException:
+            stop.set()  # the pollers end too
+            raise
+
     helpers: list[asyncio.Task[None]] = []
     if not options.once:
         helpers = [
@@ -267,7 +304,9 @@ async def run_worker(
             asyncio.create_task(worker.publications()),
         ]
     try:
-        await asyncio.gather(*(_poller(worker, channel, options, stop) for channel in channels))
+        await asyncio.gather(
+            start(), *(_poller(worker, channel, options, stop) for channel in channels)
+        )
     finally:
         for helper in helpers:
             helper.cancel()

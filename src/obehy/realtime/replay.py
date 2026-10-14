@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import heapq
 import json
-import math
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -49,7 +48,7 @@ from obehy.realtime.model import (
 from obehy.realtime.policy import Policy
 from obehy.realtime.runner import Runner
 from obehy.realtime.sources import arriva_express, dpmd, duk, mpvnet, sz, sz_tabule
-from obehy.realtime.times import Instant, instant, local_date
+from obehy.realtime.times import Instant, instant, local_date, next_multiple
 
 REPORT_SCHEMA_VERSION = 2
 LOOKAHEAD_POLLS = 40
@@ -123,11 +122,6 @@ def merged_polls(
 
 def _polls(options: ReplayOptions) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
     return merged_polls(options.archive, options.channels, options.start, options.end)
-
-
-def _next_tick(at: datetime, every_s: int) -> Instant:
-    seconds = math.floor(at.timestamp() / every_s + 1) * every_s
-    return instant(datetime.fromtimestamp(seconds, UTC))
 
 
 def replay(
@@ -204,11 +198,11 @@ class _Clock:
     def advance(self, at: Instant) -> None:
         every = self.options.gtfs_rt_every_s
         if self.next_tick is None:
-            self.next_tick = _next_tick(at, self.tick_s)
+            self.next_tick = next_multiple(at, self.tick_s)
             if every:
-                self.next_snapshot = _next_tick(at, every)
+                self.next_snapshot = next_multiple(at, every)
             if self.predictors is not None:
-                self.next_sample = _next_tick(at, int(SAMPLE_EVERY.total_seconds()))
+                self.next_sample = next_multiple(at, int(SAMPLE_EVERY.total_seconds()))
         while self.next_tick <= at:
             self.runner.tick(self.next_tick, emit=False)
             if self.next_sample is not None and self.next_sample <= self.next_tick:

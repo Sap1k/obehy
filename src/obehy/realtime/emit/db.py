@@ -8,7 +8,7 @@ month. Each `write` is one transaction. History rows carry the writer's derivati
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, LiteralString, cast
@@ -26,9 +26,7 @@ from obehy.realtime.model import (
     Instance,
     JourneyKey,
     LinkJourneys,
-    Observation,
     ObservationResult,
-    RawRef,
     RecordPlatform,
     SnapshotJourney,
     VehicleId,
@@ -36,8 +34,7 @@ from obehy.realtime.model import (
     VehicleState,
     WriteEvent,
 )
-from obehy.realtime.model_json import facts_from_json, facts_to_json
-from obehy.realtime.times import instant
+from obehy.realtime.model_json import facts_to_json
 
 HISTORY_TABLES = (
     "journey",
@@ -644,49 +641,4 @@ def clear_observations(
         "DELETE FROM rt.observation WHERE received_at >= %s AND received_at < %s"
         " AND source = ANY(%s)",
         (start, end, list(sources)),
-    )
-
-
-def stored_observations(
-    connection: psycopg.Connection, since: datetime, until: datetime, chunk: int = 20_000
-) -> Iterator[list[Observation]]:
-    """Stored observations received in [since, until), in processing order, `chunk` at a time
-    (warm replay); read through a server-side cursor, so hours of them are never in memory at
-    once."""
-
-    with (
-        connection.transaction(),
-        connection.cursor(name="warm_replay") as cursor,
-    ):
-        cursor.execute(
-            "SELECT source, channel, feed, received_at, observed_at, raw_sha256, raw_item,"
-            " decoder_version, facts FROM rt.observation"
-            " WHERE received_at >= %s AND received_at < %s"
-            " ORDER BY received_at, source, raw_sha256, raw_item",
-            (since, until),
-        )
-        while rows := cursor.fetchmany(chunk):
-            yield [_stored(*row) for row in rows]
-
-
-def _stored(
-    source: str,
-    channel: str,
-    feed: Feed,
-    received_at: datetime,
-    observed_at: datetime | None,
-    sha256: str,
-    item: int,
-    version: int,
-    facts: Any,
-) -> Observation:
-    return Observation(
-        source=source,
-        channel=channel,
-        feed=feed,
-        received_at=instant(received_at),
-        observed_at=None if observed_at is None else instant(observed_at),
-        raw=RawRef(sha256, item),
-        decoder_version=version,
-        facts=facts_from_json(facts),
     )
