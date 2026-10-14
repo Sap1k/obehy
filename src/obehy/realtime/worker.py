@@ -198,7 +198,15 @@ class _Worker:
             self.backlog.extend(self.handler.decode(channel, poll, self.backlog_phases))
             return
         async with self.lock:
-            self.handler.handle(channel, poll)
+            observations = self.handler.decode(channel, poll, self.runner.phases)
+            if not observations:
+                return
+            batches = self.runner.batches(observations)
+            if self.runner.needs_index(batches):
+                # Static data loads wait on the database: off the loop, so the other channels
+                # keep polling meanwhile.
+                await asyncio.to_thread(self.runner.load, batches)
+            self.runner.run(batches)
 
     async def ticks(self) -> None:
         await self.ready.wait()
@@ -232,7 +240,7 @@ class _Worker:
                 if not notes:
                     continue
                 await self.ready.wait()
-                current = active_loads(self.connection)
+                current = active_loads(listener)  # the main connection may be loading
                 if current.run_id == self.runner.loads.run_id:
                     continue
                 async with self.lock:

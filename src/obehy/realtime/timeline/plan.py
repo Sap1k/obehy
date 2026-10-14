@@ -16,7 +16,7 @@ from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.model import EventKind
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.path import Path, build_path
-from obehy.realtime.times import Instant, ServiceTime
+from obehy.realtime.times import Instant, ServiceTime, micros, scaled_micros
 
 Scheduled = tuple[tuple[Instant | None, Instant | None], ...]  # per call: (arrival, departure)
 
@@ -97,6 +97,10 @@ class _Span:
     window: Window
 
 
+def _us(at: Instant | None) -> int | None:
+    return None if at is None else micros(at)
+
+
 class Timetable:
     """When the timetable has the vehicle at a distance along the path.
 
@@ -106,7 +110,7 @@ class Timetable:
     call's arrival trigger. None where the timetable has no time.
     """
 
-    __slots__ = ("_spans", "_starts")
+    __slots__ = ("_bounds_us", "_spans", "_starts")
 
     def __init__(self, path: Path, scheduled: Scheduled, zones: tuple[StopZone, ...]) -> None:
         spans: list[_Span] = []
@@ -120,6 +124,10 @@ class Timetable:
             starts.append(start if i > 0 else path.call_distances_m[i])
         self._spans = tuple(spans)
         self._starts = tuple(starts)
+        # The windows in exact microseconds, for the tracker's inner loop (`lateness_us`).
+        self._bounds_us = tuple(
+            (_us(span.window.earliest), _us(span.window.latest)) for span in spans
+        )
 
     def window(self, along_m: float) -> Window | None:
         spans = self._spans
@@ -144,6 +152,31 @@ class Timetable:
 
         window = self.window(along_m)
         return 0.0 if window is None else window.lateness_s(at)
+
+    def lateness_us(self, at_us: int, along_m: float) -> float:
+        """`lateness_s` with the time in microseconds (`times.micros`); bit-identical."""
+
+        spans = self._spans
+        if not spans:
+            return 0.0
+        i = max(0, bisect_right(self._starts, along_m) - 1)
+        span = spans[i]
+        if along_m <= span.end_m or i == len(spans) - 1:
+            earliest, latest = self._bounds_us[i]
+            if along_m < span.start_m:
+                earliest = None
+        else:
+            leave, reach = self._bounds_us[i][1], self._bounds_us[i + 1][0]
+            if leave is None or reach is None:
+                return 0.0
+            gap = spans[i + 1].start_m - span.end_m
+            share = 0.0 if gap <= 0 else (along_m - span.end_m) / gap
+            earliest = latest = leave + scaled_micros(reach - leave, share)
+        if earliest is not None and at_us < earliest:
+            return (at_us - earliest) / 1_000_000
+        if latest is not None and at_us > latest:
+            return (at_us - latest) / 1_000_000
+        return 0.0
 
     def planned(self, at: Instant, along_m: float) -> Instant | None:
         """The timetable time of being at a place at `at`."""

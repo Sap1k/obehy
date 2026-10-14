@@ -31,7 +31,7 @@ from obehy.realtime.policy import ProgressPolicy
 from obehy.realtime.timeline.commit import Crossing, commit
 from obehy.realtime.timeline.path import Candidate, Path, candidates, point_at
 from obehy.realtime.timeline.plan import Plan
-from obehy.realtime.times import Instant
+from obehy.realtime.times import Instant, micros
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,15 +59,16 @@ def update(
         return Step(track or Track((), 0.0), None, (), None, False)
     live = track.hypotheses if track is not None else ()
     speed = policy.max_speed_mps(mode)
-    window = _search_window(live, at, speed, policy)
+    at_us = micros(at)
+    window = _search_window(live, at_us, speed, policy)
     found = candidates(
         plan.path, position.lon, position.lat, _sigma(policy), policy.reach_sigmas, window
     )
     if live:
-        extended = _extend(plan, live, found, position, at, speed, policy)
+        extended = _extend(plan, live, found, position, at, at_us, speed, policy)
         extended += _held(live, at, policy)
     else:
-        extended = _start(plan, found, position, at, policy)
+        extended = _start(plan, found, position, at, at_us, policy)
     if not extended:
         return _unmatched(track, at, policy)
 
@@ -85,7 +86,7 @@ def update(
     since = best.off_path_since
     off_route = since is not None and at - since >= timedelta(seconds=policy.off_route_hold_s)
     previous = track.off_path if track is not None else None
-    estimate = _off_path(plan, best, previous, position, at, speed, policy)
+    estimate = _off_path(plan, best, previous, position, at, at_us, speed, policy)
     new_track = Track(
         done.beam, done.committed_m, seen_at=at, crossed_at=done.crossed_at, off_path=estimate
     )
@@ -139,14 +140,14 @@ def _first_floor(beam: tuple[Hypothesis, ...]) -> float:
 
 
 def _search_window(
-    live: tuple[Hypothesis, ...], at: Instant, speed: float, policy: ProgressPolicy
+    live: tuple[Hypothesis, ...], at_us: int, speed: float, policy: ProgressPolicy
 ) -> tuple[float, float] | None:
     """The stretch of path any live hypothesis could have reached since its last fix; the whole
     path when there is none."""
 
     if not live:
         return None
-    elapsed = max((at - h.at).total_seconds() for h in live)
+    elapsed = max((at_us - h.at_us) / 1_000_000 for h in live)
     reach = policy.reach_sigmas * math.hypot(policy.gps_sigma_m, policy.chord_min_sigma_m)
     return (
         min(h.along_m for h in live) - policy.jitter_m,
@@ -159,6 +160,7 @@ def _start(
     found: list[Candidate],
     position: Position,
     at: Instant,
+    at_us: int,
     policy: ProgressPolicy,
 ) -> list[Hypothesis]:
     """The first fix: one hypothesis per candidate, with a prior on absolute lateness that is
@@ -166,12 +168,12 @@ def _start(
 
     out: list[Hypothesis] = []
     for candidate in found:
-        lateness = plan.timetable.lateness_s(at, candidate.along_m)
+        lateness = plan.timetable.lateness_us(at_us, candidate.along_m)
         sigma = policy.start_early_sigma_s if lateness < 0 else policy.start_lateness_sigma_s
         prior = -0.5 * (lateness / sigma) ** 2
         fit = _emission(candidate, position, plan.path, policy)
         history = (Placement(candidate.along_m, at),)
-        out.append(Hypothesis(candidate.along_m, at, lateness, fit + prior, history))
+        out.append(Hypothesis(candidate.along_m, at, lateness, fit + prior, history, at_us))
     return out
 
 
@@ -181,21 +183,27 @@ def _extend(
     found: list[Candidate],
     position: Position,
     at: Instant,
+    at_us: int,
     speed: float,
     policy: ProgressPolicy,
 ) -> list[Hypothesis]:
     """Each candidate continues the live hypothesis that reaches it most plausibly (Viterbi)."""
 
+    timetable = plan.timetable
+    jitter = policy.jitter_m
+    late: dict[float, float] = {}  # lateness at `at` per place, shared by the pairs
     out: list[Hypothesis] = []
     for candidate in found:
         fit = _emission(candidate, position, plan.path, policy)
         best: tuple[float, Hypothesis, float, float] | None = None  # score, from, along, late
         for h in live:
-            if candidate.along_m < h.along_m - policy.jitter_m:
+            if candidate.along_m < h.along_m - jitter:
                 continue  # backwards beyond GPS noise: impossible
             along = max(candidate.along_m, h.along_m)  # a small step back is no movement
-            lateness = plan.timetable.lateness_s(at, along)
-            move = _transition(h, along, at, lateness, speed, policy)
+            lateness = late.get(along)
+            if lateness is None:
+                lateness = late[along] = timetable.lateness_us(at_us, along)
+            move = _transition(h, along, at_us, lateness, speed, policy)
             if move is None:
                 continue
             score = h.log_p + move + fit
@@ -203,7 +211,8 @@ def _extend(
                 best = (score, h, along, lateness)
         if best is not None:
             score, h, along, lateness = best
-            out.append(Hypothesis(along, at, lateness, score, _placed(h.history, along, at)))
+            history = _placed(h.history, along, at)
+            out.append(Hypothesis(along, at, lateness, score, history, at_us))
     return out
 
 
@@ -235,6 +244,7 @@ def _off_path(
     previous: OffPath | None,
     position: Position,
     at: Instant,
+    at_us: int,
     speed: float,
     policy: ProgressPolicy,
 ) -> OffPath | None:
@@ -265,7 +275,7 @@ def _off_path(
     trigger = plan.zones[last + 1].arrival_m
     ceiling = min(
         end if trigger is None else trigger,
-        best.along_m + speed * (at - best.at).total_seconds(),
+        best.along_m + speed * ((at_us - best.at_us) / 1_000_000),
     )
     along = min(max(start + share * (end - start), floor), max(floor, ceiling))
     return OffPath(along, at, plan.timetable.lateness_s(at, along))
@@ -331,18 +341,18 @@ def _emission(
 def _transition(
     h: Hypothesis,
     along: float,
-    at: Instant,
+    at_us: int,
     lateness_s: float,
     speed: float,
     policy: ProgressPolicy,
 ) -> float | None:
-    """Log-likelihood of moving from `h` to `along` at `at`; None if impossible.
+    """Log-likelihood of moving from `h` to `along` at `at_us`; None if impossible.
 
     The speed limit allows only GPS jitter as slack, never the geometry's uncertainty: a loose
     chord widens where a fix may lie, not how far the vehicle may travel."""
 
     moved = along - h.along_m
-    elapsed = (at - h.at).total_seconds()
+    elapsed = (at_us - h.at_us) / 1_000_000
     if elapsed <= 0:
         return None
     if max(0.0, moved) - policy.jitter_m > speed * elapsed:

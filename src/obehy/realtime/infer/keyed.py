@@ -14,11 +14,12 @@ makes it the only candidate.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from functools import lru_cache
 
 from obehy.realtime.index import IndexView, Trip, parent_ref
 from obehy.realtime.model import JourneyKey, Reason, TripKey
-from obehy.realtime.policy import Policy
+from obehy.realtime.policy import Policy, TimePolicy
 from obehy.realtime.runs import run_journey
 from obehy.realtime.times import Instant, ServiceTime, candidate_service_dates
 
@@ -32,18 +33,29 @@ class Match:
 
 
 def span(trip: Trip, journey: JourneyKey) -> tuple[Instant, Instant]:
+    return _span(journey.service_date, trip.start, trip.end)
+
+
+# Both run for every fix of a bound vehicle (the binding is re-checked each time); bounded.
+@lru_cache(maxsize=1 << 15)
+def _span(day: date, start: int, end: int) -> tuple[Instant, Instant]:
+    return ServiceTime(day, start).instant(), ServiceTime(day, end).instant()
+
+
+@lru_cache(maxsize=1 << 15)
+def _admissible(
+    start: Instant, end: Instant, mode: str, time: TimePolicy
+) -> tuple[datetime, datetime]:
     return (
-        ServiceTime(journey.service_date, trip.start).instant(),
-        ServiceTime(journey.service_date, trip.end).instant(),
+        start - timedelta(seconds=time.pre_trip_s(mode)),
+        end + timedelta(seconds=time.max_delay_s(mode)),
     )
 
 
 def in_window(match: Match, at: Instant, policy: Policy) -> bool:
     """Whether `at` lies in the journey's admissible window (section 19.3, rule 2)."""
 
-    mode = match.trip.mode
-    lo = match.start - timedelta(seconds=policy.time.pre_trip_s(mode))
-    hi = match.end + timedelta(seconds=policy.time.max_delay_s(mode))
+    lo, hi = _admissible(match.start, match.end, match.trip.mode, policy.time)
     return lo <= at <= hi
 
 

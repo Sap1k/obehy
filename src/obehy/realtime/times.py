@@ -53,17 +53,53 @@ def _schedule_instant(service_date: date, seconds: int) -> Instant:
     return instant(wall.replace(tzinfo=PRAGUE, fold=0))
 
 
+_EPOCH = Instant(datetime(1970, 1, 1, tzinfo=UTC))
+_MICROSECOND = timedelta(microseconds=1)
+_HOUR_US = 3_600_000_000
+
+
 def local_date(value: Instant) -> date:
     """The Europe/Prague calendar date of an instant."""
 
-    return value.astimezone(PRAGUE).date()
+    return _local_date(micros(value) // _HOUR_US)
 
 
 def candidate_service_dates(value: Instant) -> tuple[date, date, date]:
     """Service dates an observation can belong to: local yesterday, today and tomorrow."""
 
-    today = local_date(value)
+    return _candidate_dates(micros(value) // _HOUR_US)
+
+
+# Prague's UTC offsets are whole hours, so the local date is the same for a whole UTC hour:
+# the conversions run several times per observation and are cached per hour (bounded).
+@lru_cache(maxsize=1 << 12)
+def _local_date(hour: int) -> date:
+    return datetime.fromtimestamp(hour * 3600, UTC).astimezone(PRAGUE).date()
+
+
+@lru_cache(maxsize=1 << 12)
+def _candidate_dates(hour: int) -> tuple[date, date, date]:
+    today = _local_date(hour)
     return today - timedelta(days=1), today, today + timedelta(days=1)
+
+
+def micros(value: Instant) -> int:
+    """Exact microseconds since the epoch, for arithmetic in the tracker's inner loop: a
+    difference of two divided by 1_000_000 is bit-identical to `timedelta.total_seconds()`."""
+
+    return (value - _EPOCH) // _MICROSECOND
+
+
+def scaled_micros(delta_us: int, factor: float) -> int:
+    """`delta_us` microseconds times `factor`, rounded as `timedelta * float` rounds (exactly,
+    half to even)."""
+
+    numerator, denominator = factor.as_integer_ratio()
+    q, r = divmod(delta_us * numerator, denominator)
+    r *= 2
+    if r > denominator or (r == denominator and q % 2 == 1):
+        q += 1
+    return q
 
 
 def next_multiple(at: Instant, every_s: int) -> Instant:

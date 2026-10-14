@@ -6,9 +6,9 @@ Frozen and slotted; a fact's JSON form for `rt.observation` is in `model_json.py
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Literal
+from typing import Literal, cast
 
 from obehy.realtime.times import Instant
 
@@ -223,15 +223,23 @@ class Observation:
     raw: RawRef
     decoder_version: int
     facts: tuple[Fact, ...]
+    # The first fact of each type (fact types do not subclass each other): `first` is read
+    # about a dozen times per observation.
+    _first: dict[type, Fact] = field(init=False, repr=False, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        first: dict[type, Fact] = {}
+        for fact in self.facts:
+            first.setdefault(type(fact), fact)
+        object.__setattr__(self, "_first", first)
 
     def first[T](self, kind: type[T]) -> T | None:
-        for fact in self.facts:
-            if isinstance(fact, kind):
-                return fact
-        return None
+        return cast("T | None", self._first.get(kind))
 
     def all[T](self, kind: type[T]) -> tuple[T, ...]:
-        return tuple(fact for fact in self.facts if isinstance(fact, kind))
+        if kind not in self._first:
+            return ()
+        return tuple(cast(T, fact) for fact in self.facts if type(fact) is kind)
 
     @property
     def at(self) -> Instant:

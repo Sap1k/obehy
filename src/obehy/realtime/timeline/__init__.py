@@ -10,12 +10,14 @@ tracks, the position lead, SŽ point events as anchors (docs/R2_SLICE.md section
 from __future__ import annotations
 
 from dataclasses import replace
+from functools import lru_cache
 
 from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.model import (
     CallState,
     Delay,
     Effect,
+    Freshness,
     Instance,
     Observation,
     PointEvent,
@@ -24,14 +26,15 @@ from obehy.realtime.model import (
     SourceState,
     WriteEvent,
 )
-from obehy.realtime.policy import Policy
+from obehy.realtime.policy import Policy, ProgressPolicy
 from obehy.realtime.timeline.commit import Crossing
 from obehy.realtime.timeline.fusion import (
     apply_point,
     merge,
-    note_position,
     note_source,
     position_leads,
+    tracks_with,
+    with_track,
 )
 from obehy.realtime.timeline.plan import PlanCache
 from obehy.realtime.timeline.progress import update
@@ -48,7 +51,7 @@ def advance(
 ) -> tuple[Instance, list[Effect]]:
     """Apply one bound observation to its instance."""
 
-    instance, previous, news = note_source(instance, observation, semantics)
+    track, previous, news = note_source(instance, observation, semantics)
     if not news:
         return instance, []  # SZ-Q6: an unchanged entry says nothing new
     position = observation.first(Position)
@@ -57,22 +60,26 @@ def advance(
     # while payloads keep coming) is no new information: it never moves progress, so event
     # intervals always run forward in time, and it does not keep the journey fresh.
     repeated = position is not None and seen is not None and observation.at <= seen
-    instance = _note(instance, observation, policy, semantics, fresh=not repeated)
+    freshness, delay_s = _note(instance, observation, policy, semantics, fresh=not repeated)
+    # The instance is rebuilt once per fix: what the source said goes in with the rest.
     effects: list[Effect] = []
     if observation.first(PointEvent) is not None and instance.lifecycle != "finished":
+        instance = with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s)
         plan = plans.plan(trip, instance.journey.service_date, index, policy)
         instance, effects = apply_point(instance, trip, plan, observation, previous, index, policy)
+        track = instance.source_track(observation.source) or track
     if instance.lifecycle != "running" or position is None or repeated:
-        return instance, effects
+        return with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s), effects
     source = observation.source
     if not position_leads(instance, source, observation.at, policy):
-        return instance, effects  # a better source's fix is fresh: it leads the position
-    instance = note_position(instance, source, observation.at)
+        # A better-ranked source has a fresh fix: that source leads the position.
+        return with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s), effects
+    track = track.evolve(position_at=observation.at)
 
     progress_policy = policy.progress
     run = trip.run_key is not None  # a CZPTT run, whatever its mode (rail-replacement bus)
     if run:
-        progress_policy = replace(progress_policy, gps_sigma_m=policy.rail.position_sigma_m(source))
+        progress_policy = _rail_progress(progress_policy, policy.rail.position_sigma_m(source))
     plan = plans.plan(trip, instance.journey.service_date, index, policy)
     step = update(plan, instance.track, position, observation.at, trip.mode, progress_policy)
     calls, crossed = _cross(instance, step.crossed, source, policy, fuse=run)
@@ -81,8 +88,7 @@ def advance(
     held = instance.progress
     if run and held is not None and (progress is None or progress.distance_m < held.distance_m):
         progress = held  # a source's point anchors progress; fixes never take it back
-    instance = replace(
-        instance,
+    instance = instance.evolve(
         calls=calls,
         progress=progress,
         track=step.track,
@@ -90,8 +96,18 @@ def advance(
         off_route=step.off_route,
         lifecycle="finished" if finished else instance.lifecycle,
         track_source=source,
+        freshness=freshness,
+        delay_s=delay_s,
+        sources=tracks_with(instance.sources, track),
     )
     return instance, [*effects, *crossed]
+
+
+@lru_cache(maxsize=64)
+def _rail_progress(policy: ProgressPolicy, gps_sigma_m: float) -> ProgressPolicy:
+    """The progress policy with a rail source's position error (one per source)."""
+
+    return replace(policy, gps_sigma_m=gps_sigma_m)
 
 
 def _note(
@@ -101,8 +117,8 @@ def _note(
     semantics: SourceSemantics,
     *,
     fresh: bool,
-) -> Instance:
-    """Record the observation's time and source delay; only new information keeps it fresh.
+) -> tuple[Freshness, int | None]:
+    """The observation's time and source delay; only new information keeps it fresh.
 
     A source whose pre-trip delay is the time since the scheduled departure (DÚK: growing while
     the vehicle stands in the depot, DUK-Q14) has it ignored before departure and while it still
@@ -115,9 +131,9 @@ def _note(
     delay_s = instance.delay_s
     if delay is not None and not elapsed and delay.seconds > policy.delay_discard_below_s:
         delay_s = delay.seconds
-    heard_at = observation.received_at if fresh else instance.freshness.heard_at
-    freshness = replace(instance.freshness, updated_at=observation.at, heard_at=heard_at)
-    return replace(instance, freshness=freshness, delay_s=delay_s)
+    old = instance.freshness
+    heard_at = observation.received_at if fresh else old.heard_at
+    return Freshness(observation.at, heard_at, old.stale, old.lost), delay_s
 
 
 def _cross(

@@ -50,9 +50,21 @@ from obehy.realtime.times import Instant
 POINT = "point"
 
 
-def _with_track(instance: Instance, track: SourceTrack) -> Instance:
-    others = tuple(t for t in instance.sources if t.source != track.source)
-    return replace(instance, sources=tuple(sorted((*others, track), key=lambda t: t.source)))
+def with_track(instance: Instance, track: SourceTrack) -> Instance:
+    """The instance with `track` as its source's track."""
+
+    return instance.evolve(sources=tracks_with(instance.sources, track))
+
+
+def tracks_with(sources: tuple[SourceTrack, ...], track: SourceTrack) -> tuple[SourceTrack, ...]:
+    """`sources` (sorted by source) with `track` in its source's place."""
+
+    for i, other in enumerate(sources):
+        if other.source == track.source:
+            return (*sources[:i], track, *sources[i + 1 :])
+        if other.source > track.source:
+            return (*sources[:i], track, *sources[i:])
+    return (*sources, track)
 
 
 def lead_of(instance: Instance, source: str) -> Lead | None:
@@ -68,27 +80,26 @@ def lead_of(instance: Instance, source: str) -> Lead | None:
 def with_lead(instance: Instance, vehicle: VehicleId, observation: Observation) -> Instance:
     lead = Lead(vehicle, observation.at)
     if instance.lead is None or instance.lead.vehicle.source == vehicle.source:
-        return replace(instance, lead=lead)
+        return instance.evolve(lead=lead)
     track = instance.source_track(vehicle.source) or SourceTrack(
         vehicle.source, observation.received_at
     )
-    return _with_track(instance, replace(track, lead=lead))
+    return with_track(instance, track.evolve(lead=lead))
 
 
 def note_source(
     instance: Instance, observation: Observation, semantics: SourceSemantics
-) -> tuple[Instance, SourceTrack | None, bool]:
-    """Record what the source says; returns the instance, the source's previous track, and
-    False for an unchanged entry of a source where that is no news (SZ-Q6)."""
+) -> tuple[SourceTrack, SourceTrack | None, bool]:
+    """What the source says: its new track, its previous one, and False for an unchanged
+    entry of a source where that is no news (SZ-Q6)."""
 
     previous = instance.source_track(observation.source)
     fingerprint = hash(observation.facts) if semantics.unchanged_entry_is_no_news else None
     if fingerprint is not None and previous is not None and previous.fingerprint == fingerprint:
-        return instance, previous, False
+        return previous, previous, False
     track = previous or SourceTrack(observation.source, observation.received_at)
     delay = observation.first(Delay)
-    track = replace(
-        track,
+    track = track.evolve(
         heard_at=observation.received_at,
         fingerprint=fingerprint,
         next_point=observation.first(NextPoint) or track.next_point,
@@ -99,7 +110,7 @@ def note_source(
             POINT if delay is not None and delay.reference == POINT else track.delay_reference
         ),
     )
-    return _with_track(instance, track), previous, True
+    return track, previous, True
 
 
 def position_leads(instance: Instance, source: str, at: Instant, policy: Policy) -> bool:
@@ -114,11 +125,6 @@ def position_leads(instance: Instance, source: str, at: Instant, policy: Policy)
         if rail.rank(other.source) < rank and at - other.position_at <= fresh:
             return False
     return True
-
-
-def note_position(instance: Instance, source: str, at: Instant) -> Instance:
-    track = instance.source_track(source) or SourceTrack(source, at)
-    return _with_track(instance, replace(track, position_at=at))
 
 
 def merge(
@@ -271,15 +277,14 @@ def apply_point(
     if kind == "arrival" and i == last:
         lifecycle = "finished"
     track = instance.source_track(observation.source)
-    instance = replace(
-        instance,
+    instance = instance.evolve(
         calls=tuple(calls),
         progress=progress,
         track=anchor(instance.track, along, policy),
         lifecycle=lifecycle,
     )
     if track is not None:
-        instance = _with_track(instance, replace(track, point=i))
+        instance = with_track(instance, track.evolve(point=i))
     if merged == before:
         return instance, []  # a repeat of the point already recorded
     journey, visit = instance.public_call(i, kind)

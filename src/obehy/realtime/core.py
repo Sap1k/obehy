@@ -414,7 +414,7 @@ def _lifecycle(
             observation.at >= start or _moving_early(instance, trip, observation, previous, ctx)
         )
         started = running or _missed_departure(instance, trip, observation, start, ctx)
-    return replace(instance, lifecycle="running") if started else instance
+    return instance.evolve(lifecycle="running") if started else instance
 
 
 def _moving_early(

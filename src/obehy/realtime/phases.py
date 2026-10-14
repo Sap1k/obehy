@@ -14,12 +14,16 @@ from contextlib import contextmanager
 
 
 class Phases:
-    __slots__ = ("calls", "cpu_s", "wall_s")
+    __slots__ = ("calls", "counts", "cpu_s", "wall_s")
 
     def __init__(self) -> None:
         self.cpu_s: dict[str, float] = {}
         self.wall_s: dict[str, float] = {}
         self.calls: dict[str, int] = {}
+        self.counts: dict[str, int] = {}  # items processed, such as observations
+
+    def count(self, name: str, n: int) -> None:
+        self.counts[name] = self.counts.get(name, 0) + n
 
     @contextmanager
     def time(self, name: str) -> Generator[None]:
@@ -39,12 +43,18 @@ class Phases:
             f"{name} {100 * self.cpu_s[name] / over_s:.1f}/{100 * spent / over_s:.1f}%"
             for name, spent in sorted(self.wall_s.items(), key=lambda item: -item[1])
         ]
+        observations = self.counts.get("observations", 0)
+        per = ""
+        if observations and "core" in self.cpu_s:
+            per = f"; core {1e6 * self.cpu_s['core'] / observations:.0f} µs per observation"
         return (
             f"cpu/wall {100 * cpu / over_s:.1f}/{100 * wall / over_s:.1f}% of a core: "
             + ", ".join(parts)
+            + per
         )
 
     def reset(self) -> None:
         self.cpu_s.clear()
         self.wall_s.clear()
         self.calls.clear()
+        self.counts.clear()

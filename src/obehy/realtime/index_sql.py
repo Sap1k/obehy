@@ -126,6 +126,15 @@ class IndexLoader:
         self.lines_used = {ref: at for ref, at in self.lines_used.items() if at >= since}
         self.index.sweep({*self.used, *refs}, self.lines_used, trip_ids, day)
 
+    def needs(self, refs: Iterable[KeyRef], dates: Iterable[date], lines: Iterable[KeyRef]) -> bool:
+        """Whether `ensure` with these would query the database."""
+
+        if any(ref[0] in CHILD_NAMESPACE and ref not in self.index.lines for ref in lines):
+            return True
+        refs = set(refs)
+        refs |= {parent for ref in refs if (parent := parent_ref(ref)) is not None}
+        return bool(self.index.missing(refs)) or not self.index.loaded_dates.issuperset(dates)
+
     def ensure(
         self, refs: Iterable[KeyRef], dates: Iterable[date], lines: Iterable[KeyRef] = ()
     ) -> Index:

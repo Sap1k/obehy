@@ -58,6 +58,18 @@ class InvariantError(AssertionError):
 
 
 @dataclass(slots=True)
+class Batch:
+    """One feed's observations of a `process` call, in processing order, and the keys, lines
+    and service dates whose static data they need."""
+
+    feed: Feed
+    observations: list[Observation]
+    refs: set[KeyRef] = field(default_factory=set[KeyRef])
+    lines: set[KeyRef] = field(default_factory=set[KeyRef])
+    days: set[date] = field(default_factory=set[date])
+
+
+@dataclass(slots=True)
 class FeedRuntime:
     loader: IndexLoader
     state: FeedState
@@ -138,31 +150,59 @@ class Runner:
             self.runtimes[feed].loader.ensure(refs[feed], days[feed], lines[feed])
 
     def process(self, observations: Sequence[Observation]) -> list[Effect]:
+        batches = self.batches(observations)
+        self.load(batches)
+        return self.run(batches)
+
+    def batches(self, observations: Sequence[Observation]) -> list[Batch]:
+        """The observations per feed, in processing order, with the static data they name."""
+
         by_feed: dict[Feed, list[Observation]] = defaultdict(list)
         for observation in observations:
             if observation.feed in self.runtimes:
                 by_feed[observation.feed].append(observation)
             else:
                 self.skipped += 1
-        effects: list[Effect] = []
+        batches: list[Batch] = []
         for feed in sorted(by_feed):
-            runtime = self.runtimes[feed]
-            batch = sorted(
-                by_feed[feed], key=lambda o: (o.received_at, o.source, o.raw.sha256, o.raw.item)
+            batch = Batch(
+                feed,
+                sorted(
+                    by_feed[feed],
+                    key=lambda o: (o.received_at, o.source, o.raw.sha256, o.raw.item),
+                ),
             )
-            refs: set[KeyRef] = set()
-            lines: set[KeyRef] = set()
-            days: set[date] = set()
-            for observation in batch:
-                refs.update(_refs(observation))
-                lines.update(_lines(observation))
-                days.update(observation_days(observation))
+            for observation in batch.observations:
+                batch.refs.update(_refs(observation))
+                batch.lines.update(_lines(observation))
+                batch.days.update(observation_days(observation))
+            batches.append(batch)
+        return batches
+
+    def needs_index(self, batches: Sequence[Batch]) -> bool:
+        """Whether `load` would query the database (the worker then runs it off its loop)."""
+
+        return any(self.runtimes[b.feed].loader.needs(b.refs, b.days, b.lines) for b in batches)
+
+    def load(self, batches: Sequence[Batch]) -> None:
+        """Load the static data the batches name that is not in the index yet."""
+
+        for batch in batches:
             with self.phases.time("index"):
-                runtime.loader.ensure(refs, days, lines)
-                runtime.loader.touch(refs, lines, batch[-1].received_at)
+                self.runtimes[batch.feed].loader.ensure(batch.refs, batch.days, batch.lines)
+
+    def run(self, batches: Sequence[Batch]) -> list[Effect]:
+        """Step the loaded batches through the core and write their effects."""
+
+        effects: list[Effect] = []
+        for batch in batches:
+            runtime = self.runtimes[batch.feed]
+            observations = batch.observations
+            runtime.loader.touch(batch.refs, batch.lines, observations[-1].received_at)
             with self.phases.time("core"):
-                for observation in batch:
+                for observation in observations:
                     effects.extend(self._step(runtime, observation))
+            self.phases.count("observations", len(observations))
         if self.writer is not None and effects:
             with self.phases.time("write"):
                 self.writer.write(effects)

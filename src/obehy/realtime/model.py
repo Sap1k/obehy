@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import Literal, NamedTuple
 
 from obehy.realtime.facts import (
@@ -271,6 +271,7 @@ class Hypothesis:
     # Each fix since the commit point, oldest first, ending at the last fix this reading placed
     # on the path.
     history: tuple[Placement, ...]
+    at_us: int  # `at` in exact microseconds (`times.micros`), for the tracker's arithmetic
     # Since when the fixes have been off the path for this reading (held, as if missing).
     off_path_since: Instant | None = None
 
@@ -290,6 +291,7 @@ class Hypothesis:
             self.lateness_s,
             self.log_p if log_p is None else log_p,
             self.history if history is None else history,
+            self.at_us,
             self.off_path_since if off_path_since is None else off_path_since,
         )
 
@@ -343,6 +345,15 @@ class Freshness:
     lost: bool = False
 
 
+class Keep(Enum):
+    """The default of an `evolve` argument: keep the field (None is a value)."""
+
+    KEEP = 0
+
+
+KEEP = Keep.KEEP
+
+
 @dataclass(frozen=True, slots=True)
 class Lead:
     """The one vehicle whose observations drive the timeline when several claim the journey
@@ -389,6 +400,36 @@ class SourceTrack:
     # `lead` is the first source's.
     lead: Lead | None = None
 
+    def evolve(
+        self,
+        *,
+        heard_at: Instant | Keep = KEEP,
+        fingerprint: int | None | Keep = KEEP,
+        next_point: NextPoint | None | Keep = KEEP,
+        delay_s: int | None | Keep = KEEP,
+        delay_at: Instant | None | Keep = KEEP,
+        delay_reference: DelayReference | None | Keep = KEEP,
+        prediction: NextStopPrediction | None | Keep = KEEP,
+        point: int | None | Keep = KEEP,
+        position_at: Instant | None | Keep = KEEP,
+        lead: Lead | None | Keep = KEEP,
+    ) -> SourceTrack:
+        """A copy with some fields replaced, faster than `dataclasses.replace` (per fix)."""
+
+        return SourceTrack(
+            self.source,
+            self.heard_at if heard_at is KEEP else heard_at,
+            self.fingerprint if fingerprint is KEEP else fingerprint,
+            self.next_point if next_point is KEEP else next_point,
+            self.delay_s if delay_s is KEEP else delay_s,
+            self.delay_at if delay_at is KEEP else delay_at,
+            self.delay_reference if delay_reference is KEEP else delay_reference,
+            self.prediction if prediction is KEEP else prediction,
+            self.point if point is KEEP else point,
+            self.position_at if position_at is KEEP else position_at,
+            self.lead if lead is KEEP else lead,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Instance:
@@ -411,6 +452,44 @@ class Instance:
     parts: tuple[PartSpan, ...] = ()
     sources: tuple[SourceTrack, ...] = ()
     track_source: str | None = None  # the source of the tracker's last fix
+
+    def evolve(
+        self,
+        *,
+        lifecycle: Lifecycle | Keep = KEEP,
+        calls: tuple[CallState, ...] | Keep = KEEP,
+        freshness: Freshness | Keep = KEEP,
+        progress: Progress | None | Keep = KEEP,
+        track: Track | None | Keep = KEEP,
+        delay_s: int | None | Keep = KEEP,
+        off_route_since: Instant | None | Keep = KEEP,
+        off_route: bool | Keep = KEEP,
+        lead: Lead | None | Keep = KEEP,
+        sources: tuple[SourceTrack, ...] | Keep = KEEP,
+        track_source: str | None | Keep = KEEP,
+    ) -> Instance:
+        """A copy with the fields the timeline changes per fix replaced; `dataclasses.replace`
+        is several times slower, and this runs a few times for every observation."""
+
+        return Instance(
+            self.journey,
+            self.release_id,
+            self.trip_id,
+            self.mode,
+            self.lifecycle if lifecycle is KEEP else lifecycle,
+            self.calls if calls is KEEP else calls,
+            self.freshness if freshness is KEEP else freshness,
+            self.progress if progress is KEEP else progress,
+            self.track if track is KEEP else track,
+            self.delay_s if delay_s is KEEP else delay_s,
+            self.off_route_since if off_route_since is KEEP else off_route_since,
+            self.off_route if off_route is KEEP else off_route,
+            self.lead if lead is KEEP else lead,
+            self.journeys,
+            self.parts,
+            self.sources if sources is KEEP else sources,
+            self.track_source if track_source is KEEP else track_source,
+        )
 
     def source_track(self, source: str) -> SourceTrack | None:
         for track in self.sources:

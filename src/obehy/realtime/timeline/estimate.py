@@ -57,7 +57,7 @@ def _call(
 def _with_calls(instance: Instance, calls: list[CallState]) -> Instance:
     if all(new is old for new, old in zip(calls, instance.calls, strict=True)):
         return instance
-    return replace(instance, calls=tuple(calls))
+    return instance.evolve(calls=tuple(calls))
 
 
 Lateness = tuple[timedelta | None, SourceClass | None]
