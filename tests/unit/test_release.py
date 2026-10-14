@@ -14,7 +14,7 @@ from obehy.release.contract import (
     check_declared_schema,
     load_contract,
 )
-from obehy.release.ddl import MIGRATION, static_ddl, static_tables
+from obehy.release.ddl import BASE_INDEXES, INDEXES, MIGRATION, static_ddl, static_tables
 from obehy.release.load import LoadError, read_release, verify_package
 from obehy.release.migrate import Migration, MigrationError, discover, pending
 from obehy.runtime_config import DATABASE_URL_ENV, ConfigurationError, load_database_url
@@ -150,7 +150,17 @@ def test_shipped_migrations_are_contiguous() -> None:
         "rail",
         "trip_call_source_kilometre",
         "observation_vehicle",
+        "index_lookups",
     ]
+
+
+def test_later_indexes_come_with_a_migration() -> None:
+    later = INDEXES[len(BASE_INDEXES) :]
+    assert later
+    text = "".join(migration.sql for migration in discover())
+    for index in later:
+        assert f"CREATE INDEX {index.name} ON static.{index.table}" in text
+        assert f"CREATE INDEX {index.name} " not in MIGRATION.read_text(encoding="utf-8")
 
 
 def test_pending_migrations_detect_edits_and_unknown_versions() -> None:

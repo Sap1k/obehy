@@ -247,6 +247,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-14** — First prod warm start: index loads were ~70 % of wall time at ~8 % CPU (waits
+  on PostgreSQL). Migration 0010 indexes the loader's scanning lookups (`static.trip` by
+  `run_key`, `source_key` by public ID and by identifier prefix; loads build them per
+  partition); the compose database is sized from `SYSTEM_RAM_GB` (an eighth as shared buffers,
+  half as cache) with JIT off. Unit and DB tests pass; the speed-up is not measured yet.
 - **2026-10-14** — Faster warm start (prod: about 8 min after peak hours, 4 h window). (1) The
   worker polls and archives during warm replay (was a gap on every restart); observations
   received meanwhile run from a backlog once it is done; the replay runs on a thread with a
@@ -261,7 +266,7 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   the journeys they are on (journeys already finished are not restored); a property test over
   the traces and a two-journey bus checks live state equals an uninterrupted run. Unit tests
   pass; DB tests (incl. the new SQL selection test), `obehy rt bench` and a real warm start
-  not run (no database reachable); needs the prod warm-up log after deploy.
+  not run (no database reachable then; DB tests passed later).
 - **2026-10-13** — The feed list's realtime sources come from the connector manifests: each
   manifest has a `title` and `covers`, and the GTFS-RT files a source feeds follow its
   channels' `live_feeds`, so the list no longer goes stale (it named only DÚK and SŽ). Unit

@@ -246,6 +246,7 @@ Copy `deploy/` to the server and next to it write `.env`:
 ```bash
 POSTGRES_PASSWORD=...     # URL-safe characters only; it goes into the database URL
 OBEHY_HTTP_PORT=8080      # where nginx listens (plain HTTP) for your reverse proxy
+SYSTEM_RAM_GB=6           # the host's RAM in whole GB; PostgreSQL is sized to about half
 ```
 
 ```bash

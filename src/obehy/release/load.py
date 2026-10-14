@@ -25,7 +25,13 @@ from psycopg.types.json import Jsonb
 from obehy.pipeline.files import file_digest
 from obehy.production_package import ProductionPackageError, read_manifest
 from obehy.release.contract import Contract, ContractError, Relation, check_declared_schema
-from obehy.release.ddl import INDEXES, Table, primary_key_columns, static_tables
+from obehy.release.ddl import (
+    INDEXES,
+    Table,
+    index_columns,
+    primary_key_columns,
+    static_tables,
+)
 
 PACKAGES = ("jdf", "czptt")
 BATCH_ROWS = 65_536
@@ -193,7 +199,7 @@ def _build_indexes(connection: psycopg.Connection, table: Table, load_id: int) -
         if index.table == table.name:
             connection.execute(
                 sql.SQL("CREATE INDEX ON {} USING {} ({})").format(
-                    target, sql.SQL(index.method), _columns(index.columns)
+                    target, sql.SQL(index.method), sql.SQL(index_columns(index))
                 )
             )
     connection.execute(sql.SQL("ANALYZE {}").format(target))

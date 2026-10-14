@@ -13,7 +13,7 @@ import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, LiteralString
 
 from obehy.release.contract import Contract, load_contract
 
@@ -45,7 +45,7 @@ class Table:
 class Index:
     name: str
     table: str
-    columns: tuple[str, ...]
+    columns: tuple[LiteralString, ...]
     method: Literal["btree", "gist"] = "btree"
 
 
@@ -80,12 +80,25 @@ DERIVED_TABLES = (
     ),
 )
 
-# Lookup indexes beyond the primary keys. Inference-specific indexes come with the engine.
-INDEXES = (
+# Lookup indexes beyond the primary keys, built on every load's partitions before ATTACH. The
+# base ones are in the generated 0003 migration; later ones come with a migration of their own.
+# Columns are trusted SQL: a name or a function-call expression.
+BASE_INDEXES = (
     Index("trip_call_location", "trip_call", ("load_id", "location_id")),
     Index("trip_route", "trip", ("load_id", "route_id")),
     Index("location_geom", "location", ("geom",), "gist"),
     Index("service_date_service", "service_date", ("load_id", "service_id")),
+)
+INDEXES = (
+    *BASE_INDEXES,
+    # The realtime index loader's lookups (realtime/index_sql.py), migration 0010.
+    Index("trip_run", "trip", ("load_id", "run_key")),
+    Index("source_key_public", "source_key", ("load_id", "namespace", "public_id")),
+    Index(
+        "source_key_prefix",
+        "source_key",
+        ("load_id", "namespace", "split_part(identifier, ':', 1)"),
+    ),
 )
 
 
@@ -123,7 +136,7 @@ def primary_key_columns(table: Table) -> tuple[str, ...]:
     return ("load_id", *table.primary_key)
 
 
-def index_columns(index: Index) -> str:
+def index_columns(index: Index) -> LiteralString:
     return ", ".join(index.columns)
 
 
@@ -158,7 +171,7 @@ def _lines(contract: Contract, tables: Iterable[Table]) -> Iterable[str]:
         yield ",\n".join(body)
         yield "\n) PARTITION BY LIST (load_id);\n"
     yield "\n"
-    for index in INDEXES:
+    for index in BASE_INDEXES:
         yield (
             f"CREATE INDEX {index.name} ON static.{index.table} "
             f"USING {index.method} ({index_columns(index)});\n"

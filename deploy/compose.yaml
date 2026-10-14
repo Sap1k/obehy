@@ -1,7 +1,7 @@
 # The Oběhy server: PostGIS, the realtime worker, hourly release updates, nightly jobs and
 # nginx serving the feeds over plain HTTP to your reverse proxy. Put POSTGRES_PASSWORD
-# (URL-safe) and optionally OBEHY_HTTP_PORT (8080), OBEHY_TAG and GITHUB_TOKEN in .env next to
-# this file. SŽ is polled only through a proxy list: save it as secrets/sz-proxies.txt here
+# (URL-safe), SYSTEM_RAM_GB (the host's RAM in whole GB) and optionally OBEHY_HTTP_PORT (8080),
+# OBEHY_TAG and GITHUB_TOKEN in .env next to this file. SŽ is polled only through a proxy list: save it as secrets/sz-proxies.txt here
 # (gitignored) and set OBEHY_EGRESS_SZ_PROXY_LIST_FILE=/app/secrets/sz-proxies.txt in .env.
 name: obehy
 
@@ -27,6 +27,23 @@ services:
       POSTGRES_DB: obehy
       POSTGRES_USER: obehy
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      SYSTEM_RAM_GB: ${SYSTEM_RAM_GB:?set SYSTEM_RAM_GB in .env}
+    # Sized from the host's RAM: about half goes to the database (an eighth as shared buffers,
+    # the rest as the OS cache it counts on), the other half to the worker, the jobs and the OS.
+    # JIT only slows the worker's short lookups. random_page_cost assumes an SSD.
+    shm_size: 256m
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mb=$$(($${SYSTEM_RAM_GB} * 1024))
+        exec docker-entrypoint.sh postgres \
+          -c jit=off \
+          -c shared_buffers=$$((mb / 8))MB \
+          -c effective_cache_size=$$((mb / 2))MB \
+          -c maintenance_work_mem=$$((mb / 16))MB \
+          -c work_mem=16MB \
+          -c random_page_cost=1.1
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U obehy -d obehy"]
       interval: 5s
