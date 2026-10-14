@@ -12,6 +12,11 @@ index in the list.
 Requests go round-robin over the pool. A proxy answering 403 or 429, or failing to connect, is
 benched for `cooldown_s` and the request is retried once on the next proxy. A channel whose
 egress is not configured never polls (fail closed).
+
+`Egress` is the fetcher of every channel, so it also holds what a request needs beyond its
+manifest: the secret of a channel with `auth` (an API key; such a channel without its secret
+never polls either), and the cursor of a channel with `cursor` (delta polling: the last good
+poll's header goes back as a query parameter, and is archived with the poll in `request`).
 """
 
 from __future__ import annotations
@@ -21,7 +26,8 @@ import threading
 import time
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
@@ -40,7 +46,12 @@ from obehy.realtime.runtime.fetch import (
     send,
     utc_clock,
 )
-from obehy.runtime_config import ConfigurationError, default_config_path
+from obehy.runtime_config import (
+    ConfigurationError,
+    default_config_path,
+    load_secrets,
+    secret_env,
+)
 
 BENCH_STATUSES = frozenset({403, 407, 429})
 
@@ -189,9 +200,16 @@ class Egress:
     pools: Mapping[str, ProxyPool]
     clock: Clock = utc_clock
     opener: Callable[[str], OpenerDirector] = anonymous_opener
+    secrets: Mapping[str, str] = field(default_factory=dict[str, str])
+    # Per channel: the cursor value of its last good poll and when that poll was received.
+    cursors: dict[str, tuple[str, datetime]] = field(
+        default_factory=dict[str, tuple[str, datetime]]
+    )
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def usable(self, channels: Sequence[Channel], log: Callable[[str], None]) -> list[Channel]:
-        """The channels that may poll: an egress channel needs its pool (fail closed)."""
+        """The channels that may poll: an egress channel needs its pool, an auth channel its
+        secret (fail closed)."""
 
         kept: list[Channel] = []
         for channel in channels:
@@ -202,12 +220,66 @@ class Egress:
                     f"[realtime.egress.{channel.egress}] proxy_list_file); not polled"
                 )
                 continue
+            if channel.auth is not None and channel.auth.secret not in self.secrets:
+                log(
+                    f"{channel.name}: secret {channel.auth.secret!r} is not configured "
+                    f"({secret_env(channel.auth.secret)} or "
+                    f"[realtime.secrets] {channel.auth.secret}); not polled"
+                )
+                continue
             kept.append(channel)
         return kept
 
+    def _since(self, channel: Channel) -> str | None:
+        if channel.cursor is None:
+            return None
+        with self._lock:
+            last = self.cursors.get(channel.name)
+        if last is None or self.clock() - last[1] > timedelta(seconds=channel.cursor.max_age_s):
+            return None
+        return last[0]
+
+    def _advance(self, channel: Channel, poll: Poll) -> None:
+        if channel.cursor is None or not poll.ok:
+            return  # a failed poll keeps the cursor: the next delta covers the gap
+        value = poll.headers.get(channel.cursor.header)
+        with self._lock:
+            if value:
+                self.cursors[channel.name] = (value, poll.received_at)
+            else:
+                self.cursors.pop(channel.name, None)
+
     def fetch(self, channel: Channel, body: bytes | None = None) -> Poll:
-        if channel.egress is None:
+        if channel.egress is None and channel.auth is None and channel.cursor is None:
             return fetch(channel, self.clock)
+        headers: dict[str, str] = {}
+        if channel.auth is not None:
+            secret = self.secrets.get(channel.auth.secret)
+            if secret is None:
+                return refused(channel, f"secret {channel.auth.secret!r} required", self.clock)
+            headers[channel.auth.header] = secret
+        since = self._since(channel)
+        params = {} if since is None or channel.cursor is None else {channel.cursor.param: since}
+        keep = () if channel.cursor is None else (channel.cursor.header,)
+        if channel.egress is None:
+            request = channel_request(
+                channel, anonymous=False, body=body, headers=headers, params=params
+            )
+            poll = send(request, channel.timeout_s, self.clock, keep=keep)
+        else:
+            poll = self._proxied(channel, body, headers, params, keep)
+        self._advance(channel, poll)
+        return replace(poll, request={**poll.request, **params}) if params else poll
+
+    def _proxied(
+        self,
+        channel: Channel,
+        body: bytes | None,
+        headers: Mapping[str, str],
+        params: Mapping[str, str],
+        keep: tuple[str, ...],
+    ) -> Poll:
+        assert channel.egress is not None
         pool = self.pools.get(channel.egress)
         if pool is None:
             return refused(channel, f"egress {channel.egress!r} is not configured", self.clock)
@@ -218,8 +290,10 @@ class Egress:
                 break
             index, proxy = picked
             # A fresh request per attempt: the proxy handler rewrites the one it sends.
-            request = channel_request(channel, anonymous=True, body=body)
-            poll = send(request, channel.timeout_s, self.clock, self.opener(proxy))
+            request = channel_request(
+                channel, anonymous=True, body=body, headers=headers, params=params
+            )
+            poll = send(request, channel.timeout_s, self.clock, self.opener(proxy), keep)
             reason = _bench_reason(poll)
             if reason is None:
                 return poll
@@ -242,4 +316,5 @@ def build_egress(
     pools = {name: ProxyPool(name, file, policy, log=log) for name, file in lists.items()}
     for pool in pools.values():
         pool.refresh()
-    return Egress(pools)
+    secrets = load_secrets((c.auth.secret for c in channels if c.auth is not None), config)
+    return Egress(pools, secrets=secrets)

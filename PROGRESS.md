@@ -214,6 +214,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
   replayed clean on the server capture of 2026-10-09 to 10-12, live on jdf. Open: `rt evaluate`
   of own GPS delay against the source's, the travel-time provider interface.
+  Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), recorded only. Next:
+  replay a day of the server capture against its release (`docs/sources/pid.md`, open
+  questions), then `live_feeds = ["jdf", "czptt"]`. GTFS-RT alerts and departures later.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -247,6 +250,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-15** — PID connector (`sources/pid.py`, `docs/sources/pid.md`), recorded only:
+  Golemio `/v2/vehiclepositions` polled every 10 s as deltas (`updatedSince` from the last
+  `x-last-modified`, a new generic manifest `cursor`), with the API key as a runtime secret (new
+  generic `auth`, `OBEHY_SECRET_<NAME>` or `[realtime.secrets]`; a source without it is not
+  polled). City vehicles bind by `pid:gtfs_trip_id`, regional buses also by CIS line + trip,
+  trains by train number on czptt (PID-Q1–Q4). Policy v7 puts PID between DÚK and SŽ in the
+  position order. Unit and DB tests pass. A short local recording at midnight polled deltas as
+  intended and replayed against the 10-12 release (bus 49 %, tram 61 %, metro 6/6, trains
+  16/17 of running key groups); night lines lack `pid:gtfs_trip_id` keys in that release
+  (overlay gap to check in the day capture).
 - **2026-10-14** — First prod warm start: index loads were ~70 % of wall time at ~8 % CPU (waits
   on PostgreSQL). Migration 0010 indexes the loader's scanning lookups (`static.trip` by
   `run_key`, `source_key` by public ID and by identifier prefix; loads build them per

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -110,6 +111,36 @@ def load_test_database_url(path: Path | None = None) -> str | None:
     if not isinstance(url, str) or not url.strip():
         return None
     return os.path.expandvars(url.strip())
+
+
+def secret_env(name: str) -> str:
+    return f"OBEHY_SECRET_{name.upper().replace('-', '_')}"
+
+
+def load_secrets(names: Iterable[str], path: Path | None = None) -> dict[str, str]:
+    """The configured secrets among `names` (API keys of realtime sources): ``OBEHY_SECRET_<NAME>``
+    or ``[realtime.secrets] <name>`` in the gitignored local config. Values are never logged."""
+
+    wanted = sorted(set(names))
+    found = {
+        name: value for name in wanted if (value := os.environ.get(secret_env(name), "").strip())
+    }
+    source = (path or default_config_path()).resolve()
+    if len(found) == len(wanted) or not source.is_file():
+        return found
+    try:
+        with source.open("rb") as stream:
+            document = tomllib.load(stream)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigurationError(f"Invalid TOML in {source}: {error}") from error
+    realtime = document.get("realtime")
+    table = cast(dict[str, Any], realtime).get("secrets") if isinstance(realtime, dict) else None
+    if isinstance(table, dict):
+        for name in wanted:
+            value = cast(dict[str, Any], table).get(name)
+            if name not in found and isinstance(value, str) and value.strip():
+                found[name] = value.strip()
+    return found
 
 
 def load_runtime_config(path: Path | None = None) -> RuntimeConfig:

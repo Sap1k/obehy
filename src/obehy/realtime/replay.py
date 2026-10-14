@@ -47,7 +47,7 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.policy import Policy
 from obehy.realtime.runner import Runner
-from obehy.realtime.sources import arriva_express, dpmd, duk, mpvnet, sz, sz_tabule
+from obehy.realtime.sources import arriva_express, dpmd, duk, mpvnet, pid, sz, sz_tabule
 from obehy.realtime.times import Instant, instant, local_date, next_multiple
 
 REPORT_SCHEMA_VERSION = 2
@@ -61,6 +61,7 @@ DECODERS: dict[tuple[str, str], Decoder] = {
     (sz.SOURCE, sz.CHANNEL): lambda body, sha, at, skew, _: sz.decode(body, sha, at, skew),
     (sz_tabule.SOURCE, sz_tabule.CHANNEL): sz_tabule.decode,
     (dpmd.SOURCE, dpmd.CHANNEL): lambda body, sha, at, skew, _: dpmd.decode(body, sha, at, skew),
+    (pid.SOURCE, pid.CHANNEL): lambda body, sha, at, skew, _: pid.decode(body, sha, at, skew),
     (arriva_express.SOURCE, arriva_express.CHANNEL): (
         lambda body, sha, at, skew, _: arriva_express.decode(body, sha, at, skew)
     ),
@@ -341,6 +342,8 @@ def _report(
             name = f"{source}/{duk.fleet(vehicle, feed)}"
         elif source == mpvnet.SOURCE:
             name = f"{source}/{'train' if feed == 'czptt' else 'bus'}"
+        elif source == pid.SOURCE:
+            name = f"{source}/{pid.mode(vehicle, feed)}"
         else:
             name = source
         fleets[name]["key_groups"] += 1

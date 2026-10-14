@@ -1,9 +1,10 @@
 # Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
 # docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness,
-# v5 the index sweep and daily compaction, v6 warm replay by vehicle).
+# v5 the index sweep and daily compaction, v6 warm replay by vehicle, v7 PID in the position
+# preference).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "6"
+policy_version = "7"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -121,9 +122,10 @@ refresh_s = 21600
 cooldown_s = 1800
 
 [rail]
-# Several sources on one rail run (docs/R2_SLICE.md section 5). DÚK GPS leads the position while
-# fresh; SŽ positions refresh only every few minutes and are coarse.
-position_preference = ["duk", "sz-mapa"]
+# Several sources on one run (docs/R2_SLICE.md section 5; the order applies on every feed). DÚK
+# GPS leads the position while fresh, then PID; SŽ positions refresh only every few minutes and
+# are coarse.
+position_preference = ["duk", "pid", "sz-mapa"]
 position_fresh_s = 120
 position_sigma_m = { default = 20, "sz-mapa" = 150 }
 # SŽ point events are minutes; a crossing from positions further outside loses to them.

@@ -1761,7 +1761,9 @@ keys in `source_key` on the overlaid parts, train numbers for trains), and PID G
 **for alerts only**. PID protobuf is never proxied unchanged; every ID is rewritten to the active
 release, and alerts are mapped to entities per feed. PID trains apply to the complete CZPTT run
 (sections 13 and 19.4). Capabilities are handled independently: positions, progress, predictions, alerts,
-occupancy and vehicle identity.
+occupancy and vehicle identity. Dossier: `docs/sources/pid.md`. Vehicle positions are polled as
+deltas (`updatedSince`), so only vehicles that changed are observed; the API key is a runtime
+secret.
 
 ## 26.4 Arriva Express and long-tail sources
 

@@ -38,6 +38,26 @@ class ManifestError(ValueError):
 
 
 @dataclass(frozen=True)
+class Auth:
+    """A request header whose value is a named secret (`runtime_config.load_secrets`); a
+    channel whose secret is not configured never polls."""
+
+    header: str
+    secret: str
+
+
+@dataclass(frozen=True)
+class Cursor:
+    """Delta polling: the response header of the last good poll goes back as a query
+    parameter, so the source returns only what changed since. Without one, or when the last
+    good poll is older than `max_age_s`, the poll is full."""
+
+    header: str
+    param: str
+    max_age_s: float
+
+
+@dataclass(frozen=True)
 class Channel:
     source: str
     channel: str
@@ -62,6 +82,8 @@ class Channel:
     # Demand polling: the named query that says what to request (runtime/demand.py); the
     # request body's `{sr70}` is filled per read. Interval channels have none.
     demand: str | None = None
+    auth: Auth | None = None
+    cursor: Cursor | None = None
 
     def is_live(self, feed: str) -> bool:
         return self.live_feeds is None or feed in self.live_feeds
@@ -192,6 +214,22 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     egress = table.get("egress")
     if egress is not None and (not isinstance(egress, str) or not _IDENTIFIER.match(egress)):
         raise ManifestError(f"{where}: egress must be a lowercase ASCII name")
+    auth: Auth | None = None
+    if "auth" in table:
+        auth_table = _table(table, "auth", where)
+        auth = Auth(_string(auth_table, "header", where), _string(auth_table, "secret", where))
+        if not _IDENTIFIER.match(auth.secret):
+            raise ManifestError(f"{where}: auth.secret must be a lowercase ASCII name")
+    cursor: Cursor | None = None
+    if "cursor" in table:
+        if method != "GET" or demand is not None:
+            raise ManifestError(f"{where}: only interval GET channels take a cursor")
+        cursor_table = _table(table, "cursor", where)
+        cursor = Cursor(
+            _string(cursor_table, "header", where).lower(),
+            _string(cursor_table, "param", where),
+            _positive(cursor_table, "max_age_s", where),
+        )
     return Channel(
         source=source,
         channel=name,
@@ -210,6 +248,8 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         semantics=dict(cast(dict[str, Any], semantics)),
         egress=egress,
         demand=demand,
+        auth=auth,
+        cursor=cursor,
     )
 
 

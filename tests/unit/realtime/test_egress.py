@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
 from obehy.realtime.archive import Poll
-from obehy.realtime.manifest import Channel
+from obehy.realtime.manifest import Auth, Channel, Cursor
 from obehy.realtime.policy import EgressPolicy
 from obehy.realtime.runtime.egress import (
     Egress,
@@ -21,6 +21,7 @@ from obehy.realtime.runtime.egress import (
 )
 from obehy.realtime.runtime.fetch import fetch
 from obehy.realtime.runtime.scheduler import backoff_interval, failures_after
+from obehy.runtime_config import load_secrets
 
 POLICY = EgressPolicy(refresh_s=3600, cooldown_s=600)
 T0 = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
@@ -199,3 +200,95 @@ def test_the_saved_list_is_read_from_its_file(
     pool = ProxyPool("sz", source, POLICY, log=lambda _: None)
     pool.refresh()
     assert pool.proxies == ("http://alice:secret@10.0.0.1:8080",)
+
+
+class _Golemio:
+    """A source that wants an API key and answers with a delta cursor header."""
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str | None]] = []
+        self.status = 200
+        source = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                source.seen.append((self.path, self.headers.get("X-Access-Token")))
+                self.send_response(source.status)
+                self.send_header("x-last-modified", f"2026-10-14T22:00:0{len(source.seen)}.000Z")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.server.server_address[1]}/v2/vehiclepositions?limit=5"
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def _keyed(url: str) -> Channel:
+    return Channel(
+        source="pid",
+        channel="vehicles",
+        method="GET",
+        url=url,
+        interval_s=10.0,
+        timeout_s=5.0,
+        auth=Auth("X-Access-Token", "golemio"),
+        cursor=Cursor("x-last-modified", "updatedSince", 120.0),
+    )
+
+
+def test_a_cursor_channel_polls_deltas_with_its_secret() -> None:
+    source = _Golemio()
+    now = [T0]
+    egress = Egress({}, clock=lambda: now[0], secrets={"golemio": "k3y"})
+    channel = _keyed(source.url)
+    try:
+        first = egress.fetch(channel)
+        second = egress.fetch(channel)
+        source.status = 503
+        failed = egress.fetch(channel)
+        source.status = 200
+        after_gap = egress.fetch(channel)  # a failed poll keeps the cursor
+        now[0] = T0 + timedelta(seconds=121)
+        stale = egress.fetch(channel)  # the last good poll is too old: a full list
+    finally:
+        source.close()
+    paths = [path for path, _ in source.seen]
+    assert all(key == "k3y" for _, key in source.seen)
+    assert paths[0] == "/v2/vehiclepositions?limit=5" and first.request == {}
+    assert paths[1].endswith("&updatedSince=2026-10-14T22%3A00%3A01.000Z")
+    assert second.request == {"updatedSince": "2026-10-14T22:00:01.000Z"}
+    assert not failed.ok and paths[2] == paths[3]
+    assert after_gap.ok and paths[3].endswith("updatedSince=2026-10-14T22%3A00%3A02.000Z")
+    assert "updatedSince" not in paths[4] and stale.request == {}
+
+
+def test_an_auth_channel_needs_its_secret() -> None:
+    channel = _keyed("http://pid.invalid/")
+    logs: list[str] = []
+    assert Egress({}).usable([channel], logs.append) == []
+    assert "OBEHY_SECRET_GOLEMIO" in logs[0] and "not polled" in logs[0]
+    assert Egress({}, secrets={"golemio": "k"}).usable([channel], logs.append) == [channel]
+    poll = fetch(channel)  # without the egress fetcher there is no secret: never sent
+    assert poll.status is None and poll.error is not None and "secret" in poll.error
+
+
+def test_secrets_come_from_the_environment_before_the_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "obehy.local.toml"
+    config.write_text('schema_version = 1\n[realtime.secrets]\ngolemio = "from-file"\n', "utf-8")
+    monkeypatch.delenv("OBEHY_SECRET_GOLEMIO", raising=False)
+    assert load_secrets(["golemio", "other"], config) == {"golemio": "from-file"}
+    monkeypatch.setenv("OBEHY_SECRET_GOLEMIO", "from-env")
+    assert load_secrets(["golemio"], config) == {"golemio": "from-env"}

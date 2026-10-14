@@ -62,10 +62,12 @@ def test_shipped_manifests_load() -> None:
         "mpvnet/jikord",
         "mpvnet/odis",
         "mpvnet/zlin",
+        "pid/vehicles",
         "sz-mapa/trains",
         "sz-tabule/board",
     ]
-    arriva, dpmd, duk, idol, *_, sz, boards = channels
+    arriva, dpmd, duk, idol, *_, pid, sz, boards = channels
+    assert pid.auth is not None and pid.cursor is not None and pid.live_feeds == ()
     assert (dpmd.filter, dpmd.method) == ("dpmd", "GET") and "{epoch_ms}" in dpmd.url
     assert idol.headers["origin"] == "https://www.mpvnet.cz" and idol.feeds == ("jdf", "czptt")
     assert (boards.demand, boards.egress, boards.method) == ("station_boards", "sz", "POST")
@@ -113,6 +115,17 @@ EVERY_5S = 'poll = { kind = "interval", seconds = 5 }\n'
         (EVERY_5S + 'feeds = ["jdf"]\nlive_feeds = ["czptt"]\n' + GET, "unknown live_feeds"),
         (EVERY_5S + GET + "semantics = { pre_trip_after_end_is_stale = 1 }\n", "true or false"),
         (EVERY_5S + GET + 'egress = "SZ proxy"\n', "egress"),
+        (EVERY_5S + GET + 'auth = { header = "X-Key", secret = "Golemio Key" }\n', "auth.secret"),
+        (
+            EVERY_5S + GET + 'cursor = { header = "x-last-modified", param = "since" }\n',
+            "max_age_s",
+        ),
+        (
+            EVERY_5S
+            + 'request = { method = "POST", url = "https://x.invalid" }\n'
+            + 'cursor = { header = "h", param = "p", max_age_s = 60 }\n',
+            "cursor",
+        ),
     ],
 )
 def test_manifest_errors(tmp_path: Path, snippet: str, message: str) -> None:
@@ -145,8 +158,8 @@ def test_manifest_rejects_duplicate_channels(tmp_path: Path) -> None:
 def test_select_channels_rejects_unknown_source() -> None:
     channels = record.load_channels()
     assert [channel.source for channel in record.select_channels(channels, ["duk"])] == ["duk"]
-    with pytest.raises(record.ManifestError, match="pid"):
-        record.select_channels(channels, ["pid"])
+    with pytest.raises(record.ManifestError, match="ids-jmk"):
+        record.select_channels(channels, ["ids-jmk"])
 
 
 def test_identical_payloads_share_one_object(tmp_path: Path) -> None:
@@ -361,7 +374,7 @@ def test_record_once_writes_one_poll_per_channel(tmp_path: Path) -> None:
 
 
 def test_cli_rejects_unknown_source(capsys: pytest.CaptureFixture[str]) -> None:
-    assert cli.main(["rt", "record", "--once", "--sources", "pid"]) == 1
+    assert cli.main(["rt", "record", "--once", "--sources", "ids-jmk"]) == 1
     assert "Unknown source" in capsys.readouterr().err
 
 

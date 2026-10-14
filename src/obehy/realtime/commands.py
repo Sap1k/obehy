@@ -183,7 +183,9 @@ def _egress(channels: list[Channel], args: argparse.Namespace) -> tuple[list[Cha
     )
     usable = egress.usable(channels, record.log)
     if not usable:
-        raise EgressError("no channel can poll: configure the egress proxy lists")
+        raise EgressError(
+            "no channel can poll: configure the egress proxy lists and source secrets"
+        )
     return usable, egress
 
 
