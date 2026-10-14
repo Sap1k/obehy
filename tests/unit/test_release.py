@@ -149,6 +149,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "history",
         "rail",
         "trip_call_source_kilometre",
+        "observation_vehicle",
     ]
 
 

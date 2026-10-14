@@ -1,9 +1,9 @@
 # Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
 # docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness,
-# v5 the index sweep and daily compaction).
+# v5 the index sweep and daily compaction, v6 warm replay by vehicle).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "5"
+policy_version = "6"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -92,7 +92,12 @@ max_early_departure_s = { default = 86400, rail = 0 }
 discard_below_s = -1800
 
 [warm_replay]
-hours = 4
+# What a restart replays: "vehicles" the stored observations of the vehicles still live (seen
+# within lifecycle.forget_after_s plus the clock skew), each from where its state begins, and
+# every observation of the journeys they and station boards are on; "window" everything.
+# Either way at most the last max_hours.
+mode = "vehicles"
+max_hours = 6
 
 [emit]
 tick_s = 10

@@ -19,7 +19,7 @@ from obehy.realtime.policy import load_policy
 from obehy.realtime.replay import ReplayOptions, replay
 from obehy.realtime.runner import Runner
 from obehy.realtime.times import Instant, instant
-from obehy.realtime.warm import warm_start
+from obehy.realtime.warm import warm_start, warm_window
 from tests.db.serving_fixture import write_release
 from tests.realtime.builder import ORIGIN, STEP_LON, Timetable, serving_rows, timetable
 
@@ -105,8 +105,7 @@ def _history(connection: psycopg.Connection) -> list[tuple[Any, ...]]:
 
 
 def _stored(connection: psycopg.Connection, until: Instant) -> Iterator[list[Observation]]:
-    since = until - timedelta(hours=POLICY.warm_replay_hours)
-    return stored_observations(connection, since, until)
+    return stored_observations(connection, *warm_window(POLICY, until))
 
 
 @pytest.fixture
@@ -171,6 +170,25 @@ def test_warm_restart_continues_like_an_uninterrupted_run(
     full, after = _snapshots(tmp_path / "full"), _snapshots(tmp_path / "after")
     assert after
     assert {name: full[name] for name in after} == after
+
+
+def test_warm_replay_reads_only_what_live_vehicles_depend_on(
+    connection: psycopg.Connection, tmp_path: Path, release: Path
+) -> None:
+    replay(
+        connection, _options(tmp_path, "all", release, write_history=True), POLICY, report=_quiet
+    )
+    until = instant(START + timedelta(minutes=41))
+    since = until - timedelta(hours=POLICY.warm_replay_max_hours)
+    everything = [o for chunk in stored_observations(connection, since, until) for o in chunk]
+    _, _, alive = warm_window(POLICY, until)
+    live = [o for chunk in stored_observations(connection, since, until, alive) for o in chunk]
+
+    # Bus 810 is bound from its first poll: all of its 80 rows. The bus with an unknown key
+    # depends on its last observation only.
+    assert len(everything) == 160
+    assert len(live) == 81
+    assert [o.received_at for o in live] == sorted(o.received_at for o in live)
 
 
 def test_a_mid_day_release_switch_adds_a_revision(

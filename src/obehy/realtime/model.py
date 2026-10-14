@@ -533,6 +533,10 @@ class VehicleState:
     # The facts of the last observation: the same fix again (`last_seen` is its own fix time)
     # is no news and is not processed again.
     facts: tuple[Fact, ...] = ()
+    # Reception time of the first observation this state depends on: the start of the current
+    # binding, or of the keyless episode; otherwise the last observation. Warm replay starts
+    # the vehicle there (`ObservationResult.state_since`).
+    since: Instant | None = None
 
 
 @dataclass(slots=True)
@@ -618,6 +622,8 @@ class ObservationResult:
     reason: Reason | None
     # The public journeys the observation bears on (rail: the run's train-number journeys).
     public: tuple[JourneyKey, ...] = ()
+    # The vehicle's `VehicleState.since` after this observation; None without a vehicle.
+    state_since: Instant | None = None
 
 
 @dataclass(frozen=True, slots=True)

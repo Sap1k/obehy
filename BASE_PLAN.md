@@ -929,10 +929,14 @@ changes). Its manifest semantics must be backed by captured examples.
   whose `release_id` matches the active publication, so a release swap never mixes releases.
 - Releases normally activate at night. A mid-day activation (a hotfix rerun) is allowed: every
   journey is re-snapshotted against the new release (section 29).
-- **Restart is a warm replay; there is no checkpoint format.** The worker loads the index,
-  re-runs the core over the stored observations of the last few hours (policy) with the replay
-  clock, then starts polling. Bindings are re-made from their keys, and the date rule (section
-  19.3) gives the same service date because it depends only on schedule and observation time.
+- **Restart is a warm replay; there is no checkpoint format.** The worker loads the index and
+  re-runs the core with the replay clock over the stored observations the live state depends
+  on: those of the vehicles still live from where their state begins (their binding or keyless
+  episode), and all of the journeys they are on, within the last few hours (policy). Live
+  vehicles and their journeys continue as in an uninterrupted run; a journey already finished
+  is not restored. Channels are polled and archived meanwhile, so a restart leaves no gap.
+  Bindings are re-made from their keys, and the date rule (section 19.3) gives the same service
+  date because it depends only on schedule and observation time.
 - Scale target: about 20k vehicles updating every 10–30 s, roughly 1–2k observations per second,
   handled by one Python process with in-memory indexes. Shard per feed only if measurements
   require it.

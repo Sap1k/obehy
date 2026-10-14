@@ -142,9 +142,12 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         semantics = ctx.semantics_of(observation)
         episode = advance(prior, observation, semantics, ctx.policy.keyless)
     if vehicle is None or (key is None and episode is None):
-        effects.append(ObservationResult(observation, None, Reason.NO_KEY))
+        since = None
         if vehicle is not None:
-            _set_vehicle(state, observation, vehicle, "unmatched", None, None, Reason.NO_KEY)
+            since = _set_vehicle(
+                state, observation, vehicle, "unmatched", None, None, Reason.NO_KEY
+            )
+        effects.append(ObservationResult(observation, None, Reason.NO_KEY, state_since=since))
         return effects
 
     if key is None:
@@ -159,8 +162,10 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
                 status: VehicleStatus = (
                     "not_in_service" if result is Reason.NOT_IN_SERVICE else "unmatched"
                 )
-                _set_vehicle(state, observation, vehicle, status, None, None, result, episode)
-                effects.append(ObservationResult(observation, None, result))
+                since = _set_vehicle(
+                    state, observation, vehicle, status, None, None, result, episode
+                )
+                effects.append(ObservationResult(observation, None, result, state_since=since))
                 return effects
             binding = Binding(
                 vehicle, result.journey, result.trip.trip_id, "inferred", observation.at, False
@@ -181,8 +186,8 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
             result = Reason.STALE_KEY
         if not isinstance(result, Match):
             status = "not_in_service" if result is Reason.NOT_IN_SERVICE else "unmatched"
-            _set_vehicle(state, observation, vehicle, status, key, None, result)
-            effects.append(ObservationResult(observation, None, result))
+            since = _set_vehicle(state, observation, vehicle, status, key, None, result)
+            effects.append(ObservationResult(observation, None, result, state_since=since))
             return effects
         binding = Binding(vehicle, result.journey, result.trip.trip_id, "keyed", observation.at)
         effects.extend(_open(state, result, ctx, observation))
@@ -215,8 +220,8 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     status = "positioning" if instance.lifecycle in ("forecast", "pre_trip") else "running"
     if instance.lifecycle == "finished":
         status = "layover"
-    _set_vehicle(state, observation, vehicle, status, key, binding, None, episode)
-    effects.append(ObservationResult(observation, binding.journey, None, instance.public))
+    since = _set_vehicle(state, observation, vehicle, status, key, binding, None, episode)
+    effects.append(ObservationResult(observation, binding.journey, None, instance.public, since))
     return effects
 
 
@@ -461,11 +466,14 @@ def _set_vehicle(
     binding: Binding | None,
     reason: Reason | None,
     episode: KeylessEpisode | None = None,
-) -> None:
+) -> Instant:
+    """Record the vehicle's state after `observation`; returns its `since`."""
+
     previous = state.vehicles.get(vehicle)
     position = observation.first(Position)
     if position is None and previous is not None:
         position = previous.position
+    since = _since(previous, observation, binding, episode)
     state.vehicles[vehicle] = VehicleState(
         vehicle=vehicle,
         feed=state.feed,
@@ -477,7 +485,32 @@ def _set_vehicle(
         reason=reason,
         episode=episode,
         facts=observation.facts,
+        since=since,
     )
+    return since
+
+
+def _since(
+    previous: VehicleState | None,
+    observation: Observation,
+    binding: Binding | None,
+    episode: KeylessEpisode | None,
+) -> Instant:
+    """Where the vehicle's state begins: a keyless vehicle's at its episode's start (inference
+    reads the whole episode), a bound one's at its binding; otherwise this observation."""
+
+    if previous is not None and previous.since is not None:
+        if episode is not None:
+            if previous.episode is not None and previous.episode.started_at == episode.started_at:
+                return previous.since
+        elif (
+            binding is not None
+            and previous.binding is not None
+            and previous.binding.journey == binding.journey
+            and previous.binding.bound_at == binding.bound_at
+        ):
+            return previous.since
+    return observation.received_at
 
 
 def rebase(state: FeedState, index: IndexView) -> list[Effect]:

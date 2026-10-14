@@ -23,7 +23,7 @@ import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg
@@ -44,7 +44,7 @@ from obehy.realtime.runtime.demand import FetchBody, StationDemand, run_demand
 from obehy.realtime.runtime.fetch import fetch_body
 from obehy.realtime.runtime.scheduler import FetchFn, run_channel
 from obehy.realtime.times import Instant, instant
-from obehy.realtime.warm import warm_start
+from obehy.realtime.warm import warm_start, warm_window
 
 
 def _now() -> Instant:
@@ -162,8 +162,7 @@ class _Worker:
         """Warm replay on a thread while the channels are polled, then the backlog."""
 
         until = _now()
-        since = until - timedelta(hours=self.policy.warm_replay_hours)
-        chunks = stream_observations(self.database_url, since, until)
+        chunks = stream_observations(self.database_url, *warm_window(self.policy, until))
         stopping = asyncio.create_task(self._stop_warm_replay())
         try:
             warmed = await asyncio.to_thread(

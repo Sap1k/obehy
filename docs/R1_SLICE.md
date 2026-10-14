@@ -151,7 +151,7 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | `[lifecycle]` | stale and lost after N s (by mode); trigger radius and margin; finished grace; forget after |
 | `[progress]` | the progress model of section 9 (geometry trust, speed, lateness change, beam, commit lag, off-route hold) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
-| `[warm_replay]` | hours = 4 |
+| `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
 | `[retention]` | observation_days = 30 (dropped by `obehy jobs nightly`) |
 
 The file carries `policy_version`, which goes into `derivation`. Code holds no defaults for
@@ -159,14 +159,27 @@ policy values: a missing key is a load error.
 
 ## 5. Restart by warm replay
 
-On start the worker loads the release index, then runs the core over the stored observations of
-the last `warm_replay.hours` with the replay clock (housekeeping ticks on round multiples of the
+On start the worker loads the release index, then runs the core over stored observations of
+the last `warm_replay.max_hours` with the replay clock (housekeeping ticks on round multiples of the
 emit tick, as in `obehy rt replay`), discarding effects except the final state rows. The replay
 runs on a thread that reads ahead of the core on its own connection. Channels are polled and
 archived from the start; their observations wait in a backlog that runs with the writer attached
 once the replay is done, so a restart leaves no gap in the archive or `rt.observation`. There is
 no checkpoint file and no second serialization format; the replay path is exercised on every
 restart.
+
+With `warm_replay.mode = "vehicles"` (policy v6) only what the live state depends on is read.
+Each stored observation carries its vehicle and `state_since`: the reception time from which
+the vehicle's state depends on its observations (the start of its binding, or of its keyless
+episode, which inference reads whole; otherwise the observation itself). A vehicle is live when
+its last observation is younger than `lifecycle.forget_after_s` plus the clock skew; the replay
+reads each live vehicle's observations from its `state_since`, and every observation of the
+journeys live vehicles and recent station boards are on, so a journey is rebuilt from its first
+observation whichever vehicle or source made it. The guarantee: every live vehicle and every
+journey it is bound to continue exactly as in an uninterrupted run. A journey no live vehicle is
+on (finished before the restart) is not restored; its events are already in history. Warm-up
+then grows with the vehicles running, not with hours of history. `mode = "window"` reads
+everything, as before v6.
 
 A binding made before the window starts is re-made from its key inside the window, and the
 date rule (section 19.3: date chosen once from the admissible window) gives the same service date

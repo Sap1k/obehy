@@ -247,6 +247,21 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-14** — Faster warm start (prod: about 8 min after peak hours, 4 h window). (1) The
+  worker polls and archives during warm replay (was a gap on every restart); observations
+  received meanwhile run from a backlog once it is done; the replay runs on a thread with a
+  read-ahead reader, ticks on the replay clock (was one tick at the end) and logs progress
+  every 30 s. (2) Core step 70 → 43 µs per observation on the real traces, bit-identical
+  (every `core.step` of the unit suite and the traces fingerprinted against the old code):
+  integer-microsecond tracker arithmetic, one instance rebuild per fix instead of four or
+  five `dataclasses.replace`, facts indexed by type, cached spans and local dates; static data
+  loads run off the event loop; the summary reports core µs per observation. (3) Policy v6
+  `warm_replay.mode = "vehicles"` with migration 0009 (`rt.observation.vehicle_id`,
+  `state_since`): a restart replays only the live vehicles from where their state begins and
+  the journeys they are on (journeys already finished are not restored); a property test over
+  the traces and a two-journey bus checks live state equals an uninterrupted run. Unit tests
+  pass; DB tests (incl. the new SQL selection test), `obehy rt bench` and a real warm start
+  not run (no database reachable); needs the prod warm-up log after deploy.
 - **2026-10-13** — The feed list's realtime sources come from the connector manifests: each
   manifest has a `title` and `covers`, and the GTFS-RT files a source feeds follow its
   channels' `live_feeds`, so the list no longer goes stale (it named only DÚK and SŽ). Unit

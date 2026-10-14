@@ -11,13 +11,28 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable, Generator, Iterable, Iterator
+from datetime import datetime, timedelta
 
 from obehy.realtime.model import Observation
 from obehy.realtime.phases import Phases
+from obehy.realtime.policy import Policy
 from obehy.realtime.runner import Runner
 from obehy.realtime.times import Instant, next_multiple
 
 PROGRESS_EVERY_S = 30.0
+
+
+def warm_window(policy: Policy, until: Instant) -> tuple[datetime, datetime, datetime | None]:
+    """`(since, until, alive)` for `stored_observations`: the last `max_hours`, and with
+    `mode = "vehicles"` the reception time from which a vehicle still counts as live (seen
+    within `forget_after_s`, as `refresh` keeps it, plus the clock skew a source time may
+    have)."""
+
+    since = until - timedelta(hours=policy.warm_replay_max_hours)
+    if policy.warm_replay_mode == "window":
+        return since, until, None
+    alive_s = policy.lifecycle.forget_after_s + policy.time.max_clock_skew_s
+    return since, until, until - timedelta(seconds=alive_s)
 
 
 class _Ticks:

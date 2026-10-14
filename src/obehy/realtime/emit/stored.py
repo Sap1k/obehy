@@ -5,6 +5,13 @@ sort; a chunk never splits observations received at the same instant, so sorting
 the full processing key (`Runner.process`) gives the same order as one sort over the window.
 `stream_observations` reads and decodes on a thread with its own connection, so waiting on the
 database and decoding the facts overlap with the core.
+
+With `alive` (policy `warm_replay.mode = "vehicles"`) only what the state of the vehicles still
+live depends on is read: a vehicle is live when its last observation was received at or after
+`alive`; its observations are read from its `state_since` (its binding's or keyless episode's
+start), and every observation of the journeys live vehicles or recent station boards are on, so
+each journey is rebuilt from its first observation, whichever vehicle or source made it. Rows
+stored before `state_since` existed are always read.
 """
 
 from __future__ import annotations
@@ -25,22 +32,70 @@ CHUNK = 20_000
 DEPTH = 4  # decoded chunks the reader may run ahead of the core
 
 
+_COLUMNS = (
+    "o.source, o.channel, o.feed, o.received_at, o.observed_at, o.raw_sha256, o.raw_item,"
+    " o.decoder_version, o.facts"
+)
+
+_WINDOW = f"""
+SELECT {_COLUMNS} FROM rt.observation o
+WHERE o.received_at >= %(since)s AND o.received_at < %(until)s
+ORDER BY o.received_at
+"""
+
+_BY_VEHICLE = f"""
+WITH latest AS (
+    SELECT DISTINCT ON (source, vehicle_id) source, vehicle_id, received_at, state_since,
+        feed, journey_namespace, journey_key, service_date
+    FROM rt.observation
+    WHERE received_at >= %(since)s AND received_at < %(until)s AND vehicle_id IS NOT NULL
+    ORDER BY source, vehicle_id, received_at DESC
+), live AS (
+    SELECT * FROM latest WHERE received_at >= %(alive)s
+), journeys AS (
+    SELECT feed, journey_namespace, journey_key, service_date
+    FROM live WHERE journey_key IS NOT NULL
+    UNION
+    SELECT feed, journey_namespace, journey_key, service_date
+    FROM rt.observation
+    WHERE received_at >= %(alive)s AND received_at < %(until)s AND vehicle_id IS NULL
+        AND state_since IS NOT NULL AND journey_key IS NOT NULL
+)
+SELECT {_COLUMNS} FROM rt.observation o
+WHERE o.received_at >= %(since)s AND o.received_at < %(until)s AND (
+    o.state_since IS NULL
+    OR EXISTS (
+        SELECT 1 FROM live l
+        WHERE l.source = o.source AND l.vehicle_id = o.vehicle_id
+            AND o.received_at >= l.state_since
+    )
+    OR EXISTS (
+        SELECT 1 FROM journeys j
+        WHERE j.feed = o.feed AND j.journey_namespace = o.journey_namespace
+            AND j.journey_key = o.journey_key AND j.service_date = o.service_date
+    )
+)
+ORDER BY o.received_at
+"""
+
+
 def stored_observations(
-    connection: psycopg.Connection, since: datetime, until: datetime, chunk: int = CHUNK
+    connection: psycopg.Connection,
+    since: datetime,
+    until: datetime,
+    alive: datetime | None = None,
+    chunk: int = CHUNK,
 ) -> Iterator[list[Observation]]:
     """Stored observations received in [since, until), in `received_at` order, about `chunk` at
-    a time; read through a server-side cursor, so hours of them are never in memory at once."""
+    a time; read through a server-side cursor, so hours of them are never in memory at once.
+    With `alive`, only those the vehicles still live depend on (see the module)."""
 
+    query = _WINDOW if alive is None else _BY_VEHICLE
     with (
         connection.transaction(),
         connection.cursor(name="warm_replay") as cursor,
     ):
-        cursor.execute(
-            "SELECT source, channel, feed, received_at, observed_at, raw_sha256, raw_item,"
-            " decoder_version, facts FROM rt.observation"
-            " WHERE received_at >= %s AND received_at < %s ORDER BY received_at",
-            (since, until),
-        )
+        cursor.execute(query, {"since": since, "until": until, "alive": alive})
         batches = iter(lambda: [_stored(*row) for row in cursor.fetchmany(chunk)], [])
         yield from whole_instants(batches)
 
@@ -66,7 +121,11 @@ def whole_instants(batches: Iterable[list[Observation]]) -> Iterator[list[Observ
 
 
 def stream_observations(
-    database_url: str, since: datetime, until: datetime, chunk: int = CHUNK
+    database_url: str,
+    since: datetime,
+    until: datetime,
+    alive: datetime | None = None,
+    chunk: int = CHUNK,
 ) -> Iterator[list[Observation]]:
     """`stored_observations` read ahead on a thread with its own connection. Closing the
     iterator early stops the reader; a reader error is raised here."""
@@ -86,7 +145,7 @@ def stream_observations(
     def read() -> None:
         try:
             with psycopg.connect(database_url, autocommit=True) as connection:
-                for part in stored_observations(connection, since, until, chunk):
+                for part in stored_observations(connection, since, until, alive, chunk):
                     if not put(part):
                         return
         except BaseException as error:  # handed to the consumer, raised there

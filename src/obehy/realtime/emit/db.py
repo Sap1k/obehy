@@ -150,12 +150,13 @@ class Writer:
         with self.connection.cursor().copy(
             "COPY rt.observation (received_at, source, channel, feed, raw_sha256, raw_item,"
             " observed_at, decoder_version, fact_schema_version, facts, journey_namespace,"
-            " journey_key, service_date, reason, release_id) FROM STDIN"
+            " journey_key, service_date, reason, release_id, vehicle_id, state_since) FROM STDIN"
         ) as copy:
             for result in results:
                 obs = result.observation
                 facts = facts_to_json(obs.facts)
                 journey = result.journey
+                vehicle = obs.first(VehicleKey)
                 copy.write_row(
                     (
                         obs.received_at,
@@ -173,6 +174,9 @@ class Writer:
                         None if journey is None else journey.service_date,
                         None if result.reason is None else result.reason.value,
                         self.derivation.release_id,
+                        None if vehicle is None else vehicle.source_vehicle_id,
+                        # A row without a vehicle (a board row) starts its own state.
+                        result.state_since or obs.received_at,
                     )
                 )
 

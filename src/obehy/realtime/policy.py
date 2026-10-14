@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v5.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v6.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import tomllib
 from dataclasses import dataclass, fields
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, cast, get_type_hints
+from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v5.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v6.toml"
 
 
 class PolicyError(ValueError):
@@ -159,7 +159,8 @@ class Policy:
     progress: ProgressPolicy
     prediction: PredictionPolicy
     delay_discard_below_s: int
-    warm_replay_hours: int
+    warm_replay_mode: WarmReplayMode
+    warm_replay_max_hours: int
     emit_tick_s: int
     sweep_index_every_s: int
     keep_index_s: int
@@ -256,6 +257,15 @@ def _rail(table: _Table) -> RailPolicy:
     )
 
 
+WarmReplayMode = Literal["vehicles", "window"]
+
+
+def _warm_replay_mode(value: str) -> WarmReplayMode:
+    if value not in ("vehicles", "window"):
+        raise PolicyError(f"warm_replay.mode must be vehicles or window, not {value!r}")
+    return value
+
+
 def parse_policy(document: dict[str, Any]) -> Policy:
     root = _Table(document, "")
     return Policy(
@@ -265,7 +275,8 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         progress=root.section("progress", ProgressPolicy),
         prediction=root.section("prediction", PredictionPolicy),
         delay_discard_below_s=root.table("delay").integer("discard_below_s"),
-        warm_replay_hours=root.table("warm_replay").integer("hours"),
+        warm_replay_mode=_warm_replay_mode(root.table("warm_replay").text("mode")),
+        warm_replay_max_hours=root.table("warm_replay").integer("max_hours"),
         emit_tick_s=root.table("emit").integer("tick_s"),
         sweep_index_every_s=root.table("emit").integer("sweep_index_every_s"),
         keep_index_s=root.table("emit").integer("keep_index_s"),
