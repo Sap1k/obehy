@@ -10,7 +10,7 @@ import pytest
 
 from obehy import cli
 from obehy.realtime import record
-from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls
+from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls, prune
 from obehy.realtime.model import SourceSemantics
 from obehy.realtime.runtime import fetch
 
@@ -215,6 +215,27 @@ def test_truncated_last_index_line_is_skipped(tmp_path: Path) -> None:
 
     polls = list(iter_polls(tmp_path, "duk", "vehicles", T0.date(), T0.date()))
     assert [poll.body() for poll in polls] == [b"a"]
+
+
+def test_prune_deletes_only_day_directories_before_the_cutoff(tmp_path: Path) -> None:
+    writer = ArchiveWriter(tmp_path)
+    writer.append("duk", "vehicles", _poll(b"a"), b"a")
+    writer.append("duk", "vehicles", _poll(b"b", at=T0 + timedelta(seconds=15)), b"b")
+    writer.append("pid", "vehicles", _poll(b"c"), b"c")
+    pinned = tmp_path / "duk" / "vehicles" / "notes"
+    pinned.mkdir()
+
+    pruned = prune(tmp_path, date(2026, 10, 6))
+
+    assert sorted(path.relative_to(tmp_path).as_posix() for path in pruned) == [
+        "duk/vehicles/2026-10-05",
+        "pid/vehicles/2026-10-05",
+    ]
+    assert sorted(p.name for p in (tmp_path / "duk" / "vehicles").iterdir()) == [
+        "2026-10-06",
+        "notes",
+    ]
+    assert prune(tmp_path / "missing", date(2026, 10, 6)) == []
 
 
 def test_arriva_filter_keeps_only_express() -> None:

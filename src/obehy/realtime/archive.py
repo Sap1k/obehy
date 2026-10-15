@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -57,6 +58,24 @@ class Stored:
 
 def day_directory(root: Path, source: str, channel: str, day: date) -> Path:
     return root / source / channel / day.isoformat()
+
+
+def prune(root: Path, before: date) -> list[Path]:
+    """Delete the day directories of every source and channel older than `before`; returns them.
+
+    Only `<root>/<source>/<channel>/<YYYY-MM-DD>` directories are touched.
+    """
+
+    pruned: list[Path] = []
+    for directory in sorted(root.glob("*/*/*")):
+        try:
+            day = date.fromisoformat(directory.name)
+        except ValueError:
+            continue
+        if directory.is_dir() and day < before:
+            shutil.rmtree(directory)
+            pruned.append(directory)
+    return pruned
 
 
 class ArchiveWriter:

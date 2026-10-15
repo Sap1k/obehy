@@ -1,10 +1,10 @@
 # Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
 # docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness,
 # v5 the index sweep and daily compaction, v6 warm replay by vehicle, v7 PID in the position
-# preference, v8 two days of rt.observation).
+# preference, v8 two days of rt.observation, v9 the raw archive window).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "8"
+policy_version = "9"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -116,6 +116,11 @@ compact_index_at_s = 12600
 # tours live in history.*, which is rebuilt from the raw archive, not from here. A day of all
 # sources is several GB.
 observation_days = 2
+# Raw archive day directories (data/rt-raw/<source>/<channel>/<UTC day>) older than this are
+# deleted by the same job. Inside the window history can be rebuilt by replay; outside it is
+# kept as recorded. Pinned corpora are copies elsewhere and stay. All sources together are about
+# 1 GB a day with PID (BASE_PLAN.md section 18.4 plans 3 months; the server disk fits 2 weeks).
+raw_days = 14
 
 [egress]
 # Proxy pools of channels that declare an egress (SŽ; docs/R2_SLICE.md section 7).

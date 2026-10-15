@@ -15,6 +15,7 @@ from typing import cast
 import psycopg
 
 from obehy.realtime import bench, record, replay
+from obehy.realtime.archive import prune as prune_archive
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError, active_loads
 from obehy.realtime.jobs import drop_observations, vehicle_day
@@ -140,8 +141,10 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     _database(days)
     nightly = job_commands.add_parser(
         "nightly",
-        help="vehicle days of the last two service dates, then drop expired observations",
+        help="vehicle days of the last two service dates, then drop expired observations and "
+        "raw archive days",
     )
+    nightly.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
     _database(nightly)
 
 
@@ -330,6 +333,10 @@ def _jobs(args: argparse.Namespace) -> int:
             cutoff = now.date() - timedelta(days=policy.observation_retention_days)
             dropped = drop_observations(connection, cutoff)
             print(f"dropped {len(dropped)} observation partitions before {cutoff}")
+    if args.job_command == "nightly":
+        cutoff = now.date() - timedelta(days=policy.raw_retention_days)
+        pruned = prune_archive(cast(Path, args.archive), cutoff)
+        print(f"deleted {len(pruned)} raw archive days before {cutoff}")
     return 0
 
 

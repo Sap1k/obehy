@@ -216,8 +216,7 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   of own GPS delay against the source's, the travel-time provider interface.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
-  GTFS-RT alerts and departures later. Open: the raw archive
-  is not pruned, and PID adds about 0.5 GB a day to it.
+  GTFS-RT alerts and departures later.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -251,6 +250,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-15** — PID live on jdf and czptt. Raw archive retention: policy v9 `[retention]
+  raw_days = 14`, and `obehy jobs nightly` deletes older archive day directories (all sources
+  with PID are about 1 GB a day; zstd level 10 is within 12 % of level 19, so the window is the
+  lever). BASE_PLAN's 3 months does not fit the 60 GB server; pinned corpora are copies and stay.
 - **2026-10-15** — PID server capture (12.75 h overnight to late morning) replayed with SŽ map
   against release 20261015T014009Z: running key groups bound bus 99.9 %, tram 99.2 % (67 %
   before the JrUtil night-trip fix), metro, trolleybus and ferry 100 %, train 97.0 %. The capture

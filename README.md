@@ -302,5 +302,6 @@ at most 60 a minute. Rail point events and the SŽ station codes need a release 
 `sr70` keys. `obehy jobs vehicle-day --from DAY` builds the
 vehicles' working days; `obehy jobs nightly` (03:30 Prague in the server stack)
 rebuilds them for the last two service dates and drops `rt.observation` days older than
-`[retention] observation_days` (2; a day of all sources is several GB). The raw archive is not pruned yet. The design is in
+`[retention] observation_days` (2; a day of all sources is several GB) and raw archive days older than `raw_days` (14, about
+1 GB a day with PID; pin days to keep with `obehy rt corpus pin` first). The design is in
 `docs/R1_SLICE.md` and, for rail, `docs/R2_SLICE.md`.
