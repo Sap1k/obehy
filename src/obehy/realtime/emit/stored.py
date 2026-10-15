@@ -11,7 +11,9 @@ live depends on is read: a vehicle is live when its last observation was receive
 `alive`; its observations are read from its `state_since` (its binding's or keyless episode's
 start), and every observation of the journeys live vehicles or recent station boards are on, so
 each journey is rebuilt from its first observation, whichever vehicle or source made it. Rows
-stored before `state_since` existed are always read.
+stored before `state_since` existed are always read. Both tests are hash joins (`live` has one
+row per vehicle, `journeys` one per journey): as `OR EXISTS` subqueries they ran once per row
+of the window against every live vehicle, minutes before the first row once PID was live.
 """
 
 from __future__ import annotations
@@ -62,18 +64,11 @@ WITH latest AS (
         AND state_since IS NOT NULL AND journey_key IS NOT NULL
 )
 SELECT {_COLUMNS} FROM rt.observation o
+LEFT JOIN live l ON l.source = o.source AND l.vehicle_id = o.vehicle_id
+LEFT JOIN journeys j ON j.feed = o.feed AND j.journey_namespace = o.journey_namespace
+    AND j.journey_key = o.journey_key AND j.service_date = o.service_date
 WHERE o.received_at >= %(since)s AND o.received_at < %(until)s AND (
-    o.state_since IS NULL
-    OR EXISTS (
-        SELECT 1 FROM live l
-        WHERE l.source = o.source AND l.vehicle_id = o.vehicle_id
-            AND o.received_at >= l.state_since
-    )
-    OR EXISTS (
-        SELECT 1 FROM journeys j
-        WHERE j.feed = o.feed AND j.journey_namespace = o.journey_namespace
-            AND j.journey_key = o.journey_key AND j.service_date = o.service_date
-    )
+    o.state_since IS NULL OR o.received_at >= l.state_since OR j.journey_key IS NOT NULL
 )
 ORDER BY o.received_at
 """

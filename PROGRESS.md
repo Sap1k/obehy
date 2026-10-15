@@ -250,6 +250,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-15** — Warm replay `read` at 90 % of wall time with PID live: the by-vehicle query's
+  `OR EXISTS` tests ran per window row against every live vehicle (window rows × live vehicles;
+  synthetic 6 h of 1,500 vehicles: 102 s before the first row). Rewritten as left joins: same
+  rows in 11.7 s. DB tests pass.
 - **2026-10-15** — PID live on jdf and czptt. Raw archive retention: policy v9 `[retention]
   raw_days = 14`, and `obehy jobs nightly` deletes older archive day directories (all sources
   with PID are about 1 GB a day; zstd level 10 is within 12 % of level 19, so the window is the
