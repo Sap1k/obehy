@@ -211,9 +211,9 @@ def test_a_body_without_features_is_a_payload_error() -> None:
         pid.decode(b"<html>", "sha", RECEIVED, SKEW)
 
 
-def test_pid_is_recorded_with_its_key_and_cursor_but_not_live() -> None:
+def test_pid_is_live_on_both_feeds_with_its_key_and_cursor() -> None:
     (channel,) = [c for c in record.load_channels() if c.source == "pid"]
     assert (channel.source, channel.channel) in DECODERS
-    assert channel.feeds == ("jdf", "czptt") and channel.live_feeds == ()
+    assert channel.feeds == ("jdf", "czptt") and channel.live_feeds == ("jdf", "czptt")
     assert channel.auth == Auth("X-Access-Token", "golemio")
     assert channel.cursor == Cursor("x-last-modified", "updatedSince", 120.0)

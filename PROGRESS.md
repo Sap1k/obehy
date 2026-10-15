@@ -214,9 +214,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
   replayed clean on the server capture of 2026-10-09 to 10-12, live on jdf. Open: `rt evaluate`
   of own GPS delay against the source's, the travel-time provider interface.
-  Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), recorded only; the
-  server capture replays at 97–100 % per mode (`docs/sources/pid.md`). Next:
-  `live_feeds = ["jdf", "czptt"]`. GTFS-RT alerts and departures later. Open: the raw archive
+  Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
+  czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
+  GTFS-RT alerts and departures later. Open: the raw archive
   is not pruned, and PID adds about 0.5 GB a day to it.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.

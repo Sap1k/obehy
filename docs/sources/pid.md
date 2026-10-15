@@ -1,10 +1,9 @@
 # Source dossier: PID vehicle positions from Golemio (`pid`)
 
-Status: **probed 2026-10-15 around 00:10 local (a few full lists and deltas, 839 vehicles in the
-first) with a test API key; recorded only.** Keys checked against release
-`20261012T080259Z-8f416ec58c3a` (serving schema 5.x). Connector `sources/pid.py` (decoder
-version 1). Not live (`live_feeds = []`) until a day of capture is replayed against the release
-current at capture time: match rate per mode, quirks, observations per second and core cost.
+Status: **probed 2026-10-15 around 00:10 local with a test API key; a 12.75 h server capture
+replayed at 97–100 % per mode; live on jdf and czptt since 2026-10-15.** Keys first checked
+against release `20261012T080259Z-8f416ec58c3a` (serving schema 5.x). Connector `sources/pid.py`
+(decoder version 2).
 
 PID (Pražská integrovaná doprava) covers Prague city buses, trams, metro, trolleybuses and the
 ferry, the regional buses of Central Bohemia and the trains in its area. Golemio, Prague's data

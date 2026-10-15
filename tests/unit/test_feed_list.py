@@ -45,8 +45,7 @@ def test_realtime_sources_come_from_the_connector_manifests(tmp_path: Path) -> N
     assert feeds["sz-mapa"] == ["cz-czptt-gtfs-rt.pb"]
     # MPV net trains are recorded but not live (live_feeds = ["jdf"]).
     assert feeds["mpvnet"] == ["cz-jdf-gtfs-rt.pb"]
-    # PID is recorded only so far (live_feeds = []).
-    assert "pid" not in feeds
+    assert feeds["pid"] == ["cz-jdf-gtfs-rt.pb", "cz-czptt-gtfs-rt.pb"]
     assert set(feeds) == {source.source for source in load_sources() if source.live_feeds}
 
 

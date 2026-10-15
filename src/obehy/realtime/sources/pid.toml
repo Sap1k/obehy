@@ -1,7 +1,7 @@
 # PID vehicle positions from Golemio (docs/sources/pid.md): Prague and Central Bohemia buses,
 # trams, metro, trolleybuses and trains. Needs a Golemio API key (secret "golemio"). Polls
-# deltas: the last response's x-last-modified goes back as updatedSince. Recorded only until a
-# day of capture has been replayed (live_feeds = []).
+# deltas: the last response's x-last-modified goes back as updatedSince. Live on both feeds since
+# the server capture of 2026-10-15 replayed at 97–100 % per mode.
 source = "pid"
 manifest_version = 1
 # The public feed list (obehy release feed-list) names the source by these.
@@ -14,7 +14,7 @@ poll = { kind = "interval", seconds = 10 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 20
 feeds = ["jdf", "czptt"]
-live_feeds = []
+live_feeds = ["jdf", "czptt"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 auth = { header = "X-Access-Token", secret = "golemio" }
 cursor = { header = "x-last-modified", param = "updatedSince", max_age_s = 120 }

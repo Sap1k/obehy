@@ -67,7 +67,7 @@ def test_shipped_manifests_load() -> None:
         "sz-tabule/board",
     ]
     arriva, dpmd, duk, idol, *_, pid, sz, boards = channels
-    assert pid.auth is not None and pid.cursor is not None and pid.live_feeds == ()
+    assert pid.auth is not None and pid.cursor is not None and pid.live_feeds == ("jdf", "czptt")
     assert (dpmd.filter, dpmd.method) == ("dpmd", "GET") and "{epoch_ms}" in dpmd.url
     assert idol.headers["origin"] == "https://www.mpvnet.cz" and idol.feeds == ("jdf", "czptt")
     assert (boards.demand, boards.egress, boards.method) == ("station_boards", "sz", "POST")
