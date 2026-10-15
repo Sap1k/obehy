@@ -438,3 +438,37 @@ def test_a_bus_reported_by_two_sources_is_one_vehicle_in_gtfs_rt() -> None:
     (update,) = [e.trip_update for e in message.entity if e.HasField("trip_update")]
     assert [e.id for e in positions] == ["vehicle:duk:1001"]  # the source the tracker follows
     assert update.vehicle.id == "duk:1001"
+
+
+def test_pid_and_duk_on_one_trip_are_one_journey_in_gtfs_rt() -> None:
+    from obehy.realtime.core import refresh
+    from obehy.realtime.emit.gtfs_rt import feed_message
+    from obehy.realtime.model import Observation, TripKey
+
+    def pid(clock: str, where: tuple[float, float]) -> Observation:
+        # PID names its GTFS trip first, the CIS line and trip after it (PID-Q3).
+        obs = observe(f"2026-10-08 {clock}", vehicle="3:1832", position=where, source="pid")
+        own = TripKey("pid:gtfs_trip_id", "382_143_261001")
+        return replace(obs, facts=(obs.facts[0], own, *obs.facts[1:]))
+
+    run = Run()
+    run.ctx = Context(
+        with_unknown(
+            timetable()
+            .trip("582492:143", days=[DAY], calls=[("A", "08:00"), ("B", "08:05"), ("C", "08:10")])
+            .key("pid:gtfs_trip_id", "382_143_261001", "jdf:t1")
+            .index(),
+            ("cis:line_trip", "999999:1"),
+        ),
+        POLICY,
+    )
+    run.at("08:00", east(0)).at("08:03", east(500), delay=60)
+    run.effects.extend(step(run.state, pid("08:03:05", east(505)), run.ctx))
+    now = local("2026-10-08 08:03:10")
+    refresh(run.state, now, POLICY)
+    estimate_all(run.state, run.ctx)
+    (journey,) = run.state.instances
+    assert (journey.namespace, journey.key) == ("cis:line_trip", "582492:143")
+    message = feed_message(run.state, now)
+    assert len([e for e in message.entity if e.HasField("trip_update")]) == 1
+    assert len([e for e in message.entity if e.HasField("vehicle")]) == 1

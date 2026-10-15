@@ -86,6 +86,7 @@ delta is about 2.8 MB uncompressed, since nearly every vehicle moves within 10 s
 | PID-Q2 | trains and metro have no fleet number | trains `train:<number>`, metro `trip:<gtfs trip>` |
 | PID-Q3 | `cis.line_id` is `"none"` for trains and null for city lines | trains keyed by train number; the CIS key only where the line is numeric |
 | PID-Q4 | after its trip, or when cancelled (`canceled`, `is_canceled`), an entry still names the trip | no trip key (vehicle and position only); before the trip `pre_trip`, without delay |
+| PID-Q7 | a regional bus is also reported by DÚK, which names it by CIS line and trip; PID's own key is its GTFS trip ID | a journey whose trip and day the observation's CIS key also finds is named by the CIS key (core `IDENTITY_NAMESPACES`), so both sources share one journey, one TripUpdate and one vehicle |
 | PID-Q6 | `includeNotTracking` lists every trip of a vehicle's block (the previous `after_track`, the running one, the upcoming `before_track` ones), all at the vehicle's one position; in the capture about 45 % of vehicles in a poll had 2+ entries | one observation per vehicle and payload: the running entry (on the route over `off_track`; two still on it at once, 0.5 %, bind no trip), else the next trip to start as `pre_trip`, else the vehicle alone |
 
 ## Open questions (for the capture)

@@ -17,7 +17,10 @@ departure); a vehicle driving its trip is never left without realtime.
 Rail runs (docs/R2_SLICE.md section 2): the instance of a CZPTT train is its whole run (PA) on
 the service date, whichever source key bound it; history and assignments go to its public
 train-number journeys (`runs.py`). A source key that is ambiguous on its own (SZ-Q5: one TR,
-two timetables) falls back to the observation's further keys, in order.
+two timetables) falls back to the observation's further keys, in order. Any other journey is
+named by the key that bound it, except that a national key of the observation finding the same
+trip on the same day names it instead (`IDENTITY_NAMESPACES`): PID binds by its own GTFS trip
+ID, DÚK by the CIS line and trip, and the bus both report is one journey.
 
 Keyless sources (`infer/keyless`, BASE_PLAN.md sections 19.2 and 19.5): an observation with a
 `LineRef` and no `TripKey` is bound by inference over its episode, keyed by the trip's own key
@@ -35,7 +38,7 @@ from datetime import timedelta
 from obehy.realtime import timeline
 from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.infer import keyless
-from obehy.realtime.infer.keyed import Match, bind, in_window, span
+from obehy.realtime.infer.keyed import IDENTITY_NAMESPACES, Match, bind, in_window, span
 from obehy.realtime.infer.keyless.episode import advance
 from obehy.realtime.model import (
     AssignVehicle,
@@ -237,6 +240,18 @@ def _bind(observation: Observation, ctx: Context, at: Instant | None = None) -> 
             result = found
         if result is not Reason.AMBIGUOUS:
             break
+    if not isinstance(result, Match) or result.journey.namespace in IDENTITY_NAMESPACES:
+        return result
+    for key in observation.all(TripKey):
+        if key.namespace not in IDENTITY_NAMESPACES:
+            continue
+        found = bind(key, at or observation.at, ctx.index, ctx.policy, day and day.day)
+        if (
+            isinstance(found, Match)
+            and found.trip.trip_id == result.trip.trip_id
+            and found.journey.service_date == result.journey.service_date
+        ):
+            return replace(result, journey=found.journey)
     return result
 
 

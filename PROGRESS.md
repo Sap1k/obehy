@@ -250,6 +250,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-15** — PID and DÚK published two TripUpdates and two vehicles for one regional bus:
+  a non-rail journey was named by the key that bound it (PID's GTFS trip ID, DÚK's CIS line and
+  trip), so one trip was two journeys. A journey whose trip and day the observation's
+  `cis:line_trip` key also finds is now named by it (PID-Q7); 99 % of PID's regional entries
+  carry the CIS key. Unit and DB tests pass.
 - **2026-10-15** — Warm replay `read` at 90 % of wall time with PID live: the by-vehicle query's
   `OR EXISTS` tests ran per window row against every live vehicle (window rows × live vehicles;
   synthetic 6 h of 1,500 vehicles: 102 s before the first row). Rewritten as left joins: same

@@ -23,6 +23,11 @@ from obehy.realtime.policy import Policy, TimePolicy
 from obehy.realtime.runs import run_journey
 from obehy.realtime.times import Instant, ServiceTime, candidate_service_dates
 
+# Keys that name a journey whichever source reported it: the CIS line and trip, which DÚK, MPV
+# net and DPMD send and PID gives beside its own GTFS trip ID. One trip bound by several sources'
+# keys is then one journey (core `_bind`).
+IDENTITY_NAMESPACES = frozenset({"cis:line_trip"})
+
 
 @dataclass(frozen=True, slots=True)
 class Match:
