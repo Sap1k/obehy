@@ -224,13 +224,15 @@ The database may run on another host (start `compose.yaml` there); instead of th
 variable, set `[database] url` in `config/obehy.local.toml`. Readers query the `active.*` views
 only. `release fetch` downloads the newest `build-*` GitHub release (or the given run id),
 checks every asset against the digest GitHub records and every package against `release.json`
-and its manifest, and keeps the three newest release directories (`--keep`). `GITHUB_TOKEN`
+and its manifest, and keeps the two newest release directories (`--keep`). `GITHUB_TOKEN`
 raises the API rate limit but is not needed. DB tests in `tests/db/` run when
 `OBEHY_TEST_DATABASE_URL` or `[database] test_url` names a database that may create databases.
 
 `deploy/obehy-release-update` runs fetch, load, then `activate --if-newer`, which leaves alone
 any release no newer than one activated before (so a rollback sticks until the next build),
-and points `data/releases/active` at what it activated.
+and points `data/releases/active` at what it activated. Activation keeps the data of the active
+release and one predecessor (`--keep`; about 7 GB each in PostgreSQL) and drops older loads and
+what failed loads left behind; `obehy release prune` does the same on demand.
 
 ## Running the server
 
@@ -300,5 +302,5 @@ at most 60 a minute. Rail point events and the SŽ station codes need a release 
 `sr70` keys. `obehy jobs vehicle-day --from DAY` builds the
 vehicles' working days; `obehy jobs nightly` (03:30 Prague in the server stack)
 rebuilds them for the last two service dates and drops `rt.observation` days older than
-`[retention] observation_days` (30). The raw archive is not pruned yet. The design is in
+`[retention] observation_days` (2; a day of all sources is several GB). The raw archive is not pruned yet. The design is in
 `docs/R1_SLICE.md` and, for rail, `docs/R2_SLICE.md`.

@@ -14,7 +14,8 @@ from obehy.release.ddl import active_view, static_tables
 from obehy.release.load import partition_name
 
 NOTIFY_CHANNEL = "obehy_publication"
-DEFAULT_KEEP = 2
+# Predecessors whose data stays loaded for `--rollback`; each release is about 7 GB.
+DEFAULT_KEEP = 1
 
 
 class ActivationError(RuntimeError):
@@ -192,11 +193,21 @@ def retained_loads(connection: psycopg.Connection, keep: int) -> set[int]:
 def prune(
     connection: psycopg.Connection, contract: Contract, keep: int = DEFAULT_KEEP
 ) -> list[int]:
-    """Drop the partitions of loads outside :func:`retained_loads`; metadata stays."""
+    """Drop the partitions of loads outside :func:`retained_loads`; metadata stays. Tables a
+    failed load left behind (a process killed mid-load) go too; its status stays `failed`."""
 
     dropped: list[int] = []
     with connection.transaction():
         connection.execute("SELECT 1 FROM control.publication FOR UPDATE")
+        for (failed,) in connection.execute(
+            "SELECT load_id FROM control.load WHERE status = 'failed' ORDER BY load_id"
+        ).fetchall():
+            for table in static_tables(contract):
+                connection.execute(
+                    sql.SQL("DROP TABLE IF EXISTS {}").format(
+                        partition_name(table.name, cast(int, failed))
+                    )
+                )
         retained = retained_loads(connection, keep)
         candidates = [
             cast(int, load_id)

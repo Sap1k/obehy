@@ -152,7 +152,7 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | `[progress]` | the progress model of section 9 (geometry trust, speed, lateness change, beam, commit lag, off-route hold) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
-| `[retention]` | observation_days = 30 (dropped by `obehy jobs nightly`) |
+| `[retention]` | observation_days = 2 (v8; was 30; dropped by `obehy jobs nightly`) |
 
 The file carries `policy_version`, which goes into `derivation`. Code holds no defaults for
 policy values: a missing key is a load error.

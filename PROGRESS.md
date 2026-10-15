@@ -250,6 +250,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-15** — Server disk (60 GB, 94 % full): PostgreSQL held 38 GB, `rt.observation`
+  ~3.7 GB a day kept 30 days and three releases at ~7 GB. Policy v8 keeps two days of
+  observations (only warm replay reads them; delay history and tours are in `history.*`),
+  activation keeps one predecessor release, `obehy release prune` frees it on demand and also
+  drops what killed loads left, and two fetched release directories are kept. Unit and DB tests
+  pass. Next to watch: `history.*` at ~300 MB a day before PID goes live.
 - **2026-10-15** — PID connector (`sources/pid.py`, `docs/sources/pid.md`), recorded only:
   Golemio `/v2/vehiclepositions` polled every 10 s as deltas (`updatedSince` from the last
   `x-last-modified`, a new generic manifest `cursor`), with the API key as a runtime secret (new

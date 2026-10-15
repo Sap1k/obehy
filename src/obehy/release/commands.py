@@ -52,7 +52,8 @@ def add_parsers(commands: Any) -> None:
         "--keep",
         type=int,
         default=fetching.DEFAULT_KEEP,
-        help="fetched release directories to keep, newest first (default: 3)",
+        help="fetched release directories to keep, newest first "
+        f"(default: {fetching.DEFAULT_KEEP})",
     )
 
     loader = release_commands.add_parser("load", help="verify and load a release directory")
@@ -81,9 +82,21 @@ def add_parsers(commands: Any) -> None:
         "--keep",
         type=int,
         default=activation.DEFAULT_KEEP,
-        help="predecessor releases whose data stays in the database (default: 2)",
+        help="predecessor releases whose data stays in the database "
+        f"(default: {activation.DEFAULT_KEEP})",
     )
     _connection_arguments(activator)
+
+    pruner = release_commands.add_parser(
+        "prune", help="drop the data of loads no longer needed (as activate does afterwards)"
+    )
+    pruner.add_argument(
+        "--keep",
+        type=int,
+        default=activation.DEFAULT_KEEP,
+        help=f"predecessor releases to keep (default: {activation.DEFAULT_KEEP})",
+    )
+    _connection_arguments(pruner)
 
     reporter = release_commands.add_parser("status", help="show the active release and loads")
     _connection_arguments(reporter)
@@ -156,6 +169,10 @@ def run(args: argparse.Namespace) -> int:
                     reload=cast(bool, args.reload),
                     report=_report,
                 )
+                return 0
+            if args.release_command == "prune":
+                dropped = activation.prune(connection, contract, cast(int, args.keep))
+                print(f"dropped the data of loads {dropped}" if dropped else "nothing to drop")
                 return 0
             if args.release_command == "activate":
                 if args.rollback:

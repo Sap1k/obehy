@@ -7,6 +7,7 @@ from typing import Any, LiteralString
 
 import psycopg
 import pytest
+from psycopg import sql
 
 from obehy.release import activate as activation
 from obehy.release.contract import Contract, load_contract
@@ -288,3 +289,33 @@ def test_prune_keeps_active_and_predecessors(
     assert _scalar(connection, "SELECT count(*) FROM control.release") == 5
     # The remaining views still work after dropping partitions.
     assert _scalar(connection, "SELECT count(*) FROM active.trip") == 2
+
+
+def test_prune_by_default_keeps_one_predecessor_and_clears_failed_leftovers(
+    connection: psycopg.Connection, tmp_path: Path
+) -> None:
+    for run_id in ("run-a", "run-b", "run-c"):
+        _load(connection, write_release(tmp_path, run_id))
+        _activate(connection, run_id)
+    # A load killed mid-run: marked failed later, its unattached table still there.
+    (failed,) = connection.execute(
+        "INSERT INTO control.load (run_id, package, status) VALUES ('run-c', 'jdf', 'failed')"
+        " RETURNING load_id"
+    ).fetchone() or (None,)
+    connection.execute(
+        sql.SQL("CREATE TABLE {} (LIKE static.trip)").format(
+            sql.Identifier("static", f"trip_l{failed}")
+        )
+    )
+
+    dropped = activation.prune(connection, CONTRACT)
+
+    statuses = dict(
+        connection.execute(
+            "SELECT run_id, array_agg(DISTINCT status ORDER BY status) FROM control.load"
+            " GROUP BY run_id"
+        ).fetchall()
+    )
+    assert statuses == {"run-a": ["dropped"], "run-b": ["loaded"], "run-c": ["failed", "loaded"]}
+    assert len(dropped) == 2
+    assert not [name for name in _leftover_tables(connection) if name.endswith(f"_l{failed}")]

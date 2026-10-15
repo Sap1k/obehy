@@ -26,7 +26,7 @@ from obehy.pipeline.files import file_digest
 from obehy.production_package import package_digest
 
 DEFAULT_REPOSITORY = "Sap1k/obehy"
-DEFAULT_KEEP = 3
+DEFAULT_KEEP = 2
 TAG_PREFIX = "build-"
 API = "https://api.github.com"
 TOKEN_ENV = ("GITHUB_TOKEN", "GH_TOKEN")

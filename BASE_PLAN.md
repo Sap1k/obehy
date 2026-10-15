@@ -665,8 +665,8 @@ On the application server:
    sends `NOTIFY obehy_publication`. Readers query `active.*` only. `--rollback` returns to the
    publication that preceded the current one.
 
-A failed load leaves no attached partitions. The active release and its two most recent
-predecessors keep their database payloads; older releases keep only metadata.
+A failed load leaves no attached partitions. The active release and its most recent
+predecessor keep their database payloads; older releases keep only metadata.
 
 The loader never performs identity matching, trip collapse, overlay precedence, fuzzy matching or
 static claim arbitration.
@@ -1862,7 +1862,7 @@ GTFS-RT carriage details are populated only where suitable.
 # 29. History
 
 History must survive JrUtil reruns, timetable versions and release retention. The mirror keeps
-only the active release and two predecessors, so history **never references `static.*`**: it is
+only the active release and one predecessor, so history **never references `static.*`**: it is
 self-describing.
 
 **Journey.** The history key of an operating instance is
