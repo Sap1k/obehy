@@ -35,7 +35,7 @@ Accept-Encoding: gzip
 
 ## Response
 
-A GeoJSON FeatureCollection; one Feature per vehicle on a trip. Times are ISO 8601 with offset.
+A GeoJSON FeatureCollection; one Feature per trip of each vehicle's block (PID-Q6). Times are ISO 8601 with offset.
 
 | Field | Use |
 | --- | --- |
@@ -43,14 +43,15 @@ A GeoJSON FeatureCollection; one Feature per vehicle on a trip. Times are ISO 86
 | `properties.last_position.origin_timestamp` | fix time → `observed_at` (dropped beyond the policy skew, T15) |
 | `…last_position.bearing` | bearing, may be null |
 | `…last_position.delay.actual` | current delay in seconds → `Delay(…, "unknown")` while running |
-| `…last_position.state_position` | `before_track(_delayed)`, `on_track`, `at_stop`, `off_track`, `after_track(_delayed)` (PID-Q4) |
+| `…last_position.state_position` | `before_track(_delayed)`, `on_track`, `at_stop`, `off_track`, `after_track(_delayed)`, `canceled` (PID-Q4) |
+| `…last_position.tracking` | true exactly on the running states (`on_track`, `at_stop`, `off_track`) |
 | `…last_position.is_canceled` | cancelled trip (PID-Q4) |
 | `…last_position.last_stop`, `next_stop` | PID GTFS stop ID, sequence, scheduled times (not used yet) |
 | `properties.trip.gtfs.trip_id` | PID GTFS trip → `TripKey("pid:gtfs_trip_id")` |
 | `…trip.gtfs.route_type` | GTFS mode; 2 is a train (feed czptt) |
 | `…trip.cis.line_id`, `cis.trip_number` | CIS line + trip (regional buses) → fallback `TripKey("cis:line_trip")`; for trains `trip_number` is the train number |
 | `…trip.vehicle_registration_number` | fleet number → `VehicleKey("<route_type>:<number>")` (PID-Q1) |
-| `…trip.start_timestamp` | scheduled first departure (not used: the keyed date rule picks the date) |
+| `…trip.start_timestamp` | scheduled first departure: orders a vehicle's upcoming trips (PID-Q6); the keyed date rule still picks the date |
 
 ## Keys against the release
 
@@ -68,6 +69,16 @@ the release has only 11–57 `pid:gtfs_trip_id` keys for each of the night trams
 and after-midnight trips look under-keyed by the static overlay (JrUtil), not mismatched by
 the connector. The day capture is to show this by hour and line before going live.
 
+Prod capture 2026-10-14 22:00 – 2026-10-15 10:45 UTC (4,112 polls, 12 failed, all but 6 deltas)
+replayed with SŽ map against release 20261015T014009Z (built after the JrUtil night-trip fix,
+JrUtil 101bc65) and decoder 2 (PID-Q6): running key groups bound bus 17,197/17,208 (99.9 %),
+tram 3,670/3,699 (99.2 %, was 67 % before the fix), metro 845/845, trolleybus 520/520, ferry
+175/175, train 1,145/1,180 (97.0 %); SŽ map alongside 99.7 %. 2.89 M PID observations; jdf
+`no_key` 108 k are vehicles after their last trip or between trips without a next one (PID-Q4,
+Q6). Whole replay, both sources, 4.65 M observations in 27 min on the dev machine; live, PID
+is about 60 observations a second. Archive: about 290 MB compressed for the 12.75 h (a daytime
+delta is about 2.8 MB uncompressed, since nearly every vehicle moves within 10 s).
+
 ## Quirks
 
 | ID | Quirk | Handling |
@@ -75,15 +86,14 @@ the connector. The day capture is to show this by hour and line before going liv
 | PID-Q1 | `vehicle_registration_number` repeats across modes (and possibly operators) | vehicle key `<route_type>:<number>`; collisions to check in the capture |
 | PID-Q2 | trains and metro have no fleet number | trains `train:<number>`, metro `trip:<gtfs trip>` |
 | PID-Q3 | `cis.line_id` is `"none"` for trains and null for city lines | trains keyed by train number; the CIS key only where the line is numeric |
-| PID-Q4 | after its trip, or when cancelled, an entry still names the trip | no trip key (vehicle and position only); before the trip `pre_trip`, without delay |
+| PID-Q4 | after its trip, or when cancelled (`canceled`, `is_canceled`), an entry still names the trip | no trip key (vehicle and position only); before the trip `pre_trip`, without delay |
+| PID-Q6 | `includeNotTracking` lists every trip of a vehicle's block (the previous `after_track`, the running one, the upcoming `before_track` ones), all at the vehicle's one position; in the capture about 45 % of vehicles in a poll had 2+ entries | one observation per vehicle and payload: the running entry (on the route over `off_track`; two still on it at once, 0.5 %, bind no trip), else the next trip to start as `pre_trip`, else the vehicle alone |
 
 ## Open questions (for the capture)
 
-- Match rate per mode on a current release; how often the CIS fallback binds what the GTFS key
-  does not.
-- PID-Q1: fleet-number collisions within a mode across operators.
-- How often a vehicle updates (observations per second at peak) and the core cost per
-  observation; archive bytes per day with deltas.
+- How often the CIS fallback binds what the GTFS key does not.
+- PID-Q1: in the capture no fleet number appeared twice within a mode in one poll; 7 moved
+  between related operators over the night (OAD Kolín / ČSAD Polkost, ARRIVA / ČSAD Benešov).
 - Overlap with DÚK (PID `100xxx` trips, DUK-Q11) and MPV net, and with SŽ on trains; the position
   order is DÚK, PID, SŽ (`rail.position_preference`, policy v7).
 - Whether `delay.actual` before the trip (`before_track_delayed`) is a departure forecast worth

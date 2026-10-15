@@ -214,9 +214,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
   replayed clean on the server capture of 2026-10-09 to 10-12, live on jdf. Open: `rt evaluate`
   of own GPS delay against the source's, the travel-time provider interface.
-  Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), recorded only. Next:
-  replay a day of the server capture against its release (`docs/sources/pid.md`, open
-  questions), then `live_feeds = ["jdf", "czptt"]`. GTFS-RT alerts and departures later.
+  Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), recorded only; the
+  server capture replays at 97–100 % per mode (`docs/sources/pid.md`). Next:
+  `live_feeds = ["jdf", "czptt"]`. GTFS-RT alerts and departures later. Open: the raw archive
+  is not pruned, and PID adds about 0.5 GB a day to it.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -250,6 +251,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-15** — PID server capture (12.75 h overnight to late morning) replayed with SŽ map
+  against release 20261015T014009Z: running key groups bound bus 99.9 %, tram 99.2 % (67 %
+  before the JrUtil night-trip fix), metro, trolleybus and ferry 100 %, train 97.0 %. The capture
+  showed Golemio lists every trip of a vehicle's block at its one position (PID-Q6): about 45 %
+  of vehicles in a poll had 2+ entries, and each upcoming trip was claimed as pre-trip. Decoder
+  2 keeps one entry per vehicle and payload (the running one, else the next trip, else the
+  vehicle alone; two running at once bind neither) and binds no trip in the `canceled` state.
 - **2026-10-15** — Server disk (60 GB, 94 % full): PostgreSQL held 38 GB, `rt.observation`
   ~3.7 GB a day kept 30 days and three releases at ~7 GB. Policy v8 keeps two days of
   observations (only warm replay reads them; delay history and tours are in `history.*`),

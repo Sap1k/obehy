@@ -125,6 +125,7 @@ def test_pid_q4_before_the_trip_is_pre_trip_without_delay(state: str) -> None:
     [
         {"state_position": "after_track"},
         {"state_position": "after_track_delayed"},
+        {"state_position": "canceled"},
         {"is_canceled": True},
     ],
 )
@@ -132,6 +133,61 @@ def test_pid_q4_a_finished_or_cancelled_trip_is_not_claimed(last: dict[str, Any]
     (obs,) = decode(entry(last=last))
     assert obs.first(TripKey) is None and obs.first(SourceState) is None
     assert obs.first(VehicleKey) == VehicleKey("3:6940") and obs.first(Position) is not None
+
+
+def block_trip(trip_id: str, state: str, start: str) -> dict[str, Any]:
+    return entry(
+        trip={
+            "gtfs": {"route_type": 3, "trip_id": trip_id},
+            "start_timestamp": f"2026-10-15T{start}",
+        },
+        last={"state_position": state, "tracking": state in pid.RUNNING},
+    )
+
+
+def trip_of(obs: Observation) -> str | None:
+    key = obs.first(TripKey)
+    return None if key is None else key.key
+
+
+def test_pid_q6_a_vehicle_listed_per_block_trip_keeps_the_one_it_runs() -> None:
+    (obs,) = decode(
+        block_trip("52_801", "after_track", "00:01:00+02:00"),
+        block_trip("52_376", "before_track_delayed", "01:06:00+02:00"),
+        block_trip("52_802", "on_track", "00:24:00+02:00"),
+        block_trip("52_375", "before_track_delayed", "00:54:00+02:00"),
+    )
+    assert trip_of(obs) == "52_802" and obs.raw.item == 2
+    assert obs.first(SourceState) == SourceState("running")
+
+
+def test_pid_q6_between_trips_the_next_one_is_pre_trip() -> None:
+    # Across the DST change 02:30+02:00 starts before 02:10+01:00.
+    (obs,) = decode(
+        block_trip("late", "before_track", "02:10:00+01:00"),
+        block_trip("done", "after_track", "01:40:00+02:00"),
+        block_trip("next", "before_track", "02:30:00+02:00"),
+    )
+    assert trip_of(obs) == "next" and obs.first(SourceState) == SourceState("pre_trip")
+    (obs,) = decode(block_trip("a", "after_track", "01:00:00+02:00"))
+    assert trip_of(obs) is None and obs.first(VehicleKey) == VehicleKey("3:6940")
+
+
+def test_pid_q6_a_handover_keeps_the_trip_on_its_route() -> None:
+    (obs,) = decode(
+        block_trip("old", "off_track", "04:15:00+02:00"),
+        block_trip("new", "at_stop", "04:29:00+02:00"),
+    )
+    assert trip_of(obs) == "new"
+
+
+def test_pid_q6_two_trips_running_at_once_bind_neither() -> None:
+    (obs,) = decode(
+        block_trip("715_370", "on_track", "04:18:00+02:00"),
+        block_trip("345_393", "on_track", "04:53:00+02:00"),
+    )
+    assert trip_of(obs) is None and obs.first(SourceState) is None
+    assert obs.first(Position) is not None
 
 
 def test_t15_a_fix_far_from_reception_has_no_time_or_position() -> None:
