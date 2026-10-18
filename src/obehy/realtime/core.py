@@ -71,6 +71,7 @@ from obehy.realtime.platforms import apply_platform
 from obehy.realtime.policy import Policy
 from obehy.realtime.runs import journey_spans, part_spans, snapshots
 from obehy.realtime.timeline.estimate import (
+    dwell_credit,
     estimate,
     monotone,
     own_lateness,
@@ -266,16 +267,18 @@ def estimate_all(state: FeedState, ctx: Context) -> None:
         plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
         if trip.run_key is None:  # not a rail run (a CZPTT run may start as a bus)
             current = waiting_is_not_early(instance, plan, own_lateness(instance))
+            current = dwell_credit(instance, trip, plan, current, ctx.policy.prediction)
             state.instances[journey] = estimate(
                 instance, plan.scheduled, ctx.policy.prediction, current=current
             )
             continue
         predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)
+        current = waiting_is_not_early(instance, plan, current_lateness(instance))
         estimated = estimate(
             instance,
             plan.scheduled,
             ctx.policy.prediction,
-            current=waiting_is_not_early(instance, plan, current_lateness(instance)),
+            current=dwell_credit(instance, trip, plan, current, ctx.policy.prediction),
             anchor=predictor,
         )
         state.instances[journey] = monotone(estimated)

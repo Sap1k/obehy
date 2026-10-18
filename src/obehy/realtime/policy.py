@@ -76,8 +76,9 @@ class ProgressPolicy:
     max_commit_lag_s: int
     max_event_interval_s: int
     off_route_hold_s: int
-    off_path_detour_factor: float
-    off_path_detour_m: float
+    move_sigma_m: float
+    move_slack_m: float
+    reckon_slack: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +87,8 @@ class PredictionPolicy:
     long_dwell_s: ByMode
     min_long_dwell_s: ByMode
     max_early_departure_s: ByMode
+    dwell_credit_s: ByMode
+    early_keep: ByMode
 
 
 @dataclass(frozen=True, slots=True)

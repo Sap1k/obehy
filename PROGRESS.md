@@ -250,6 +250,25 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-19** — Delays at stops, on roads the shape misses, and SŽ minutes (policy v10).
+  A stop without a timetabled dwell credits the dwell a vehicle is seen to make, up to
+  `dwell_credit_s` = 30 s, fading out over the next leg (a train at a call not on request even
+  when its arrival went unseen; `on_request` from pickup/drop-off 3). Off a real shape a held
+  reading advances by the distance its fixes moved, and a reading may not fall far behind the
+  fixes, so a bus on a parallel road no longer stalls where the roads split (synthetic block:
+  worst made-up lateness 210 s → 15 s); chords keep the leg estimate; a trigger passed off the
+  path waits for a fix past it. SZ-Q12: `de` and `nsp` are truncated minutes, taken at their
+  middle (decoder 2). `obehy rt replay --quality` (and `--since`/`--until`) reports accuracy by
+  horizon and predicted delay, flicker, dwell and off-shape bumps. 2026-10-12 morning peak
+  (DPMD 05-10, MPV net 07:00-07:30, SŽ map 07-08), next-stop MAE/bias before → after: DPMD bus
+  33.4/+14.5 → 31.1/+5.9 s, MPV net bus 47.7/+7.0 → 46.1/+0.2 s, trolleybus 34.8 → 33.1 s,
+  MPV net rail 55.5 → 54.2 s, SŽ rail 93.0/−44.3 → 92.3/−16.0 s; flicker reversals per call
+  1.42 → 1.03 (DPMD), 1.26 → 0.97 (MPV net bus). Two and three stops ahead unchanged or better.
+  Early running holds to the next call and fades beyond it (`early_keep` = 0.5): buses
+  predicted over a minute early were real early running mid-trip (all GPS, 452 trips), right at
+  the next call (−94 s predicted, −86 s actual) but mostly gone two calls on (−91 / −32 s); their
+  bias −74 → −38 s; MPV net bus flicker 0.97 → 0.84, DPMD 1.03 → 0.61, MAE two and three calls
+  ahead within a second of before. Unit and DB tests pass; not run on PID.
 - **2026-10-18** — TripUpdates no longer leave the feed when realtime ends (MOTIS reverted the
   whole trip, the calls made included, to the timetable): policy v10 `publish_finished_s` keeps
   a finished trip's calls made (no vehicle) 30 min, rail 60 min; a lost trip keeps its calls

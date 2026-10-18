@@ -7,12 +7,15 @@ segment), scored by three terms:
 - geometry fit: lateral distance against the trust of the path there (a real shape closely, a
   stop-to-stop chord less, the longer the less), plus the heading when the fix has a bearing;
 - forward speed: no backward move beyond GPS jitter, no move faster than the mode allows;
+  on a real shape, no move much shorter than the fixes moved apart;
 - change of lateness: time lost or gained against the timetable between the two fixes, with a
   spread growing with the time between them. Absolute lateness is never penalised.
 
-A fix the path does not explain holds a hypothesis as if the fix were missing, at a fixed cost;
-meanwhile the lateness comes from an estimate on the current leg (`OffPath`), so a detour or a
-shape that misses the road taken does not freeze the delay.
+A fix the path does not explain holds a hypothesis at a fixed cost, advanced by the distance the
+fixes moved (never into the next call's arrival trigger): where a shape misses the road taken,
+or on a detour, the distance driven measures progress, so the delay neither freezes nor grows
+from a projection that stands still. Two roads of about the same length differ in where they
+go, not how far.
 The most likely hypothesis is the live position; crossings are committed once the readings
 agree (`commit.py`). GPS fixes are the only evidence in R1; source-reported progress (SŽ
 passages, a next stop) will be scored against the same hypotheses as a further term.
@@ -51,9 +54,11 @@ def update(
     position: Position,
     at: Instant,
     mode: str,
+    source: str,
     policy: ProgressPolicy,
 ) -> Step:
-    """Extend the journey's hypotheses with one fix and commit what they agree on."""
+    """Extend the journey's hypotheses with one fix (from `source`) and commit what they
+    agree on."""
 
     if len(plan.path.points) < 2:
         return Step(track or Track((), 0.0), None, (), None, False)
@@ -64,9 +69,16 @@ def update(
     found = candidates(
         plan.path, position.lon, position.lat, _sigma(policy), policy.reach_sigmas, window
     )
+    here = (position.lon, position.lat)
+    # How far the fixes moved apart: progress on a real shape must keep up with it, and a held
+    # reading advances by it. Only between fixes of one source: a run fuses sources of
+    # different precision (DÚK GPS, the SŽ map).
+    moved: float | None = None
+    if track is not None and track.fix is not None and track.fix[0] == source:
+        moved = distance_m(track.fix[1:], here)
     if live:
-        extended = _extend(plan, live, found, position, at, at_us, speed, policy)
-        extended += _held(live, at, policy)
+        extended = _extend(plan, live, found, position, at, at_us, speed, moved, policy)
+        extended += _held(plan, live, at, at_us, moved, here, policy)
     else:
         extended = _start(plan, found, position, at, at_us, policy)
     if not extended:
@@ -86,9 +98,14 @@ def update(
     since = best.off_path_since
     off_route = since is not None and at - since >= timedelta(seconds=policy.off_route_hold_s)
     previous = track.off_path if track is not None else None
-    estimate = _off_path(plan, best, previous, position, at, at_us, speed, policy)
+    estimate = _chord_estimate(plan, best, previous, here, at, at_us, speed)
     new_track = Track(
-        done.beam, done.committed_m, seen_at=at, crossed_at=done.crossed_at, off_path=estimate
+        done.beam,
+        done.committed_m,
+        seen_at=at,
+        crossed_at=done.crossed_at,
+        off_path=estimate,
+        fix=(source, *here),
     )
     return Step(new_track, progress, done.crossed, since, off_route)
 
@@ -185,27 +202,38 @@ def _extend(
     at: Instant,
     at_us: int,
     speed: float,
+    moved: float | None,
     policy: ProgressPolicy,
 ) -> list[Hypothesis]:
     """Each candidate continues the live hypothesis that reaches it most plausibly (Viterbi)."""
 
     timetable = plan.timetable
     jitter = policy.jitter_m
+    # On a real shape a reading must keep up with how far the fixes moved apart.
+    shortfall = moved - policy.move_slack_m if moved is not None and plan.path.shaped else None
+    move_sigma = policy.move_sigma_m
     late: dict[float, float] = {}  # lateness at `at` per place, shared by the pairs
     out: list[Hypothesis] = []
     for candidate in found:
         fit = _emission(candidate, position, plan.path, policy)
         best: tuple[float, Hypothesis, float, float] | None = None  # score, from, along, late
         for h in live:
-            if candidate.along_m < h.along_m - jitter:
-                continue  # backwards beyond GPS noise: impossible
-            along = max(candidate.along_m, h.along_m)  # a small step back is no movement
+            # Backwards beyond GPS noise is impossible; a reading advanced by the distance
+            # driven may have overshot a road shorter than the one it estimated.
+            if candidate.along_m < h.along_m - jitter - policy.reckon_slack * h.reckoned_m:
+                continue
+            # A small step back is no movement, except to correct an overshoot.
+            along = candidate.along_m if h.reckoned_m > 0 else max(candidate.along_m, h.along_m)
             lateness = late.get(along)
             if lateness is None:
                 lateness = late[along] = timetable.lateness_us(at_us, along)
             move = _transition(h, along, at_us, lateness, speed, policy)
             if move is None:
                 continue
+            if shortfall is not None and h.off_path_since is None:  # placed by the last fix
+                short = shortfall - (along - h.along_m)
+                if short > 0:
+                    move -= 0.5 * (short / move_sigma) ** 2
             score = h.log_p + move + fit
             if best is None or score > best[0]:
                 best = (score, h, along, lateness)
@@ -227,58 +255,101 @@ def _placed(history: tuple[Placement, ...], along_m: float, at: Instant) -> tupl
     return (*history, placement)
 
 
-def _held(live: tuple[Hypothesis, ...], at: Instant, policy: ProgressPolicy) -> list[Hypothesis]:
-    """A fix the geometry does not explain (a detour, a road far from a stop-to-stop chord)
-    says nothing about where the vehicle is: each hypothesis may also hold as if the fix were
-    missing, at a fixed cost, instead of dying for it."""
+def _held(
+    plan: Plan,
+    live: tuple[Hypothesis, ...],
+    at: Instant,
+    at_us: int,
+    moved: float | None,
+    here: tuple[float, float],
+    policy: ProgressPolicy,
+) -> list[Hypothesis]:
+    """A fix the geometry does not explain (a detour, a shape that misses the road taken, a road
+    far from a stop-to-stop chord) says nothing about where along the path the vehicle is: each
+    hypothesis may also hold, at a fixed cost, instead of dying for it.
 
-    return [
-        h.evolve(log_p=h.log_p + policy.off_path_log_p, off_path_since=h.off_path_since or at)
-        for h in live
-    ]
+    On a real shape it advances by the distance the fixes moved, never into the next call's
+    arrival trigger: a vehicle on another road of about the same length keeps its lateness, one
+    on a longer detour grows late once it reaches that limit, and since the road left to the
+    next call is never shorter than the straight line to it, a fix off to the side or behind
+    adds nothing. Its place stays out of the history: a departure it passes is committed once
+    a fix on the path brackets it. On a stop-to-stop chord, which no road follows, it stays
+    where it was; the lateness comes from the leg estimate (`_chord_estimate`)."""
+
+    out: list[Hypothesis] = []
+    for h in live:
+        along, lateness = h.along_m, h.lateness_s
+        if plan.path.shaped and moved is not None:
+            trigger, call = _next_arrival(plan, h.along_m)
+            at_call = plan.path.call_distances_m[call]
+            left = distance_m(here, point_at(plan.path, at_call))
+            along = max(h.along_m, min(h.along_m + moved, trigger - 1.0, at_call - left))
+            lateness = plan.timetable.lateness_us(at_us, along)
+        # It keeps the time of its last fix on the path: coming back onto the path far ahead
+        # (a detour past the next stop) stays within the speed limit counted from there.
+        out.append(
+            Hypothesis(
+                along,
+                h.at,
+                lateness,
+                h.log_p + policy.off_path_log_p,
+                h.history,
+                h.at_us,
+                h.off_path_since or at,
+                h.reckoned_m + (along - h.along_m),
+            )
+        )
+    return out
 
 
-def _off_path(
+def _chord_estimate(
     plan: Plan,
     best: Hypothesis,
     previous: OffPath | None,
-    position: Position,
+    here: tuple[float, float],
     at: Instant,
     at_us: int,
     speed: float,
-    policy: ProgressPolicy,
 ) -> OffPath | None:
-    """While the best reading holds off the path, where the fix puts the vehicle on its leg:
-    between the last stop left and the next one, by the share of its distance to the last stop
-    in its distances to both. Unlike a projection onto the stop-to-stop line, the share keeps
-    growing on a detour that runs sideways. Never behind the held reading or an earlier
-    estimate, never faster than the mode allows, never past the next stop's arrival trigger:
-    events come only from fixes on the path."""
+    """While the best reading holds off a stop-to-stop chord: where the fix puts the vehicle on
+    its leg (`_leg_share`), never behind the held reading or an earlier estimate, never faster
+    than the mode allows, never past the next call's arrival trigger. Lateness only."""
 
-    if best.off_path_since is None or best.at >= at:
-        return None  # this fix is on the path
-    calls = plan.path.call_distances_m
-    last = max(plan.call_index_at(best.along_m), 0)
-    if last + 1 >= len(calls):
+    if plan.path.shaped or best.off_path_since is None or best.at >= at:
         return None
-    start, end = calls[last], calls[last + 1]
-    here = (position.lon, position.lat)
-    a, b = point_at(plan.path, start), point_at(plan.path, end)
-    to_last, to_next = distance_m(here, a), distance_m(here, b)
-    leg = distance_m(a, b)
-    if to_last + to_next > policy.off_path_detour_factor * leg + policy.off_path_detour_m:
-        return None  # too far off to say where along the leg it is
-    share = 1.0 if to_last + to_next <= 0 else to_last / (to_last + to_next)
     floor = best.along_m
-    if previous is not None and start <= previous.along_m <= end:
-        floor = max(floor, previous.along_m)
-    trigger = plan.zones[last + 1].arrival_m
-    ceiling = min(
-        end if trigger is None else trigger,
-        best.along_m + speed * ((at_us - best.at_us) / 1_000_000),
-    )
-    along = min(max(start + share * (end - start), floor), max(floor, ceiling))
+    if previous is not None and previous.along_m >= floor:
+        floor = previous.along_m
+    trigger, _ = _next_arrival(plan, best.along_m)
+    ceiling = min(trigger, best.along_m + speed * ((at_us - best.at_us) / 1_000_000))
+    along = min(max(_leg_share(plan, best.along_m, here), floor), max(floor, ceiling))
     return OffPath(along, at, plan.timetable.lateness_s(at, along))
+
+
+def _leg_share(plan: Plan, along_m: float, here: tuple[float, float]) -> float:
+    """Where a fix puts the vehicle on its leg: between the last call left and the next one by
+    its share of distance to the two. Unlike a projection onto the chord, it keeps growing on a
+    road that runs sideways."""
+
+    calls = plan.path.call_distances_m
+    last = max(plan.call_index_at(along_m), 0)
+    if last + 1 >= len(calls):
+        return along_m
+    start, end = calls[last], calls[last + 1]
+    to_last = distance_m(here, point_at(plan.path, start))
+    to_next = distance_m(here, point_at(plan.path, end))
+    share = 1.0 if to_last + to_next <= 0 else to_last / (to_last + to_next)
+    return start + share * (end - start)
+
+
+def _next_arrival(plan: Plan, along_m: float) -> tuple[float, int]:
+    """The first arrival trigger ahead of `along_m` and its call; past the last, the end."""
+
+    for trigger in plan.triggers_between(along_m, math.inf):
+        if trigger.kind == "arrival":
+            return trigger.along_m, trigger.call
+    last = len(plan.path.call_distances_m) - 1
+    return plan.path.call_distances_m[last] + 1.0, last
 
 
 def _prune(extended: list[Hypothesis], policy: ProgressPolicy) -> tuple[Hypothesis, ...]:

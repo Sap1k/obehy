@@ -75,7 +75,7 @@ def test_keys_service_day_and_vehicle() -> None:
         TripKey("czptt:train_number", "16001"),  # SZ-Q5: only a fallback
     )
     assert obs.first(ServiceDay) == ServiceDay(date(2026, 10, 5))
-    assert obs.first(Delay) == Delay(420, "point")
+    assert obs.first(Delay) == Delay(450, "point")  # SZ-Q12
     assert obs.first(TripStatus) == TripStatus(False, False)
 
 
@@ -93,8 +93,8 @@ def test_sz_q2_bare_times_resolve_around_the_response_time() -> None:
     assert point.actual == Interval(local("2026-10-06 00:01"), local("2026-10-06 00:01:59"))
     assert point.scheduled == local("2026-10-05 23:58")
     prediction = obs.first(NextStopPrediction)
-    assert prediction == NextStopPrediction(
-        "56901", local("2026-10-06 00:10"), local("2026-10-06 00:16")
+    assert prediction == NextStopPrediction(  # SZ-Q12: the predicted minute's middle
+        "56901", local("2026-10-06 00:10"), local("2026-10-06 00:16:30")
     )
 
 
@@ -120,6 +120,16 @@ def test_sz_q4_names_give_every_catalogue_code_and_codes_lose_the_check_digit() 
 def test_sz_q7_a_next_point_without_a_code() -> None:
     (obs,) = _decode(_feature(nna="vl. v km 2,847", zst_sr70=None))
     assert obs.first(NextPoint) == NextPoint("vl. v km 2,847", None)
+
+
+def test_sz_q12_a_delay_and_a_predicted_time_are_their_minutes_middle() -> None:
+    # `de` = `cr` - `cp` in whole minutes and `nsp` a minute, both truncated: on average half a
+    # minute more than they say, as `cr` stands for its whole minute.
+    (obs,) = _decode(_feature())
+    assert obs.first(Delay) == Delay(7 * 60 + 30, "point")
+    prediction = obs.first(NextStopPrediction)
+    assert prediction is not None and prediction.predicted is not None
+    assert prediction.predicted.second == 30
 
 
 def test_sz_q8_no_bearing_while_standing() -> None:

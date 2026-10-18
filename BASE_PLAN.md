@@ -1252,12 +1252,15 @@ a loop every pass does. Nothing is chosen at this step.
   as if that fix were missing, at a fixed cost about that of a fit at the edge of reach. A
   reading is never killed by one fix the path cannot explain; it loses to a reading that
   explains the fixes. Holding longer than `T` is off-route (section 20.7). Shapes are never
-  perfect (OSM roads, router choices), so while the best reading holds, the lateness is not
-  frozen: the fix is placed on the current leg, between the last stop left and the next one, by
-  its share of distance to the two (it keeps growing on a detour that runs sideways, where a
-  projection onto the stop-to-stop line would stall). That estimate never goes back, never
-  passes the next stop's arrival trigger and gives no events; it is dropped when the fix is
-  too far off the leg to say anything.
+  perfect (OSM roads, router choices; a bus takes the other of two roads of about the same
+  length), and two such roads differ in where they go, not how far. So on a real shape a held
+  reading advances by the distance the fixes moved apart: never into the next call's arrival
+  trigger and never closer to the next call than the straight line from the fix to it (a fix
+  off to the side or behind adds nothing). On another road of the same length the lateness
+  stays what it was; on a longer detour the reading reaches that limit and the lateness grows
+  while the vehicle really is late. On a stop-to-stop chord, which no road follows, the held
+  reading stays and the fix is placed on the current leg by its share of distance to the last
+  stop left and the next one, for the lateness only. Events come only from fixes on the path.
 - *Heading*, when the source sends a bearing: the angle to the segment's direction. Opposite
   legs of a *závlek* or an out-and-back road are told apart by this alone.
 
@@ -1266,6 +1269,10 @@ candidate at `b` (time `t₁`):
 
 - *Forward only.* `b < a` beyond a small jitter allowance is impossible; jitter counts as no
   movement.
+- *Keeping up with the fixes.* On a real shape a reading may not advance much less than the
+  fixes moved apart, the shortest road between them. Without this a fix on a parallel road
+  projects onto the shape where the roads split and stays there while time passes, read as
+  lateness that is dropped again where the roads meet.
 - *Speed.* `(b − a) / (t₁ − t₀)` above the mode's maximum is impossible. Only GPS jitter is
   slack here: a loose chord widens where a fix may lie, not how far a vehicle may travel.
 - *Change of lateness, never lateness itself.* The timetable gives each place a window
@@ -1341,11 +1348,18 @@ L          ← pred_dep(j) − S_dep(j)
 - A late vehicle recovers time only in a real timetabled dwell, down to the minimum dwell
   (policy: about a minute, two in long dwells). Buses mostly have none (arrival = departure);
   trains often do. Running-time recovery per mode is 0 until learned from history.
-- Early running is carried over unchanged. Officially a bus may leave at most 59 s early and
-  should wait, but in practice it waits only at some stops (a busy stop where it is usually
-  early) and not at others; that is a habit, not a rule, so there is no blanket
-  no-early-departure clamp. Per-stop holding is learned from history later and then applied
-  where it is observed. Showing a vehicle that is early as on time would be wrong.
+- A call without a timetabled dwell still has one inside its minute. Time the vehicle is seen
+  standing there, up to a per-mode credit, is not lateness: while it stands, and on the next
+  leg, fading out by the next call (the leg's running time absorbs it). Most road stops are
+  request stops, so only a stop seen happening is credited; a train certainly stops at a call
+  not on request. Per-stop dwell is learned from history later.
+- Early running holds to the next call and fades beyond it: at each further call a per-mode
+  share of the lead is kept. Officially a bus may leave at most 59 s early and should wait, but
+  in practice it waits only at some stops (a busy stop where it is usually early) and not at
+  others; that is a habit, not a rule, so there is no blanket no-early-departure clamp. Early
+  vehicles do mostly lose their lead within a call or two, which the fade follows until
+  per-stop holding is learned from history. Showing a vehicle that is early as on time would be
+  wrong.
 - Each estimate is the single best prediction; no uncertainty is published.
 - A vehicle standing at a call gets a predicted departure; monotone repair keeps every estimate
   at or after the last fix and the previous call.
@@ -1427,8 +1441,9 @@ deviations are expected and some are correct.
   between distant stops is trusted less than a short urban hop or a real shape.
 - Fixes matching no segment for less than `T` (default 3 min): hold. No progress, binding kept.
 - For longer: set `off_route` (detour or diversion). A keyed binding is never dropped for
-  geometry. Committed progress and events pause; the lateness follows the leg estimate of
-  section 20.4, and only without one the last measured lateness holds.
+  geometry. Committed progress and events pause; the lateness follows the held reading
+  (section 20.4: the distance driven on a shape, the leg estimate on a chord), so it neither
+  freezes nor grows from a stalled projection.
 - On rejoining, decoding resumes (section 20.4). Calls passed without matching fixes get no
   event and are shown as passed without realtime, never as departed.
 

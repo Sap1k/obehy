@@ -24,7 +24,7 @@ from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
 from obehy.realtime.runtime.demand import StationDemand
 from obehy.realtime.runtime.egress import Egress, EgressError, build_egress
-from obehy.realtime.times import Instant, instant, local_date
+from obehy.realtime.times import PRAGUE, Instant, instant, local_date
 from obehy.realtime.worker import WorkerOptions, run_worker
 from obehy.runtime_config import ConfigurationError, load_database_url
 
@@ -87,6 +87,15 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     )
     replayer.add_argument(
         "--gtfs-rt-every", type=int, metavar="SECONDS", help="write GTFS-RT snapshots"
+    )
+    replayer.add_argument(
+        "--since", type=_local_time, help="replay polls from this local time (YYYY-MM-DDTHH:MM)"
+    )
+    replayer.add_argument("--until", type=_local_time, help="and before this local time")
+    replayer.add_argument(
+        "--quality",
+        action="store_true",
+        help="estimate every tick; report prediction accuracy, flicker and dwell at stops",
     )
     _database(replayer)
 
@@ -233,6 +242,12 @@ def _record(args: argparse.Namespace) -> int:
     return 0
 
 
+def _local_time(value: str) -> Instant:
+    """A Prague wall-clock time from the command line."""
+
+    return instant(datetime.fromisoformat(value).replace(tzinfo=PRAGUE))
+
+
 def _replay(args: argparse.Namespace) -> int:
     channels = select_channels(
         record.load_channels(cast(Path, args.manifest)),
@@ -248,6 +263,9 @@ def _replay(args: argparse.Namespace) -> int:
         feeds=cast(tuple[Feed, ...], args.feeds),
         write_history=cast(bool, args.write_history),
         gtfs_rt_every_s=cast(int | None, args.gtfs_rt_every),
+        quality=cast(bool, args.quality),
+        since=cast(Instant | None, args.since),
+        until=cast(Instant | None, args.until),
     )
     with psycopg.connect(_url(args), autocommit=True) as connection:
         document = replay.replay(connection, options, load_policy())

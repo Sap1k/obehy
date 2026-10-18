@@ -12,14 +12,24 @@
   (typically arriving into padded layover time) is waiting, so its lateness counts as zero.
   During a reception gap the last lateness holds; the vehicle is never assumed back on time.
 
+A call the timetable gives no dwell (arrival = departure) still has one inside the minute.
+Time the vehicle is seen standing there, up to the mode's `dwell_credit_s`, is not lateness:
+while it stands, the lateness carried on is its lateness on arrival (never below zero: arriving
+early it waits) plus any standing beyond the credit; after it leaves, the credit fades out
+over the next leg, gone at the next call (`dwell_credit`). Most road stops are request stops,
+so only a stop seen happening counts; a train certainly stops at a call not on request, so
+there the lateness at the previous call stands in for an arrival not observed.
+
 Propagation (BASE_PLAN.md section 20.5) carries the lateness call by call. A late vehicle
 recovers time only where the timetable has a real dwell (departure after arrival): it leaves
-after the minimum dwell, never before the scheduled departure. Early running is carried on,
-but a predicted departure from a passenger stop is at most the mode's `max_early_departure_s`
-ahead of the timetable: trains wait for their time (0); for road vehicles, whether one waits is
-a habit of particular stops, learned from history later. An observed departure is never
-changed. Predictions never precede an earlier call's estimate or the last fix
-(monotone repair). There is no uncertainty: each estimate is the best single prediction.
+after the minimum dwell, never before the scheduled departure. Early running holds to the next
+call and fades beyond it (the mode's `early_keep` of the lead is kept at each further call:
+early vehicles mostly lose their lead within a call or two), and a predicted departure from
+a passenger stop is at most the mode's `max_early_departure_s` ahead of the timetable: trains
+wait for their time (0); for road vehicles, whether one waits is a habit of particular stops,
+learned from history later. An observed departure is never changed. Predictions never
+precede an earlier call's estimate or the last fix (monotone repair). There is no uncertainty:
+each estimate is the best single prediction.
 """
 
 from __future__ import annotations
@@ -27,6 +37,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
+from obehy.realtime.index import Trip
 from obehy.realtime.model import CallState, CallStatus, Instance, Interval, SourceClass
 from obehy.realtime.policy import PredictionPolicy
 from obehy.realtime.timeline.plan import Plan, Scheduled
@@ -76,6 +87,69 @@ def waiting_is_not_early(instance: Instance, plan: Plan, current: Lateness) -> L
     return timedelta(0), source_class
 
 
+def _zero_dwell(scheduled: tuple[Instant | None, Instant | None]) -> bool:
+    arrival, departure = scheduled
+    return arrival is not None and arrival == departure
+
+
+def _standing(lateness: timedelta, arrived: timedelta, credit: timedelta) -> timedelta:
+    """The lateness carried on from a vehicle standing at a call without a timetabled dwell:
+    standing up to `credit` beyond its arrival (or beyond the timetable, arriving early) is the
+    dwell the minute holds."""
+
+    growth = lateness - max(arrived, timedelta(0))
+    return lateness - min(max(growth, timedelta(0)), credit)
+
+
+def dwell_credit(
+    instance: Instance, trip: Trip, plan: Plan, current: Lateness, policy: PredictionPolicy
+) -> Lateness:
+    """The current lateness less the dwell credited at the call last left, if it had no
+    timetabled dwell, fading out along the leg to the next call's arrival trigger."""
+
+    lateness, source_class = current
+    track, progress = instance.track, instance.progress
+    if lateness is None or source_class != "gps" or track is None or not track.hypotheses:
+        return current
+    if progress is None or not 0 <= progress.call_index < len(instance.calls) - 1:
+        return current
+    i = progress.call_index
+    state = instance.calls[i]
+    if not state.passenger or not _zero_dwell(plan.scheduled[i]):
+        return current
+    scheduled = plan.scheduled[i][1]
+    left = _passed(state.passed_departure, state.departure)
+    if scheduled is None or left is None:
+        return current
+    arrived_at = _passed(state.passed_arrival, state.arrival)
+    if arrived_at is not None:
+        arrived = arrived_at - scheduled
+    elif instance.parts and not trip.calls[i].on_request and i > 0:
+        # It certainly stopped: the lateness it came with, at the previous call's latest time.
+        before = instance.calls[i - 1]
+        arrival_before, departure_before = plan.scheduled[i - 1]
+        left_before = _passed(before.passed_departure, before.departure)
+        reached_before = _passed(before.passed_arrival, before.arrival)
+        if left_before is not None and departure_before is not None:
+            arrived = left_before - departure_before
+        elif reached_before is not None and arrival_before is not None:
+            arrived = reached_before - arrival_before
+        else:
+            return current
+    else:
+        return current  # a request stop not seen happening may have been passed
+    credit = timedelta(seconds=policy.dwell_credit_s(instance.mode))
+    credited = (left - scheduled) - _standing(left - scheduled, arrived, credit)
+    if credited <= timedelta(0):
+        return current
+    start = plan.zones[i].departure_m
+    end = plan.zones[i + 1].arrival_m
+    if start is None or end is None or end <= start:
+        return current
+    share = min(1.0, max(0.0, (track.hypotheses[0].along_m - start) / (end - start)))
+    return lateness - credited * (1.0 - share), source_class
+
+
 def own_lateness(instance: Instance) -> Lateness:
     track = instance.track
     lateness = track.lateness_s if track is not None else None
@@ -118,6 +192,7 @@ def estimate(
     finished = instance.lifecycle == "finished"
     last = len(instance.calls) - 1
     calls: list[CallState] = []
+    ahead = 0  # passenger calls predicted so far
     for i, (state, (sched_arr, sched_dep)) in enumerate(
         zip(instance.calls, scheduled, strict=True)
     ):
@@ -132,6 +207,15 @@ def estimate(
                 # Arrived, not yet left: the departure is still a prediction, never before the
                 # arrival (a source's arrival can be later than the last fix).
                 leave_floor = floor if est_arr is None or (floor and floor > est_arr) else est_arr
+                if (
+                    state.passenger
+                    and delay_class == "gps"
+                    and est_arr is not None
+                    and sched_arr is not None
+                    and _zero_dwell((sched_arr, sched_dep))
+                ):
+                    credit = timedelta(seconds=policy.dwell_credit_s(instance.mode))
+                    lateness = _standing(lateness, est_arr - sched_arr, credit)
                 est_dep, lateness = _departure(
                     est_arr,
                     sched_arr,
@@ -153,6 +237,12 @@ def estimate(
         else:
             if anchor is not None and anchor[0] == i:
                 lateness = anchor[1]
+            elif state.passenger and lateness < timedelta(0) and ahead > 0:
+                # An early lead holds to the next call and fades beyond it: early vehicles
+                # mostly lose it within a call or two (they wait, or drive slower).
+                lateness = lateness * policy.early_keep(instance.mode)
+            if state.passenger:
+                ahead += 1
             est_arr = _shifted(sched_arr, lateness, floor)
             if est_arr is not None:
                 floor = est_arr

@@ -63,6 +63,8 @@ class Call:
     passenger_service: bool
     arrival: int | None
     departure: int | None
+    # A request stop (pickup or drop-off "coordinate with driver"): the vehicle may pass it.
+    on_request: bool = False
 
     @property
     def time(self) -> int:
@@ -332,6 +334,7 @@ def run_trip(run_id: str, run_key: str, parts: list[Trip]) -> Trip:
                     previous.passenger_service or call.passenger_service,
                     previous.arrival if previous.arrival is not None else call.arrival,
                     call.departure if call.departure is not None else previous.departure,
+                    previous.on_request and call.on_request,
                 )
                 index = len(calls) - 1
             else:
@@ -353,6 +356,7 @@ def run_trip(run_id: str, run_key: str, parts: list[Trip]) -> Trip:
                 call.passenger_service,
                 call.arrival,
                 call.departure,
+                call.on_request,
             )
         )
     head, tail = parts[0], parts[-1]

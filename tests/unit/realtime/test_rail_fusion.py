@@ -30,6 +30,7 @@ from obehy.realtime.model import (
 from obehy.realtime.policy import load_policy
 from obehy.realtime.record import load_channels
 from obehy.realtime.timeline.fusion import merge
+from obehy.realtime.times import Instant
 from tests.realtime.builder import ORIGIN, STEP_LON, timetable
 from tests.realtime.observations import local
 
@@ -304,3 +305,49 @@ def test_sz_q10_a_repeated_point_changes_nothing_and_a_late_one_still_places() -
         _sz("2026-10-08 08:15:10", _point("B", ("10002",), "2026-10-08 08:13")),
     )
     assert ("czptt:B", "departure", "source") in _events(late)
+
+
+def _zero_dwell_index(b: str) -> Index:
+    """A ~X B C with no timetabled dwell at B (`b` is "B", or "?B" for a request stop)."""
+
+    tt = timetable("czptt", "czptt:train_number")
+    for n, (name, code) in enumerate(
+        [("A", "10001"), ("X", "10009"), ("B", "10002"), ("C", "10003")]
+    ):
+        tt.stop(name, ORIGIN[0] + n * STEP_LON, ORIGIN[1], sr70=code)
+    tt.trip(
+        "100",
+        trip_id="czptt:trip:PA1:1",
+        days=[D8],
+        calls=[("A", "08:00"), ("~X", "08:05"), (b, "08:10"), ("C", "08:20")],
+        run=("PA1", 1),
+        train="100",
+        mode="rail",
+        shape=False,
+    )
+    tt.key("czptt:tr", "Tr:1", "czptt:trip:PA1:1")
+    return tt.index()
+
+
+def test_a_train_leaving_a_stop_not_on_request_is_credited_its_unseen_dwell() -> None:
+    """Only SŽ's departure from B is known (its arrival never observed): at a call not on request
+    the train certainly stood there, so standing up to the credit is not lateness; at a request
+    stop it may have run through, so the lateness stands."""
+
+    arrivals: list[Instant | None] = []
+    for b in ("B", "?B"):
+        index = _zero_dwell_index(b)
+        state, _, ctx = _run(
+            index,
+            _duk("2026-10-08 08:00:30", 0.2),
+            _duk("2026-10-08 08:05:00", 1.0),
+            _sz("2026-10-08 08:11:40", _point("B", ("10002",), "2026-10-08 08:11")),
+            _duk("2026-10-08 08:12:00", 2.1),
+        )
+        b_call = state.instances[PA].calls[2]
+        assert b_call.departure is not None and b_call.arrival is None
+        estimate_all(state, ctx)
+        arrivals.append(state.instances[PA].calls[3].estimated_arrival)
+    regular, request = arrivals
+    assert regular is not None and request is not None
+    assert (request - regular).total_seconds() > 10

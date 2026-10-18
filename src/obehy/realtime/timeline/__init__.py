@@ -81,7 +81,9 @@ def advance(
     if run:
         progress_policy = _rail_progress(progress_policy, policy.rail.position_sigma_m(source))
     plan = plans.plan(trip, instance.journey.service_date, index, policy)
-    step = update(plan, instance.track, position, observation.at, trip.mode, progress_policy)
+    step = update(
+        plan, instance.track, position, observation.at, trip.mode, source, progress_policy
+    )
     calls, crossed = _cross(instance, step.crossed, source, policy, fuse=run)
     finished = any(c.kind == "arrival" and c.call == len(calls) - 1 for c in step.crossed)
     progress = step.progress

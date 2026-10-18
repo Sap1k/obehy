@@ -230,16 +230,18 @@ class IndexLoader:
             passenger,
             arrival,
             departure,
+            on_request,
         ) in self._rows_first(
             "SELECT trip_id, sequence, location_id,"
             " row_number() OVER (PARTITION BY trip_id, location_id ORDER BY sequence),"
-            " passenger_service, scheduled_arrival, scheduled_departure"
+            " passenger_service, scheduled_arrival, scheduled_departure,"
+            " pickup_type = 3 OR dropoff_type = 3"
             " FROM static.trip_call WHERE trip_id = ANY(%s) AND load_id = %s"
             " ORDER BY trip_id, sequence",
             trip_ids,
         ):
             calls[trip_id].append(
-                Call(sequence, location_id, visit_n, passenger, arrival, departure)
+                Call(sequence, location_id, visit_n, passenger, arrival, departure, on_request)
             )
             locations.add(location_id)
         shapes: set[str] = set()

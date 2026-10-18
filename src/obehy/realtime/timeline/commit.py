@@ -59,7 +59,8 @@ def commit(
     The deciding readings are those within `agree_within` of the most likely. Agreement means
     each has passed the trigger *and* brackets the crossing with the same two fixes (the common
     prefix of their histories). The first disagreement stops committing: that crossing is still
-    undecided. A crossing before every history starts was never observed and gets nothing. One
+    undecided, as is one a reading held off the path has passed with no fix past it yet. A
+    crossing before every history starts was never observed and gets nothing. One
     bracketed by fixes further apart than `max_event_interval_s` (a reception gap) gets a time
     for realtime but is not recorded as an event. Crossing times never decrease along the path:
     each is at least the one committed before it (`crossed_at`). Readings outside the decision
@@ -77,8 +78,10 @@ def commit(
         brackets = [_bracket(h.history, trigger.along_m) for h in deciding]
         if len({_fix_times(b) for b in brackets}) > 1:
             break  # the readings disagree on when: undecided
-        reached = trigger.along_m
         bracket = brackets[0]
+        if bracket is None and any(_before(h.history, trigger.along_m) for h in deciding):
+            break  # passed by a reading held off the path: no fix past it yet
+        reached = trigger.along_m
         if bracket is None:
             continue  # crossed before anything was observed
         when = _crossing_time(bracket, trigger, plan)
@@ -140,6 +143,12 @@ def _crossing_time(bracket: Bracket, trigger: Trigger, plan: Plan) -> Instant:
     else:
         share = (trigger.along_m - before.along_m) / (after.along_m - before.along_m)
     return Instant(before.at + (after.at - before.at) * min(1.0, max(0.0, share)))
+
+
+def _before(history: tuple[Placement, ...], along_m: float) -> bool:
+    """Whether the history was observed before `along_m` but not yet past it."""
+
+    return bool(history) and history[0].along_m < along_m and history[-1].along_m < along_m
 
 
 def _cut(h: Hypothesis, frontier: float) -> Hypothesis:

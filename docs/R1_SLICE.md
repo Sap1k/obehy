@@ -263,9 +263,16 @@ Track        hypotheses (≤ beam), committed_m (frontier), unmatched_since, cro
    change of lateness and `σ_L = base + rate × Δt`, using the `loss` parameters when time is
    lost and the `gain` ones when it is gained. Lateness is measured against the timetable
    window of the place (BASE_PLAN.md section 20.4): 0 inside a call's dwell, never early while
-   waiting at the origin.
-4. Off path: every hypothesis also holds unchanged at `off_path_log_p`, as if the fix were
-   missing (`off_path_since` set).
+   waiting at the origin. On a real shape, from a hypothesis the last fix placed on the path, a
+   move shorter than the fixes' distance `d` apart by more than `move_slack_m` also costs
+   `−½(shortfall/move_sigma_m)²`.
+4. Off path: every hypothesis also holds at `off_path_log_p` (`off_path_since` set). On a real
+   shape it advances by `d` (between two fixes of one source), never into the next call's
+   arrival trigger and never closer to the next call than the fix's straight-line distance to
+   it; coming back onto the path it may step back by `reckon_slack` of what it advanced. On a
+   stop-to-stop chord it stays, and the lateness comes from the leg estimate (the fix's share of
+   distance to the last call left and the next). A held place never enters the history: a
+   trigger it passes is committed once a fix on the path brackets it.
 5. Every candidate keeps its best predecessor (Viterbi); the beam keeps the `beam` most likely,
    dropping any more than `prune` below the best. The most likely hypothesis holding off path
    for `off_route_hold_s` makes the journey `off_route`; a first fix with no candidate at all
@@ -286,7 +293,8 @@ and backtrack tolerance): `gps_sigma_m`, `shape_sigma_m`, `chord_min_sigma_m`, `
 `loss_sigma_base_s`, `loss_sigma_rate`, `gain_sigma_base_s`, `gain_sigma_rate`,
 `start_lateness_sigma_s`, `beam`, `prune`, `max_commit_lag_s`, `max_event_interval_s` (a crossing
 bracketed by fixes further apart is not known well enough for history: no event, but realtime
-gets its time interpolated between those fixes, status `inferred`), `off_route_hold_s`.
+gets its time interpolated between those fixes, status `inferred`), `off_route_hold_s`,
+`move_sigma_m`, `move_slack_m`, `reckon_slack`.
 
 **Reception gaps in realtime.** Predictions use the lateness the tracker measures from GPS
 (BASE_PLAN.md section 21.1), else the source's delay. Through a gap the last lateness holds; the

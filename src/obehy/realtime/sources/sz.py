@@ -5,8 +5,9 @@ times, resolved near the response time `md`, itself local), SZ-Q3 (`cr` is the a
 standing, else the departure or passage), SZ-Q4 (points by `NÁZEV20` name: every code the SR70
 catalogue gives the name; 6-digit codes lose their check digit), SZ-Q5 (the train number is a
 further key, used only when the TR is ambiguous), SZ-Q7 (the next point may be an operational
-point), SZ-Q8 (`a` is `""` when standing). SZ-Q6 (unchanged entries) is the core's, declared
-in the manifest.
+point), SZ-Q8 (`a` is `""` when standing), SZ-Q12 (times are whole minutes, truncated: the
+delay `de` and the predicted time `nsp` stand for the middle of their minute). SZ-Q6
+(unchanged entries) is the core's, declared in the manifest.
 """
 
 from __future__ import annotations
@@ -41,11 +42,12 @@ from obehy.realtime.times import Instant, read_local, resolve_clock, within_skew
 
 SOURCE = "sz-mapa"
 CHANNEL = "trains"
-DECODER_VERSION = 1
+DECODER_VERSION = 2
 
 ID = re.compile(r"^TR/([^/]+)/([^/]+)/([^/]+)/([^/]+)/(\d{8})$")
 HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
 MINUTE = timedelta(seconds=59)  # `cr` is truncated to the minute
+HALF_MINUTE_S = 30  # SZ-Q12: `de` and `nsp` are truncated minutes too
 # The SR70 catalogue with its 20-character names (jrunify-ext-geodata rail/SR70_Nazev20.csv).
 CATALOGUE = Path(__file__).resolve().parents[2] / "data" / "realtime" / "sr70-name20.csv"
 
@@ -168,12 +170,12 @@ def _train(
         facts.append(NextPoint(next_name.strip(), sr70_5(p.get("zst_sr70"))))
     delay = p.get("de")
     if isinstance(delay, int) and not isinstance(delay, bool):
-        facts.append(Delay(delay * 60, "point"))
+        facts.append(Delay(delay * 60 + HALF_MINUTE_S, "point"))  # SZ-Q12
     stop = sr70_5(p.get("nsn70"))
     if stop is not None:
         facts.append(
             NextStopPrediction(
-                stop, _clock(p.get("nst"), reference), _clock(p.get("nsp"), reference)
+                stop, _clock(p.get("nst"), reference), _middle(_clock(p.get("nsp"), reference))
             )
         )
     facts.append(TripStatus(p.get("s") == 1, p.get("di") == 1))
@@ -187,6 +189,12 @@ def _train(
         decoder_version=DECODER_VERSION,
         facts=tuple(facts),
     )
+
+
+def _middle(value: Instant | None) -> Instant | None:
+    """A truncated minute's middle (SZ-Q12)."""
+
+    return None if value is None else Instant(value + timedelta(seconds=HALF_MINUTE_S))
 
 
 def _position(feature: dict[str, Any], p: dict[str, Any]) -> Position | None:

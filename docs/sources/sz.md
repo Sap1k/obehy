@@ -171,8 +171,8 @@ diversion). Platforms are not in this endpoint; they come from the station board
 | SZ-Q9 | TRs absent from CZPTT, or present but not running that day | unmatched, shown as such |
 | SZ-Q10 | `cna` stays the same while other fields of the entry change (delay, position), so a point repeats; another source may have passed it already | resolved from the call this source placed the train at last; a repeat of a recorded event changes nothing |
 | SZ-Q11 | a train reports points its timetable does not have (diverted; `di` stays 0) | unresolved, counted; nothing moves |
+| SZ-Q12 | times are whole minutes, truncated: `de` = `cr` − `cp` in minutes, `nsp` a minute | the delay and the predicted time stand for their minute's middle (+30 s), as `cr` is the minute's interval; measured 2026-10-12 07:00-08:00: SŽ's own next-stop prediction bias −28.9 s → +1.1 s, MAE 72.4 → 72.0 s |
 
 ## Open questions
 
 - Confirm `e` = ETCS supervision with SŽ.
-- Rounding of `cr` and `de`.

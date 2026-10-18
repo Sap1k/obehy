@@ -274,16 +274,17 @@ class Hypothesis:
     at_us: int  # `at` in exact microseconds (`times.micros`), for the tracker's arithmetic
     # Since when the fixes have been off the path for this reading (held, as if missing).
     off_path_since: Instant | None = None
+    # How far it has been advanced by the distance driven since its last fix on the path.
+    reckoned_m: float = 0.0
 
     def evolve(
         self,
         *,
         log_p: float | None = None,
         history: tuple[Placement, ...] | None = None,
-        off_path_since: Instant | None = None,
     ) -> Hypothesis:
         """A copy with some fields changed; `dataclasses.replace` is too slow for the tracker's
-        inner loop. `off_path_since` can be set, never cleared."""
+        inner loop."""
 
         return Hypothesis(
             self.along_m,
@@ -292,15 +293,16 @@ class Hypothesis:
             self.log_p if log_p is None else log_p,
             self.history if history is None else history,
             self.at_us,
-            self.off_path_since if off_path_since is None else off_path_since,
+            self.off_path_since,
+            self.reckoned_m,
         )
 
 
 @dataclass(frozen=True, slots=True)
 class OffPath:
-    """Where the vehicle is estimated to be along the path while its fixes are off it (a detour,
-    or a shape that misses the road it takes): placed on the leg between the last stop left
-    and the next one by its distances to the two (`progress.py`). Lateness only, never events."""
+    """Where the vehicle is estimated to be along a stop-to-stop chord while its fixes are off
+    it: placed on the leg between the last stop left and the next one by its distances to the
+    two (`progress.py`). Lateness only, never events."""
 
     along_m: float
     at: Instant
@@ -319,12 +321,14 @@ class Track:
     # Time of the last committed crossing: crossings are committed in path order, so their
     # times never decrease.
     crossed_at: Instant | None = None
-    # While the best reading is held off the path: the estimate from the latest fix.
+    # While the best reading is held off a stop-to-stop chord: the estimate from the latest fix.
     off_path: OffPath | None = None
+    # The newest fix's source and place (lon, lat): the distance driven to the next one.
+    fix: tuple[str, float, float] | None = None
 
     @property
     def lateness_s(self) -> float | None:
-        """The measured lateness: off the path the estimate, else the best reading's."""
+        """The measured lateness: off a chord the estimate, else the best reading's."""
 
         if self.off_path is not None:
             return self.off_path.lateness_s

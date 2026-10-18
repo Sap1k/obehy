@@ -427,11 +427,14 @@ def test_a_dwell_absorbs_lateness_only_down_to_the_minimum_dwell() -> None:
     assert near(c.estimated_arrival, "08:18")
 
 
-def test_early_running_is_carried_through_a_dwell_unchanged() -> None:
+def test_early_running_holds_to_the_next_call_then_fades() -> None:
     run = _dwell_run().at("08:00", east(0)).at("08:00:45", east(500))  # ~105 s early
     b, c = run.instance.calls[1:]
     assert near(b.estimated_departure, "08:08:15")  # not clamped to the timetable
-    assert near(c.estimated_arrival, "08:13:15")
+    lead = 105 * POLICY.prediction.early_keep("bus")  # one call on, part of the lead is left
+    expected = local("2026-10-08 08:15") - timedelta(seconds=lead)
+    assert c.estimated_arrival is not None
+    assert abs((c.estimated_arrival - expected).total_seconds()) <= 5
 
 
 def test_a_bus_standing_at_a_stop_gets_a_predicted_departure() -> None:
@@ -505,3 +508,37 @@ def test_pid_and_duk_on_one_trip_are_one_journey_in_gtfs_rt() -> None:
     message = feed_message(run.state, now, POLICY.lifecycle)
     assert len([e for e in message.entity if e.HasField("trip_update")]) == 1
     assert len([e for e in message.entity if e.HasField("vehicle")]) == 1
+
+
+def _at_b(*fixes: tuple[str, float]) -> Run:
+    """A bus on time to B (no timetabled dwell: 08:05/08:05), then the fixes given."""
+
+    run = Run().at("08:00", east(0)).at("08:02:30", east(500)).at("08:04:40", east(900))
+    for clock, metres in fixes:
+        run.at(clock, east(metres))
+    return run
+
+
+def test_standing_within_the_dwell_credit_at_a_stop_without_dwell_is_not_lateness() -> None:
+    run = _at_b(("08:05:00", 1000), ("08:05:25", 1000))
+    c = run.instance.calls[2]
+    assert near(c.estimated_arrival, "08:10:00", slack_s=8)
+    run.at("08:05:40", east(1100))  # left; the credit fades out along the leg to C
+    assert near(run.instance.calls[2].estimated_arrival, "08:10:00", slack_s=8)
+
+
+def test_standing_beyond_the_dwell_credit_is_lateness() -> None:
+    credit = POLICY.prediction.dwell_credit_s("bus")
+    run = _at_b(("08:05:00", 1000), ("08:06:30", 1000))
+    expected = local("2026-10-08 08:10:00") + timedelta(seconds=90 - credit)
+    arrival = run.instance.calls[2].estimated_arrival
+    assert arrival is not None and abs((arrival - expected).total_seconds()) <= 8
+
+
+def test_a_vehicle_driving_through_a_request_stop_is_not_credited() -> None:
+    run = _at_b(("08:05:00", 1000), ("08:05:10", 1100), ("08:06:30", 1300))
+    plain = run.instance.calls[2].estimated_arrival
+    track = run.instance.track
+    assert plain is not None and track is not None and track.lateness_s is not None
+    expected = local("2026-10-08 08:10:00") + timedelta(seconds=round(track.lateness_s))
+    assert abs((plain - expected).total_seconds()) <= 2

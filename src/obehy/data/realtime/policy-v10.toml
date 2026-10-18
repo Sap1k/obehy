@@ -2,7 +2,8 @@
 # docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness,
 # v5 the index sweep and daily compaction, v6 warm replay by vehicle, v7 PID in the position
 # preference, v8 two days of rt.observation, v9 the raw archive window, v10 trip updates
-# kept after the trip ends).
+# kept after the trip ends, observed dwell credited at stops without a timetabled one, and
+# the distance driven followed where a shape misses the road).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
 policy_version = "10"
@@ -72,12 +73,19 @@ max_commit_lag_s = 900
 # is passed without realtime (e.g. inside a reception gap).
 max_event_interval_s = 300
 off_route_hold_s = 180
-# While fixes are off the path (a detour, or a shape that misses the road taken), lateness is
-# estimated on the leg between the last stop left and the next one by the fix's distances to
-# them, never past the next stop. No estimate when those distances add up to more than
-# factor x the leg plus this many metres: the vehicle is too far off to say where it is.
-off_path_detour_factor = 2
-off_path_detour_m = 3000
+# Two roads of about the same length differ in where they go, not how far: the distance driven
+# is the measure of progress where a shape misses the road taken.
+# On a real shape, a reading may not advance much less than the fixes moved apart (the shortest
+# road between them): a shortfall beyond move_slack_m (GPS error at both fixes) costs a normal
+# term with move_sigma_m. Without it a fix on a parallel road projects onto the shape where the
+# roads split and stays there while time passes, read as lateness. A held reading (off a real
+# shape) advances by the distance the fixes moved, never into the next call's arrival trigger
+# (events come from fixes on the path); coming back onto the path it may step back by
+# reckon_slack of what it advanced so. On a stop-to-stop chord the leg estimate is used instead. Both only between two fixes of one source (a run fuses DÚK GPS and the SŽ
+# map). Measured on the 2026-10-12 morning peak (DPMD, MPV net, SŽ map; `--quality`).
+move_sigma_m = 15
+move_slack_m = 50
+reckon_slack = 0.25
 
 [prediction]
 # Propagation (BASE_PLAN.md 20.5). A late vehicle recovers time only in a real timetabled dwell
@@ -91,6 +99,18 @@ min_dwell_s = { default = 60 }
 long_dwell_s = { default = 300 }
 min_long_dwell_s = { default = 120 }
 max_early_departure_s = { default = 86400, rail = 0 }
+# A stop the timetable gives no dwell (arrival = departure, whole minutes) still has one inside
+# the minute. Time a vehicle is seen standing there, up to dwell_credit_s, is not lateness: while
+# it stands, and on the next leg, fading out by the next stop (the leg's time absorbs it). Most
+# road stops are request stops, so only an observed stop counts; a train certainly stops at a
+# call not on request. Measured on the 2026-10-12 morning peak (DPMD, MPV net, SŽ map;
+# `obehy rt replay --quality`): 20 s and 45 s were no better.
+dwell_credit_s = { default = 30 }
+# An early lead holds to the next call; at each call beyond, this share of it is kept. Early
+# vehicles mostly lose their lead within a call or two (2026-10-12 MPV net, buses predicted more
+# than a minute early: next call -94 s predicted / -86 s actual, two calls on -91 / -32 s). Of
+# 0.3, 0.4 and 0.5 on the 2026-10-12 morning peak, 0.5 cost DPMD least for the same MPV net gain.
+early_keep = { default = 0.5 }
 
 [delay]
 discard_below_s = -1800

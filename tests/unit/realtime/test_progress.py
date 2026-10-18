@@ -12,7 +12,8 @@ from datetime import date, datetime
 from itertools import pairwise
 
 from obehy.realtime.core import Context, estimate_all, step
-from obehy.realtime.index import Index
+from obehy.realtime.geo import cumulative_m
+from obehy.realtime.index import Index, Shape
 from obehy.realtime.model import (
     Effect,
     FeedState,
@@ -323,32 +324,69 @@ def test_committed_progress_never_goes_back() -> None:
         last = track.committed_m
 
 
-def test_off_the_shape_the_delay_follows_the_leg_instead_of_freezing() -> None:
-    # The shape misses the road the bus takes: from 600 m it drives a parallel road 400 m north
-    # of it to B, running later and later. No fix fits the shape there, yet the delay follows
-    # the bus along the leg A → B; B's arrival comes from the fixes back on the shape.
+def _shaped(
+    stops: Mapping[str, tuple[float, float]],
+    calls: Sequence[CallSpec],
+    shape: Sequence[tuple[float, float]],
+) -> Index:
+    """A trip whose shape runs through the given points (metres east, north) instead of
+    straight from stop to stop."""
+
+    tt = timetable()
+    for name, (east, north) in stops.items():
+        tt.stop(name, *point(east, north))
+    index = tt.trip("582492:143", days=[DAY], calls=list(calls)).index()
+    (trip,) = index.trips.values()
+    assert trip.shape_id is not None
+    points = tuple(point(east, north) for east, north in shape)
+    index.shapes[trip.shape_id] = Shape(trip.shape_id, points, cumulative_m(points))
+    return index
+
+
+# Around a block: the shape goes north, then east to B; the bus goes east, then north. Both 1600 m.
+BLOCK_STOPS = {"A": (0, 0), "B": (800, 800), "C": (1600, 800)}
+BLOCK_CALLS = [("A", "08:00"), ("B", "08:04"), ("C", "08:06")]
+BLOCK_SHAPE = [(0, 0), (0, 800), (800, 800), (1600, 800)]
+
+
+def test_a_parallel_road_of_the_same_length_adds_no_lateness() -> None:
+    # The bus runs to time on the other side of the block. Projected onto the shape it would
+    # stand at the corner by A while it drives east; read as lateness, that is two minutes
+    # made up and dropped again at B. The distance driven is the progress instead.
+    d = Drive(_shaped(BLOCK_STOPS, BLOCK_CALLS, BLOCK_SHAPE))
+    for fix in drive([("08:00", 0, 0), ("08:02", 800, 0), ("08:04", 800, 800)]):
+        d.run([fix])
+        track = d.instance.track
+        assert track is not None and track.lateness_s is not None
+        assert abs(track.lateness_s) < 45, fix
+        c = d.instance.calls[2]
+        assert c.estimated_arrival is not None
+        assert abs((c.estimated_arrival - at("08:06")).total_seconds()) < 45, fix
+    d.run(drive([("08:04", 800, 800), ("08:06", 1600, 800)])[1:])
+    assert d.arrivals() == [("B", 1), ("C", 1)]
+
+
+def test_a_longer_detour_grows_late_and_its_events_come_from_the_path() -> None:
+    # The shape runs straight A → B → C; from 400 m the bus detours 600 m north around 1200 m
+    # of road and comes back at 1600 m, 1200 m further than the shape, at the same speed.
     tt = timetable()
     for name, east in (("A", 0), ("B", 2000), ("C", 4000)):
         tt.stop(name, *point(east, 0))
-    shaped = tt.trip(
-        "582492:143", days=[DAY], calls=[("A", "08:00"), ("B", "08:10"), ("C", "08:20")]
+    index = tt.trip(
+        "582492:143", days=[DAY], calls=[("A", "08:00"), ("B", "08:04"), ("C", "08:08")]
     ).index()
-    fixes = drive([("08:00", 0, 0), ("08:02", 400, 0), ("08:03", 600, 400)])
-    fixes += drive([("08:03:15", 650, 400), ("08:12", 1600, 400)])
-    d = Drive(shaped).run(fixes)
+    d = Drive(index).run(drive([("08:00", 0, 0), ("08:00:48", 400, 0), ("08:02", 400, 600)]))
+    d.run(drive([("08:02", 400, 600), ("08:04:24", 1600, 600), ("08:05:36", 1600, 0)])[1:])
     track = d.instance.track
-    assert track is not None and track.off_path is not None
-    # At 08:12, 1600 m east and 400 m north: about 1.5 km along the leg, due there at 08:07:40.
-    assert track.lateness_s is not None and 180 < track.lateness_s < 420
-    assert track.hypotheses[0].lateness_s < 60  # the held reading alone would say on time
-    assert d.instance.off_route and d.arrivals() == []  # no events off the shape
-    b = d.instance.calls[1]
-    assert b.estimated_arrival is not None and b.estimated_arrival > at("08:13")
-
-    d.run(drive([("08:12:30", 1800, 0), ("08:14", 2000, 0), ("08:16", 2600, 0)]))
+    assert track is not None and track.lateness_s is not None
+    away = track.lateness_s
+    assert away > 60  # 1200 m further at 8.3 m/s is 144 s
+    assert d.arrivals() == []  # nothing arrives by the distance driven
+    d.run(drive([("08:05:36", 1600, 0), ("08:06:24", 2000, 0)])[1:])
     track = d.instance.track
-    assert track is not None and track.off_path is None and not d.instance.off_route
-    assert ("B", 1) in d.arrivals()
+    assert track is not None and track.lateness_s is not None
+    assert abs(track.lateness_s - away) < 60  # back on the path without a jump
+    assert d.arrivals() == [("B", 1)]
 
 
 def test_a_long_standstill_keeps_the_history_short_and_the_events_unchanged() -> None:

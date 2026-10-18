@@ -114,8 +114,10 @@ class Timetable:
         visits: dict[str, int] = {}
         built: list[Call] = []
         for sequence, spec in enumerate(calls, start=first_sequence):
-            name = spec[0].lstrip("~")
+            # "~X" is a railway point without passenger service, "?X" a request stop.
+            name = spec[0].lstrip("~?")
             passenger = not spec[0].startswith("~")
+            on_request = spec[0].startswith("?")
             if len(spec) == 2:
                 arrival = departure = hhmm(spec[1])
             else:
@@ -124,7 +126,15 @@ class Timetable:
             location = self._location(name)
             visits[name] = visits.get(name, 0) + 1
             built.append(
-                Call(sequence, location.location_id, visits[name], passenger, arrival, departure)
+                Call(
+                    sequence,
+                    location.location_id,
+                    visits[name],
+                    passenger,
+                    arrival,
+                    departure,
+                    on_request,
+                )
             )
         line = key.split(":", 1)[0]
         self.trips.append(
@@ -303,8 +313,8 @@ def serving_rows(tt: Timetable) -> dict[str, list[dict[str, object]]]:
                 "passenger_service": call.passenger_service,
                 "scheduled_arrival": call.arrival,
                 "scheduled_departure": call.departure,
-                "pickup_type": 0,
-                "dropoff_type": 0,
+                "pickup_type": 3 if call.on_request else 0,
+                "dropoff_type": 3 if call.on_request else 0,
                 "timepoint": True,
                 # Kilometres, as some feeds do: the core must not rely on this unit.
                 "shape_distance_traveled": None,

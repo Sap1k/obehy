@@ -46,6 +46,7 @@ from obehy.realtime.model import (
     VehicleKey,
 )
 from obehy.realtime.policy import Policy
+from obehy.realtime.quality import QualityLog
 from obehy.realtime.runner import Runner
 from obehy.realtime.sources import arriva_express, dpmd, duk, mpvnet, pid, sz, sz_tabule
 from obehy.realtime.times import Instant, instant, local_date, next_multiple
@@ -91,6 +92,8 @@ class ReplayOptions:
     gtfs_rt_every_s: int | None = None
     since: Instant | None = None
     until: Instant | None = None
+    # Estimate every tick and log prediction accuracy, flicker and dwell (`quality`).
+    quality: bool = False
 
 
 @dataclass(slots=True)
@@ -148,7 +151,8 @@ def replay(
     unresolved: Counter[str] = Counter()
     keyless = KeylessLog(policy.keyless.episode_gap_s)
     predictors = PredictorLog() if "czptt" in runner.runtimes else None
-    clock = _Clock(runner, options, policy.emit_tick_s, predictors)
+    quality = QualityLog() if options.quality else None
+    clock = _Clock(runner, options, policy.emit_tick_s, predictors, quality)
     last: Instant | None = None
     for chunk in batched(_decoded(options, policy, stats), LOOKAHEAD_POLLS, strict=False):
         # Load the static data of the next polls' keys in one round trip set.
@@ -167,6 +171,8 @@ def replay(
     if predictors is not None:
         document["unresolved"] = dict(sorted(unresolved.items()))
         document["predictors"] = predictors.report()
+    if quality is not None:
+        document["quality"] = quality.report()
     options.out.mkdir(parents=True, exist_ok=True)
     if keyless.groups:
         document["keyless"] = keyless.report()
@@ -187,11 +193,13 @@ class _Clock:
         options: ReplayOptions,
         tick_s: int,
         predictors: PredictorLog | None = None,
+        quality: QualityLog | None = None,
     ) -> None:
         self.runner = runner
         self.options = options
         self.tick_s = tick_s
         self.predictors = predictors
+        self.quality = quality
         self.next_tick: Instant | None = None
         self.next_snapshot: Instant | None = None
         self.next_sample: Instant | None = None
@@ -206,6 +214,10 @@ class _Clock:
                 self.next_sample = next_multiple(at, int(SAMPLE_EVERY.total_seconds()))
         while self.next_tick <= at:
             self.runner.tick(self.next_tick, emit=False)
+            if self.quality is not None:
+                for _, runtime in sorted(self.runner.runtimes.items()):
+                    estimate_all(runtime.state, runtime.ctx)
+                    self.quality.sample(runtime.state, runtime.ctx, self.next_tick)
             if self.next_sample is not None and self.next_sample <= self.next_tick:
                 rail = self.runner.runtimes["czptt"]
                 assert self.predictors is not None

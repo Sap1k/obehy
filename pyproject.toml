@@ -81,6 +81,7 @@ source_modules = [
     "obehy.realtime.model_json",
     "obehy.realtime.runs",
     "obehy.realtime.evaluate",
+    "obehy.realtime.quality",
     "obehy.realtime.platforms",
 ]
 forbidden_modules = [
