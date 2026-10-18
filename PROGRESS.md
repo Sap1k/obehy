@@ -250,6 +250,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-18** — TripUpdates no longer leave the feed when realtime ends (MOTIS reverted the
+  whole trip, the calls made included, to the timetable): policy v10 `publish_finished_s` keeps
+  a finished trip's calls made (no vehicle) 30 min, rail 60 min; a lost trip keeps its calls
+  made with `NO_DATA` ahead until forgotten. Unit tests pass.
 - **2026-10-15** — PID and DÚK published two TripUpdates and two vehicles for one regional bus:
   a non-rail journey was named by the key that bound it (PID's GTFS trip ID, DÚK's CIS line and
   trip), so one trip was two journeys. A journey whose trip and day the observation's

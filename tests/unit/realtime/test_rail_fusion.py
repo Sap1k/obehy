@@ -202,7 +202,7 @@ def test_a_train_is_one_vehicle_however_many_report_it() -> None:
         _sz("2026-10-08 08:01:00", sz_fix),
         _duk("2026-10-08 08:01:30", 0.4),
     )
-    message = feed_message(state, local("2026-10-08 08:02"))
+    message = feed_message(state, local("2026-10-08 08:02"), POLICY.lifecycle)
     (entity,) = [e for e in message.entity if e.HasField("vehicle")]
     assert entity.vehicle.vehicle.id == run_vehicle_id(PA) == entity.id.removeprefix("vehicle:")
     assert entity.vehicle.vehicle.label == "100"
@@ -213,7 +213,9 @@ def test_a_train_is_one_vehicle_however_many_report_it() -> None:
         _sz("2026-10-08 08:05:00", sz_fix),  # DÚK silent: the SŽ position, same vehicle
     )
     (entity,) = [
-        e for e in feed_message(later, local("2026-10-08 08:05")).entity if e.HasField("vehicle")
+        e
+        for e in feed_message(later, local("2026-10-08 08:05"), POLICY.lifecycle).entity
+        if e.HasField("vehicle")
     ]
     assert entity.vehicle.vehicle.id == run_vehicle_id(PA)
     assert abs(entity.vehicle.position.longitude - sz_fix.lon) < 1e-5

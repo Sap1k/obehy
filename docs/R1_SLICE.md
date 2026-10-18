@@ -148,7 +148,7 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | Section | Values |
 |---|---|
 | `[time]` | date window `pre(mode)` and `max_delay(mode)`; vehicle-day gap 3 h; `max_clock_skew` (proposed 20 min) |
-| `[lifecycle]` | stale and lost after N s (by mode); trigger radius and margin; finished grace; forget after |
+| `[lifecycle]` | stale and lost after N s (by mode); trigger radius and margin; how long a finished trip stays published; forget after |
 | `[progress]` | the progress model of section 9 (geometry trust, speed, lateness change, beam, commit lag, off-route hold) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
@@ -292,9 +292,13 @@ gets its time interpolated between those fixes, status `inferred`), `off_route_h
 (BASE_PLAN.md section 21.1), else the source's delay. Through a gap the last lateness holds; the
 vehicle is never assumed back on time. A journey without observations is `stale` after
 `stale_after_s` (its vehicle position is withdrawn, another claimant may lead) and `lost` after
-`predict_without_data_s` (its trip update is withdrawn too); both are per mode, longer for rail,
-and count on the reception clock from the last observation bringing a new fix, so a vehicle
-clock offset does not matter and a GPS time frozen while payloads keep coming is a gap.
+`predict_without_data_s` (its predictions are withdrawn: the trip update keeps the calls made and
+marks every call ahead `NO_DATA` until the journey is forgotten); both are per mode, longer for
+rail, and count on the reception clock from the last observation bringing a new fix, so a vehicle
+clock offset does not matter and a GPS time frozen while payloads keep coming is a gap. A
+finished journey keeps its trip update, the calls made and no vehicle, for `publish_finished_s`
+after its last call: a trip leaving the feed would be reverted to the timetable by consumers,
+the calls already made included.
 
 **Scenario suite** (`tests/unit/realtime/test_progress.py`), one test each:
 

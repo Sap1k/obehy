@@ -261,7 +261,7 @@ class Runner:
                     estimate_all(runtime.state, runtime.ctx)
             if emit and self.gtfs_rt_dir is not None:
                 with self.phases.time("gtfs_rt"):
-                    emitter = self.emitters.setdefault(feed, FeedEmitter())
+                    emitter = self.emitters.setdefault(feed, FeedEmitter(self.policy.lifecycle))
                     write_feed(
                         self.gtfs_rt_dir / f"{feed}.pb", emitter.serialize(runtime.state, now)
                     )

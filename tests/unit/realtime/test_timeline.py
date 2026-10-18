@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
+
+from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.realtime.core import Context, estimate_all, step
 from obehy.realtime.model import (
@@ -222,7 +224,6 @@ def test_a_loop_attaches_events_to_the_right_visit() -> None:
 
 
 def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
-    from google.transit import gtfs_realtime_pb2 as rt
 
     from obehy.realtime.core import refresh
     from obehy.realtime.emit.gtfs_rt import feed_message
@@ -232,7 +233,7 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
     now = local("2026-10-08 08:03:10")
     refresh(run.state, now, POLICY)
     estimate_all(run.state, run.ctx)
-    raw = feed_message(run.state, now).SerializeToString(deterministic=True)
+    raw = feed_message(run.state, now, POLICY.lifecycle).SerializeToString(deterministic=True)
     message = rt.FeedMessage()
     message.ParseFromString(raw)
 
@@ -245,25 +246,55 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
     assert [s.stop_sequence for s in update.stop_time_update] == [1, 2, 3]
     expected = local("2026-10-08 08:05:30").timestamp()  # 30 s late at 500 m
     assert abs(update.stop_time_update[1].arrival.time - expected) <= 5
-    assert feed_message(run.state, now).SerializeToString(deterministic=True) == raw
+    assert (
+        feed_message(run.state, now, POLICY.lifecycle).SerializeToString(deterministic=True) == raw
+    )
 
     # Stale after 300 s: the position goes, the predictions stay through a reception gap...
     later = local("2026-10-08 08:10")
     refresh(run.state, later, POLICY)
-    assert [e.id for e in feed_message(run.state, later).entity] == [
+    assert [e.id for e in feed_message(run.state, later, POLICY.lifecycle).entity] == [
         "trip:cis:line_trip:582492:143:2026-10-08"
     ]
-    # ...until nothing has been heard for predict_without_data_s.
+    # ...until nothing has been heard for predict_without_data_s: then the calls made stay and
+    # every call ahead is NO_DATA, never reverted to the timetable by leaving the feed.
     lost = local("2026-10-08 08:34")
     refresh(run.state, lost, POLICY)
-    assert len(feed_message(run.state, lost).entity) == 0
+    (entity,) = feed_message(run.state, lost, POLICY.lifecycle).entity
+    stops = entity.trip_update.stop_time_update
+    no_data = rt.TripUpdate.StopTimeUpdate.NO_DATA
+    assert [s.schedule_relationship == no_data for s in stops] == [False, True, True]
+    assert stops[0].departure.time > 0 and not entity.trip_update.HasField("vehicle")
+
+
+def test_a_finished_trip_keeps_its_trip_update_for_a_while() -> None:
+    from obehy.realtime.core import refresh
+    from obehy.realtime.emit.gtfs_rt import feed_message
+
+    run = Run().at("08:00", east(0)).at("08:03", east(500)).at("08:06", east(1200))
+    run.at("08:13", east(2000))  # three minutes late at C
+    assert run.instance.lifecycle == "finished"
+    now = local("2026-10-08 08:20")
+    refresh(run.state, now, POLICY)
+    estimate_all(run.state, run.ctx)
+    (entity,) = feed_message(run.state, now, POLICY.lifecycle).entity
+    update = entity.trip_update
+    assert not update.HasField("vehicle")
+    assert [s.stop_sequence for s in update.stop_time_update] == [1, 2, 3]
+    arrival = update.stop_time_update[2].arrival.time
+    assert local("2026-10-08 08:06").timestamp() < arrival <= local("2026-10-08 08:13").timestamp()
+    # Gone publish_finished_s after its last call.
+    keep = int(POLICY.lifecycle.publish_finished_s("bus"))
+    gone = Instant(local("2026-10-08 08:13") + timedelta(seconds=keep + 10))
+    refresh(run.state, gone, POLICY)
+    assert len(feed_message(run.state, gone, POLICY.lifecycle).entity) == 0
 
 
 def test_gtfs_rt_bytes_reused_across_ticks_match_a_fresh_serialization() -> None:
     from obehy.realtime.core import refresh
     from obehy.realtime.emit.gtfs_rt import FeedEmitter, feed_message
 
-    emitter = FeedEmitter()
+    emitter = FeedEmitter(POLICY.lifecycle)
     run = Run().at("08:00", east(0))
     for clock, metres in (("08:01", 150), ("08:02", 300), ("08:03", 500), ("08:04", 700)):
         run.at(clock, east(metres))
@@ -272,8 +303,10 @@ def test_gtfs_rt_bytes_reused_across_ticks_match_a_fresh_serialization() -> None
         estimate_all(run.state, run.ctx)
         payload = emitter.serialize(run.state, now)
         # The same bytes as serializing the whole message at once, with nothing cached.
-        assert payload == feed_message(run.state, now).SerializeToString(deterministic=True)
-        assert payload == FeedEmitter().serialize(run.state, now)
+        assert payload == feed_message(run.state, now, POLICY.lifecycle).SerializeToString(
+            deterministic=True
+        )
+        assert payload == FeedEmitter(POLICY.lifecycle).serialize(run.state, now)
         assert emitter.serialize(run.state, now) == payload  # all from cache
     assert len(emitter.trips) == 1 and len(emitter.positions) == 1
 
@@ -432,7 +465,7 @@ def test_a_bus_reported_by_two_sources_is_one_vehicle_in_gtfs_rt() -> None:
     now = local("2026-10-08 08:03:10")
     refresh(run.state, now, POLICY)
     estimate_all(run.state, run.ctx)
-    message = feed_message(run.state, now)
+    message = feed_message(run.state, now, POLICY.lifecycle)
     assert len(run.state.vehicles) == 2  # both bound to the journey
     positions = [e for e in message.entity if e.HasField("vehicle")]
     (update,) = [e.trip_update for e in message.entity if e.HasField("trip_update")]
@@ -469,6 +502,6 @@ def test_pid_and_duk_on_one_trip_are_one_journey_in_gtfs_rt() -> None:
     estimate_all(run.state, run.ctx)
     (journey,) = run.state.instances
     assert (journey.namespace, journey.key) == ("cis:line_trip", "582492:143")
-    message = feed_message(run.state, now)
+    message = feed_message(run.state, now, POLICY.lifecycle)
     assert len([e for e in message.entity if e.HasField("trip_update")]) == 1
     assert len([e for e in message.entity if e.HasField("vehicle")]) == 1

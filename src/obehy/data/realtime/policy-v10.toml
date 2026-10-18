@@ -1,10 +1,11 @@
 # Realtime core policy (BASE_PLAN.md section 23, docs/R1_SLICE.md section 4,
 # docs/R2_SLICE.md section 8; v3 adds [keyless], v4 off-path lateness,
 # v5 the index sweep and daily compaction, v6 warm replay by vehicle, v7 PID in the position
-# preference, v8 two days of rt.observation, v9 the raw archive window).
+# preference, v8 two days of rt.observation, v9 the raw archive window, v10 trip updates
+# kept after the trip ends).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "9"
+policy_version = "10"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -21,7 +22,9 @@ stale_after_s = { default = 300, rail = 900 }
 predict_without_data_s = { default = 1800, rail = 3600 }
 arrival_radius_m = 60
 departure_margin_m = 40
-finished_grace_s = 300
+# A finished journey keeps its trip update (the calls it made) this long after its last call,
+# so consumers do not revert it to the timetable; a lost one keeps its calls made until forgotten.
+publish_finished_s = { default = 1800, rail = 3600 }
 # Vehicles unseen and journeys untouched this long are dropped from memory (history keeps them).
 forget_after_s = 7200
 

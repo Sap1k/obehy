@@ -1,7 +1,14 @@
 """Per-feed GTFS-RT from core state (BASE_PLAN.md section 30): matched vehicles only.
 
 Output is deterministic: entities in sorted order, timestamps from the tick clock and the
-observations, never from the wall clock. Stale and finished journeys are left out.
+observations, never from the wall clock.
+
+A TripUpdate does not leave the feed when realtime about the trip ends: a consumer would revert
+the whole trip to the timetable, the calls already made included, and plan on top of times that
+never happened. A finished journey keeps its TripUpdate (the calls it made, no vehicle) for
+`lifecycle.publish_finished_s` after its last call; a lost one (nothing heard for
+`predict_without_data_s`) keeps the calls it made, every call ahead `NO_DATA`, until it is
+forgotten. Vehicle positions are published for live journeys only, and not while stale.
 
 A rail run is published per trip part (docs/R2_SLICE.md section 2): each part gets its own
 TripUpdate with its own `stop_sequence`s, the junction call shared by two parts carries the
@@ -22,8 +29,10 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from google.transit import gtfs_realtime_pb2 as rt
 
@@ -37,10 +46,14 @@ from obehy.realtime.model import (
     VehicleId,
     VehicleState,
 )
+from obehy.realtime.policy import LifecyclePolicy
 from obehy.realtime.times import Instant
 
 LIVE = ("pre_trip", "running")
 TIMED = ("actual", "inferred", "predicted")
+MADE = ("actual", "inferred")  # calls with an observed or inferred crossing
+
+Publication = Literal["live", "lost", "finished"]
 
 
 def _epoch(value: Instant) -> int:
@@ -138,6 +151,25 @@ def _one_source(instance: Instance, vehicles: list[VehicleId], state: FeedState)
     return [v for v in vehicles if v.source == source]
 
 
+def publication(instance: Instance, now: Instant, policy: LifecyclePolicy) -> Publication | None:
+    """How a journey's TripUpdate is published at `now`, if at all."""
+
+    if instance.lifecycle in LIVE:
+        return "lost" if instance.freshness.lost else "live"
+    if instance.lifecycle != "finished":
+        return None
+    made = [
+        t
+        for c in instance.calls
+        if c.status in MADE
+        for t in (c.estimated_arrival, c.estimated_departure)
+        if t is not None
+    ]
+    end = max(made, default=instance.freshness.updated_at)
+    keep = timedelta(seconds=policy.publish_finished_s(instance.mode))
+    return "finished" if now - end <= keep else None
+
+
 def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str) -> bytes:
     assert current.position is not None
     entity = rt.FeedEntity()
@@ -157,26 +189,33 @@ def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str
     return entity.SerializeToString(deterministic=True)
 
 
-def _trip_updates(instance: Instance, vehicle_id: str | None) -> tuple[bytes, ...]:
-    """The serialized TripUpdate entities of a live journey, one per published part."""
+def _trip_updates(
+    instance: Instance, vehicle_id: str | None, publication: Publication
+) -> tuple[bytes, ...]:
+    """The serialized TripUpdate entities of a journey, one per published part. A finished
+    journey publishes the calls it made; a lost one those and `NO_DATA` for every call ahead.
+    Either leaves out a part without a call made."""
 
     journey = instance.journey
     parts = _parts(instance)
+    timed_statuses = TIMED if publication == "live" else MADE
     out: list[bytes] = []
     for n, part in enumerate(parts):
         updates: list[tuple[CallState, bool, bool]] = []
+        made = False
         for i in range(part.first, part.last + 1):
             call = instance.calls[i]
             if not call.passenger:
                 continue
-            timed = call.status in TIMED
-            if not timed and _mapped(call) is None:
+            timed = call.status in timed_statuses
+            made = made or call.status in MADE
+            if not timed and _mapped(call) is None and publication != "lost":
                 continue
             # A junction shared with the neighbouring part: arrival before, departure after.
             arrival = not (n > 0 and i == part.first)
             departure = not (n < len(parts) - 1 and i == part.last)
             updates.append((call, arrival and timed, departure and timed))
-        if not updates:
+        if not updates or (publication != "live" and not made):
             continue
         entity = rt.FeedEntity()
         entity.id = _entity_id(instance, part)
@@ -188,6 +227,9 @@ def _trip_updates(instance: Instance, vehicle_id: str | None) -> tuple[bytes, ..
         for call, arrival, departure in updates:
             stop = update.stop_time_update.add()
             stop.stop_sequence = call.sequence
+            if publication == "lost" and call.status not in MADE:
+                stop.schedule_relationship = rt.TripUpdate.StopTimeUpdate.NO_DATA
+                continue
             if arrival and call.estimated_arrival is not None:
                 stop.arrival.time = _epoch(call.estimated_arrival)
             if departure and call.estimated_departure is not None:
@@ -217,7 +259,8 @@ class FeedEmitter:
     identity says unchanged). The output is exactly `SerializeToString(deterministic=True)` of
     the whole message: a header field followed by entity fields in order."""
 
-    def __init__(self) -> None:
+    def __init__(self, policy: LifecyclePolicy) -> None:
+        self.policy = policy
         self.trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
         self.positions: dict[str, tuple[Instance, VehicleState, bytes]] = {}
 
@@ -239,17 +282,19 @@ class FeedEmitter:
 
         trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
         for journey, instance in sorted(state.instances.items()):
-            if instance.lifecycle not in LIVE or instance.freshness.lost:
-                continue  # a stale journey keeps its predictions through a reception gap
-            if instance.parts:
-                vehicle_id: str | None = run_vehicle_id(journey)
-            elif vehicles_of.get(journey):
+            # A stale journey keeps its predictions through a reception gap.
+            published = publication(instance, now, self.policy)
+            if published is None:
+                continue
+            vehicle_id: str | None = None  # not live: the vehicle may be on its next trip
+            if published == "live" and instance.parts:
+                vehicle_id = run_vehicle_id(journey)
+            elif published == "live" and vehicles_of.get(journey):
                 vehicle_id = str(vehicles_of[journey][0])
-            else:
-                vehicle_id = None
             cached = self.trips.get(journey)
             if cached is None or cached[0] is not instance or cached[1] != vehicle_id:
-                cached = (instance, vehicle_id, _trip_updates(instance, vehicle_id))
+                updates = _trip_updates(instance, vehicle_id, published)
+                cached = (instance, vehicle_id, updates)
             trips[journey] = cached
             chunks.extend(_field(2, entity) for entity in cached[2])
         self.trips = trips
@@ -277,8 +322,8 @@ class FeedEmitter:
         return b"".join(chunks)
 
 
-def feed_message(state: FeedState, now: Instant) -> rt.FeedMessage:
-    return rt.FeedMessage.FromString(FeedEmitter().serialize(state, now))
+def feed_message(state: FeedState, now: Instant, policy: LifecyclePolicy) -> rt.FeedMessage:
+    return rt.FeedMessage.FromString(FeedEmitter(policy).serialize(state, now))
 
 
 def write_feed(path: Path, payload: bytes) -> None:

@@ -154,7 +154,7 @@ def test_r10_a_board_row_gives_a_train_without_an_instance_its_track() -> None:
     (record,) = [e for e in effects if isinstance(e, RecordPlatform)]
     assert record.journey == JourneyKey("czptt", "czptt:train_number", "100", D8)
     estimate_all(state, Context(index, POLICY))
-    message = feed_message(state, local("2026-10-08 07:41"))
+    message = feed_message(state, local("2026-10-08 07:41"), POLICY.lifecycle)
     assert not [e for e in message.entity if e.HasField("trip_update")]
 
 
@@ -175,7 +175,7 @@ def test_r12_a_platform_number_is_a_label_only() -> None:
     platform = state.instances[PA].calls[0].platform
     assert platform is not None and platform.boarding_point_id is None
     estimate_all(state, Context(index, POLICY))
-    message = feed_message(state, local("2026-10-08 07:41"))
+    message = feed_message(state, local("2026-10-08 07:41"), POLICY.lifecycle)
     assert not [e for e in message.entity if e.HasField("trip_update")]
 
 

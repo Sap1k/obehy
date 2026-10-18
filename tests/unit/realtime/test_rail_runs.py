@@ -149,7 +149,7 @@ def test_gtfs_rt_has_a_trip_update_per_part_without_railway_points() -> None:
         {"at": "2026-10-08 08:02:00", "key": "6006", "state": "running", "position": _at(0.5)},
     )
     estimate_all(state, Context(index, POLICY))
-    message = feed_message(state, local("2026-10-08 08:02"))
+    message = feed_message(state, local("2026-10-08 08:02"), POLICY.lifecycle)
     updates = {
         e.trip_update.trip.trip_id: e.trip_update
         for e in message.entity
@@ -174,3 +174,30 @@ def test_two_versions_of_one_part_running_the_same_day_are_ambiguous() -> None:
     index.runs["PA1"] = (*index.runs["PA1"], "czptt:trip:PA1:2b")
     _, effects = _step(index, {"at": "2026-10-08 08:00", "key": "106006"})
     assert [e.reason for e in effects if isinstance(e, ObservationResult)] == [Reason.AMBIGUOUS]
+
+
+def test_a_finished_run_keeps_the_trip_update_of_every_part() -> None:
+    index = _run()
+    fixes = [
+        ("2026-10-08 07:59:30", 0.0),
+        ("2026-10-08 08:00:30", 0.2),
+        ("2026-10-08 08:09:00", 1.9),
+        ("2026-10-08 08:10:00", 2.0),
+        ("2026-10-08 08:12:30", 2.2),
+        ("2026-10-08 08:16:00", 2.6),
+        ("2026-10-08 08:20:00", 3.0),
+    ]
+    state, _ = _step(
+        index,
+        *({"at": at, "key": "6006", "state": "running", "position": _at(x)} for at, x in fixes),
+    )
+    assert state.instances[PA].lifecycle == "finished"
+    estimate_all(state, Context(index, POLICY))
+    message = feed_message(state, local("2026-10-08 08:40"), POLICY.lifecycle)
+    assert sorted(e.trip_update.trip.trip_id for e in message.entity) == [
+        "czptt:trip:PA1:1",
+        "czptt:trip:PA1:2",
+    ]
+    assert not any(
+        e.HasField("vehicle") or e.trip_update.HasField("vehicle") for e in message.entity
+    )

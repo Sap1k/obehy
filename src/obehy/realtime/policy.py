@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v9.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v10.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v9.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v10.toml"
 
 
 class PolicyError(ValueError):
@@ -47,7 +47,7 @@ class LifecyclePolicy:
     predict_without_data_s: ByMode
     arrival_radius_m: float
     departure_margin_m: float
-    finished_grace_s: int
+    publish_finished_s: ByMode
     forget_after_s: int
 
 
@@ -267,12 +267,21 @@ def _warm_replay_mode(value: str) -> WarmReplayMode:
     return value
 
 
+def _lifecycle(table: _Table) -> LifecyclePolicy:
+    lifecycle = table.section("lifecycle", LifecyclePolicy)
+    published = lifecycle.publish_finished_s
+    longest = max([published.default, *(v for _, v in published.overrides)])
+    if longest >= lifecycle.forget_after_s:
+        raise PolicyError("lifecycle.publish_finished_s must be below forget_after_s")
+    return lifecycle
+
+
 def parse_policy(document: dict[str, Any]) -> Policy:
     root = _Table(document, "")
     return Policy(
         version=root.text("policy_version"),
         time=root.section("time", TimePolicy),
-        lifecycle=root.section("lifecycle", LifecyclePolicy),
+        lifecycle=_lifecycle(root),
         progress=root.section("progress", ProgressPolicy),
         prediction=root.section("prediction", PredictionPolicy),
         delay_discard_below_s=root.table("delay").integer("discard_below_s"),

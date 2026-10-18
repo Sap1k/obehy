@@ -300,7 +300,7 @@ def _snapshot(options: ReplayOptions, runner: Runner, at: Instant) -> None:
         estimate_all(runtime.state, runtime.ctx)
         path = options.out / "gtfs-rt" / feed / f"{at:%Y%m%dT%H%M%SZ}.pb"
         path.parent.mkdir(parents=True, exist_ok=True)
-        message = feed_message(runtime.state, at)
+        message = feed_message(runtime.state, at, runner.policy.lifecycle)
         with atomic_output_path(path) as temporary:
             temporary.write_bytes(message.SerializeToString(deterministic=True))
 
