@@ -239,7 +239,9 @@ class Runner:
         return effects
 
     def tick(self, now: Instant, *, emit: bool = True) -> None:
-        """Housekeeping at `now`; with `emit`, also GTFS-RT files and the state tables."""
+        """Housekeeping and estimates at `now`; with `emit`, also GTFS-RT files and the state
+        tables. Warm replay estimates too: a published estimate is kept until a new one leaves
+        the deadband (BASE_PLAN.md section 20.5), so estimates carry state from tick to tick."""
 
         if self.next_compaction is None:
             self.next_compaction = self._compaction_after(now)
@@ -256,9 +258,8 @@ class Runner:
         for feed, runtime in sorted(self.runtimes.items()):
             with self.phases.time("refresh"):
                 refresh(runtime.state, now, self.policy)
-            if emit:
-                with self.phases.time("estimate"):
-                    estimate_all(runtime.state, runtime.ctx, now)
+            with self.phases.time("estimate"):
+                estimate_all(runtime.state, runtime.ctx, now)
             if emit and self.gtfs_rt_dir is not None:
                 with self.phases.time("gtfs_rt"):
                     emitter = self.emitters.setdefault(feed, FeedEmitter(self.policy.lifecycle))

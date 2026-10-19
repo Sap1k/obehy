@@ -216,7 +216,6 @@ class _Clock:
             self.runner.tick(self.next_tick, emit=False)
             if self.quality is not None:
                 for _, runtime in sorted(self.runner.runtimes.items()):
-                    estimate_all(runtime.state, runtime.ctx, self.next_tick)
                     self.quality.sample(runtime.state, runtime.ctx, self.next_tick)
             if self.next_sample is not None and self.next_sample <= self.next_tick:
                 rail = self.runner.runtimes["czptt"]
@@ -233,8 +232,6 @@ def _finish(runner: Runner, last: Instant, writer: Writer | None) -> None:
     """Final housekeeping and estimates, and the current state when writing history."""
 
     runner.tick(last, emit=False)
-    for runtime in runner.runtimes.values():
-        estimate_all(runtime.state, runtime.ctx, last)
     if writer is not None:
         writer.write_state({feed: r.state for feed, r in runner.runtimes.items()})
 

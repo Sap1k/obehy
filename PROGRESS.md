@@ -251,6 +251,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-20** — Warm restart: since the publishing deadband (2026-10-19) estimates carry
+  state from tick to tick, but warm replay ticked without estimating, so a restarted worker
+  published differently from an uninterrupted one (`test_warm_restart_continues_like_an_
+  uninterrupted_run` failed). Every tick now estimates; `emit` only gates files and tables.
+  Replay snapshots every 60 s now see 10 s estimates, so the pinned-corpus golden digests
+  (not regenerated since 2026-10-10) need regenerating with `OBEHY_PINNED_ROOT`.
 - **2026-10-19** — Flicker and misread early buses. A published prediction moves only by
   `publish_deadband_s` = 20 s or more (rail 0): most moves of the measured lateness are
   stop-and-go traffic, and smoothing the lateness itself (EMA, trend, the last departure) cost
