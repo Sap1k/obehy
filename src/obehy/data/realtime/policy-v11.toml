@@ -112,6 +112,15 @@ max_early_departure_s = { default = 86400, rail = 0 }
 runtime_decay_s = 1800
 runtime_prior_weight = 0.5
 runtime_ratio_max = 3.0
+# A predicted time stays as published until a new estimate differs from it by at least this
+# much (and never once it falls before now or before the previous call): most moves come from
+# stop-and-go traffic, and smoothing the lateness itself cost accuracy wherever tried (PID
+# 2026-10-15: 20 s cut reversals 16 % for +0.3 s MAE, 45 s 56 % for +2 s). Rail unchanged.
+publish_deadband_s = { default = 20, rail = 0 }
+# A road call not yet seen reached is not reached before now while the last fix is at most this
+# old (PID fixes are 31 s old when published, 58 s at p90). In a reception gap the vehicle may
+# have passed it unseen: the last fix's time holds.
+floor_fresh_s = 90
 # A stop the timetable gives no dwell (arrival = departure, whole minutes) still has one inside
 # the minute. Time a vehicle is seen standing there, up to dwell_credit_s, is not lateness: while
 # it stands, and on the next leg, fading out by the next stop (the leg's time absorbs it). Most

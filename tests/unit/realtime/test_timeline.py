@@ -581,9 +581,21 @@ def test_a_journey_records_the_hops_it_drives() -> None:
 
 
 def test_a_call_not_yet_reached_is_never_predicted_before_now() -> None:
-    run = Run().at("08:00", east(0)).at("08:03", east(500))
-    now = local("2026-10-08 08:07")  # no fix since 08:03: B is still ahead
+    # 900 m along at 08:03 is 90 s early: B (08:05) would be due 08:03:30. At 08:04:20, with
+    # that fix 80 s old, B is not reached yet, so not before now.
+    run = Run().at("08:00", east(0)).at("08:03", east(900))
+    now = local("2026-10-08 08:04:20")
+    estimate_all(run.state, run.ctx, now)
+    (instance,) = run.state.instances.values()
+    _, b, c = instance.calls
+    assert b.estimated_arrival == now
+    assert c.estimated_arrival is not None and c.estimated_arrival > now
+
+
+def test_in_a_reception_gap_a_call_may_have_been_passed_unseen() -> None:
+    run = Run().at("08:00", east(0)).at("08:03", east(900))
+    now = local("2026-10-08 08:07")  # no fix for four minutes: B may well be behind it
     estimate_all(run.state, run.ctx, now)
     (instance,) = run.state.instances.values()
     arrival = instance.calls[1].estimated_arrival
-    assert arrival is not None and arrival >= now
+    assert arrival is not None and arrival < now

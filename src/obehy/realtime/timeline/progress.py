@@ -269,7 +269,9 @@ def _held(
     hypothesis may also hold, at a fixed cost, instead of dying for it.
 
     On a real shape it advances by the distance the fixes moved, never into the next call's
-    arrival trigger: a vehicle on another road of about the same length keeps its lateness, one
+    arrival trigger, and never gains time: the distance driven bounds progress only from above
+    (PID 2026-10-15: buses held off the path were predicted minutes early, a detour's extra time
+    invisible). A vehicle on another road of about the same length keeps its lateness, one
     on a longer detour grows late once it reaches that limit, and since the road left to the
     next call is never shorter than the straight line to it, a fix off to the side or behind
     adds nothing. Its place stays out of the history: a departure it passes is committed once
@@ -284,7 +286,9 @@ def _held(
             at_call = plan.path.call_distances_m[call]
             left = distance_m(here, point_at(plan.path, at_call))
             along = max(h.along_m, min(h.along_m + moved, trigger - 1.0, at_call - left))
-            lateness = plan.timetable.lateness_us(at_us, along)
+            # The distance driven bounds progress only from above (a detour is longer than the
+            # road it leaves), so off the path the vehicle is never seen gaining time.
+            lateness = max(plan.timetable.lateness_us(at_us, along), h.lateness_s)
         # It keeps the time of its last fix on the path: coming back onto the path far ahead
         # (a detour past the next stop) stays within the speed limit counted from there.
         out.append(
@@ -313,7 +317,8 @@ def _chord_estimate(
 ) -> OffPath | None:
     """While the best reading holds off a stop-to-stop chord: where the fix puts the vehicle on
     its leg (`_leg_share`), never behind the held reading or an earlier estimate, never faster
-    than the mode allows, never past the next call's arrival trigger. Lateness only."""
+    than the mode allows, never past the next call's arrival trigger, and never gaining time.
+    Lateness only."""
 
     if plan.path.shaped or best.off_path_since is None or best.at >= at:
         return None
@@ -323,7 +328,10 @@ def _chord_estimate(
     trigger, _ = _next_arrival(plan, best.along_m)
     ceiling = min(trigger, best.along_m + speed * ((at_us - best.at_us) / 1_000_000))
     along = min(max(_leg_share(plan, best.along_m, here), floor), max(floor, ceiling))
-    return OffPath(along, at, plan.timetable.lateness_s(at, along))
+    lateness = max(plan.timetable.lateness_s(at, along), best.lateness_s)
+    if previous is not None:
+        lateness = max(lateness, previous.lateness_s)
+    return OffPath(along, at, lateness)
 
 
 def _leg_share(plan: Plan, along_m: float, here: tuple[float, float]) -> float:

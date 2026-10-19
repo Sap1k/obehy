@@ -404,3 +404,36 @@ def test_a_long_standstill_keeps_the_history_short_and_the_events_unchanged() ->
         ("C", 1, "arrival"),
     ]
     assert at("08:21") <= d.times()[1] <= at("08:22")
+
+
+def test_off_the_path_a_vehicle_is_never_seen_gaining_time() -> None:
+    # The shape runs straight A → B; from 400 m (on time) the bus detours 600 m north and runs
+    # east fast on a parallel road. The distance driven would put it about 1280 m along by
+    # 08:02, half a minute ahead of the timetable, but a detour is longer than the road it
+    # leaves: no time is gained off the path.
+    tt = timetable()
+    for name, east in (("A", 0), ("B", 2000), ("C", 4000)):
+        tt.stop(name, *point(east, 0))
+    index = tt.trip(
+        "582492:143", days=[DAY], calls=[("A", "08:00"), ("B", "08:04"), ("C", "08:08")]
+    ).index()
+    d = Drive(index).run(drive([("08:00", 0, 0), ("08:00:48", 400, 0)]))
+    track = d.instance.track
+    assert track is not None and track.lateness_s is not None
+    left = track.lateness_s
+    d.run(drive([("08:00:48", 400, 0), ("08:01:12", 400, 600), ("08:02", 1600, 600)])[1:])
+    track = d.instance.track
+    assert track is not None and track.lateness_s is not None
+    assert track.hypotheses[0].off_path_since is not None
+    assert track.lateness_s >= left
+
+
+def test_pid_q8_after_the_start_a_vehicle_far_ahead_on_the_path_is_not_running_it() -> None:
+    # At the scheduled start the source says the vehicle runs the trip, but it is on the trip's
+    # later roads, 25 minutes ahead (still driving to the start): not running it. Seen moving
+    # on along the path at a plausible place later, it starts there.
+    d = Drive(GAP_ROUTE).run(drive([("08:00:30", 5000, 0), ("08:01", 5400, 0)]))
+    assert d.instance.lifecycle == "pre_trip" and d.events() == []
+    d.run(drive([("08:12", 2100, 0), ("08:13", 2600, 0), ("08:24", 4100, 0)]))
+    assert d.instance.lifecycle == "running"
+    assert d.arrivals() == [("C", 1)]

@@ -251,6 +251,19 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-19** — Flicker and misread early buses. A published prediction moves only by
+  `publish_deadband_s` = 20 s or more (rail 0): most moves of the measured lateness are
+  stop-and-go traffic, and smoothing the lateness itself (EMA, trend, the last departure) cost
+  2+ s MAE wherever tried. PID-Q8: Golemio starts a vehicle on its next trip at the scheduled
+  time wherever it is and projects it onto the path (line 388 deadheading out of Prague, put
+  12 km along, 23 min early; Golemio's own delay −1421 s): DUK-Q19's start rule now holds after
+  the scheduled start too, and a trip not yet departed is never shown early. Off the path a
+  held reading never gains time. The floor at now applies only while the last fix is at most
+  `floor_fresh_s` = 90 s old (a reception gap may pass calls unseen). PID peak with deadband and
+  no-gain: bus flicker 1.19 → 0.97 for +0.3 s MAE; with the start fix bus bias two to five
+  stops on −9…−19 → −2…−12 s and predictions over a minute early 14.4k → 10.9k samples (MAE
+  271 → 175 s). Carrying a floored call's time to the calls after it doubled tram flicker and
+  was dropped; the final combination's replay was not finished at commit. Unit tests pass.
 - **2026-10-19** — Road predictions from hop running times learned live (policy v11). A
   constant lateness carried forward predicted Prague buses early, more so further ahead (PID
   2026-10-15 06:45-09:00: bias −31 s at the next stop, −55 s five stops on), and 12.5 % of

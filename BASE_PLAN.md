@@ -1260,7 +1260,9 @@ a loop every pass does. Nothing is chosen at this step.
   stays what it was; on a longer detour the reading reaches that limit and the lateness grows
   while the vehicle really is late. On a stop-to-stop chord, which no road follows, the held
   reading stays and the fix is placed on the current leg by its share of distance to the last
-  stop left and the next one, for the lateness only. Events come only from fixes on the path.
+  stop left and the next one, for the lateness only. Either way the held reading never gains
+  time: the distance driven bounds progress only from above (a detour is longer than the road
+  it leaves). Events come only from fixes on the path.
 - *Heading*, when the source sends a bearing: the angle to the segment's direction. Opposite
   legs of a *závlek* or an out-and-back road are told apart by this alone.
 
@@ -1355,9 +1357,16 @@ L          ← pred_dep(j) − S_dep(j)
   time into `j` times (ratio − 1); on the hop being driven, for the share of it left. A hop no
   one has driven lately keeps the timetable's. Ratios by weekday and time of day from history
   are the next fallback, before the timetable.
-- A call not yet reached is never predicted before now: a source's fixes can be half a minute
-  old when published, and a time already past would show the vehicle there.
-- Both are for road vehicles. Rail runs keep the timetable's running times (few trains share
+- A call not yet reached is never predicted before now while the last fix is fresh: a source's
+  fixes can be half a minute old when published, and a time already past would show the
+  vehicle there. In a reception gap the vehicle may have passed calls unseen, and the last
+  fix's time holds.
+- A trip not yet departed is never shown early: an early departure is observed, never
+  assumed (a source's delay that says otherwise is ignored).
+- A published prediction stays until a new estimate differs from it by a policy deadband: most
+  moves of the measured lateness come from stop-and-go traffic, and every smoothing of the
+  lateness itself cost accuracy.
+- Both running times and the floor at now are for road vehicles. Rail runs keep the timetable's running times (few trains share
   a hop; SŽ predictions anchor them) and are not floored at now (SŽ positions are minutes
   apart: a train not yet seen at a station may well be there).
 

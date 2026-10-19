@@ -68,7 +68,7 @@ from obehy.realtime.model import (
     WriteEvent,
 )
 from obehy.realtime.platforms import apply_platform
-from obehy.realtime.policy import Policy
+from obehy.realtime.policy import Policy, PredictionPolicy
 from obehy.realtime.runs import journey_spans, part_spans, snapshots
 from obehy.realtime.timeline.estimate import (
     dwell_credit,
@@ -279,7 +279,12 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
             current = waiting_is_not_early(instance, plan, own_lateness(instance))
             current = dwell_credit(instance, trip, plan, current, policy)
             state.instances[journey] = estimate(
-                instance, plan.scheduled, policy, current=current, extra=extra, now=now
+                instance,
+                plan.scheduled,
+                policy,
+                current=current,
+                extra=extra,
+                now=_fresh(instance, now, policy),
             )
             continue
         predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)
@@ -293,6 +298,16 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
         )
         state.instances[journey] = monotone(estimated)
     state.dirty.clear()
+
+
+def _fresh(instance: Instance, now: Instant, policy: PredictionPolicy) -> Instant | None:
+    """`now` while the journey's last fix is recent enough that a call not seen reached has not
+    been (`floor_fresh_s`); None in a reception gap, where the vehicle may have passed it."""
+
+    progress = instance.progress
+    if progress is None or now - progress.at > timedelta(seconds=policy.floor_fresh_s):
+        return None
+    return now
 
 
 def _behind(instance: Instance, now: Instant) -> bool:
@@ -447,10 +462,13 @@ def _lifecycle(
 ) -> Instance:
     """`pre_trip` becomes `running` when the source says so, or, for a source without trip
     states, once the scheduled start has passed. A pre-trip source state (DUK-Q5) holds it,
-    unless the source shows a missed departure (DUK-Q18). Before the scheduled start a
-    running state counts while the vehicle waits at the first stop or once it is seen moving
-    along the path past it, not while it stands beyond it (DUK-Q19): an early departure is
-    observed, never assumed."""
+    unless the source shows a missed departure (DUK-Q18). A running state counts while the
+    vehicle waits at the first stop or once it is seen moving along the path past it, no
+    further ahead of the timetable than the start prior allows (DUK-Q19): an early departure is
+    observed, never assumed. Also after the scheduled start (PID-Q8: Golemio switches a vehicle
+    to its next trip at the scheduled time wherever it is, still driving to the start, and
+    projects it onto the trip's path; on 2026-10-15 a bus deadheading out of Prague at 07:11
+    was put 12 km along line 388, 23 minutes early)."""
 
     if instance.lifecycle != "pre_trip":
         return instance
@@ -458,23 +476,23 @@ def _lifecycle(
     if source is None:
         started = observation.at >= start
     else:
-        running = source.code == SOURCE_RUNNING and (
-            observation.at >= start or _moving_early(instance, trip, observation, previous, ctx)
+        running = source.code == SOURCE_RUNNING and _seen_starting(
+            instance, trip, observation, previous, ctx
         )
         started = running or _missed_departure(instance, trip, observation, start, ctx)
     return instance.evolve(lifecycle="running") if started else instance
 
 
-def _moving_early(
+def _seen_starting(
     instance: Instance,
     trip: Trip,
     observation: Observation,
     previous: Position | None,
     ctx: Context,
 ) -> bool:
-    """DUK-Q19: before its time a vehicle saying it runs has started only at the first stop
-    or seen moving along the trip's path past it (DPmÚL vehicles say they run while laying
-    over on a stand beyond the first stop under the next trip)."""
+    """DUK-Q19, PID-Q8: a vehicle saying it runs has started only at the first stop or seen
+    moving along the trip's path past it (DPmÚL vehicles say they run while laying over on a
+    stand beyond the first stop under the next trip; PID ones while still driving to it)."""
 
     position = observation.first(Position)
     if position is None:

@@ -90,6 +90,8 @@ class PredictionPolicy:
     runtime_decay_s: int  # a hop traversal's weight falls by e every this many seconds
     runtime_prior_weight: float  # the timetable's weight, as traversals just made
     runtime_ratio_max: float  # a traversal's ratio to the timetable is clipped to [1/max, max]
+    publish_deadband_s: ByMode  # a published prediction moves only by at least this much
+    floor_fresh_s: int  # with a fix this recent, a call not seen reached is not reached before now
     dwell_credit_s: ByMode
     early_keep: ByMode
 

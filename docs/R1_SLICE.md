@@ -150,7 +150,7 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | `[time]` | date window `pre(mode)` and `max_delay(mode)`; vehicle-day gap 3 h; `max_clock_skew` (proposed 20 min) |
 | `[lifecycle]` | stale and lost after N s (by mode); trigger radius and margin; how long a finished trip stays published; forget after |
 | `[progress]` | the progress model of section 9 (geometry trust, speed, lateness change, beam, commit lag, off-route hold) |
-| `[prediction]` | propagation (BASE_PLAN.md 20.5): dwell recovery, early departure limit, observed dwell credit, early fade; hop running times `runtime_decay_s`, `runtime_prior_weight`, `runtime_ratio_max` (v11) |
+| `[prediction]` | propagation (BASE_PLAN.md 20.5): dwell recovery, early departure limit, observed dwell credit, early fade; hop running times `runtime_decay_s`, `runtime_prior_weight`, `runtime_ratio_max`, `publish_deadband_s`, `floor_fresh_s` (v11) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
 | `[retention]` | observation_days = 2 (v8; was 30), raw_days = 14 (v9; raw archive days), both dropped by `obehy jobs nightly` |
@@ -313,8 +313,11 @@ the calls already made included.
 consecutive passenger calls into it) takes now beyond the timetable's: the recency-weighted
 ratio of every journey's recent arrival-to-arrival time over the same two stops
 (`timeline/runtimes.py`, kept per feed in `FeedState.hops`), shrunk toward the timetable. A
-call not yet reached is never predicted before the emit tick: PID fixes are about half a minute
-old when published, and a time before now says the vehicle is there when it is not. Rail runs
+call not yet reached is never predicted before the emit tick while the last fix is at most
+`floor_fresh_s` old: PID fixes are about half a minute old when published, and a time before
+now says the vehicle is there when it is not. A trip not yet
+departed is never shown early, and a published prediction moves only by `publish_deadband_s`
+or more. Rail runs
 keep both as before: few trains share a hop, and SŽ positions are minutes apart (a train not
 seen at a station yet may well be there; floored at now, trains two and three stations ahead
 were 7-11 s worse on the 2026-10-12 peak).

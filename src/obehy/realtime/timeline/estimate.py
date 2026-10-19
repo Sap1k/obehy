@@ -182,6 +182,8 @@ def estimate(
     one call ahead (`anchor`) from which propagation continues (`timeline.fusion`)."""
 
     lateness, delay_class = current if current is not None else own_lateness(instance)
+    if instance.lifecycle == "pre_trip" and lateness is not None and lateness < timedelta(0):
+        lateness = timedelta(0)  # not departed: an early departure is observed, never assumed
     reached = instance.progress.call_index if instance.progress is not None else -1
     # A call with a crossing means every earlier call was passed, observed or not.
     for i, state in enumerate(instance.calls):
@@ -199,6 +201,10 @@ def estimate(
     floor: Instant | None = instance.progress.at if instance.progress is not None else None
     if now is not None and (floor is None or now > floor):
         floor = now  # a call not yet reached is not reached before now
+    # A published prediction stays until the new one differs by `hold` or more; never before
+    # `before` (now, then the previous call's published time).
+    hold = timedelta(seconds=policy.publish_deadband_s(instance.mode))
+    before = floor
     finished = instance.lifecycle == "finished"
     last = len(instance.calls) - 1
     calls: list[CallState] = []
@@ -270,6 +276,14 @@ def estimate(
             )
             if est_dep is not None:
                 floor = est_dep
+            if state.status == "predicted" and _within(
+                (state.estimated_arrival, state.estimated_departure),
+                (est_arr, est_dep),
+                hold,
+                before,
+            ):
+                est_arr, est_dep = state.estimated_arrival, state.estimated_departure
+            before = est_dep or est_arr or before
             calls.append(_call(state, est_arr, est_dep, "predicted", delay_class))
     return _with_calls(instance, calls)
 
@@ -329,6 +343,27 @@ def _departure(
     if floor is not None and leaves < floor:
         leaves = floor
     return Instant(leaves), leaves - sched_dep
+
+
+def _within(
+    kept: tuple[Instant | None, Instant | None],
+    new: tuple[Instant | None, Instant | None],
+    hold: timedelta,
+    before: Instant | None,
+) -> bool:
+    """Whether the published times `kept` may stay: each within `hold` of the new one, and not
+    before `before`."""
+
+    if hold <= timedelta(0):
+        return False
+    for old, value in zip(kept, new, strict=True):
+        if (old is None) != (value is None):
+            return False
+        if old is None or value is None:
+            continue
+        if abs(old - value) >= hold or (before is not None and old < before):
+            return False
+    return True
 
 
 def _passed(when: Instant | None, recorded: Interval | None) -> Instant | None:
