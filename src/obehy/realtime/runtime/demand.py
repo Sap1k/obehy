@@ -13,7 +13,8 @@ Reads go one at a time, spread over the minute, the soonest due call first (neve
 before refreshes), at most `ceiling_per_min`; the rest of the minute's demand is dropped and
 counted. A refusal (403/429), a server error or an answer slower than `slow_latency_factor`
 times the median halves the ceiling for `slowdown_s`. A 403 also opens the channel's circuit
-(the scheduler's rule). The request's body has `{sr70}` replaced by the station's 6-digit code,
+(the scheduler's rule), and a fetch that raises is a failed poll (the scheduler's too). The
+request's body has `{sr70}` replaced by the station's 6-digit code,
 kept with the poll for the decoder.
 """
 
@@ -33,7 +34,7 @@ import psycopg
 from obehy.realtime.archive import Poll
 from obehy.realtime.manifest import Channel
 from obehy.realtime.policy import BoardPolicy
-from obehy.realtime.runtime.scheduler import BLOCKED, BLOCKED_STEPS
+from obehy.realtime.runtime.scheduler import BLOCKED, BLOCKED_STEPS, fetch_guarded
 from obehy.realtime.times import Instant, instant, local_date
 
 CATALOGUE = Path(__file__).resolve().parents[2] / "data" / "realtime" / "sr70-name20.csv"
@@ -232,7 +233,7 @@ async def run_demand(
             if stop.is_set():
                 break
             body = (channel.body or b"").replace(b"{sr70}", station.encode())
-            poll = await asyncio.to_thread(fetch, channel, body)
+            poll = await fetch_guarded(fetch, channel, body)
             poll = replace(poll, request={"sr70": station})
             now = clock()
             reads.last[station] = now

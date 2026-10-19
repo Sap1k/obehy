@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import gzip
+import http.client
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,7 @@ from obehy.realtime import record
 from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls, prune
 from obehy.realtime.model import SourceSemantics
 from obehy.realtime.runtime import fetch
+from obehy.realtime.runtime.scheduler import run_channel
 
 T0 = datetime(2026, 10, 5, 23, 59, 50, tzinfo=UTC)
 
@@ -307,12 +309,14 @@ def test_dpmd_filter_stores_unexpected_shape_unfiltered() -> None:
 
 
 class _Response:
-    def __init__(self, body: bytes, headers: dict[str, str]) -> None:
+    def __init__(self, body: bytes | None, headers: dict[str, str]) -> None:
         self.status = 200
         self.headers = headers
         self._body = body
 
     def read(self) -> bytes:
+        if self._body is None:
+            raise http.client.IncompleteRead(b"partial")
         return self._body
 
     def __enter__(self) -> _Response:
@@ -351,6 +355,37 @@ def test_a_cache_busted_gzip_channel_is_stored_decompressed() -> None:
     (url,) = opener.urls
     stamp = url.rsplit("=", 1)[1]
     assert stamp.isdigit() and len(stamp) == 13
+
+
+def test_a_body_cut_short_is_a_failed_poll() -> None:
+    # A chunked response that ends early raises IncompleteRead, an HTTPException, not OSError.
+    channel = _channel()
+    opener = _Opener(_Response(None, {}))
+    poll = fetch.send(fetch.channel_request(channel, anonymous=True), 5.0, opener=opener)  # type: ignore[arg-type]
+    assert not poll.ok
+    assert poll.body is None
+    assert poll.error is not None and poll.error.startswith("IncompleteRead")
+
+
+def test_a_fetch_error_is_a_failed_poll_and_a_handler_error_ends_the_channel(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Any fetch error is logged and is a failed poll; a handler error (the database) is not caught.
+    channel = _channel()
+    seen: list[Poll] = []
+
+    def fetcher(channel: record.Channel) -> Poll:
+        raise RuntimeError("boom")
+
+    async def on_poll(channel: record.Channel, poll: Poll) -> None:
+        seen.append(poll)
+        raise ValueError("database gone")
+
+    with pytest.raises(ValueError, match="database gone"):
+        asyncio.run(run_channel(channel, asyncio.Event(), fetcher, on_poll, once=True))
+    (poll,) = seen
+    assert not poll.ok and poll.error == "RuntimeError: boom"
+    assert "fetch failed" in capsys.readouterr().err
 
 
 def test_backoff_doubles_after_repeated_failures() -> None:

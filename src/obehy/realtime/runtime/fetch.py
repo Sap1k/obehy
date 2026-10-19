@@ -12,6 +12,7 @@ only `runtime.egress.Egress` holds: `fetch` refuses it.
 from __future__ import annotations
 
 import gzip
+import http.client
 import ssl
 import time
 from collections.abc import Callable, Mapping
@@ -105,7 +106,9 @@ def send(
             headers=_kept_headers(error.headers) if error.headers else {},
             error=f"HTTP {error.code} {error.reason}",
         )
-    except (OSError, EOFError, ValueError) as error:  # gzip: BadGzipFile, truncated
+    # http.client: a body cut short (IncompleteRead) or a garbled status line; gzip:
+    # BadGzipFile, truncated
+    except (OSError, EOFError, ValueError, http.client.HTTPException) as error:
         return Poll(
             requested_at=requested_at,
             received_at=clock(),
