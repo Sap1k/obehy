@@ -27,6 +27,7 @@ from obehy.realtime.model import (
     JourneyKey,
     LinkJourneys,
     ObservationResult,
+    PartSpan,
     RecordPlatform,
     SnapshotJourney,
     VehicleId,
@@ -35,6 +36,7 @@ from obehy.realtime.model import (
     WriteEvent,
 )
 from obehy.realtime.model_json import facts_to_json
+from obehy.realtime.runs import current_part, published_parts
 
 HISTORY_TABLES = (
     "journey",
@@ -417,10 +419,11 @@ class Writer:
                     now = _Written(
                         {
                             (feed, v.source, v.source_vehicle_id): _vehicle_row(
-                                feed, v, current, release_id
+                                feed, v, current, state, release_id
                             )
                             for v, current in state.vehicles.items()
                         },
+                        {},
                         {},
                         {},
                     )
@@ -431,8 +434,12 @@ class Writer:
                             calls = (instance.calls, encoded)
                         now.calls[journey] = calls
                         now.trips[_key(journey)] = _trip_row(instance, calls[1])
+                        for part in published_parts(instance):
+                            row = _part_row(instance, part, release_id)
+                            now.parts[(*_key(journey), part.trip_id)] = row
                     self._write_table(feed, _VEHICLES, now.vehicles, before and before.vehicles)
                     self._write_table(feed, _TRIPS, now.trips, before and before.trips)
+                    self._write_table(feed, _PARTS, now.parts, before and before.parts)
                     written[feed] = now
         except BaseException:
             self._state.clear()  # unknown what was written: rewrite in full next time
@@ -566,19 +573,41 @@ _TRIPS = _Table(
     ("feed", "key_namespace", "key", "service_date"),
     ("text", "text", "text", "date"),
 )
+# The feed trips each journey publishes over its calls (a run's parts, a road trip itself), so
+# readers find a trip's state by its feed trip ID (BASE_PLAN.md section 30).
+_PARTS = _Table(
+    "trip_part_current",
+    (
+        "feed",
+        "key_namespace",
+        "key",
+        "service_date",
+        "trip_id",
+        "first_call",
+        "last_call",
+        "release_id",
+    ),
+    ("feed", "key_namespace", "key", "service_date", "trip_id"),
+    ("text", "text", "text", "date", "text"),
+)
 
 
 @dataclass(slots=True)
 class _Written:
     vehicles: _Rows
     trips: _Rows
+    parts: _Rows
     calls: dict[JourneyKey, tuple[tuple[CallState, ...], str]]
 
 
 def _vehicle_row(
-    feed: Feed, vehicle: VehicleId, v: VehicleState, release_id: str
+    feed: Feed, vehicle: VehicleId, v: VehicleState, state: FeedState, release_id: str
 ) -> tuple[Any, ...]:
+    """The vehicle's trip is the feed trip it is on: on a rail run, the part it is driving."""
+
     b = v.binding
+    instance = None if b is None else state.instances.get(b.journey)
+    trip_id = None if b is None else b.trip_id if instance is None else current_part(instance)
     return (
         feed,
         vehicle.source,
@@ -588,13 +617,17 @@ def _vehicle_row(
         None if b is None else b.journey.namespace,
         None if b is None else b.journey.key,
         None if b is None else b.journey.service_date,
-        None if b is None else b.trip_id,
+        trip_id,
         None if v.position is None else v.position.lat,
         None if v.position is None else v.position.lon,
         None if v.position is None else v.position.bearing,
         None if v.reason is None else v.reason.value,
         release_id,
     )
+
+
+def _part_row(i: Instance, part: PartSpan, release_id: str) -> tuple[Any, ...]:
+    return (*_key(i.journey), part.trip_id, part.first, part.last, release_id)
 
 
 def _trip_row(i: Instance, calls: str) -> tuple[Any, ...]:

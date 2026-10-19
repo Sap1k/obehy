@@ -47,6 +47,7 @@ from obehy.realtime.model import (
     VehicleState,
 )
 from obehy.realtime.policy import LifecyclePolicy
+from obehy.realtime.runs import current_part, published_parts
 from obehy.realtime.times import Instant
 
 LIVE = ("pre_trip", "running")
@@ -66,10 +67,6 @@ def _trip(descriptor: rt.TripDescriptor, trip_id: str, journey: JourneyKey) -> N
     descriptor.schedule_relationship = rt.TripDescriptor.SCHEDULED
 
 
-def _parts(instance: Instance) -> tuple[PartSpan, ...]:
-    return instance.parts or (PartSpan(instance.trip_id, 0, len(instance.calls) - 1),)
-
-
 def _entity_id(instance: Instance, part: PartSpan) -> str:
     journey = instance.journey
     if not instance.parts:
@@ -79,17 +76,6 @@ def _entity_id(instance: Instance, part: PartSpan) -> str:
 
 def _mapped(call: CallState) -> str | None:
     return call.platform.boarding_point_id if call.platform is not None else None
-
-
-def _current_part(instance: Instance) -> str:
-    """The trip part the vehicle is on: the one holding the next call to reach."""
-
-    parts = _parts(instance)
-    reached = instance.progress.call_index if instance.progress is not None else -1
-    for part in parts:
-        if reached < part.last:
-            return part.trip_id
-    return parts[-1].trip_id
 
 
 @lru_cache(maxsize=8192)  # bounded: the worker runs for weeks
@@ -175,7 +161,7 @@ def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str
     entity = rt.FeedEntity()
     entity.id = f"vehicle:{vehicle_id}"
     position = entity.vehicle
-    _trip(position.trip, _current_part(instance), instance.journey)
+    _trip(position.trip, current_part(instance), instance.journey)
     position.vehicle.id = vehicle_id
     if instance.parts:
         label = _train_number(instance)
@@ -197,7 +183,7 @@ def _trip_updates(
     Either leaves out a part without a call made."""
 
     journey = instance.journey
-    parts = _parts(instance)
+    parts = published_parts(instance)
     timed_statuses = TIMED if publication == "live" else MADE
     out: list[bytes] = []
     for n, part in enumerate(parts):

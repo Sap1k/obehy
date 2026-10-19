@@ -259,6 +259,22 @@ docker compose up -d
 The first release update downloads and loads a full release; the worker restarts until it is
 active. The package must be public on GitHub (or `docker login ghcr.io` on the server).
 
+## Running the API
+
+`obehy api serve` runs the project API (`BASE_PLAN.md` section 30) on the configured database;
+it reads the active release and the worker's realtime state and never calls upstream:
+
+```powershell
+uv run obehy api serve --port 8000          # http://127.0.0.1:8000/api/v1/docs
+```
+
+It answers under `/api/v1`: `status`, `stops?q=|bbox=`, `stop-places/<id>` and its
+`departures?from=&minutes=`, `trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/
+<key>/<service_date>`, which redirects), `vehicles?bbox=` and `vehicles/<source>:<id>`; the
+OpenAPI document is `/api/v1/openapi.json`. Trip IDs go into paths percent-encoded (CZPTT IDs
+contain `%`). Limits are in `src/obehy/data/api/api-v1.toml`. On the server, `deploy/compose.yaml`
+runs it as the `api` service and nginx forwards `/api/` to it.
+
 ## Replaying realtime payloads
 
 `obehy rt replay` runs archived payloads through the same pipeline as the live worker, with a

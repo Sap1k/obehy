@@ -60,8 +60,10 @@ realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
 - **Connectors declare, the runtime executes.** A connector declares its channels and lookups
   and implements only `fetch`, `decode` and `plan`. Scheduling, rate limits, budgets and
   caching are the generic runtime's; the API never calls upstream.
-- **Public IDs are journey keys and `vehicle_id`s**, never `trip_id`. Rail journeys are train
-  number + service date, joined by `journey_link` where the number changes.
+- **The API refers to trips by the feed's `trip_id` + service date** and to vehicles by
+  `vehicle_id`; source keys are lookup aliases only. History and realtime state are keyed by
+  journey: rail journeys are train number + service date, joined by `journey_link` where the
+  number changes.
 - **Core state is partitioned by feed**; nothing in memory crosses `jdf` and `czptt`.
 - **Curated data is git-reviewed files + `obehy ref import`.** `ref.*` is a mirror. Private
   datasets (the DÚK register) come from a local path and are never committed.

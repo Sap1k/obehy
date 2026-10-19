@@ -26,6 +26,7 @@ from obehy import (
     regional_overlay,
     route_shapes,
 )
+from obehy.api import commands as api_commands
 from obehy.pipeline import jrutil
 from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
 from obehy.pipeline.errors import PipelineError
@@ -513,6 +514,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     realtime_commands.add_parsers(commands)
     release_commands.add_parsers(commands)
+    api_commands.add_parsers(commands)
     return parser
 
 
@@ -522,6 +524,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return realtime_commands.run(args)
     if args.command in ("db", "release"):
         return release_commands.run(args)
+    if args.command == "api":
+        return api_commands.run(args)
     try:
         runtime = load_runtime_config(cast(Path | None, args.config))
         requested_year = cast(int | Literal["auto"], args.gvd_year)

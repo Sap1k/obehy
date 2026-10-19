@@ -5,12 +5,14 @@ description = "Czech public-transport static feed builds and publication"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "fastapi>=0.149,<1",
   "gtfs-realtime-bindings>=3.0.0",
-  "psycopg[binary]>=3.3,<4",
+  "psycopg[binary,pool]>=3.3,<4",
   "pyarrow>=25,<26",
   "pyproj>=3.7,<4",
   "rich>=14,<15",
   "shapely>=2.1,<3",
+  "uvicorn[standard]>=0.54,<1",
   "zstandard>=0.23,<1",
 ]
 
@@ -22,6 +24,7 @@ obehy-osm = "obehy.osm_snapshot:main"
 
 [dependency-groups]
 dev = [
+  "httpx2>=2.15,<3",
   "import-linter>=2.15",
   "pyarrow-stubs>=20,<21",
   "pyright>=1.1.403,<2",
@@ -38,6 +41,7 @@ build-backend = "hatchling.build"
 packages = ["src/obehy"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"src/obehy/data/api" = "obehy/data/api"
 "src/obehy/data/post-inference" = "obehy/data/post-inference"
 "src/obehy/data/regional-gtfs-overlay" = "obehy/data/regional-gtfs-overlay"
 "src/obehy/data/realtime" = "obehy/data/realtime"
@@ -92,6 +96,21 @@ forbidden_modules = [
     "obehy.pipeline",
     "obehy.realtime.archive",
     "obehy.realtime.record",
+]
+
+[[tool.importlinter.contracts]]
+name = "The API reads the database only: no realtime core, connectors or worker"
+type = "forbidden"
+source_modules = ["obehy.api"]
+forbidden_modules = [
+    "obehy.realtime.core",
+    "obehy.realtime.infer",
+    "obehy.realtime.timeline",
+    "obehy.realtime.sources",
+    "obehy.realtime.runtime",
+    "obehy.realtime.worker",
+    "obehy.realtime.emit",
+    "obehy.pipeline",
 ]
 
 [[tool.importlinter.contracts]]

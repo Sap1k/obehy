@@ -15,6 +15,7 @@ from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.model import (
     Effect,
     Feed,
+    Instance,
     JourneyKey,
     JourneySpan,
     LinkJourneys,
@@ -57,6 +58,24 @@ def journey_spans(feed: Feed, run: Trip, day: date) -> tuple[JourneySpan, ...]:
 
 def part_spans(run: Trip) -> tuple[PartSpan, ...]:
     return tuple(PartSpan(part.trip_id, part.first, part.last) for part in run.parts)
+
+
+def published_parts(instance: Instance) -> tuple[PartSpan, ...]:
+    """The feed trips an instance publishes over its calls: a run's parts, or a road trip as
+    its own single part."""
+
+    return instance.parts or (PartSpan(instance.trip_id, 0, len(instance.calls) - 1),)
+
+
+def current_part(instance: Instance) -> str:
+    """The trip part the vehicle is on: the one holding the next call to reach."""
+
+    parts = published_parts(instance)
+    reached = instance.progress.call_index if instance.progress is not None else -1
+    for part in parts:
+        if reached < part.last:
+            return part.trip_id
+    return parts[-1].trip_id
 
 
 def snapshots(

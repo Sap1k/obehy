@@ -1,0 +1,33 @@
+# Project API limits (src/obehy/api, BASE_PLAN.md section 30). Versioned like the realtime
+# policy: a change of meaning is a new file.
+api_version = "1"
+
+[stops]
+# Name search: at least this many characters, at most this many results.
+search_min_chars = 2
+search_limit = 20
+search_limit_max = 50
+# Viewport queries: the largest bbox in square degrees (about a district) and the most stops.
+bbox_max_deg2 = 0.5
+bbox_limit = 2000
+
+[departures]
+# A departure scheduled up to this long before `from` stays on the board while it is still to
+# come (a late bus).
+lookback_min = 90
+minutes = 60
+minutes_max = 360
+limit = 40
+limit_max = 200
+
+[vehicles]
+# Positions older than this are not shown (the realtime policy's default stale_after_s).
+max_age_s = 300
+bbox_max_deg2 = 4.0
+limit = 3000
+
+[cache]
+# Cache-Control max-age: realtime answers follow the worker's 10 s tick, static ones the
+# hourly release update (with the release as ETag).
+realtime_s = 5
+static_s = 3600

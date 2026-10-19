@@ -21,6 +21,7 @@ from obehy.realtime.model import (
     WriteEvent,
 )
 from obehy.realtime.policy import load_policy
+from obehy.realtime.runs import current_part, published_parts
 from tests.realtime.builder import ORIGIN, STEP_LON, timetable
 from tests.realtime.observations import local, observe
 
@@ -94,6 +95,17 @@ def test_r1_r2_a_run_is_one_instance_with_a_journey_per_train_number() -> None:
     assert {e.journey for e in effects if isinstance(e, AssignVehicle)} == {J1, J2}
     (result,) = [e for e in effects if isinstance(e, ObservationResult)]
     assert (result.journey, result.public) == (PA, (J1, J2))
+
+
+def test_a_run_publishes_its_feed_trip_parts_and_a_road_trip_itself() -> None:
+    # The state tables carry these, so readers find a run's calls by the feed trip ID.
+    state, _ = _step(_run(), {"at": "2026-10-08 08:00", "key": "6006"})
+    instance = state.instances[PA]
+    assert [(p.trip_id, p.first, p.last) for p in published_parts(instance)] == [
+        ("czptt:trip:PA1:1", 0, 2),
+        ("czptt:trip:PA1:2", 2, 3),
+    ]
+    assert current_part(instance) == "czptt:trip:PA1:1"  # at A: the next call is in part 1
 
 
 def test_r1_one_train_number_is_one_journey() -> None:

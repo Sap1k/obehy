@@ -215,6 +215,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
   replayed clean on the server capture of 2026-10-09 to 10-12, live on jdf. Open: `rt evaluate`
   of own GPS delay against the source's, the travel-time provider interface.
+  Step 9 (project API, 2026-10-20): `obehy api serve` (FastAPI, `src/obehy/api/`) with status,
+  stop search and viewport, stop places, departures, trips by feed trip ID + service date
+  (source keys redirect, older trip IDs answer 410 with their key) and vehicles; the `api`
+  service and nginx `/api/` in `deploy/`. The worker also writes `rt.trip_part_current` (each
+  feed trip's slice of its journey's calls) and a vehicle's current part. Open: debug
+  endpoints, alerts, composition, PMTiles, `no_realtime`, merged station boards.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
   GTFS-RT alerts and departures later.
@@ -251,6 +257,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-20** — Project API v1 (`BASE_PLAN.md` section 30, migration 0011). Trips are
+  addressed by feed `trip_id` + service date; realtime joins by trip ID through the new
+  `rt.trip_part_current`, so rail parts get their slice of the run. Validated: 14 API DB tests,
+  unit tests, ruff, pyright, import contracts; on the dev DB (release 20261015, static only)
+  boards answer in 15–60 ms, Praha Florenc (15 k calls) in ~200 ms, stop search in 25–50 ms;
+  stop-place detail takes ~0.8–1.6 s (its lines; cached by release ETag).
 - **2026-10-20** — Warm restart: since the publishing deadband (2026-10-19) estimates carry
   state from tick to tick, but warm replay ticked without estimating, so a restarted worker
   published differently from an uninterrupted one (`test_warm_restart_continues_like_an_

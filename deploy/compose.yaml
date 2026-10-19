@@ -1,6 +1,6 @@
-# The Oběhy server: PostGIS, the realtime worker, hourly release updates, nightly jobs and
-# nginx serving the feeds over plain HTTP to your reverse proxy. Put POSTGRES_PASSWORD
-# (URL-safe), SYSTEM_RAM_GB (the host's RAM in whole GB) and optionally OBEHY_HTTP_PORT (8080),
+# The Oběhy server: PostGIS, the realtime worker, hourly release updates, nightly jobs, the API
+# and nginx serving the feeds and the API over plain HTTP to your reverse proxy. Put
+# POSTGRES_PASSWORD (URL-safe), SYSTEM_RAM_GB (the host's RAM in whole GB) and optionally OBEHY_HTTP_PORT (8080),
 # OBEHY_TAG and GITHUB_TOKEN in .env next to this file. SŽ is polled only through a proxy list: save it as secrets/sz-proxies.txt here
 # (gitignored) and set OBEHY_EGRESS_SZ_PROXY_LIST_FILE=/app/secrets/sz-proxies.txt in .env. PID is
 # polled only with a Golemio API key: OBEHY_SECRET_GOLEMIO in .env.
@@ -76,10 +76,18 @@ services:
     <<: *app
     entrypoint: ["/app/deploy/obehy-nightly"]
 
+  # The project API (BASE_PLAN.md section 30), behind nginx at /api/. Answers 503 until a
+  # release is active.
+  api:
+    <<: *app
+    command: ["api", "serve", "--host", "0.0.0.0", "--port", "8000"]
+
   # Plain HTTP for the reverse proxy in front, which terminates TLS (deploy/nginx.conf).
   web:
     image: nginx:1.30-alpine
     restart: unless-stopped
+    depends_on:
+      - api
     ports:
       - "${OBEHY_HTTP_PORT:-8080}:80"
     volumes:

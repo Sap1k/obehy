@@ -182,14 +182,18 @@ def test_retention_drops_only_observation_days_before_the_cutoff(
     assert remaining == [("observation_20260909",), ("observation_20261009",)]
 
 
-def _state_tables(connection: psycopg.Connection) -> tuple[list[Any], list[Any]]:
+def _state_tables(connection: psycopg.Connection) -> tuple[list[Any], list[Any], list[Any]]:
     vehicles = connection.execute(
         "SELECT * FROM rt.vehicle_state_current ORDER BY feed, source, source_vehicle_id"
     ).fetchall()
     trips = connection.execute(
         "SELECT * FROM rt.trip_state_current ORDER BY feed, key_namespace, key, service_date"
     ).fetchall()
-    return vehicles, trips
+    parts = connection.execute(
+        "SELECT * FROM rt.trip_part_current"
+        " ORDER BY feed, key_namespace, key, service_date, trip_id"
+    ).fetchall()
+    return vehicles, trips, parts
 
 
 def test_state_written_by_changes_matches_a_full_rewrite(connection: psycopg.Connection) -> None:
@@ -209,3 +213,7 @@ def test_state_written_by_changes_matches_a_full_rewrite(connection: psycopg.Con
     _writer(connection).write_state({"jdf": state})  # a fresh writer rewrites in full
     assert _state_tables(connection) == incremental
     assert len(incremental[0]) == 1 and len(incremental[1]) == 1
+    # A road trip publishes itself as its one part over all its calls, under its feed trip ID.
+    (trip_row,), (part_row,) = incremental[1], incremental[2]
+    assert part_row[4] == trip_row[5] and part_row[5] == 0
+    assert part_row[6] == len(trip_row[11]) - 1

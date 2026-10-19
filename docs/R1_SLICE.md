@@ -85,6 +85,8 @@ rt.observation              received_at, source, channel, feed, raw_sha, raw_lin
 rt.vehicle_state_current    one row per (feed, vehicle_key), upserted each emit tick; UNLOGGED
 rt.trip_state_current       one row per journey of service dates today ± 1; the public per-call
                             model as jsonb; UNLOGGED
+rt.trip_part_current        per journey, the feed trips it publishes and their slice of its
+                            calls (a rail run's parts; a road trip is its own); UNLOGGED
 rt.source_health            source, channel, minute, polls, errors, rows, lag
 
 history.derivation          id, core_version, policy_version, release_id

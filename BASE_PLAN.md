@@ -908,8 +908,8 @@ changes). Its manifest semantics must be backed by captured examples.
   to `czptt`). Vehicle state is per feed as well; a vehicle seen in both feeds is joined only in
   SQL. Sharding the core by feed later needs no redesign.
 - An emit tick (default 10 s) writes GTFS-RT `.pb` files per feed by atomic rename, upserts
-  changed rows of the UNLOGGED `rt.trip_state_current` (joined by the API with static
-  departures).
+  changed rows of the UNLOGGED `rt.trip_state_current` and `rt.trip_part_current` (joined by the
+  API with static departures by feed trip ID).
 - The inference index is built in memory (plain dictionaries) from SQL queries over the
   `active.*` views, so the realtime core and the API see exactly the same static data and the
   same derived helpers (`service_date`). It is double-buffered and swapped between cycles when
@@ -1969,11 +1969,14 @@ PID, DÚK, SŽ or another provider.
 /gtfs-rt/{jdf,czptt}/{vehicle-positions,trip-updates,alerts}.pb
 /tiles/<run-id>/{stops,routes}.pmtiles
 
-/api/v1/stops?bbox=…
+/api/v1/status                              release, activation, source freshness
+/api/v1/stops?q=…|bbox=…                    stop places by name (case and diacritics folded)
+/api/v1/stop-places/<id>                    boarding points and lines
 /api/v1/stop-places/<id>/departures         both feeds; scheduled + realtime + forecasts
-/api/v1/journeys/<feed>/<namespace>/<key>/<service_date>
-                                            calls, typed features, notes, realtime state
-/api/v1/journeys/…/composition?from=<location>   pending | fresh | stale (section 28)
+/api/v1/trips/<trip_id>/<service_date>      calls, typed features, notes, realtime state
+/api/v1/trips/by-key/<namespace>/<key>/<service_date>
+                                            308 to the trip a source key names
+/api/v1/trips/…/composition?from=<location> pending | fresh | stale (section 28)
 /api/v1/vehicles?bbox=…[&include=unmatched,not_in_service]
 /api/v1/vehicles/<vehicle_id>               or <source>:<source_vehicle_id> when unbound
 /api/v1/alerts
@@ -1983,20 +1986,32 @@ PID, DÚK, SŽ or another provider.
 /api/v1/debug/realtime/unmatched            unmatched and ambiguous observations with candidates
 ```
 
-- **Public IDs are journey keys and vehicle IDs, never `trip_id`.** A `trip_id` changes with
-  every timetable version and JrUtil rerun; responses carry it, with the `release_id`, as an
-  attribute only. Bookmarks, links and caches stay valid across releases.
+- **Trips are identified by the feed's `trip_id` and the service date;** vehicles by their
+  vehicle ID. Source keys (`cis:line_trip`, `pid:gtfs_trip_id`, `czptt:train_number`, …) are
+  lookup aliases only, answered with a redirect, and a trip's preferred journey key is an
+  attribute. A `trip_id` lasts one timetable version of its line (section 6): an older one
+  answers 410 with the journey it ran as (from `history.journey_schedule`), whose key resolves
+  through `by-key` against the active release.
 - **The public realtime model** is, per call: `estimate`, `status` (`scheduled`, `predicted`,
   `actual`, `inferred`, `no_realtime`, `cancelled`) and `source_class`. Intervals, confidence and
-  provenance stay in the debug API. Public fields are only ever added.
-- `obehy api` is FastAPI. Its OpenAPI schema generates the frontend's TypeScript types.
+  provenance stay in the debug API. Public fields are only ever added. `no_realtime` needs
+  per-region coverage and is not emitted yet: a trip without realtime state is `scheduled`.
+- `obehy api` is FastAPI over a read-only pool; each request is one repeatable-read snapshot
+  that reads the active publication first, so static and realtime rows are of one release. Its
+  OpenAPI schema generates the frontend's TypeScript types. Its limits (search, viewport
+  areas, departure lookback, vehicle age, cache ages) are the versioned
+  `src/obehy/data/api/api-v1.toml`.
 - The frontend lives in `web/` (Vite, React, MapLibre GL JS) with its own toolchain.
 - Stops and routes are PMTiles, generated per release and served as static files. The base map
   needs no tile server and puts no load on the database.
-- The emit tick writes a vehicles snapshot file next to the GTFS-RT files; the API filters it by
-  bounding box.
-- Departures join `active.*` with `rt.trip_state_current` on the active `release_id`, and drop
-  each trip's final passenger call.
+- Vehicles are read from `rt.vehicle_state_current` of the active release, filtered by bounding
+  box and the maximum age; a vehicle's trip is the feed trip (rail: the run's part) it is on.
+- Departures join `active.*` with the realtime state of the active `release_id` by feed trip
+  ID: `rt.trip_part_current` maps each feed trip, a rail run's part included, to its slice of
+  the journey's calls in `rt.trip_state_current`. A departure scheduled before the board's
+  start stays while its estimate is still to come; each trip's final passenger call is dropped.
+- A board covers one stop place and its boarding points. Boards merging nearby stop places of
+  both feeds (a town's bus station and railway station) wait for a station-grouping rule.
 
 **Vehicles without an active trip.** Every vehicle has a `state`:
 

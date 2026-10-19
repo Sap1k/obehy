@@ -46,7 +46,7 @@ class Index:
     name: str
     table: str
     columns: tuple[LiteralString, ...]
-    method: Literal["btree", "gist"] = "btree"
+    method: Literal["btree", "gist", "gin"] = "btree"
 
 
 LOCATION_GEOM = Column(
@@ -99,6 +99,12 @@ INDEXES = (
         "source_key",
         ("load_id", "namespace", "split_part(identifier, ':', 1)"),
     ),
+    # The project API's lookups (src/obehy/api), migration 0011.
+    Index("location_name_fold", "location", ("control.obehy_fold(name) gin_trgm_ops",), "gin"),
+    Index("location_parent", "location", ("load_id", "parent_location_id")),
+    Index("assignment_trip", "assignment", ("load_id", "trip_id")),
+    Index("assignment_route", "assignment", ("load_id", "route_id")),
+    Index("assignment_service", "assignment", ("load_id", "service_id")),
 )
 
 

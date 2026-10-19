@@ -43,7 +43,6 @@ flowchart LR
   api -->|lookup requests| pg
   jobs <--> pg
   pg --> api
-  files --> api
   api --> web
   files --> web
   files --> ext
@@ -333,9 +332,11 @@ These are fixed now because changing them later breaks history or consumers.
   - The CZPTT run and the TR are attributes.
   - Physical continuity comes from vehicle assignments and compositions, never from merging
     journeys.
-- **Public IDs are journey keys and `vehicle_id`s, never `trip_id`.** Those are
-  `/api/v1/journeys/{feed}/{namespace}/{key}/{service_date}` and
-  `/api/v1/vehicles/{vehicle_id}`; `trip_id` and `release_id` are attributes in responses.
+- **The API refers to trips by the feed's `trip_id` and service date**
+  (`/api/v1/trips/{trip_id}/{service_date}`) and to vehicles by `vehicle_id`
+  (`/api/v1/vehicles/{vehicle_id}`). Source keys only redirect (`/api/v1/trips/by-key/…`); a
+  trip ID of an older timetable version answers 410 with its journey key. History stays keyed
+  by journey.
 - **The public realtime model is the same for every call.** A call has an `estimate`, a
   `status` (`scheduled`, `predicted`, `actual`, `inferred`, `no_realtime` or `cancelled`) and a
   `source_class`. Intervals, confidence and provenance are in the debug API only. Public
