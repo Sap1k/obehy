@@ -1339,15 +1339,31 @@ Project propagation runs call by call from the current lateness (own GPS where t
 the source's delay):
 
 ```text
-pred_arr(j) = S_arr(j) + L
+L          ← L + X(j)                                   X: the hop into j, now, beyond the timetable
+pred_arr(j) = max(S_arr(j) + L, now)
 pred_dep(j) = max(S_dep(j), pred_arr(j) + min_dwell)   when L > 0 and S_dep(j) > S_arr(j)
             = S_dep(j) + L                               otherwise
 L          ← pred_dep(j) − S_dep(j)
 ```
 
+- A constant lateness carried forward is wrong wherever the road runs slower (or faster) than
+  its timetable: in the Prague morning peak buses lose about 10 s per stop, so carried
+  lateness predicted them half a minute early at the next stop and over a minute early five
+  stops on. The time a hop (two consecutive passenger calls) takes now is learned live from
+  every journey over the same two stops: arrival to arrival, as a ratio to the timetable,
+  weighted by recency and shrunk toward the timetable's own. `X(j)` is the timetable's running
+  time into `j` times (ratio − 1); on the hop being driven, for the share of it left. A hop no
+  one has driven lately keeps the timetable's. Ratios by weekday and time of day from history
+  are the next fallback, before the timetable.
+- A call not yet reached is never predicted before now: a source's fixes can be half a minute
+  old when published, and a time already past would show the vehicle there.
+- Both are for road vehicles. Rail runs keep the timetable's running times (few trains share
+  a hop; SŽ predictions anchor them) and are not floored at now (SŽ positions are minutes
+  apart: a train not yet seen at a station may well be there).
+
 - A late vehicle recovers time only in a real timetabled dwell, down to the minimum dwell
   (policy: about a minute, two in long dwells). Buses mostly have none (arrival = departure);
-  trains often do. Running-time recovery per mode is 0 until learned from history.
+  trains often do.
 - A call without a timetabled dwell still has one inside its minute. Time the vehicle is seen
   standing there, up to a per-mode credit, is not lateness: while it stands, and on the next
   leg, fading out by the next call (the leg's running time absorbs it). Most road stops are
@@ -1488,8 +1504,9 @@ Once a vehicle is bound:
 
 ## 21.3 Remaining time
 
-- Progress along the path plus last-stop delay propagation (section 20.5) is the default and is
-  sufficient wherever stops are close together. That covers urban and regional traffic.
+- Progress along the path plus propagation with hop running times learned live (section 20.5)
+  is the default and is sufficient wherever stops are close together. That covers urban and
+  regional traffic.
 - A pluggable `TravelTimeProvider` interface exists **only for long gaps between stops** (coaches,
   motorway sections). Input: the instance, current progress and target calls. Output: ETAs with
   uncertainty, entered as prediction candidates.

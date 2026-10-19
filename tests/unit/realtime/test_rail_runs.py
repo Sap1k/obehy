@@ -148,7 +148,7 @@ def test_gtfs_rt_has_a_trip_update_per_part_without_railway_points() -> None:
         {"at": "2026-10-08 08:00:30", "key": "6006", "state": "running", "position": _at(0.2)},
         {"at": "2026-10-08 08:02:00", "key": "6006", "state": "running", "position": _at(0.5)},
     )
-    estimate_all(state, Context(index, POLICY))
+    estimate_all(state, Context(index, POLICY), local("2026-10-08 08:02"))
     message = feed_message(state, local("2026-10-08 08:02"), POLICY.lifecycle)
     updates = {
         e.trip_update.trip.trip_id: e.trip_update
@@ -192,7 +192,7 @@ def test_a_finished_run_keeps_the_trip_update_of_every_part() -> None:
         *({"at": at, "key": "6006", "state": "running", "position": _at(x)} for at, x in fixes),
     )
     assert state.instances[PA].lifecycle == "finished"
-    estimate_all(state, Context(index, POLICY))
+    estimate_all(state, Context(index, POLICY), local("2026-10-08 08:40"))
     message = feed_message(state, local("2026-10-08 08:40"), POLICY.lifecycle)
     assert sorted(e.trip_update.trip.trip_id for e in message.entity) == [
         "czptt:trip:PA1:1",

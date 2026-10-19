@@ -80,6 +80,7 @@ from obehy.realtime.timeline.estimate import (
 from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, lead_of, with_lead
 from obehy.realtime.timeline.plan import PlanCache
 from obehy.realtime.timeline.progress import at_origin_or_moving, past_first_stop
+from obehy.realtime.timeline.runtimes import forget, record, running_extra
 from obehy.realtime.times import PRAGUE, Instant
 
 CORE_VERSION = "r1.0"
@@ -207,6 +208,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         before = previous.position if previous is not None else None
         start = span(trip, binding.journey)[0]
         instance = _lifecycle(instance, trip, observation, start, before, ctx)
+        calls_before = instance.calls
         instance, timeline_effects = timeline.advance(
             instance,
             trip,
@@ -218,6 +220,9 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         )
         state.instances[binding.journey] = instance
         state.dirty.add(binding.journey)
+        if binding.confirmed and instance.calls is not calls_before:
+            plan = ctx.plans.plan(trip, binding.journey.service_date, ctx.index, ctx.policy)
+            record(state.hops, instance, calls_before, plan.scheduled, ctx.policy.prediction)
         if not binding.confirmed:  # realtime only until continuity confirms the inference
             timeline_effects = [e for e in timeline_effects if not isinstance(e, WriteEvent)]
         effects.extend(timeline_effects)
@@ -256,20 +261,25 @@ def _bind(observation: Observation, ctx: Context, at: Instant | None = None) -> 
     return result
 
 
-def estimate_all(state: FeedState, ctx: Context) -> None:
-    """Bring per-call estimates of changed journeys up to date (before emitting state)."""
+def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
+    """Bring per-call estimates up to date as of `now` (before emitting state): of changed
+    journeys, and of journeys whose next predicted time has fallen behind `now`."""
 
-    for journey in sorted(state.dirty):
+    policy = ctx.policy.prediction
+    due = set(state.dirty)
+    due.update(j for j, instance in state.instances.items() if _behind(instance, now))
+    for journey in sorted(due):
         instance = state.instances.get(journey)
         if instance is None:
             continue
         trip = ctx.index.trip(instance.trip_id)
         plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
         if trip.run_key is None:  # not a rail run (a CZPTT run may start as a bus)
+            extra = running_extra(instance, plan, state.hops, now, policy)
             current = waiting_is_not_early(instance, plan, own_lateness(instance))
-            current = dwell_credit(instance, trip, plan, current, ctx.policy.prediction)
+            current = dwell_credit(instance, trip, plan, current, policy)
             state.instances[journey] = estimate(
-                instance, plan.scheduled, ctx.policy.prediction, current=current
+                instance, plan.scheduled, policy, current=current, extra=extra, now=now
             )
             continue
         predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)
@@ -277,28 +287,43 @@ def estimate_all(state: FeedState, ctx: Context) -> None:
         estimated = estimate(
             instance,
             plan.scheduled,
-            ctx.policy.prediction,
-            current=dwell_credit(instance, trip, plan, current, ctx.policy.prediction),
+            policy,
+            current=dwell_credit(instance, trip, plan, current, policy),
             anchor=predictor,
         )
         state.instances[journey] = monotone(estimated)
     state.dirty.clear()
 
 
+def _behind(instance: Instance, now: Instant) -> bool:
+    """Whether a running road journey's first predicted time is before `now` (rail runs are
+    estimated from their last fix: SŽ positions are minutes apart, so a train not seen at a
+    call yet may well be there)."""
+
+    if instance.lifecycle != "running" or instance.parts:
+        return False
+    for call in instance.calls:
+        if call.status == "predicted":
+            first = call.estimated_arrival or call.estimated_departure
+            return first is not None and first < now
+    return False
+
+
 def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
     """Emit-tick housekeeping: flag stale and lost journeys, forget long-unseen vehicles and
     journeys."""
 
+    forget(state.hops, now, policy.prediction)
     # Each entry is decided on its own, so iteration order cannot change the result.
-    forget = timedelta(seconds=policy.lifecycle.forget_after_s)
+    unseen = timedelta(seconds=policy.lifecycle.forget_after_s)
     for vehicle, current in list(state.vehicles.items()):
-        if now - current.last_seen > forget:
+        if now - current.last_seen > unseen:
             del state.vehicles[vehicle]
     bound = {v.binding.journey for v in state.vehicles.values() if v.binding is not None}
     limits: dict[str, tuple[timedelta, timedelta]] = {}
     for journey, instance in list(state.instances.items()):
         idle = now - instance.freshness.heard_at
-        if idle > forget and journey not in bound:
+        if idle > unseen and journey not in bound:
             del state.instances[journey]
             continue
         mode = instance.mode

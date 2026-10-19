@@ -8,6 +8,7 @@ every value stored in them is immutable, so a state can be snapshotted by copyin
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
@@ -543,6 +544,13 @@ class VehicleState:
     since: Instant | None = None
 
 
+# A hop between consecutive passenger calls: (mode, from location, to location, timed from the
+# first call's departure rather than its arrival: at the origin, which has no arrival).
+HopKey = tuple[str, str, str, bool]
+# One vehicle's traversal of a hop: (arrival at its end, seconds taken, seconds scheduled).
+Traversal = tuple[Instant, float, float]
+
+
 @dataclass(slots=True)
 class FeedState:
     feed: Feed
@@ -550,6 +558,8 @@ class FeedState:
     instances: dict[JourneyKey, Instance] = field(default_factory=dict[JourneyKey, Instance])
     # Journeys whose per-call estimates are out of date; `core.estimate_all` refreshes them.
     dirty: set[JourneyKey] = field(default_factory=set[JourneyKey])
+    # Recent traversals of each hop by any journey, oldest first (`timeline.runtimes`).
+    hops: dict[HopKey, deque[Traversal]] = field(default_factory=dict[HopKey, deque[Traversal]])
 
 
 # --- effects ------------------------------------------------------------------------------------

@@ -84,11 +84,12 @@ class Drive:
                 ),
             )
             self.effects.extend(step(self.state, observation, self.ctx))
+            self.now = when
         return self
 
     @property
     def instance(self) -> Instance:
-        estimate_all(self.state, self.ctx)
+        estimate_all(self.state, self.ctx, self.now)
         (value,) = self.state.instances.values()
         return value
 

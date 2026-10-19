@@ -22,7 +22,7 @@ def _replay(name: str) -> tuple[list[WriteEvent], FeedState]:
     effects: list[Effect] = []
     for observation in observations:
         effects.extend(step(state, observation, ctx))
-    estimate_all(state, ctx)
+    estimate_all(state, ctx, observations[-1].at)
     return [e for e in effects if isinstance(e, WriteEvent)], state
 
 
@@ -89,7 +89,7 @@ def _live(name: str, ticks: list[str]) -> dict[str, list[CallState]]:
             step(state, upcoming, ctx)
             upcoming = next(pending, None)
         refresh(state, now, POLICY)
-        estimate_all(state, ctx)
+        estimate_all(state, ctx, now)
         (instance,) = state.instances.values()
         shown[clock] = list(instance.calls)
     return shown
@@ -106,7 +106,7 @@ def test_a_bus_waiting_at_the_origin_with_a_frozen_gps_clock_is_shown_live_corre
     origin, alejich, cernovicka = shown["11:03"][:3]
     assert _clock(origin.estimated_departure) == "11:05"  # waiting is not running early
     assert _clock(cernovicka.estimated_arrival) == "11:09"
-    assert _clock(shown["11:08"][0].estimated_departure) == "11:07"  # leaving now, late
+    assert _clock(shown["11:08"][0].estimated_departure) == "11:08"  # not seen leaving: now
     origin, alejich, cernovicka = shown["11:12"][:3]
     assert (origin.status, alejich.status, cernovicka.status) == ("actual",) * 3
     assert _clock(origin.estimated_departure) == "11:07"

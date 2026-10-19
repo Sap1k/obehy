@@ -28,8 +28,14 @@ early vehicles mostly lose their lead within a call or two), and a predicted dep
 a passenger stop is at most the mode's `max_early_departure_s` ahead of the timetable: trains
 wait for their time (0); for road vehicles, whether one waits is a habit of particular stops,
 learned from history later. An observed departure is never changed. Predictions never
-precede an earlier call's estimate or the last fix (monotone repair). There is no uncertainty:
-each estimate is the best single prediction.
+precede an earlier call's estimate or the last fix (monotone repair), and a call not yet
+reached is never predicted before `now` (road vehicles: their fixes may be half a minute old
+when published; a rail run passes none, its SŽ positions are minutes apart). There is no
+uncertainty: each estimate is the best single prediction.
+
+Each call ahead of a road vehicle also adds the time its hop takes now beyond the timetable's
+(`extra`, learned live from every journey over the same two stops: `runtimes.running_extra`):
+a road running slower than its timetable makes a vehicle later the further ahead.
 """
 
 from __future__ import annotations
@@ -167,6 +173,8 @@ def estimate(
     *,
     current: Lateness | None = None,
     anchor: tuple[int, timedelta] | None = None,
+    extra: tuple[timedelta, ...] | None = None,
+    now: Instant | None = None,
 ) -> Instance:
     """Per-call estimates; computed when state is emitted, not on every fix.
 
@@ -189,6 +197,8 @@ def estimate(
         default=-1,
     )
     floor: Instant | None = instance.progress.at if instance.progress is not None else None
+    if now is not None and (floor is None or now > floor):
+        floor = now  # a call not yet reached is not reached before now
     finished = instance.lifecycle == "finished"
     last = len(instance.calls) - 1
     calls: list[CallState] = []
@@ -241,6 +251,8 @@ def estimate(
                 # An early lead holds to the next call and fades beyond it: early vehicles
                 # mostly lose it within a call or two (they wait, or drive slower).
                 lateness = lateness * policy.early_keep(instance.mode)
+            if extra is not None and (anchor is None or anchor[0] != i):
+                lateness += extra[i]
             if state.passenger:
                 ahead += 1
             est_arr = _shifted(sched_arr, lateness, floor)

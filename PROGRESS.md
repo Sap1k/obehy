@@ -207,9 +207,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   142/150 DÚK train key groups, places 99.5% of SŽ point events, and its rail GTFS-RT passes the
   consistency check. Open for R2 acceptance: a CI release with serving 5.1, then a 25 h
   DÚK + SŽ + boards corpus pinned against it (golden digests, validator, live hour).
-  Predictions follow `BASE_PLAN.md` 20.5 (dwell recovery, early running carried over, no
-  uncertainty); per-stop holding and knock-on to the next trip of a tour wait for history
-  learning and circulations (section 22). JrUtil's
+  Predictions follow `BASE_PLAN.md` 20.5 (dwell recovery, early running carried over, hop
+  running times learned live for road vehicles, no uncertainty); hop ratios by time of day,
+  per-stop holding and knock-on to the next trip of a tour wait for history learning and
+  circulations (section 22). JrUtil's
   `serving-v5.json` time description still says noon − 12 h and needs correcting.
   Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
   replayed clean on the server capture of 2026-10-09 to 10-12, live on jdf. Open: `rt evaluate`
@@ -250,6 +251,23 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-19** — Road predictions from hop running times learned live (policy v11). A
+  constant lateness carried forward predicted Prague buses early, more so further ahead (PID
+  2026-10-15 06:45-09:00: bias −31 s at the next stop, −55 s five stops on), and 12.5 % of
+  next-stop predictions were already in the past when published (fixes ~31 s old; the floor
+  was the fix time). Now each call ahead adds the time its hop takes now beyond the timetable:
+  the recency-weighted ratio (`runtime_decay_s` 30 min, `runtime_prior_weight` 0.5) of every
+  journey's arrival-to-arrival time over the same two stops (`timeline/runtimes.py`,
+  `FeedState.hops`); a road call not yet reached is never predicted before now. Rail runs are
+  unchanged (floored at now, trains two and three stations ahead got 7-11 s worse). PID bus
+  MAE/bias next stop 64.6/−31 → 56.7/−15 s, third 77.4/−34 → 66.9/−10 s, fifth 98.7/−55 →
+  85.1/−19 s; tram 38.5 → 31.6 s next stop (fifth 56.2 → 57.7 s, bias +14…+29 s); metro
+  24 → 17 s; none in the past. 2026-10-12 peak (DPMD, MPV net, SŽ map): bus 51.7/−6.7 →
+  48.9/−0.1 s next stop, 71.1 → 68.2 s third; trolleybus 36.9 → 32.8 s, third 62.9 → 52.0 s;
+  rail identical. Flicker (reversals per call) up: PID bus 1.00 → 1.19, tram 0.82 → 1.10, DPMD
+  + MPV net bus 0.81 → 0.90. Dropping the dwell credit, the waiting rule and the early fade
+  was measured and rejected (PID: 4× as many buses predicted over a minute early, flicker
+  nearly doubled). Unit tests pass; DB tests and corpus goldens not run (no test database).
 - **2026-10-19** — Delays at stops, on roads the shape misses, and SŽ minutes (policy v10).
   A stop without a timetabled dwell credits the dwell a vehicle is seen to make, up to
   `dwell_credit_s` = 30 s, fading out over the next leg (a train at a call not on request even

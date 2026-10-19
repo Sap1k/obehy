@@ -231,7 +231,7 @@ def test_an_early_train_waits_for_its_departure() -> None:
         _duk("2026-10-08 08:02:00", 1.0),
         _duk("2026-10-08 08:03:00", 1.4),  # minutes ahead of the timetable
     )
-    estimate_all(state, ctx)
+    estimate_all(state, ctx, local("2026-10-08 08:03:00"))
     _, _, b, c = state.instances[PA].calls
     assert b.estimated_arrival is not None and b.estimated_arrival < local("2026-10-08 08:10")
     assert b.estimated_departure == local("2026-10-08 08:12")  # held to the timetable
@@ -277,7 +277,9 @@ def _predicted_c(predictor: str) -> object:
         ),
     )
     policy = replace(POLICY, rail=replace(POLICY.rail, predictor=predictor))
-    estimate_all(state, Context(index, policy, ctx.plans, ctx.semantics))
+    estimate_all(
+        state, Context(index, policy, ctx.plans, ctx.semantics), local("2026-10-08 08:13:10")
+    )
     instance: Instance = state.instances[PA]
     return instance.calls[3].estimated_arrival
 
@@ -346,7 +348,7 @@ def test_a_train_leaving_a_stop_not_on_request_is_credited_its_unseen_dwell() ->
         )
         b_call = state.instances[PA].calls[2]
         assert b_call.departure is not None and b_call.arrival is None
-        estimate_all(state, ctx)
+        estimate_all(state, ctx, local("2026-10-08 08:12:00"))
         arrivals.append(state.instances[PA].calls[3].estimated_arrival)
     regular, request = arrivals
     assert regular is not None and request is not None

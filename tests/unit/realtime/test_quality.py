@@ -23,7 +23,7 @@ def test_quality_scores_predictions_and_measures_the_dwell_at_a_stop_without_one
     ]
     for clock, metres in fixes:
         run.at(clock, east(metres))
-        estimate_all(run.state, run.ctx)
+        estimate_all(run.state, run.ctx, local(f"2026-10-08 {clock}"))
         log.sample(run.state, run.ctx, local(f"2026-10-08 {clock}"))
     report = log.report()
     accuracy = report["accuracy"]["bus"]

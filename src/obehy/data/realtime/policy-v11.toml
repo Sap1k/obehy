@@ -3,10 +3,11 @@
 # v5 the index sweep and daily compaction, v6 warm replay by vehicle, v7 PID in the position
 # preference, v8 two days of rt.observation, v9 the raw archive window, v10 trip updates
 # kept after the trip ends, observed dwell credited at stops without a timetabled one, and
-# the distance driven followed where a shape misses the road).
+# the distance driven followed where a shape misses the road, v11 hop running times learned
+# live).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "10"
+policy_version = "11"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -99,12 +100,26 @@ min_dwell_s = { default = 60 }
 long_dwell_s = { default = 300 }
 min_long_dwell_s = { default = 120 }
 max_early_departure_s = { default = 86400, rail = 0 }
+# Hop running times (`timeline.runtimes`): how long vehicles take between two consecutive
+# passenger calls now, from the arrivals of every journey over the same two stops, as a ratio
+# to the timetable. Traversals weigh less by e every runtime_decay_s; the timetable's own ratio
+# (1) weighs runtime_prior_weight, as a traversal just made; a traversal's ratio is clipped to
+# [1/runtime_ratio_max, runtime_ratio_max]. Each call ahead of a road vehicle gets the running
+# time its hop takes now beyond the timetable's (on the hop being driven, the share of it
+# left); rail runs keep the timetable's (few trains share a hop; SŽ predictions anchor them).
+# Measured offline on the PID morning peak 2026-10-15 06:45-09:00: decay 30 min with weight
+# 0.5 beat a 30-minute median of at least three, decays of 10-60 min and weights of 0.25-2.
+runtime_decay_s = 1800
+runtime_prior_weight = 0.5
+runtime_ratio_max = 3.0
 # A stop the timetable gives no dwell (arrival = departure, whole minutes) still has one inside
 # the minute. Time a vehicle is seen standing there, up to dwell_credit_s, is not lateness: while
 # it stands, and on the next leg, fading out by the next stop (the leg's time absorbs it). Most
 # road stops are request stops, so only an observed stop counts; a train certainly stops at a
 # call not on request. Measured on the 2026-10-12 morning peak (DPMD, MPV net, SŽ map;
-# `obehy rt replay --quality`): 20 s and 45 s were no better.
+# `obehy rt replay --quality`): 20 s and 45 s were no better. Kept with hop running times: on
+# the 2026-10-15 PID peak, without it and the waiting rule four times as many buses were
+# predicted over a minute early, and predictions flickered nearly twice as often.
 dwell_credit_s = { default = 30 }
 # An early lead holds to the next call; at each call beyond, this share of it is kept. Early
 # vehicles mostly lose their lead within a call or two (2026-10-12 MPV net, buses predicted more

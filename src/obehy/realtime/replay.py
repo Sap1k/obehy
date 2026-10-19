@@ -216,7 +216,7 @@ class _Clock:
             self.runner.tick(self.next_tick, emit=False)
             if self.quality is not None:
                 for _, runtime in sorted(self.runner.runtimes.items()):
-                    estimate_all(runtime.state, runtime.ctx)
+                    estimate_all(runtime.state, runtime.ctx, self.next_tick)
                     self.quality.sample(runtime.state, runtime.ctx, self.next_tick)
             if self.next_sample is not None and self.next_sample <= self.next_tick:
                 rail = self.runner.runtimes["czptt"]
@@ -234,7 +234,7 @@ def _finish(runner: Runner, last: Instant, writer: Writer | None) -> None:
 
     runner.tick(last, emit=False)
     for runtime in runner.runtimes.values():
-        estimate_all(runtime.state, runtime.ctx)
+        estimate_all(runtime.state, runtime.ctx, last)
     if writer is not None:
         writer.write_state({feed: r.state for feed, r in runner.runtimes.items()})
 
@@ -309,7 +309,7 @@ def history_writer(
 
 def _snapshot(options: ReplayOptions, runner: Runner, at: Instant) -> None:
     for feed, runtime in sorted(runner.runtimes.items()):
-        estimate_all(runtime.state, runtime.ctx)
+        estimate_all(runtime.state, runtime.ctx, at)
         path = options.out / "gtfs-rt" / feed / f"{at:%Y%m%dT%H%M%SZ}.pb"
         path.parent.mkdir(parents=True, exist_ok=True)
         message = feed_message(runtime.state, at, runner.policy.lifecycle)

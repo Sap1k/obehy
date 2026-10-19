@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from collections import deque
 from dataclasses import replace
 from datetime import date, timedelta
 
@@ -54,11 +56,12 @@ class Run:
     def at(self, clock: str, where: tuple[float, float] | None, **extra: object) -> Run:
         obs = observe(f"2026-10-08 {clock}", position=where, **extra)  # type: ignore[arg-type]
         self.effects.extend(step(self.state, obs, self.ctx))
+        self.now = obs.at
         return self
 
     @property
     def instance(self) -> Instance:
-        estimate_all(self.state, self.ctx)
+        estimate_all(self.state, self.ctx, self.now)
         (value,) = self.state.instances.values()
         return value
 
@@ -232,7 +235,7 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
     run.at("08:03", None, vehicle="2002", key="999999:1")  # unmatched: never in GTFS-RT
     now = local("2026-10-08 08:03:10")
     refresh(run.state, now, POLICY)
-    estimate_all(run.state, run.ctx)
+    estimate_all(run.state, run.ctx, now)
     raw = feed_message(run.state, now, POLICY.lifecycle).SerializeToString(deterministic=True)
     message = rt.FeedMessage()
     message.ParseFromString(raw)
@@ -276,7 +279,7 @@ def test_a_finished_trip_keeps_its_trip_update_for_a_while() -> None:
     assert run.instance.lifecycle == "finished"
     now = local("2026-10-08 08:20")
     refresh(run.state, now, POLICY)
-    estimate_all(run.state, run.ctx)
+    estimate_all(run.state, run.ctx, now)
     (entity,) = feed_message(run.state, now, POLICY.lifecycle).entity
     update = entity.trip_update
     assert not update.HasField("vehicle")
@@ -300,7 +303,7 @@ def test_gtfs_rt_bytes_reused_across_ticks_match_a_fresh_serialization() -> None
         run.at(clock, east(metres))
         now = local(f"2026-10-08 {clock}:10")
         refresh(run.state, now, POLICY)
-        estimate_all(run.state, run.ctx)
+        estimate_all(run.state, run.ctx, now)
         payload = emitter.serialize(run.state, now)
         # The same bytes as serializing the whole message at once, with nothing cached.
         assert payload == feed_message(run.state, now, POLICY.lifecycle).SerializeToString(
@@ -467,7 +470,7 @@ def test_a_bus_reported_by_two_sources_is_one_vehicle_in_gtfs_rt() -> None:
     run.at("08:03", east(510), vehicle="842", source="dpmd")  # the same bus, the city's feed
     now = local("2026-10-08 08:03:10")
     refresh(run.state, now, POLICY)
-    estimate_all(run.state, run.ctx)
+    estimate_all(run.state, run.ctx, now)
     message = feed_message(run.state, now, POLICY.lifecycle)
     assert len(run.state.vehicles) == 2  # both bound to the journey
     positions = [e for e in message.entity if e.HasField("vehicle")]
@@ -502,7 +505,7 @@ def test_pid_and_duk_on_one_trip_are_one_journey_in_gtfs_rt() -> None:
     run.effects.extend(step(run.state, pid("08:03:05", east(505)), run.ctx))
     now = local("2026-10-08 08:03:10")
     refresh(run.state, now, POLICY)
-    estimate_all(run.state, run.ctx)
+    estimate_all(run.state, run.ctx, now)
     (journey,) = run.state.instances
     assert (journey.namespace, journey.key) == ("cis:line_trip", "582492:143")
     message = feed_message(run.state, now, POLICY.lifecycle)
@@ -542,3 +545,45 @@ def test_a_vehicle_driving_through_a_request_stop_is_not_credited() -> None:
     assert plain is not None and track is not None and track.lateness_s is not None
     expected = local("2026-10-08 08:10:00") + timedelta(seconds=round(track.lateness_s))
     assert abs((plain - expected).total_seconds()) <= 2
+
+
+def test_a_hop_driven_slower_lately_stretches_the_predictions_beyond_it() -> None:
+    """Vehicles lately took 1.5 times the timetable's 5 minutes from B to C: the bus between A
+    and B is predicted at C later by the hop's ratio now (decayed and shrunk toward 1)."""
+
+    plain = Run().at("08:00", east(0)).at("08:03", east(500)).instance
+    run = Run().at("08:00", east(0)).at("08:03", east(500))
+    hop = ("bus", "jdf:B", "jdf:C", False)
+    run.state.hops[hop] = deque([(local("2026-10-08 08:02"), 450.0, 300.0)])
+    slow = run.instance
+    prediction = POLICY.prediction
+    weight = math.exp(-60 / prediction.runtime_decay_s)
+    prior = prediction.runtime_prior_weight
+    ratio = (prior + weight * 1.5) / (prior + weight)
+    assert slow.calls[1].estimated_arrival == plain.calls[1].estimated_arrival  # A-B: no data
+    late, early = slow.calls[2].estimated_arrival, plain.calls[2].estimated_arrival
+    assert late is not None and early is not None
+    stretched = late - early
+    assert abs(stretched.total_seconds() - (ratio - 1) * 300) < 1
+
+
+def test_a_journey_records_the_hops_it_drives() -> None:
+    run = Run().at("08:00", east(0)).at("08:03", east(500)).at("08:06", east(1200))
+    run.at("08:11", east(2000))
+    hops = run.state.hops
+    assert set(hops) == {("bus", "jdf:A", "jdf:B", True), ("bus", "jdf:B", "jdf:C", False)}
+    ((end, taken, planned),) = hops[("bus", "jdf:B", "jdf:C", False)]
+    _, b, c = run.instance.calls
+    assert b.arrival is not None and c.arrival is not None
+    middle = b.arrival.lo + (b.arrival.hi - b.arrival.lo) / 2
+    assert end == c.arrival.lo + (c.arrival.hi - c.arrival.lo) / 2
+    assert planned == 300 and taken == (end - middle).total_seconds()  # arrival to arrival
+
+
+def test_a_call_not_yet_reached_is_never_predicted_before_now() -> None:
+    run = Run().at("08:00", east(0)).at("08:03", east(500))
+    now = local("2026-10-08 08:07")  # no fix since 08:03: B is still ahead
+    estimate_all(run.state, run.ctx, now)
+    (instance,) = run.state.instances.values()
+    arrival = instance.calls[1].estimated_arrival
+    assert arrival is not None and arrival >= now
