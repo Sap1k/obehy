@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 from starlette.exceptions import HTTPException
 
-from obehy.api import departures, schema, status, stops, trips, vehicles
+from obehy.api import boards, debug, lines, schema, status, stops, trips, vehicles
 from obehy.api.db import NoActiveRelease, open_pool
 from obehy.api.limits import Limits, load_limits
 from obehy.api.params import ParameterError
@@ -72,7 +72,7 @@ def create_app(
     app = FastAPI(
         title="Oběhy",
         version="1",
-        summary="Czech public transport: stops, departures, trips and vehicles, live.",
+        summary="Czech public transport: stops, boards, trips, lines and vehicles, live.",
         openapi_url=f"{PREFIX}/openapi.json",
         docs_url=f"{PREFIX}/docs",
         redoc_url=None,
@@ -82,6 +82,6 @@ def create_app(
     app.add_exception_handler(ParameterError, _parameter_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(NoActiveRelease, _no_release)
-    for module in (status, stops, departures, trips, vehicles):
+    for module in (status, stops, boards, trips, lines, vehicles, debug):
         app.include_router(module.router, prefix=PREFIX)
     return app

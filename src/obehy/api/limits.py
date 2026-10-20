@@ -18,11 +18,24 @@ class Limits:
     search_limit_max: int
     stops_bbox_max_deg2: float
     stops_bbox_limit: int
+    near_radius_m: int
+    near_radius_max_m: int
+    near_limit: int
     lookback_min: int
     departures_minutes: int
     departures_minutes_max: int
     departures_limit: int
     departures_limit_max: int
+    board_stops_max: int
+    lines_search_limit: int
+    lines_search_limit_max: int
+    line_patterns: int
+    history_max_days: int
+    history_default_days: int
+    on_time_early_s: int
+    on_time_late_s: int
+    debug_window_min: int
+    debug_limit: int
     vehicle_max_age_s: int
     vehicles_bbox_max_deg2: float
     vehicles_limit: int
@@ -43,6 +56,7 @@ def load_limits(path: Path = LIMITS) -> Limits:
         table("vehicles"),
         table("cache"),
     )
+    lines, history, debug = table("lines"), table("history"), table("debug")
     return Limits(
         version=str(document["api_version"]),
         search_min_chars=int(stops["search_min_chars"]),
@@ -50,11 +64,24 @@ def load_limits(path: Path = LIMITS) -> Limits:
         search_limit_max=int(stops["search_limit_max"]),
         stops_bbox_max_deg2=float(stops["bbox_max_deg2"]),
         stops_bbox_limit=int(stops["bbox_limit"]),
+        near_radius_m=int(stops["near_radius_m"]),
+        near_radius_max_m=int(stops["near_radius_max_m"]),
+        near_limit=int(stops["near_limit"]),
         lookback_min=int(departures["lookback_min"]),
         departures_minutes=int(departures["minutes"]),
         departures_minutes_max=int(departures["minutes_max"]),
         departures_limit=int(departures["limit"]),
         departures_limit_max=int(departures["limit_max"]),
+        board_stops_max=int(departures["stops_max"]),
+        lines_search_limit=int(lines["search_limit"]),
+        lines_search_limit_max=int(lines["search_limit_max"]),
+        line_patterns=int(lines["patterns"]),
+        history_max_days=int(history["max_days"]),
+        history_default_days=int(history["default_days"]),
+        on_time_early_s=int(history["on_time_early_s"]),
+        on_time_late_s=int(history["on_time_late_s"]),
+        debug_window_min=int(debug["window_min"]),
+        debug_limit=int(debug["limit"]),
         vehicle_max_age_s=int(vehicles["max_age_s"]),
         vehicles_bbox_max_deg2=float(vehicles["bbox_max_deg2"]),
         vehicles_limit=int(vehicles["limit"]),

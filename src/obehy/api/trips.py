@@ -2,20 +2,25 @@
 
 A trip ID lasts one timetable version of its line (BASE_PLAN.md section 6). One from an older
 version answers 410 with the journey it ran as (from history), whose key `by-key` resolves
-against the active release.
+against the active release. A journey's recorded runs are under `journeys/…/history`.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, RedirectResponse
+from psycopg.rows import DictRow
 
 from obehy.api import schema
+from obehy.api.codes import amenities, call_flags, feature, load_codes, tristate
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
+from obehy.api.params import date_span
+from obehy.realtime.times import local_date
 
 router = APIRouter(tags=["trips"])
 
@@ -58,11 +63,41 @@ def trip_by_key(
     return RedirectResponse(trip_path(rows[0]["trip_id"], service_date), status_code=308)
 
 
+def _call(row: DictRow, features: list[schema.Feature]) -> schema.TripCall:
+    codes = load_codes()
+    boarding = codes.boarding_of(row["pickup_type"])
+    alighting = codes.boarding_of(row["dropoff_type"])
+    flags = set(call_flags(features, row["sequence"]))
+    if "ask_driver" in (boarding, alighting):
+        flags.add("request_stop")
+    if alighting == "none" and boarding != "none":
+        flags.add("boarding_only")
+    if boarding == "none" and alighting != "none":
+        flags.add("exit_only")
+    return schema.TripCall(
+        sequence=row["sequence"],
+        location_id=row["location_id"],
+        name=row["name"],
+        latitude=row["latitude"],
+        longitude=row["longitude"],
+        boarding=boarding,
+        alighting=alighting,
+        flags=sorted(flags),
+        platform=row["platform"],
+        scheduled_arrival=row["scheduled_arrival"],
+        scheduled_departure=row["scheduled_departure"],
+        estimated_arrival=row["estimated_arrival"],
+        estimated_departure=row["estimated_departure"],
+        status=row["status"],
+        source_class=row["source_class"],
+    )
+
+
 @router.get(
     "/trips/{trip_id}/{service_date}",
     response_model=schema.Trip,
     responses={404: {"model": schema.Problem}, 410: {"model": schema.GoneTrip}},
-    summary="A trip on a service date: calls, realtime, features",
+    summary="A trip on a service date: calls, realtime, amenities, connections",
 )
 def trip(
     response: Response,
@@ -92,16 +127,31 @@ def trip(
         )
     if not row["runs"]:
         raise HTTPException(404, f"{trip_id} does not run on {service_date}")
-    journey = snap.one("trip_journey", params | {"namespaces": JOURNEY_NAMESPACES})
+    codes = load_codes()
+    journey_row = snap.one("trip_journey", params | {"namespaces": JOURNEY_NAMESPACES})
+    journey = None if journey_row is None else schema.JourneyKey.model_validate(journey_row)
     realtime = snap.one("trip_realtime", params)
     parts = (
         snap.all("trip_parts", {"run_key": row["run_key"], "service_date": service_date})
         if row["run_key"] is not None
         else []
     )
-    features = snap.all(
-        "trip_features",
-        {"trip_id": trip_id, "route_id": row["route_id"], "service_id": row["service_id"]},
+    features = [
+        feature(codes, f)
+        for f in snap.all(
+            "trip_features",
+            {"trip_id": trip_id, "route_id": row["route_id"], "service_id": row["service_id"]},
+        )
+    ]
+    seen_since = snap.now - timedelta(seconds=limits.vehicle_max_age_s)
+    vehicles = snap.all("trip_vehicles", params | {"seen_since": seen_since})
+    links = (
+        []
+        if journey is None
+        else snap.all(
+            "trip_links",
+            {"namespace": journey.namespace, "key": journey.key, "service_date": service_date},
+        )
     )
     shape = None
     if include == "shape" and row["shape_id"] is not None:
@@ -111,29 +161,101 @@ def trip(
         **envelope(snap),
         trip_id=trip_id,
         service_date=service_date,
-        journey=None if journey is None else schema.JourneyKey.model_validate(journey),
+        journey=journey,
         line=line(row),
         agency=row["agency"],
         trip_short_name=row["trip_short_name"],
         headsign=row["headsign"],
-        wheelchair_accessible=row["wheelchair_accessible"],
-        bikes_allowed=row["bikes_allowed"],
+        wheelchair_accessible=tristate(row["wheelchair_accessible"]),
+        bikes_allowed=tristate(row["bikes_allowed"]),
+        amenities=amenities(features),
         realtime=None if realtime is None else schema.TripRealtime.model_validate(realtime),
+        vehicles=[schema.TripVehicle.model_validate(v) for v in vehicles],
         run_parts=[schema.TripPart.model_validate(p) for p in parts]
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
-        calls=[schema.TripCall.model_validate(c) for c in snap.all("trip_calls", params)],
-        features=[
-            schema.Feature(
-                scope=f["scope"],
-                kind=f["kind"],
-                call_sequence=f["call_sequence"],
-                call_sequence_to=f["call_sequence_to"],
-                source_code=f["source_code"],
-                note=None
-                if f["note_kind"] is None
-                else schema.Note(kind=f["note_kind"], label=f["note_label"], text=f["note_text"]),
+        calls=[_call(c, features) for c in snap.all("trip_calls", params)],
+        features=features,
+        notes=[f.note for f in features if f.note is not None],
+        connections=[
+            schema.Connection(
+                direction=c["direction"],
+                at_sequence=c["at_sequence"],
+                wait_minutes=c["wait_minutes"],
+                line=c["line"],
+                destination=c["destination"],
+                note=c["note"],
+                trip=None
+                if c["target_trip_id"] is None
+                else schema.TripRef(trip_id=c["target_trip_id"], service_date=service_date),
             )
-            for f in features
+            for c in snap.all("trip_connections", params)
+        ],
+        links=[
+            schema.JourneyLink(
+                kind=k["kind"],
+                journey=schema.JourneyKey(namespace=k["namespace"], key=k["key"]),
+                trip=None
+                if k["trip_id"] is None
+                else schema.TripRef(trip_id=k["trip_id"], service_date=service_date),
+            )
+            for k in links
         ],
         shape=shape,
+    )
+
+
+def _delay(actual: datetime | None, scheduled: datetime | None) -> int | None:
+    if actual is None or scheduled is None:
+        return None
+    return round((actual - scheduled).total_seconds())
+
+
+@router.get(
+    "/journeys/{namespace}/{key}/history",
+    response_model=schema.TripHistory,
+    summary="A journey's recorded runs: actual times and delays per service date",
+)
+def journey_history(
+    response: Response,
+    snap: SnapshotDep,
+    limits: LimitsDep,
+    namespace: str,
+    key: str,
+    since: Annotated[date | None, Query(description="First service date")] = None,
+    until: Annotated[date | None, Query(description="Last service date; default today")] = None,
+) -> schema.TripHistory:
+    realtime_cache(response, limits)
+    start, end = date_span(
+        since,
+        until,
+        local_date(snap.now),
+        limits.history_default_days,
+        limits.history_max_days,
+    )
+    rows = snap.all(
+        "trip_history", {"namespace": namespace, "key": key, "since": start, "until": end}
+    )
+    days: dict[date, tuple[str, list[schema.HistoryCall]]] = {}
+    calls: defaultdict[date, list[schema.HistoryCall]] = defaultdict(list)
+    for r in rows:
+        days.setdefault(r["service_date"], (r["trip_id"], calls[r["service_date"]]))
+        calls[r["service_date"]].append(
+            schema.HistoryCall(
+                location_id=r["location_id"],
+                name=r["name"],
+                scheduled_arrival=r["scheduled_arrival"],
+                scheduled_departure=r["scheduled_departure"],
+                actual_arrival=r["actual_arrival"],
+                actual_departure=r["actual_departure"],
+                arrival_delay_s=_delay(r["actual_arrival"], r["scheduled_arrival"]),
+                departure_delay_s=_delay(r["actual_departure"], r["scheduled_departure"]),
+            )
+        )
+    return schema.TripHistory(
+        **envelope(snap),
+        journey=schema.JourneyKey(namespace=namespace, key=key),
+        days=[
+            schema.HistoryDay(service_date=day, trip_id=trip_id, calls=day_calls)
+            for day, (trip_id, day_calls) in days.items()
+        ],
     )

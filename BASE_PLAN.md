@@ -1970,13 +1970,20 @@ PID, DÚK, SŽ or another provider.
 /tiles/<run-id>/{stops,routes}.pmtiles
 
 /api/v1/status                              release, activation, source freshness
-/api/v1/stops?q=…|bbox=…                    stop places by name (case and diacritics folded)
-/api/v1/stop-places/<id>                    boarding points and lines
-/api/v1/stop-places/<id>/departures         both feeds; scheduled + realtime + forecasts
-/api/v1/trips/<trip_id>/<service_date>      calls, typed features, notes, realtime state
+/api/v1/stops?q=…|bbox=…|near=lat,lon       stop places by name (case and diacritics folded),
+                                            viewport or distance
+/api/v1/stop-places/<id>                    facilities, boarding points and lines
+/api/v1/stop-places/<id>/departures|arrivals
+/api/v1/departures|arrivals?stops=a,b,…     both feeds; scheduled + realtime + the vehicle;
+                                            `next` cursor for the following rows
+/api/v1/trips/<trip_id>/<service_date>      calls, amenities, features, notes, connections,
+                                            journey links, vehicles, realtime state
 /api/v1/trips/by-key/<namespace>/<key>/<service_date>
                                             308 to the trip a source key names
 /api/v1/trips/…/composition?from=<location> pending | fresh | stale (section 28)
+/api/v1/journeys/<namespace>/<key>/history  recorded runs: actual times and delays
+/api/v1/lines?q=…, /api/v1/lines/<route_id>[/trips|/punctuality]
+                                            search, stop patterns, the date's trips, history
 /api/v1/vehicles?bbox=…[&include=unmatched,not_in_service]
 /api/v1/vehicles/<vehicle_id>               or <source>:<source_vehicle_id> when unbound
 /api/v1/alerts
@@ -1984,6 +1991,7 @@ PID, DÚK, SŽ or another provider.
 /api/v1/debug/realtime/instances/<instance> evidence, intervals, inference explanation
 /api/v1/debug/realtime/sources              health per source and channel
 /api/v1/debug/realtime/unmatched            unmatched and ambiguous observations with candidates
+/api/v1/debug/static/trips/<trip_id>        the raw static codes behind the readable features
 ```
 
 - **Trips are identified by the feed's `trip_id` and the service date;** vehicles by their
@@ -2001,6 +2009,14 @@ PID, DÚK, SŽ or another provider.
   OpenAPI schema generates the frontend's TypeScript types. Its limits (search, viewport
   areas, departure lookback, vehicle age, cache ages) are the versioned
   `src/obehy/data/api/api-v1.toml`.
+- **Static codes are readable.** JDF fixed codes (pevné kódy) and CZPTT KADR codes, typed by
+  JrUtil into `assignment.kind`, are answered as labelled features (Czech, English, an icon
+  key), whole-trip `amenities` (wheelchair, bicycles, reservation, …, the strongest statement
+  winning), per-call `flags` and `boarding`/`alighting` (from the GTFS codes), stop
+  `facilities`, calendar designations as text and integrated transport systems by name. The
+  vocabulary is the versioned `src/obehy/data/api/codes-v1.toml`; integrated transport codes
+  come from the CIS JŘ MHD list and, at 30000 + its code, the IDS list. Raw symbols only in
+  `/debug`.
 - The frontend lives in `web/` (Vite, React, MapLibre GL JS) with its own toolchain.
 - Stops and routes are PMTiles, generated per release and served as static files. The base map
   needs no tile server and puts no load on the database.

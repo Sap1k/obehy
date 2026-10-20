@@ -12,6 +12,7 @@ from psycopg_pool import ConnectionPool
 from obehy.api import schema
 from obehy.api.db import Snapshot, snapshot
 from obehy.api.limits import Limits
+from obehy.realtime.times import PRAGUE
 
 
 def _snapshot(request: Request) -> Iterator[Snapshot]:
@@ -27,7 +28,7 @@ LimitsDep = Annotated[Limits, Depends(_limits)]
 
 
 def envelope(snap: Snapshot) -> dict[str, Any]:
-    return {"release_id": snap.release_id, "generated_at": snap.now}
+    return {"release_id": snap.release_id, "generated_at": snap.now.astimezone(PRAGUE)}
 
 
 def realtime_cache(response: Response, limits: Limits) -> None:

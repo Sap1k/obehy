@@ -1,0 +1,109 @@
+# Readable forms of the static timetable codes (BASE_PLAN.md section 30): the JDF fixed codes
+# (pevné kódy) and CZPTT KADR codes that JrUtil types into `assignment.kind`, the calendar
+# designations, GTFS boarding codes and the integrated transport systems. Versioned like the
+# limits: a change of meaning is a new file. `icon` is a stable key for the frontend's icon set.
+codes_version = "1"
+
+# assignment.kind -> group, Czech and English label, icon. Groups: accessibility, bicycles,
+# reservation, onboard, operation (how the trip runs), stopping (a call), facility and
+# interchange (a stop), calendar, note, integrated_transport.
+[kinds]
+note = { group = "note", cs = "Poznámka", en = "Note", icon = "note" }
+calendar_designation = { group = "calendar", cs = "Jede", en = "Runs", icon = "calendar" }
+reservation_available = { group = "reservation", cs = "Místenky", en = "Seat reservation available", icon = "reservation" }
+reservation_required = { group = "reservation", cs = "Povinná místenka", en = "Seat reservation required", icon = "reservation_required" }
+wheelchair_accessible_vehicle = { group = "accessibility", cs = "Vozidlo pro cestující na vozíku", en = "Wheelchair-accessible vehicle", icon = "wheelchair" }
+partly_wheelchair_accessible_vehicle = { group = "accessibility", cs = "Částečně bezbariérové vozidlo", en = "Partly wheelchair-accessible vehicle", icon = "wheelchair_partly" }
+wheelchair_booking_required = { group = "accessibility", cs = "Přepravu vozíku nutno objednat", en = "Wheelchair space must be booked", icon = "wheelchair_booking" }
+wheelchair_booking_recommended = { group = "accessibility", cs = "Přepravu vozíku doporučeno objednat", en = "Wheelchair space booking recommended", icon = "wheelchair_booking" }
+refreshments_on_vehicle = { group = "onboard", cs = "Občerstvení ve vozidle", en = "Refreshments on board", icon = "refreshments" }
+luggage_transport = { group = "onboard", cs = "Přeprava zavazadel", en = "Luggage carried", icon = "luggage" }
+bicycle_transport = { group = "bicycles", cs = "Přeprava jízdních kol", en = "Bicycles carried", icon = "bicycle" }
+bicycle_carry_on = { group = "bicycles", cs = "Kolo jako spoluzavazadlo", en = "Bicycles as hand luggage", icon = "bicycle" }
+bicycle_storage = { group = "bicycles", cs = "Úschovna kol ve vlaku", en = "Bicycle storage on board", icon = "bicycle" }
+bicycle_reservation_available = { group = "bicycles", cs = "Místo pro kolo lze rezervovat", en = "Bicycle space can be reserved", icon = "bicycle_reservation" }
+bicycle_reservation_required = { group = "bicycles", cs = "Povinná rezervace místa pro kolo", en = "Bicycle space reservation required", icon = "bicycle_reservation" }
+bicycle_transport_prohibited = { group = "bicycles", cs = "Přeprava kol vyloučena", en = "No bicycles", icon = "bicycle_none" }
+on_request = { group = "operation", cs = "Na znamení nebo objednávku", en = "On request", icon = "on_request" }
+conditional = { group = "operation", cs = "Jede za podmínky", en = "Runs conditionally", icon = "conditional" }
+self_service_ticketing = { group = "onboard", cs = "Samoobslužný odbavovací systém", en = "Self-service ticketing", icon = "ticket" }
+integrated_transport = { group = "integrated_transport", cs = "Integrovaná doprava", en = "Integrated transport", icon = "integrated" }
+not_stopping = { group = "stopping", cs = "Nezastavuje", en = "Does not stop", icon = "not_stopping" }
+diversion = { group = "operation", cs = "Jede odklonem", en = "Diverted", icon = "diversion" }
+request_stop = { group = "stopping", cs = "Zastávka na znamení", en = "Request stop", icon = "request_stop" }
+exit_only = { group = "stopping", cs = "Jen pro výstup", en = "Exit only", icon = "exit_only" }
+boarding_only = { group = "stopping", cs = "Jen pro nástup", en = "Boarding only", icon = "boarding_only" }
+wheelchair_accessible = { group = "facility", cs = "Bezbariérově přístupné", en = "Wheelchair accessible", icon = "wheelchair" }
+refreshments = { group = "facility", cs = "Občerstvení", en = "Refreshments", icon = "refreshments" }
+toilet = { group = "facility", cs = "WC", en = "Toilet", icon = "toilet" }
+accessible_toilet = { group = "facility", cs = "Bezbariérové WC", en = "Accessible toilet", icon = "toilet_accessible" }
+urban_transport_interchange = { group = "interchange", cs = "Přestup na MHD", en = "Interchange with city transport", icon = "interchange_city" }
+border_control_only = { group = "stopping", cs = "Jen pohraniční kontrola", en = "Border control only", icon = "border" }
+visually_impaired_accessible = { group = "facility", cs = "Přístupné pro nevidomé", en = "Accessible for the visually impaired", icon = "visually_impaired" }
+accessibility_terminal = { group = "facility", cs = "Kontaktní místo pro bezbariérovou přepravu", en = "Accessibility assistance point", icon = "accessibility_point" }
+rail_interchange = { group = "interchange", cs = "Přestup na vlak", en = "Interchange with rail", icon = "interchange_rail" }
+line_interchange = { group = "interchange", cs = "Přestup mezi linkami", en = "Interchange between lines", icon = "interchange_line" }
+metro_interchange = { group = "interchange", cs = "Přestup na metro", en = "Interchange with metro", icon = "interchange_metro" }
+ship_terminal = { group = "interchange", cs = "Přístaviště", en = "Ship terminal", icon = "ship" }
+airport_nearby = { group = "interchange", cs = "Letiště", en = "Airport nearby", icon = "airport" }
+park_and_ride = { group = "facility", cs = "Parkoviště P+R", en = "Park and ride", icon = "park_and_ride" }
+
+# JDF calendar designations: the days a trip runs, as printed on the timetable. The calendar
+# itself is already compiled into the service dates; these are for display.
+[calendar]
+"X" = { cs = "jede v pracovních dnech", en = "runs on working days" }
+"+" = { cs = "jede v neděli a ve státem uznané svátky", en = "runs on Sundays and public holidays" }
+"1" = { cs = "jede v pondělí", en = "runs on Mondays" }
+"2" = { cs = "jede v úterý", en = "runs on Tuesdays" }
+"3" = { cs = "jede ve středu", en = "runs on Wednesdays" }
+"4" = { cs = "jede ve čtvrtek", en = "runs on Thursdays" }
+"5" = { cs = "jede v pátek", en = "runs on Fridays" }
+"6" = { cs = "jede v sobotu", en = "runs on Saturdays" }
+"7" = { cs = "jede v neděli", en = "runs on Sundays" }
+
+# GTFS pickup_type / drop_off_type, as JrUtil projects them.
+[boarding]
+"0" = "regular"
+"1" = "none"
+"2" = "phone"
+"3" = "ask_driver"
+
+# Integrated transport systems by their CIS JŘ code: the MHD list
+# (https://www.cisjr.cz/doc/mhd.htm) as is, and the IDS list
+# (https://www.cisjr.cz/doc/ids.htm) at 30000 + its code (the MHD list itself has IDS JMK as
+# 30621 = 30000 + 621). 30001 (MHD Praha) is PID. Codes in neither list stay bare.
+[integrated_transport]
+"30001" = { name = "MHD Praha", abbreviation = "PID" }
+"30004" = { name = "MHD České Budějovice" }
+"30005" = { name = "MHD Olomouc" }
+"30007" = { name = "MHD Plzeň" }
+"30017" = { name = "MHD Český Těšín" }
+"30018" = { name = "MHD Třinec" }
+"30023" = { name = "MHD Havířov" }
+"30028" = { name = "MHD Žďár nad Sázavou" }
+"30036" = { name = "MHD Karlovy Vary" }
+"30039" = { name = "MHD Chomutov a Jirkov" }
+"30041" = { name = "MHD Jihlava" }
+"30044" = { name = "MHD Ústí nad Labem" }
+"30065" = { name = "MHD Litomyšl" }
+"30069" = { name = "MHD Jáchymov" }
+"30071" = { name = "MHD Velké Meziříčí" }
+"30091" = { name = "MHD Ostrov" }
+"30111" = { name = "Pražská integrovaná doprava", abbreviation = "PID" }
+"30209" = { name = "MHD Duchcov" }
+"30211" = { name = "MHD Kadaň" }
+"30212" = { name = "MHD Klášterec nad Ohří" }
+"30220" = { name = "MHD Nové Město na Moravě" }
+"30311" = { name = "Integrovaný dopravní systém Jihočeského kraje", abbreviation = "IDS JK" }
+"30313" = { name = "Integrovaný dopravní systém Táborska", abbreviation = "IDS TA" }
+"30321" = { name = "Integrovaná doprava Plzeňského kraje", abbreviation = "IDPK" }
+"30411" = { name = "Integrovaný dopravní systém Karlovarského kraje", abbreviation = "IDOK" }
+"30421" = { name = "Doprava Ústeckého kraje", abbreviation = "DÚK" }
+"30512" = { name = "Integrovaný dopravní systém Libereckého kraje", abbreviation = "IDOL" }
+"30521" = { name = "Východočeský dopravní integrovaný systém", abbreviation = "VYDIS" }
+"30522" = { name = "Integrovaná regionální doprava Královéhradeckého a Pardubického kraje", abbreviation = "IREDO" }
+"30621" = { name = "Integrovaný dopravní systém Jihomoravského kraje", abbreviation = "IDS JMK" }
+"30631" = { name = "Veřejná doprava Vysočiny", abbreviation = "VDV" }
+"30711" = { name = "Integrovaný dopravní systém Olomouckého kraje", abbreviation = "IDSOK" }
+"30722" = { name = "Integrovaná doprava Zlínského kraje", abbreviation = "IDZK" }
+"30811" = { name = "Integrovaný dopravní systém Moravskoslezského kraje", abbreviation = "ODIS" }

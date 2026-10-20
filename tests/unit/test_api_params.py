@@ -7,8 +7,13 @@ from datetime import date
 import pytest
 
 from obehy.api.params import (
+    Cursor,
     ParameterError,
+    date_span,
+    decode_cursor,
+    encode_cursor,
     parse_bbox,
+    parse_near,
     schedule_spans,
     search_words,
     split_vehicle_id,
@@ -80,3 +85,31 @@ def test_trip_paths_escape_what_trip_ids_contain() -> None:
     assert by_key_path("cis:line_trip", "100133:1027", date(2026, 10, 15)) == (
         "/api/v1/trips/by-key/cis:line_trip/100133:1027/2026-10-15"
     )
+
+
+def test_a_cursor_round_trips_and_rejects_anything_else() -> None:
+    cursor = Cursor(
+        local("2026-10-06 06:10"),
+        local("2026-10-06 06:00"),
+        "czptt:trip:Pa%3A1:1",
+        date(2026, 10, 5),
+        "jdf:stop:1",
+    )
+    assert decode_cursor(encode_cursor(cursor)) == cursor
+    for bad in ("", "bm90IGEgY3Vyc29y", "e30"):
+        with pytest.raises(ParameterError):
+            decode_cursor(bad)
+
+
+def test_near_and_date_spans() -> None:
+    assert parse_near("50.08,14.43") == (50.08, 14.43)
+    for bad in ("14", "a,b", "95,14"):
+        with pytest.raises(ParameterError):
+            parse_near(bad)
+    today = date(2026, 10, 20)
+    assert date_span(None, None, today, 7, 31) == (date(2026, 10, 14), today)
+    assert date_span(date(2026, 10, 1), date(2026, 10, 3), today, 7, 31)[0] == date(2026, 10, 1)
+    with pytest.raises(ParameterError, match="31 days"):
+        date_span(date(2026, 1, 1), None, today, 7, 31)
+    with pytest.raises(ParameterError, match="after"):
+        date_span(date(2026, 10, 5), date(2026, 10, 4), today, 7, 31)

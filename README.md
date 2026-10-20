@@ -268,12 +268,16 @@ it reads the active release and the worker's realtime state and never calls upst
 uv run obehy api serve --port 8000          # http://127.0.0.1:8000/api/v1/docs
 ```
 
-It answers under `/api/v1`: `status`, `stops?q=|bbox=`, `stop-places/<id>` and its
-`departures?from=&minutes=`, `trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/
-<key>/<service_date>`, which redirects), `vehicles?bbox=` and `vehicles/<source>:<id>`; the
-OpenAPI document is `/api/v1/openapi.json`. Trip IDs go into paths percent-encoded (CZPTT IDs
-contain `%`). Limits are in `src/obehy/data/api/api-v1.toml`. On the server, `deploy/compose.yaml`
-runs it as the `api` service and nginx forwards `/api/` to it.
+It answers under `/api/v1`: `status`; `stops?q=|bbox=|near=`; `stop-places/<id>` with its
+`departures` and `arrivals` (and `departures|arrivals?stops=a,b` for several, paged by `next`);
+`trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/<key>/<service_date>`, which
+redirects); `journeys/<namespace>/<key>/history`; `lines?q=`, `lines/<route_id>` with its
+`trips` and `punctuality`; `vehicles?bbox=` and `vehicles/<source>:<id>`; and the
+unpublished `debug/…`. The interactive docs are `/api/v1/docs`; the OpenAPI document is
+`/api/v1/openapi.json`. Trip IDs go into paths percent-encoded (CZPTT IDs contain `%`).
+Limits are in `src/obehy/data/api/api-v1.toml`, the readable static codes in `codes-v1.toml`
+next to it. On the server, `deploy/compose.yaml` runs it as the `api` service and nginx
+forwards `/api/` to it.
 
 ## Replaying realtime payloads
 

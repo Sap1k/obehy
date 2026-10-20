@@ -105,6 +105,18 @@ INDEXES = (
     Index("assignment_trip", "assignment", ("load_id", "trip_id")),
     Index("assignment_route", "assignment", ("load_id", "route_id")),
     Index("assignment_service", "assignment", ("load_id", "service_id")),
+    # Migration 0012.
+    Index("assignment_location", "assignment", ("load_id", "location_id")),
+    Index("connection_origin", "connection_claim", ("load_id", "origin_trip_id")),
+    Index(
+        "route_name_fold",
+        "route",
+        (
+            "control.obehy_fold(coalesce(short_name, '') || ' ' || coalesce(long_name, ''))"
+            " gin_trgm_ops",
+        ),
+        "gin",
+    ),
 )
 
 

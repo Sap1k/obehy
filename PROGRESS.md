@@ -219,8 +219,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   stop search and viewport, stop places, departures, trips by feed trip ID + service date
   (source keys redirect, older trip IDs answer 410 with their key) and vehicles; the `api`
   service and nginx `/api/` in `deploy/`. The worker also writes `rt.trip_part_current` (each
-  feed trip's slice of its journey's calls) and a vehicle's current part. Open: debug
-  endpoints, alerts, composition, PMTiles, `no_realtime`, merged station boards.
+  feed trip's slice of its journey's calls) and a vehicle's current part. Expanded
+  2026-10-20 (phase A): readable static codes, arrivals, nearby stops, multi-stop boards with
+  a cursor, the vehicle on boards and trips, lines, connections and journey links, journey
+  history and line punctuality, debug endpoints. Next phases: vehicle registry and details,
+  cancellations, alerts (any source, republished in GTFS-RT), lookups and compositions (ČD on
+  request, 55p-style per-unit spans). Open beyond: PMTiles, `no_realtime`, merged station
+  boards.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
   GTFS-RT alerts and departures later.
@@ -257,6 +262,15 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-20** — API phase A (migration 0012): fixed codes readable through
+  `codes-v1.toml` (39 kinds, calendar designations, boarding codes, 34 integrated transport
+  systems from the CIS JŘ MHD and IDS lists), arrivals, `near`, multi-stop boards with a
+  cursor, vehicles on boards and trips, `/lines` (search, patterns, trips, punctuality),
+  connections and journey links, `/journeys/…/history`, `/debug`. Validated: 23 API DB tests,
+  unit tests, ruff, pyright, contracts; on the dev DB (static only): boards 40–340 ms (Florenc),
+  multi-stop 60–125 ms, a PID tram line's patterns 1.1 s and its 486 trips 0.8 s. Starlette's
+  test client decodes `%25` twice (uvicorn once), so encoded CZPTT trip IDs are checked against
+  a live server only.
 - **2026-10-20** — Project API v1 (`BASE_PLAN.md` section 30, migration 0011). Trips are
   addressed by feed `trip_id` + service date; realtime joins by trip ID through the new
   `rt.trip_part_current`, so rail parts get their slice of the run. Validated: 14 API DB tests,

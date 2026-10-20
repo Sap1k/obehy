@@ -21,6 +21,8 @@ import psycopg
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import ConnectionPool
 
+from obehy.realtime.times import Instant, instant
+
 SQL = Path(__file__).resolve().parent / "sql"
 PUBLICATION: LiteralString = (
     "SELECT run_id, activated_at, statement_timestamp() AS now FROM control.publication"
@@ -67,7 +69,7 @@ class Snapshot:
     connection: psycopg.Connection[DictRow]
     release_id: str
     activated_at: datetime
-    now: datetime
+    now: Instant
 
     def all(self, name: str, params: dict[str, Any] | None = None) -> list[DictRow]:
         return self.connection.execute(query(name), params).fetchall()
@@ -81,4 +83,4 @@ def snapshot(pool: ConnectionPool[Any]) -> Iterator[Snapshot]:
         row = cast(psycopg.Connection[DictRow], connection).execute(PUBLICATION).fetchone()
         if row is None or row["run_id"] is None:
             raise NoActiveRelease("no release is active")
-        yield Snapshot(connection, row["run_id"], row["activated_at"], row["now"])
+        yield Snapshot(connection, row["run_id"], row["activated_at"], instant(row["now"]))
