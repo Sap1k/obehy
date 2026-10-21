@@ -100,6 +100,9 @@ from obehy.realtime.facts import (
     TripStatus as TripStatus,
 )
 from obehy.realtime.facts import (
+    VehicleAttribute as VehicleAttribute,
+)
+from obehy.realtime.facts import (
     VehicleKey as VehicleKey,
 )
 from obehy.realtime.times import Instant

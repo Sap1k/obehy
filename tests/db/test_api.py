@@ -12,6 +12,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from obehy.api.app import create_app
+from obehy.realtime.emit.vehicles import VehicleBook
+from obehy.realtime.times import local_date
+from obehy.reference import duk_register, vehicle_list
+from obehy.reference.load import load_dataset
 from obehy.release import activate as activation
 from obehy.release.contract import load_contract
 from obehy.release.load import load_release
@@ -161,7 +165,40 @@ def _vehicles(connection: psycopg.Connection) -> None:
         " ('jdf', 'duk', '1003', 'unmatched', now(), NULL, NULL, NULL, NULL,"
         " 50.681, 14.541, NULL, 'run-a'),"
         " ('czptt', 'sz', '7', 'running', now(), NULL, NULL, NULL, NULL,"
-        " 50.68, 14.54, NULL, 'run-old')"
+        " 50.68, 14.54, NULL, 'run-old'),"
+        # MPVnet reports bus 1001 too, by its plate.
+        " ('jdf', 'mpvnet', '4U1 2345', 'running', now() - interval '50 seconds',"
+        " 'cis:line_trip', '000001:1', '2026-10-06', 'jdf:trip:1', 50.6801, 14.5401, 92,"
+        " 'run-a')"
+    )
+    connection.execute(
+        "INSERT INTO rt.vehicle_attribute_observed VALUES"
+        " ('mpvnet', '4U1 2345', 'licence_plate', '4U1 2345', now(), now()),"
+        " ('duk', '1001', 'low_floor', 'false', now(), now()),"
+        " ('duk', '1001', 'air_conditioning', 'true', now(), now())"
+    )
+    # Before the plate was known both reports ran trip 1 side by side: a pairing candidate.
+    connection.execute(
+        "INSERT INTO rt.vehicle_pairing VALUES ('duk', '1001', 'mpvnet', '4U1 2345',"
+        " now() - interval '2 minutes', now() - interval '1 minute', 2, false,"
+        ' \'{"feed": "jdf", "namespace": "cis:line_trip", "key": "000001:1",'
+        ' "service_date": "2026-10-06"}\')'
+    )
+    # The registry: the DÚK seed knows 1001, our own list adds its plate.
+    load_dataset(
+        connection,
+        duk_register.parse(
+            "vhc_id,model,agency,year_of_manufacture,low_floor,contactless_payments,"
+            "air_conditioning,alternate_fuel,USB_chargers\n"
+            "1001,Iveco Crossway LE LINE 13M,AKV bus,2014,1,0,,0,0\n",
+            "seed-1",
+        ),
+    )
+    load_dataset(
+        connection,
+        vehicle_list.parse(
+            "vehicle_id,licence_plate,operator\nduk:1001,4U1 2345,Arriva\n", "own-1"
+        ),
     )
 
 
@@ -184,6 +221,29 @@ def client(
             _call(2, "jdf:stop:2", "predicted", "2026-10-06T06:25:00"),
         ],
         [("jdf:trip:1", 0, 1)],
+    )
+    connection.execute(
+        "UPDATE rt.trip_state_current SET sources = %s WHERE key = 'P1'",
+        (
+            json.dumps(
+                [
+                    {
+                        "source": "duk",
+                        "heard_at": "2026-10-06T04:09:00+00:00",
+                        "position_at": "2026-10-06T04:09:00+00:00",
+                        "delay_s": 600,
+                        "leads_position": True,
+                    },
+                    {
+                        "source": "pid",
+                        "heard_at": "2026-10-06T06:08:30+02:00",
+                        "position_at": None,
+                        "delay_s": 540,
+                        "leads_position": False,
+                    },
+                ]
+            ),
+        ),
     )
     # The state of an older release is never shown with this one.
     _state(
@@ -252,6 +312,18 @@ def client(
         " ('czptt', 'czptt:train_number', '6599', 'czptt:train_number', '6600', '2026-10-07',"
         "  'continues_as', (SELECT min(derivation_id) FROM history.derivation))"
     )
+    # What the worker does each tick: which vehicle each report is, and the profiles.
+    book = VehicleBook.load(connection)
+    for source, vehicle, seen in connection.execute(
+        "SELECT source, source_vehicle_id, last_seen FROM rt.vehicle_state_current"
+    ).fetchall():
+        vehicle_id, bound_by = book.identify((source, vehicle), local_date(seen))
+        connection.execute(
+            "UPDATE rt.vehicle_state_current SET vehicle_id = %s, bound_by = %s"
+            " WHERE source = %s AND source_vehicle_id = %s",
+            (vehicle_id, bound_by, source, vehicle),
+        )
+    book.write(connection, [])
     with TestClient(create_app(database_url), follow_redirects=False) as test_client:
         yield test_client
 
@@ -415,7 +487,8 @@ def test_vehicles_fresh_in_the_viewport_of_this_release(client: TestClient) -> N
     ]
     _get(client, "/vehicles", 422, bbox=box, include="parked")
     assert _get(client, "/vehicles/duk:1001")["vehicle"]["state"] == "running"
-    _get(client, "/vehicles/duk:1002", 404)  # older than the maximum age
+    old = _get(client, "/vehicles/duk:1002")  # older than the maximum age: no current state
+    assert (old["vehicle"], [r["source"] for r in old["reports"]]) == (None, ["duk"])
 
 
 def test_no_active_release_is_a_503(database_url: str) -> None:
@@ -440,10 +513,19 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/journeys/{namespace}/{key}/history",
         "/api/v1/lines",
         "/api/v1/lines/{route_id}",
+        "/api/v1/lines/{route_id}/timetable",
         "/api/v1/lines/{route_id}/trips",
         "/api/v1/lines/{route_id}/punctuality",
         "/api/v1/vehicles",
         "/api/v1/vehicles/{vehicle_id}",
+        "/api/v1/debug/release",
+        "/api/v1/debug/realtime/sources",
+        "/api/v1/debug/realtime/unmatched",
+        "/api/v1/debug/realtime/instances/{feed}/{namespace}/{key}/{service_date}",
+        "/api/v1/debug/vehicles/pairings",
+        "/api/v1/debug/vehicles/registry",
+        "/api/v1/debug/vehicles/{vehicle_id}",
+        "/api/v1/debug/static/trips/{trip_id}",
     }
 
 
@@ -455,20 +537,26 @@ def test_fixed_codes_are_readable(client: TestClient) -> None:
         {"code": "30001", "name": "MHD Praha", "abbreviation": "PID"}
     ]
     assert [o["cs"] for o in amenities["operates"]] == ["jede v pracovních dnech"]
-    assert all("source_code" not in f for f in trip["features"])
-    request_stop = next(f for f in trip["features"] if f["kind"] == "on_request")
-    assert (request_stop["label"]["en"], request_stop["from_sequence"]) == ("On request", 2)
-    # The first call is boarding only (no drop-off), the second a request stop (T).
+    assert all(f["source_code"] is None or f["official"] for f in trip["features"])
+    on_order = next(f for f in trip["features"] if "on_request" in f["kinds"])
+    assert (on_order["label"]["cs"], on_order["from_sequence"]) == (
+        "spoj zastávku obsluhuje jen na objednání",
+        2,
+    )
+    # The origin takes no drop-off, as every origin: no flag. The second call is on order (T).
     first, second = trip["calls"]
     assert (first["boarding"], first["alighting"], first["flags"]) == (
         "regular",
         "none",
-        ["boarding_only"],
+        [],
     )
-    assert second["flags"] == ["request_stop"]
+    assert second["flags"] == ["on_request"]
     place = _get(client, "/stop-places/jdf:stop:1")
     assert place["wheelchair_boarding"] is True
-    assert sorted(f["kind"] for f in place["facilities"]) == ["toilet", "wheelchair_accessible"]
+    assert sorted(k for f in place["facilities"] for k in f["kinds"]) == [
+        "toilet",
+        "wheelchair_accessible",
+    ]
     raw = _get(client, "/debug/static/trips/jdf:trip:1")["assignments"]
     assert {"X", "@", "O", "T"} <= {a["source_code"] for a in raw}
 
@@ -515,19 +603,42 @@ def test_the_vehicle_on_a_board_row_and_a_trip(client: TestClient) -> None:
     assert _get(client, "/trips/jdf:trip:1/2026-10-05")["vehicles"] == []
 
 
-def test_lines_search_patterns_and_trips(client: TestClient) -> None:
+def test_a_line_overview_timetable_and_live_trips(client: TestClient) -> None:
     (found,) = _get(client, "/lines", q="1")["lines"]
     assert found["line"]["route_id"] == "jdf:route:000001"
     detail = _get(client, "/lines/jdf:route:000001", date="2026-10-05", include="shape")
+    assert (detail["runs_from"], detail["runs_until"]) == ("2026-10-05", "2026-10-10")
+    assert detail["integrated_transport"] == [
+        {"code": "30001", "name": "MHD Praha", "abbreviation": "PID"}
+    ]
+    assert [f["kinds"] for f in detail["features"]] == [["integrated_transport"]]
+    assert detail["day"] == {
+        "trips": 2,
+        "first_departure": "2026-10-05T06:00:00+02:00",
+        "last_departure": "2026-10-06T00:30:00+02:00",  # 24:30
+    }
     (pattern,) = detail["patterns"]
     assert pattern["trips"] == 2 and pattern["shape"]["type"] == "LineString"
+    assert (pattern["first_departure"], pattern["last_departure"]) == (
+        "2026-10-05T06:00:00+02:00",
+        "2026-10-06T00:30:00+02:00",
+    )
     assert [s["location_id"] for s in pattern["stops"]] == ["jdf:stop:1", "jdf:stop:2"]
+    (columns,) = _get(client, "/lines/jdf:route:000001/timetable", date="2026-10-05")["patterns"]
+    assert [(t["trip_id"], t["times"]) for t in columns["trips"]] == [
+        ("jdf:trip:1", ["2026-10-05T06:00:00+02:00", "2026-10-05T06:15:00+02:00"]),
+        ("jdf:trip:2", ["2026-10-06T00:30:00+02:00", "2026-10-06T00:45:00+02:00"]),
+    ]
     trips = _get(client, "/lines/jdf:route:000001/trips", date="2026-10-06")["trips"]
-    assert [(t["trip_id"], t["lifecycle"], t["delay_s"]) for t in trips] == [
-        ("jdf:trip:1", "running", 600),
-        ("jdf:trip:2", None, None),
+    assert [
+        (t["trip_id"], t["lifecycle"], t["delay_s"], [v["vehicle_id"] for v in t["vehicles"]])
+        for t in trips
+    ] == [
+        ("jdf:trip:1", "running", 600, ["duk:1001"]),
+        ("jdf:trip:2", None, None, []),
     ]
     _get(client, "/lines/jdf:route:nope", 404)
+    _get(client, "/lines/jdf:route:nope/timetable", 404)
 
 
 def test_connections_and_journey_links_of_a_trip(client: TestClient) -> None:
@@ -567,5 +678,110 @@ def test_debug_shows_a_journey_and_its_parts(client: TestClient) -> None:
     body = _get(client, "/debug/realtime/instances/jdf/pid:gtfs_trip_id/P1/2026-10-06")
     assert body["state"]["trip_id"] == "jdf:trip:1"
     assert [p["trip_id"] for p in body["parts"]] == ["jdf:trip:1"]
-    assert _get(client, "/debug/realtime/sources")["channels"] == []
+    assert [v["source"] for v in body["vehicles"]] == ["duk"]
+    sources = _get(client, "/debug/realtime/sources")
+    assert sources["channels"] == []
+    assert [
+        (c["source"], c["vehicles"], c["on_trips"], c["registered"], c["journeys"], c["leads"])
+        for c in sources["current"]
+    ] == [("duk", 2, 1, 1, 1, 1), ("mpvnet", 1, 1, 1, 0, 0), ("pid", 0, 0, 0, 1, 0)]
     assert _get(client, "/debug/realtime/unmatched")["groups"] == []
+    release = _get(client, "/debug/release")["release"]
+    assert release["run_id"] == "run-a"
+    assert [p["package"] for p in release["packages"]] == ["czptt", "jdf"]
+    assert [h["action"] for h in release["history"]] == ["activate"]
+
+
+def test_debug_shows_why_a_vehicle_is_what_it_is(client: TestClient) -> None:
+    body = _get(client, "/debug/vehicles/duk:1001")
+    assert sorted((r["source"], r["bound_by"]) for r in body["reports"]) == [
+        ("duk", "source"),
+        ("mpvnet", "identifier"),
+    ]
+    assert sorted(
+        (k["dataset"], k["source"] or k["scheme"], k["source_vehicle_id"] or k["identifier"])
+        for k in body["keys"]
+    ) == [("duk-register", "duk", "1001"), ("vehicles", "licence_plate", "4U12345")]
+    assert sorted((o["source"], o["attribute"]) for o in body["observed"]) == [
+        ("duk", "air_conditioning"),
+        ("duk", "low_floor"),
+        ("mpvnet", "licence_plate"),
+    ]
+    assert body["profile"]["registered"] is True
+    assert [p["source_b"] for p in body["pairings"]] == ["mpvnet"]
+    (pairing,) = _get(client, "/debug/vehicles/pairings", confirmed="false")["pairings"]
+    assert (pairing["vehicle_a"], pairing["vehicle_b"], pairing["bound_by_b"]) == (
+        "duk:1001",
+        "duk:1001",
+        "identifier",
+    )
+    assert _get(client, "/debug/vehicles/pairings", confirmed="true")["pairings"] == []
+    registry = _get(client, "/debug/vehicles/registry")
+    assert [(d["dataset"], d["vehicles"], d["source_keys"]) for d in registry["datasets"]] == [
+        ("vehicles", 1, 0),
+        ("duk-register", 1, 1),
+    ]
+    assert registry["datasets"][0]["identifier_keys"] == {"licence_plate": 1}
+    assert registry["profiles"]["registered"] == 1
+    # The register says low floor, DÚK live says not; the register's operator is not ours.
+    assert registry["conflicts"] == [
+        {"vehicle_id": "duk:1001", "attributes": ["low_floor", "operator"]}
+    ]
+    _get(client, "/debug/vehicles/nope:1", 404)
+
+
+def test_one_registered_vehicle_seen_by_two_sources(client: TestClient) -> None:
+    (bus,) = _get(client, "/vehicles", bbox="14.5,50.6,14.6,50.7")["vehicles"]
+    assert (bus["vehicle_id"], bus["sources"], bus["source"]) == (
+        "duk:1001",
+        ["duk", "mpvnet"],
+        "duk",  # the freshest report
+    )
+    detail = _get(client, "/vehicles/duk:1001")
+    assert [(r["source"], r["bound_by"]) for r in detail["reports"]] == [
+        ("duk", "source"),
+        ("mpvnet", "identifier"),
+    ]
+    assert detail["registry"]["datasets"] == ["vehicles", "duk-register"]
+    assert detail["registry"]["model"] == "Iveco Crossway LE LINE 13M"
+    found = {a["attribute"]: a for a in detail["attributes"]}
+    # Instants stored in jsonb (UTC) are answered in Prague time like every other time.
+    stated = [s["observed_at"] for a in found.values() for s in a["statements"]]
+    assert stated and all(t is None or t.endswith(("+01:00", "+02:00")) for t in stated)
+    # The register says low floor, DÚK live says no: the registry wins, the clash shows.
+    assert (found["low_floor"]["value"], found["low_floor"]["conflict"]) == ("true", True)
+    assert [s["origin"] for s in found["low_floor"]["statements"]] == ["curated", "live"]
+    # Our own list beats the seed on the operator, and states the plate MPVnet reports.
+    assert (found["operator"]["value"], found["operator"]["source"]) == ("Arriva", "vehicles")
+    assert (found["licence_plate"]["value"], found["licence_plate"]["origin"]) == (
+        "4U1 2345",
+        "curated",
+    )
+    assert found["air_conditioning"]["value"] == "true"  # only live states it
+    _get(client, "/vehicles/duk:9999", 404)
+    _get(client, "/vehicles/nonsense", 404)
+
+
+def test_boards_and_trips_name_the_vehicle_traits_and_realtime_sources(client: TestClient) -> None:
+    (row,) = _get(client, "/stop-places/jdf:stop:1/departures", start="2026-10-06T06:05:00+02:00")[
+        "departures"
+    ]
+    assert row["sources"] == ["duk", "pid"]
+    assert (row["vehicle"]["vehicle_id"], row["vehicle"]["traits"]["low_floor"]) == (
+        "duk:1001",
+        True,
+    )
+    trip = _get(client, "/trips/jdf:trip:1/2026-10-06")
+    sources = trip["realtime"]["sources"]
+    assert [(s["source"], s["label"]["cs"], s["leads_position"]) for s in sources] == [
+        ("duk", "DÚK", True),
+        ("pid", "PID", False),
+    ]
+    # Stored as the worker's UTC instants, answered in Prague time like every other time.
+    assert (sources[0]["heard_at"], sources[0]["position_at"]) == (
+        "2026-10-06T06:09:00+02:00",
+        "2026-10-06T06:09:00+02:00",
+    )
+    assert [(v["vehicle_id"], v["sources"]) for v in trip["vehicles"]] == [
+        ("duk:1001", ["duk", "mpvnet"])
+    ]

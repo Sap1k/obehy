@@ -1,0 +1,61 @@
+# The closed vocabulary of vehicle attributes (BASE_PLAN.md section 27). Connectors and the
+# reference importers map their fields onto it; a field without a home is kept as
+# `raw:<source>:<field>`. Values are text: `true`/`false` for bool, digits for int.
+attributes_version = "1"
+
+# A live value seen again is written (its last_seen moved) at most this often.
+touch_s = 3600
+
+# Who wins when statements about one vehicle clash. A curated value (the registry) always
+# wins; then a live one, from the source listed first (per attribute where that attribute
+# names its own order, else `live_sources`; unlisted sources after), the most recent first
+# among equals; then the model's default. Every disagreement is flagged, none is dropped.
+# Two sources' reports are one vehicle only when the registry binds both to it.
+[precedence]
+live_sources = ["pid", "duk", "dpmd", "mpvnet", "arriva-express", "sz-mapa", "sz-tabule"]
+
+[precedence.attributes]
+# Golemio's agency_name.real is the operator actually running the trip.
+operator = ["pid"]
+
+# The identifiers a vehicle can be known by beside a source's vehicle ID: a registry key of
+# this kind binds any source report stating the same value live (an MPVnet plate, a 55p series
+# number). How each is compared: `letters_digits` (upper case) or `digits`.
+[identifiers]
+licence_plate = "letters_digits"
+evn = "digits"
+series_number = "digits"
+
+# Two sources' reports of one journey running side by side are one vehicle while the evidence
+# holds, even unregistered (`bound_by = co_located`); each pairing is also a candidate key for
+# the registry. Close: fixes at most `max_fix_gap_s` apart, within `distance_m`; confirmed after
+# `confirm_s` and `min_fixes` such fixes; dropped when apart by `apart_m`, or `hold_s` after the
+# last close fix.
+[pairing]
+distance_m = 250
+apart_m = 1000
+max_fix_gap_s = 60
+min_fixes = 3
+confirm_s = 120
+hold_s = 3600
+
+[attributes]
+low_floor = { type = "bool", cs = "Nízkopodlažní", en = "Low floor", icon = "low_floor" }
+wheelchair_accessible = { type = "bool", cs = "Pro cestující na vozíku", en = "Wheelchair accessible", icon = "wheelchair" }
+air_conditioning = { type = "bool", cs = "Klimatizace", en = "Air conditioning", icon = "air_conditioning" }
+usb = { type = "bool", cs = "USB nabíječky", en = "USB chargers", icon = "usb" }
+wifi = { type = "bool", cs = "Wi-Fi", en = "Wi-Fi", icon = "wifi" }
+power_sockets = { type = "bool", cs = "Zásuvky", en = "Power sockets", icon = "power_socket" }
+contactless_payment = { type = "bool", cs = "Platba kartou", en = "Contactless payment", icon = "contactless" }
+alternative_fuel = { type = "bool", cs = "Alternativní pohon", en = "Alternative fuel", icon = "alternative_fuel" }
+fuel = { type = "text", cs = "Pohon", en = "Fuel", icon = "fuel" }
+manufacturer = { type = "text", cs = "Výrobce", en = "Manufacturer", icon = "manufacturer" }
+model = { type = "text", cs = "Typ", en = "Model", icon = "model" }
+year = { type = "int", cs = "Rok výroby", en = "Year built", icon = "year" }
+capacity = { type = "int", cs = "Kapacita", en = "Capacity", icon = "capacity" }
+licence_plate = { type = "text", cs = "SPZ", en = "Licence plate", icon = "plate" }
+fleet_number = { type = "text", cs = "Evidenční číslo", en = "Fleet number", icon = "fleet_number" }
+evn = { type = "text", cs = "Evropské číslo vozidla (EVN)", en = "European vehicle number (EVN)", icon = "evn" }
+series_number = { type = "text", cs = "Řada a číslo", en = "Series and number", icon = "series_number" }
+operator = { type = "text", cs = "Dopravce", en = "Operator", icon = "operator" }
+category = { type = "text", cs = "Druh vozidla", en = "Vehicle category", icon = "category" }

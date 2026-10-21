@@ -272,12 +272,30 @@ It answers under `/api/v1`: `status`; `stops?q=|bbox=|near=`; `stop-places/<id>`
 `departures` and `arrivals` (and `departures|arrivals?stops=a,b` for several, paged by `next`);
 `trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/<key>/<service_date>`, which
 redirects); `journeys/<namespace>/<key>/history`; `lines?q=`, `lines/<route_id>` with its
-`trips` and `punctuality`; `vehicles?bbox=` and `vehicles/<source>:<id>`; and the
-unpublished `debug/…`. The interactive docs are `/api/v1/docs`; the OpenAPI document is
+`timetable`, `trips` and `punctuality`; `vehicles?bbox=` and `vehicles/<vehicle_id>`; and
+`debug/…` (raw rows, uncached, shapes may change). The interactive docs are
+`/api/v1/docs`; the OpenAPI document is
 `/api/v1/openapi.json`. Trip IDs go into paths percent-encoded (CZPTT IDs contain `%`).
 Limits are in `src/obehy/data/api/api-v1.toml`, the readable static codes in `codes-v1.toml`
 next to it. On the server, `deploy/compose.yaml` runs it as the `api` service and nginx
 forwards `/api/` to it.
+
+## Vehicle registry
+
+`obehy ref import <dataset>` mirrors a curated vehicle dataset into `ref.*` (`BASE_PLAN.md`
+section 27) and tells a running worker to reload it. `vehicles` is Oběhy's own list (CSV in
+`jrunify-ext-geodata/vehicles/`: `vehicle_id`, a source key or identifiers such as
+`licence_plate`, `evn`, `series_number`, and attributes); `duk-register` is a private seed and
+is never committed. The file comes from `--path` or `[reference]` in the config; an unchanged
+version is skipped.
+
+```powershell
+uv run obehy ref import vehicles --path D:\src\jrunify-ext-geodata\vehicles\vehicles.csv
+uv run obehy ref import duk-register                # [reference] duk-register in the config
+```
+
+`/api/v1/debug/vehicles/registry` shows what each dataset holds and where sources disagree;
+`/api/v1/debug/vehicles/pairings` lists reports seen running side by side, candidates for keys.
 
 ## Replaying realtime payloads
 

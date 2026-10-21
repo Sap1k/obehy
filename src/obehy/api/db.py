@@ -42,7 +42,10 @@ def query(name: str) -> LiteralString:
 
 def _configure(connection: psycopg.Connection[DictRow]) -> None:
     connection.autocommit = True
-    connection.execute("SET TIME ZONE 'Europe/Prague'")
+    # SQL works in UTC, like the instants the worker stores (in columns and in jsonb); local
+    # time in SQL is always explicit (`AT TIME ZONE 'Europe/Prague'`, `obehy_instant`). The
+    # response models answer in Prague time (`schema.Time`).
+    connection.execute("SET TIME ZONE 'UTC'")
     connection.read_only = True
     connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
     connection.autocommit = False

@@ -24,13 +24,14 @@ from obehy.realtime.model import (
     SourceDeparture,
     SourceState,
     TripKey,
+    VehicleAttribute,
     VehicleKey,
 )
 from obehy.realtime.times import Instant, instant, read_unless_offset_twice, within_skew
 
 SOURCE = "duk"
 CHANNEL = "vehicles"
-DECODER_VERSION = 3
+DECODER_VERSION = 4
 
 OFF = 255
 PRE_TRIP_STATES = frozenset({2, 3})
@@ -126,6 +127,13 @@ def _entry(
     if isinstance(delay, int) and not isinstance(delay, bool):
         facts.append(Delay(delay * 60, "unknown"))
     facts.append(SourceState("pre_trip" if state in PRE_TRIP_STATES else "running"))
+    for field, attribute in (
+        ("HasLowfloor", "low_floor"),
+        ("isAirConditioned", "air_conditioning"),
+    ):
+        value = entry.get(field)
+        if isinstance(value, bool):
+            facts.append(VehicleAttribute(attribute, "true" if value else "false"))
     departure = _time(entry.get("TODepartureDT"))
     if departure is not None:
         facts.append(SourceDeparture(departure))

@@ -16,6 +16,7 @@ from typing import Any, LiteralString, cast
 import psycopg
 from psycopg import sql
 
+from obehy.realtime.emit.vehicles import VehicleBook
 from obehy.realtime.model import (
     AssignVehicle,
     CallState,
@@ -37,6 +38,7 @@ from obehy.realtime.model import (
 )
 from obehy.realtime.model_json import facts_to_json
 from obehy.realtime.runs import current_part, published_parts
+from obehy.realtime.times import local_date
 
 HISTORY_TABLES = (
     "journey",
@@ -72,6 +74,8 @@ class Writer:
     # Per feed, the current-state rows last written (a feed not in it is rewritten in full)
     # and each journey's calls JSON with the calls tuple it was made from.
     _state: dict[Feed, _Written] = field(default_factory=dict[Feed, "_Written"])
+    # Which vehicle each report is, live attributes and profiles (emit/vehicles.py).
+    vehicles: VehicleBook = field(init=False)
 
     def __post_init__(self) -> None:
         d = self.derivation
@@ -87,6 +91,12 @@ class Writer:
         ).fetchone()
         assert row is not None
         self.derivation_id = cast(int, row[0])
+        self.vehicles = VehicleBook.load(self.connection)
+
+    def reload_registry(self) -> None:
+        """`obehy ref import` loaded a dataset: identities and profiles are redone."""
+
+        self.vehicles.reload(self.connection)
 
     # --- partitions ---------------------------------------------------------------------------
 
@@ -145,6 +155,7 @@ class Writer:
             self._assignments(results, assigned)
             self._links(links)
             self._platforms(platforms)
+            self.vehicles.write(self.connection, self.vehicles.observe(results))
 
     def _observations(self, results: Sequence[ObservationResult]) -> None:
         if not results:
@@ -412,6 +423,7 @@ class Writer:
 
         release_id = self.derivation.release_id
         written: dict[Feed, _Written] = {}
+        self.vehicles.track(states)  # pairings first: they may change who a report is
         try:
             with self.connection.transaction():
                 for feed, state in sorted(states.items()):
@@ -419,7 +431,7 @@ class Writer:
                     now = _Written(
                         {
                             (feed, v.source, v.source_vehicle_id): _vehicle_row(
-                                feed, v, current, state, release_id
+                                feed, v, current, state, self.vehicles, release_id
                             )
                             for v, current in state.vehicles.items()
                         },
@@ -441,6 +453,8 @@ class Writer:
                     self._write_table(feed, _TRIPS, now.trips, before and before.trips)
                     self._write_table(feed, _PARTS, now.parts, before and before.parts)
                     written[feed] = now
+                # Profiles of vehicles whose identity changed with these rows.
+                self.vehicles.write(self.connection, [])
         except BaseException:
             self._state.clear()  # unknown what was written: rewrite in full next time
             raise
@@ -550,6 +564,8 @@ _VEHICLES = _Table(
         "bearing",
         "reason",
         "release_id",
+        "vehicle_id",
+        "bound_by",
     ),
     ("feed", "source", "source_vehicle_id"),
     ("text", "text", "text"),
@@ -569,6 +585,7 @@ _TRIPS = _Table(
         "stale",
         "updated_at",
         "calls",
+        "sources",
     ),
     ("feed", "key_namespace", "key", "service_date"),
     ("text", "text", "text", "date"),
@@ -601,7 +618,12 @@ class _Written:
 
 
 def _vehicle_row(
-    feed: Feed, vehicle: VehicleId, v: VehicleState, state: FeedState, release_id: str
+    feed: Feed,
+    vehicle: VehicleId,
+    v: VehicleState,
+    state: FeedState,
+    book: VehicleBook,
+    release_id: str,
 ) -> tuple[Any, ...]:
     """The vehicle's trip is the feed trip it is on: on a rail run, the part it is driving."""
 
@@ -623,6 +645,7 @@ def _vehicle_row(
         None if v.position is None else v.position.bearing,
         None if v.reason is None else v.reason.value,
         release_id,
+        *book.identify((vehicle.source, vehicle.source_vehicle_id), local_date(v.last_seen)),
     )
 
 
@@ -641,7 +664,23 @@ def _trip_row(i: Instance, calls: str) -> tuple[Any, ...]:
         i.freshness.stale,
         i.freshness.updated_at,
         calls,
+        json.dumps(_sources_json(i)),
     )
+
+
+def _sources_json(i: Instance) -> list[dict[str, Any]]:
+    """Which sources the journey's realtime came from (the API's provenance), by source."""
+
+    return [
+        {
+            "source": t.source,
+            "heard_at": _iso(t.heard_at),
+            "position_at": _iso(t.position_at),
+            "delay_s": t.delay_s,
+            "leads_position": t.source == i.track_source,
+        }
+        for t in sorted(i.sources, key=lambda t: t.source)
+    ]
 
 
 def _iso(value: datetime | None) -> str | None:

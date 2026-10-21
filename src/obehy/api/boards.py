@@ -10,7 +10,14 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from psycopg.rows import DictRow
 
 from obehy.api import schema
-from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
+from obehy.api.common import (
+    LimitsDep,
+    SnapshotDep,
+    envelope,
+    line,
+    realtime_cache,
+    traits,
+)
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
 from obehy.api.params import (
@@ -32,16 +39,17 @@ Limit = Annotated[int | None, Query(ge=1)]
 CursorParam = Annotated[str | None, Query(alias="cursor", description="`next` of a previous page")]
 
 
-def _stops(snap: Snapshot, ids: list[str]) -> list[schema.Stop]:
-    """The stop places named (a boarding point names its stop place), in the order given."""
+def stop_places(snap: Snapshot, ids: list[str]) -> list[schema.Stop]:
+    """The stop places named, in the order given, once each (a boarding point names its stop
+    place); 404 for any that is none."""
 
+    rows = snap.all("stops_by_id", {"location_ids": ids})
+    missing = sorted(set(ids) - {r["asked"] for r in rows})
+    if missing:
+        raise HTTPException(404, f"no stop place {', '.join(missing)}")
     found: dict[str, schema.Stop] = {}
-    for location_id in ids:
-        row = snap.one("stop", {"location_id": location_id})
-        if row is None:
-            raise HTTPException(404, f"no stop place {location_id}")
-        stop = schema.Stop.model_validate(row)
-        found.setdefault(stop.location_id, stop)
+    for r in rows:
+        found.setdefault(r["location_id"], schema.Stop.model_validate(r))
     return list(found.values())
 
 
@@ -55,6 +63,8 @@ def _vehicle(r: DictRow) -> schema.TripVehicle | None:
         latitude=r["vehicle_latitude"],
         longitude=r["vehicle_longitude"],
         bearing=r["vehicle_bearing"],
+        traits=traits(r),
+        sources=sorted(set(r["vehicle_sources"] or [])),
     )
 
 
@@ -114,6 +124,7 @@ def _board(
             stale=r["stale"],
             platform=r["platform"],
             vehicle=_vehicle(r),
+            sources=list(r["sources"] or []),
         )
         for r in rows
     ]
@@ -136,6 +147,47 @@ def _ids(stops: str) -> list[str]:
     return [s for s in (part.strip() for part in stops.split(",")) if s]
 
 
+def _respond(
+    response: Response,
+    snap: Snapshot,
+    limits: Limits,
+    ids: list[str],
+    *,
+    arrivals: bool,
+    start: datetime | None,
+    minutes: int | None,
+    limit: int | None,
+    cursor: str | None,
+) -> dict[str, Any]:
+    realtime_cache(response, limits)
+    if not ids:
+        raise ParameterError("name at least one stop place")
+    if len(ids) > limits.board_stops_max:
+        raise ParameterError(f"at most {limits.board_stops_max} stop places")
+    stops = stop_places(snap, ids)
+    since, until, rows, following = _board(
+        snap,
+        limits,
+        stops,
+        arrivals=arrivals,
+        start=start,
+        minutes=minutes,
+        limit=limit,
+        cursor=cursor,
+    )
+    return envelope(snap) | {
+        "stop": stops[0],
+        "stops": stops,
+        "since": since,
+        "until": until,
+        "arrivals" if arrivals else "departures": rows,
+        "next": following,
+    }
+
+
+StopsParam = Annotated[str, Query(description="Comma-separated stop place IDs")]
+
+
 @router.get(
     "/stop-places/{location_id}/departures",
     response_model=schema.Departures,
@@ -152,7 +204,18 @@ def departures(
     limit: Limit = None,
     cursor: CursorParam = None,
 ) -> schema.Departures:
-    return _departures(response, snap, limits, [location_id], start, minutes, limit, cursor)
+    body = _respond(
+        response,
+        snap,
+        limits,
+        [location_id],
+        arrivals=False,
+        start=start,
+        minutes=minutes,
+        limit=limit,
+        cursor=cursor,
+    )
+    return schema.Departures(**body)
 
 
 @router.get(
@@ -165,46 +228,24 @@ def departures_of(
     response: Response,
     snap: SnapshotDep,
     limits: LimitsDep,
-    stops: Annotated[str, Query(description="Comma-separated stop place IDs")],
+    stops: StopsParam,
     start: Start = None,
     minutes: Minutes = None,
     limit: Limit = None,
     cursor: CursorParam = None,
 ) -> schema.Departures:
-    return _departures(response, snap, limits, _ids(stops), start, minutes, limit, cursor)
-
-
-def _departures(
-    response: Response,
-    snap: Snapshot,
-    limits: Limits,
-    ids: list[str],
-    start: datetime | None,
-    minutes: int | None,
-    limit: int | None,
-    cursor: str | None,
-) -> schema.Departures:
-    realtime_cache(response, limits)
-    stops = _checked(snap, limits, ids)
-    since, until, rows, following = _board(
+    body = _respond(
+        response,
         snap,
         limits,
-        stops,
+        _ids(stops),
         arrivals=False,
         start=start,
         minutes=minutes,
         limit=limit,
         cursor=cursor,
     )
-    return schema.Departures(
-        **envelope(snap),
-        stop=stops[0],
-        stops=stops,
-        since=since,
-        until=until,
-        departures=rows,
-        next=following,
-    )
+    return schema.Departures(**body)
 
 
 @router.get(
@@ -223,7 +264,18 @@ def arrivals(
     limit: Limit = None,
     cursor: CursorParam = None,
 ) -> schema.Arrivals:
-    return _arrivals(response, snap, limits, [location_id], start, minutes, limit, cursor)
+    body = _respond(
+        response,
+        snap,
+        limits,
+        [location_id],
+        arrivals=True,
+        start=start,
+        minutes=minutes,
+        limit=limit,
+        cursor=cursor,
+    )
+    return schema.Arrivals(**body)
 
 
 @router.get(
@@ -236,51 +288,21 @@ def arrivals_of(
     response: Response,
     snap: SnapshotDep,
     limits: LimitsDep,
-    stops: Annotated[str, Query(description="Comma-separated stop place IDs")],
+    stops: StopsParam,
     start: Start = None,
     minutes: Minutes = None,
     limit: Limit = None,
     cursor: CursorParam = None,
 ) -> schema.Arrivals:
-    return _arrivals(response, snap, limits, _ids(stops), start, minutes, limit, cursor)
-
-
-def _arrivals(
-    response: Response,
-    snap: Snapshot,
-    limits: Limits,
-    ids: list[str],
-    start: datetime | None,
-    minutes: int | None,
-    limit: int | None,
-    cursor: str | None,
-) -> schema.Arrivals:
-    realtime_cache(response, limits)
-    stops = _checked(snap, limits, ids)
-    since, until, rows, following = _board(
+    body = _respond(
+        response,
         snap,
         limits,
-        stops,
+        _ids(stops),
         arrivals=True,
         start=start,
         minutes=minutes,
         limit=limit,
         cursor=cursor,
     )
-    return schema.Arrivals(
-        **envelope(snap),
-        stop=stops[0],
-        stops=stops,
-        since=since,
-        until=until,
-        arrivals=rows,
-        next=following,
-    )
-
-
-def _checked(snap: Snapshot, limits: Limits, ids: list[str]) -> list[schema.Stop]:
-    if not ids:
-        raise ParameterError("name at least one stop place")
-    if len(ids) > limits.board_stops_max:
-        raise ParameterError(f"at most {limits.board_stops_max} stop places")
-    return _stops(snap, ids)
+    return schema.Arrivals(**body)

@@ -1,6 +1,7 @@
 -- Typed features and notes of a trip, its calls, its route and its service.
 SELECT a.scope, a.kind, a.call_sequence, a.call_sequence_to, a.source_code,
-       n.kind AS note_kind, n.label AS note_label, n.text AS note_text
+       n.kind AS note_kind, n.label AS note_label, n.text AS note_text,
+       n.service_note_type AS note_code
 FROM active.assignment a
 LEFT JOIN active.service_note n ON n.note_id = a.note_id
 WHERE (a.scope IN ('trip', 'call', 'call_range') AND a.trip_id = %(trip_id)s)

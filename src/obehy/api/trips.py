@@ -17,8 +17,15 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from psycopg.rows import DictRow
 
 from obehy.api import schema
-from obehy.api.codes import amenities, call_flags, feature, load_codes, tristate
-from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
+from obehy.api.codes import amenities, call_flags, features, load_codes, tristate
+from obehy.api.common import (
+    LimitsDep,
+    SnapshotDep,
+    envelope,
+    line,
+    realtime_cache,
+    trip_vehicle,
+)
 from obehy.api.params import date_span
 from obehy.realtime.times import local_date
 
@@ -63,17 +70,13 @@ def trip_by_key(
     return RedirectResponse(trip_path(rows[0]["trip_id"], service_date), status_code=308)
 
 
-def _call(row: DictRow, features: list[schema.Feature]) -> schema.TripCall:
+def _call(
+    row: DictRow, features: list[schema.Feature], *, first: bool, last: bool
+) -> schema.TripCall:
     codes = load_codes()
     boarding = codes.boarding_of(row["pickup_type"])
     alighting = codes.boarding_of(row["dropoff_type"])
-    flags = set(call_flags(features, row["sequence"]))
-    if "ask_driver" in (boarding, alighting):
-        flags.add("request_stop")
-    if alighting == "none" and boarding != "none":
-        flags.add("boarding_only")
-    if boarding == "none" and alighting != "none":
-        flags.add("exit_only")
+    flags = call_flags(features, row["sequence"], boarding, alighting, first=first, last=last)
     return schema.TripCall(
         sequence=row["sequence"],
         location_id=row["location_id"],
@@ -82,7 +85,7 @@ def _call(row: DictRow, features: list[schema.Feature]) -> schema.TripCall:
         longitude=row["longitude"],
         boarding=boarding,
         alighting=alighting,
-        flags=sorted(flags),
+        flags=flags,
         platform=row["platform"],
         scheduled_arrival=row["scheduled_arrival"],
         scheduled_departure=row["scheduled_departure"],
@@ -90,6 +93,21 @@ def _call(row: DictRow, features: list[schema.Feature]) -> schema.TripCall:
         estimated_departure=row["estimated_departure"],
         status=row["status"],
         source_class=row["source_class"],
+    )
+
+
+def _realtime(row: DictRow) -> schema.TripRealtime:
+    codes = load_codes()
+    return schema.TripRealtime(
+        lifecycle=row["lifecycle"],
+        delay_s=row["delay_s"],
+        off_route=row["off_route"],
+        stale=row["stale"],
+        updated_at=row["updated_at"],
+        sources=[
+            schema.RealtimeSource.model_validate(s | {"label": codes.source(s["source"])})
+            for s in row["sources"]
+        ],
     )
 
 
@@ -136,15 +154,15 @@ def trip(
         if row["run_key"] is not None
         else []
     )
-    features = [
-        feature(codes, f)
-        for f in snap.all(
+    stated = features(
+        codes,
+        snap.all(
             "trip_features",
             {"trip_id": trip_id, "route_id": row["route_id"], "service_id": row["service_id"]},
-        )
-    ]
+        ),
+    )
     seen_since = snap.now - timedelta(seconds=limits.vehicle_max_age_s)
-    vehicles = snap.all("trip_vehicles", params | {"seen_since": seen_since})
+    vehicles = snap.all("trip_vehicles", params | {"trip_ids": [trip_id], "seen_since": seen_since})
     links = (
         []
         if journey is None
@@ -153,6 +171,7 @@ def trip(
             {"namespace": journey.namespace, "key": journey.key, "service_date": service_date},
         )
     )
+    calls = snap.all("trip_calls", params)
     shape = None
     if include == "shape" and row["shape_id"] is not None:
         found = snap.one("trip_shape", {"shape_id": row["shape_id"]})
@@ -168,14 +187,16 @@ def trip(
         headsign=row["headsign"],
         wheelchair_accessible=tristate(row["wheelchair_accessible"]),
         bikes_allowed=tristate(row["bikes_allowed"]),
-        amenities=amenities(features),
-        realtime=None if realtime is None else schema.TripRealtime.model_validate(realtime),
-        vehicles=[schema.TripVehicle.model_validate(v) for v in vehicles],
+        amenities=amenities(stated),
+        realtime=None if realtime is None else _realtime(realtime),
+        vehicles=[trip_vehicle(v) for v in vehicles],
         run_parts=[schema.TripPart.model_validate(p) for p in parts]
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
-        calls=[_call(c, features) for c in snap.all("trip_calls", params)],
-        features=features,
-        notes=[f.note for f in features if f.note is not None],
+        calls=[
+            _call(c, stated, first=n == 0, last=n == len(calls) - 1) for n, c in enumerate(calls)
+        ],
+        features=stated,
+        notes=[f.note for f in stated if f.note is not None],
         connections=[
             schema.Connection(
                 direction=c["direction"],

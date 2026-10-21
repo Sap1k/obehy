@@ -5,7 +5,8 @@
 -- from `since` (a lookback before `start`) stays while its expected time is still at or after
 -- `start`. A cursor continues after the row it names. Realtime is found by the feed trip ID
 -- through rt.trip_part_current, in the active release; the part's slice of the journey's
--- calls holds the call by its sequence. The vehicle is the freshest one on the trip.
+-- calls holds the call by its sequence, with the sources it came from. The vehicle is the
+-- freshest one on the trip, with its profile's traits.
 WITH spans (service_date, lo, hi) AS (
     SELECT * FROM unnest(%(dates)s::date[], %(lo)s::integer[], %(hi)s::integer[])
 ),
@@ -50,7 +51,8 @@ running AS (
 realtime AS (
     SELECT DISTINCT ON (p.trip_id, p.service_date, (e.value ->> 'sequence')::integer)
            p.trip_id, p.service_date, (e.value ->> 'sequence')::integer AS sequence,
-           e.value AS call, s.stale
+           e.value AS call, s.stale,
+           ARRAY(SELECT x ->> 'source' FROM jsonb_array_elements(s.sources) AS x) AS sources
     FROM rt.trip_part_current p
     JOIN rt.trip_state_current s USING (feed, key_namespace, key, service_date, release_id)
     CROSS JOIN LATERAL jsonb_array_elements(s.calls) WITH ORDINALITY AS e (value, n)
@@ -60,16 +62,20 @@ realtime AS (
     ORDER BY p.trip_id, p.service_date, (e.value ->> 'sequence')::integer, s.updated_at DESC
 ),
 vehicles AS (
-    SELECT DISTINCT ON (v.trip_id, v.service_date)
-           v.trip_id, v.service_date, v.source || ':' || v.source_vehicle_id AS vehicle_id,
-           v.status, v.last_seen, v.latitude, v.longitude, v.bearing
-    FROM rt.vehicle_state_current v
-    WHERE v.release_id = %(release_id)s AND v.last_seen >= %(seen_since)s
-        AND (v.trip_id, v.service_date) IN (SELECT trip_id, service_date FROM running)
-    ORDER BY v.trip_id, v.service_date, v.last_seen DESC, v.source, v.source_vehicle_id
+    SELECT DISTINCT ON (r.trip_id, r.service_date) r.*
+    FROM (
+        SELECT v.trip_id, v.service_date, v.vehicle_id, v.status, v.last_seen, v.latitude,
+               v.longitude, v.bearing, v.source, v.source_vehicle_id,
+               array_agg(v.source) OVER (PARTITION BY v.trip_id, v.service_date, v.vehicle_id)
+                   AS vehicle_sources
+        FROM rt.vehicle_state_current v
+        WHERE v.release_id = %(release_id)s AND v.last_seen >= %(seen_since)s
+            AND (v.trip_id, v.service_date) IN (SELECT trip_id, service_date FROM running)
+    ) r
+    ORDER BY r.trip_id, r.service_date, r.last_seen DESC, r.source, r.source_vehicle_id
 ),
 live AS (
-    SELECT r.*, x.call, x.stale,
+    SELECT r.*, x.call, x.stale, x.sources,
            (x.call ->> CASE WHEN %(arrivals)s THEN 'estimated_arrival'
                             ELSE 'estimated_departure' END)::timestamptz AS estimated
     FROM running r
@@ -84,14 +90,16 @@ SELECT l.trip_id, l.service_date, l.location_id, l.route_id, ro.short_name, ro.l
        coalesce(l.stop_headsign, l.headsign) AS headsign, l.scheduled, l.estimated, l.expected,
        extract(epoch FROM l.estimated - l.scheduled)::integer AS delay_s,
        coalesce(l.call ->> 'status', 'scheduled') AS status,
-       l.call ->> 'source_class' AS source_class, l.stale, bp.public_code AS platform,
+       l.call ->> 'source_class' AS source_class, l.stale, l.sources, bp.public_code AS platform,
        v.vehicle_id, v.status AS vehicle_state, v.last_seen AS vehicle_seen,
        v.latitude AS vehicle_latitude, v.longitude AS vehicle_longitude,
-       v.bearing AS vehicle_bearing
+       v.bearing AS vehicle_bearing, v.vehicle_sources, vp.low_floor, vp.air_conditioning,
+       vp.wheelchair_accessible, vp.model, vp.operator, vp.licence_plate, vp.fleet_number
 FROM rows l
 JOIN active.route ro ON ro.route_id = l.route_id
 LEFT JOIN posts bp ON bp.location_id = l.boarding_point_id
 LEFT JOIN vehicles v USING (trip_id, service_date)
+LEFT JOIN rt.vehicle_profile vp ON vp.vehicle_id = v.vehicle_id
 WHERE l.expected >= %(start)s AND l.expected < %(until)s
     AND (%(after_expected)s::timestamptz IS NULL
         OR (l.expected, l.scheduled, l.trip_id, l.service_date, l.location_id)

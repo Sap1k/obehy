@@ -1824,45 +1824,85 @@ fixtures.
 
 # 27. Vehicle registry
 
-Vehicle data comes from upstream (DÚK `HasLowfloor`, an image URL) and from curated lists keyed
-by source vehicle ID (the DÚK register). Curated lists are **git-reviewed files loaded by
-`obehy ref import`** into versioned `ref.*` snapshots; `ref` is a mirror, never a source of
-truth. Public lists live in `jrunify-ext-geodata/vehicles/`; private ones (the DÚK register is
-not public) use the same format from a path in `obehy.local.toml` and are never committed.
+Vehicle data comes from the sources and from curated datasets.
+
+- **Sources** state what they know live, mapped onto the vocabulary by each connector: PID
+  (wheelchair access, air conditioning, USB, the operator running the trip, category, fleet
+  number), DÚK (low floor, air conditioning), DPMD (fleet number, model, plate), MPVnet and
+  Arriva (plate).
+- **Curated datasets** are git-reviewed files loaded by `obehy ref import` into `ref.*`, each
+  replaced as a whole per version and ranked by a priority; `ref` is a mirror, never a source
+  of truth.
+  - Oběhy's own list (`vehicles`, priority 0, public, `jrunify-ext-geodata/vehicles/`) is the
+    registry being built up, keyed by plate or by source and ID.
+  - Seeds fill it meanwhile: the DÚK register (`duk-register`, priority 10) is private, read
+    from a path in `obehy.local.toml` and never committed.
 
 A vehicle is identified at one of three levels:
 
 ```text
-exact vehicle   (source, source_vehicle_id) → vehicle_id through a curated binding
+exact vehicle   a report bound to a vehicle_id by a key, or paired with one (below)
 vehicle type    vehicle_model_id (Iveco Crossway LE 12M, ČD 814, Bmz 245)
 category only   attributes without an entity ("low-floor bus")
 ```
 
-- `vehicle_id` is opaque, minted in the curated files and never recycled. Bindings carry
-  validity ranges because fleet numbers are reused and plates change. EVN/UIC numbers are the
-  natural binding for rail vehicles. An operator move changes a binding or attribute, not the
-  vehicle.
-- Bindings are only ever curated, never inferred, also across sources.
-- A source vehicle without a binding still gets history and state under
-  `{source}:{source_vehicle_id}` and re-attaches when a binding is curated.
+**Keys.** A registered vehicle is known by keys valid over dates, because fleet numbers are
+reused and plates change:
+- a source's vehicle ID (`duk`, `1001`);
+- an identifier any source may state: licence plate, EVN, series number. `[identifiers]` in
+  `data/vehicles/attributes.toml` says how each is compared (plates as letters and digits,
+  EVN and series numbers as digits).
+
+A report is bound by its source key first, else by the identifiers it states live, in the
+vocabulary's order; where two datasets' keys claim it, the lower priority wins. So a DÚK bus
+the seed knows by its DÚK ID and our list by its plate is one vehicle when MPVnet reports that
+plate. EVN/UIC and series numbers are the natural keys of rail vehicles.
+
+**Co-location.** Two sources may report one vehicle with nothing to bind them (a DÚK ID and an
+MPVnet plate no key connects). Reports of different sources on the same journey whose fixes,
+at most `max_fix_gap_s` apart, lie within `distance_m` at least `min_fixes` times over
+`confirm_s` are one vehicle while that holds (`bound_by = co_located`, `[pairing]` in the
+vocabulary). They part when `apart_m` apart, on different journeys, or not seen together for
+`hold_s`. The vehicle is a partner's registered vehicle when one has a key, else the report of
+the best-ranked source. Pairings never write keys: each is kept in `rt.vehicle_pairing` as a
+candidate for review (`/debug/vehicles/pairings`).
+
+- `vehicle_id` is opaque, minted in the curated files and never recycled. An operator move
+  changes a key or attribute, not the vehicle.
+- A report without a key or partner gets history and state under
+  `{source}:{source_vehicle_id}` and re-attaches when a key is curated.
 
 ```text
-vehicle                     vehicle_id, operator_id, vehicle_model_id, fleet_number, public_label
-vehicle_source_binding      source_id, source_vehicle_id, vehicle_id, valid_from, valid_to
-vehicle_model               vehicle_model_id, manufacturer, model, mode
-vehicle_attribute           vehicle_id, attribute, value, dataset_version, valid_from, valid_to
-model_attribute             vehicle_model_id, attribute, value, dataset_version
-vehicle_attribute_observed  (rt) vehicle key, attribute, value, source_id, first_seen, last_seen
-vehicle_media               vehicle_id | vehicle_model_id, url, licence, attribution, source
+ref.dataset                 dataset, version, title, private, priority, imported_at, rows
+ref.vehicle                 vehicle_id, dataset, vehicle_model_id, public_label
+ref.vehicle_key             vehicle_id, dataset, (source, source_vehicle_id) | (scheme,
+                            identifier), valid_from, valid_to
+ref.vehicle_model           vehicle_model_id, dataset, manufacturer, model, mode
+ref.vehicle_attribute       vehicle_id, attribute, value, dataset
+ref.model_attribute         vehicle_model_id, attribute, value, dataset
+rt.vehicle_attribute_observed  source, source_vehicle_id, attribute, value, first_seen, last_seen
+rt.vehicle_pairing          two reports, first and last seen, fixes, confirmed, last journey
+rt.vehicle_profile          vehicle_id, the main attributes as columns, every statement (json)
+vehicle_media (later)       vehicle_id | vehicle_model_id, url, licence, attribution, source
 ```
 
 - **Attributes** use a closed vocabulary (`data/vehicles/attributes.toml`: low floor, air
-  conditioning, USB, Wi-Fi, contactless payment, fuel, manufacturer, model, year, capacity, …).
-  Each source maps its raw fields onto it; unmapped fields are kept as `raw:<source>:<field>`.
-- Live upstream attributes are written only on change, with `last_seen`.
-- **The effective value is a SQL view**, per attribute: curated per vehicle > live upstream >
-  model default > unknown. Disagreements are flagged for review, never averaged. The API reads
-  only the view and shows the source of each value.
+  conditioning, USB, Wi-Fi, contactless payment, fuel, manufacturer, model, year, capacity,
+  plate, fleet number, EVN, series number, operator, …). A field outside it may be kept as
+  `raw:<source>:<field>`.
+- Live values are written only on change and touched every `touch_s`, kept across restarts.
+- **Precedence**, per attribute: curated (the best-priority dataset) > live (the attribute's
+  own source order, else `live_sources`, then the latest statement) > the model's default.
+  Disagreements are flagged, never averaged, and every statement is kept with its origin,
+  source and time.
+- **The worker resolves, the API reads.** Identity and precedence are decided once per change
+  (a live value, a pairing, a registry reload announced by `NOTIFY obehy_registry`) and
+  written: `rt.vehicle_state_current.vehicle_id` and `bound_by` per report, and
+  `rt.vehicle_profile` per vehicle.
+- **Provenance.** A vehicle names every source reporting it and how each report was bound; a
+  trip names the sources its realtime came from (`rt.trip_state_current.sources`: when each
+  last brought anything new, its last usable position, its delay, whether it leads the
+  position).
 - Media: whether an image is cached or linked is decided by its source licence; attribution is
   always shown.
 
@@ -1872,32 +1912,44 @@ vehicle_media               vehicle_id | vehicle_model_id, url, licence, attribu
 
 Two different facts, kept apart:
 
-- **`vehicle_assignment`**: which vehicle works a journey. It comes from keyed bindings of a
-  source `vehicle_key`, or from sources that publish assignments, such as a 55p.cz-style batch
-  every 30–60 minutes naming the vehicle of each train number. Assignments feed `vehicle_day`,
-  so trains get observed tours too (section 22).
+- **`vehicle_assignment`**: which vehicle works a journey. It comes from bound live reports,
+  or from sources that publish assignments by train number. Assignments feed `vehicle_day`, so
+  trains get observed tours too (section 22).
 - **Composition**: the formation of a train, which may name exact vehicles, only vehicle
   types, or neither.
 
 ```text
-composition        journey, from (location_id, visit_n), to (location_id, visit_n) | open,
-                   observed_at, source_id, raw_ref
-composition_unit   composition, sequence, vehicle_id?, vehicle_model_id?, passenger_label,
-                   features
+composition        journey, source_id, observed_at, raw_ref
+composition_unit   composition, sequence, from (location_id, visit_n), to (location_id,
+                   visit_n) | open, vehicle_id?, vehicle_model_id?, vehicle_type, role,
+                   coach_number, classes, features
 ```
 
-- A composition is a **segment of a journey**: formations change en route. Composition APIs
-  usually answer "from station S onward", so an answer is open-ended from S until a later answer
-  from a later station closes it; adjacent identical answers merge.
-- A unit may name a vehicle, a type, both or neither; a type-only unit still gets features from
-  the model.
+- **Each unit has its own span** within the journey: units join and leave en route.
+  `650.002+650.003pk (Most – Ústí nad Labem hl.n.)` is 650.002 for the whole run and 650.003
+  attached as a pusher (`pk`, postrk) between Most and Ústí. Roles come from a codes table;
+  unknown suffixes are kept raw.
+- **Segments are derived**: the journey split at every span boundary, each piece listing its
+  units (start–Most `650.002`; Most–Ústí `650.002 + 650.003 (pusher)`; Ústí–end `650.002`).
+  The API answers both `units[]` as stored and `segments[]`.
+- **Answers "from station S onward"** (ČD) are units open from S until a later answer from a
+  later station closes them; adjacent identical answers merge.
+- **A unit naming a vehicle binds through the registry's keys** (EVN, series number), so the
+  unit, the vehicle's live report and its registry entry are one `vehicle_id`. A type-only unit
+  gets features from its model.
+- **Two sources on one segment combine, never overwrite.** A source naming exact vehicles (an
+  EVN per unit) and ČD's type-level answer (series and coach numbers, classes, services) are
+  matched per segment by sequence and type: the vehicle identity from the first, the coach
+  detail from ČD. Units that do not match stay listed with their own source, and the segment
+  is flagged.
 - Composition sources are **lookups** (section 18.2): fetched on demand or by bounded
   prefetch, never polled for every train. Their `plan` picks the station from the schedule and
   live state, for example the next passenger call.
 
-Order: the ČD source first; 55p.cz only after explicit permission covering retrieval, storage,
-display, redistribution and caching duration. The project API is the rich source of truth;
-GTFS-RT carriage details are populated only where suitable.
+Order: the ČD source first. 55p.cz (exact vehicles per train) is a future source only: nothing
+retrieves its data until explicit permission covers retrieval, storage, display,
+redistribution and caching duration. The project API is the rich source of truth; GTFS-RT
+carriage details are populated only where suitable.
 
 ---
 
@@ -1982,15 +2034,25 @@ PID, DÚK, SŽ or another provider.
                                             308 to the trip a source key names
 /api/v1/trips/…/composition?from=<location> pending | fresh | stale (section 28)
 /api/v1/journeys/<namespace>/<key>/history  recorded runs: actual times and delays
-/api/v1/lines?q=…, /api/v1/lines/<route_id>[/trips|/punctuality]
-                                            search, stop patterns, the date's trips, history
+/api/v1/lines?q=…                           search
+/api/v1/lines/<route_id>                    validity, integrated systems, features and notes;
+                                            the date's trips, first and last departure, and
+                                            stop patterns
+/api/v1/lines/<route_id>/timetable          per stop pattern, each trip's times at its stops
+/api/v1/lines/<route_id>/trips              the date's trips, realtime state and vehicles
+/api/v1/lines/<route_id>/punctuality        from history, per hour and per stop
 /api/v1/vehicles?bbox=…[&include=unmatched,not_in_service]
-/api/v1/vehicles/<vehicle_id>               or <source>:<source_vehicle_id> when unbound
+/api/v1/vehicles/<vehicle_id>               state, registry entry, source reports and how each
+                                            was bound, attributes with every statement
 /api/v1/alerts
 
-/api/v1/debug/realtime/instances/<instance> evidence, intervals, inference explanation
-/api/v1/debug/realtime/sources              health per source and channel
-/api/v1/debug/realtime/unmatched            unmatched and ambiguous observations with candidates
+/api/v1/debug/release                       the active release, packages, loads, activations
+/api/v1/debug/realtime/sources              polls per channel; what each source feeds now
+/api/v1/debug/realtime/unmatched            unbound observations by reason, with examples
+/api/v1/debug/realtime/instances/<instance> state, parts, vehicle reports, observations
+/api/v1/debug/vehicles/<vehicle_id>         reports, keys, pairings, statements, profile
+/api/v1/debug/vehicles/pairings             co-located reports: candidate registry keys
+/api/v1/debug/vehicles/registry             datasets and what they hold; conflicts
 /api/v1/debug/static/trips/<trip_id>        the raw static codes behind the readable features
 ```
 
@@ -2010,13 +2072,18 @@ PID, DÚK, SŽ or another provider.
   areas, departure lookback, vehicle age, cache ages) are the versioned
   `src/obehy/data/api/api-v1.toml`.
 - **Static codes are readable.** JDF fixed codes (pevné kódy) and CZPTT KADR codes, typed by
-  JrUtil into `assignment.kind`, are answered as labelled features (Czech, English, an icon
-  key), whole-trip `amenities` (wheelchair, bicycles, reservation, …, the strongest statement
-  winning), per-call `flags` and `boarding`/`alighting` (from the GTFS codes), stop
-  `facilities`, calendar designations as text and integrated transport systems by name. The
-  vocabulary is the versioned `src/obehy/data/api/codes-v1.toml`; integrated transport codes
-  come from the CIS JŘ MHD list and, at 30000 + its code, the IDS list. Raw symbols only in
-  `/debug`.
+  JrUtil into `assignment.kind`, are answered as features: one per source code at one place,
+  with the kinds it means, its Czech label the code's official text (JDF 1.11 Tabulka pevných
+  kódů, with its trip and stop wordings; the KJŘ text of CZPTT central notes 10–46; the train
+  activities), an English label and an icon key. From them come whole-trip `amenities`
+  (wheelchair, bicycles, reservation, …, the strongest statement winning), per-call `flags`
+  and `boarding`/`alighting` (from the GTFS codes; an origin's no alighting and a terminus's
+  no boarding are no flag), stop `facilities`, calendar designations as text and integrated
+  transport systems by name. The vocabulary is the versioned
+  `src/obehy/data/api/codes-v1.toml`; integrated transport codes come from the CIS JŘ MHD
+  list and, at 30000 + its code, the IDS list. Raw rows in `/debug/static`.
+- **Debug endpoints are in the OpenAPI document** under the `debug` tag, uncached; they answer
+  raw rows whose shapes follow the tables and may change.
 - The frontend lives in `web/` (Vite, React, MapLibre GL JS) with its own toolchain.
 - Stops and routes are PMTiles, generated per release and served as static files. The base map
   needs no tile server and puts no load on the database.

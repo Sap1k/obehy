@@ -153,6 +153,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "index_lookups",
         "api",
         "api_lines",
+        "vehicles",
     ]
 
 

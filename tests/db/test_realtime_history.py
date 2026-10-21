@@ -217,3 +217,28 @@ def test_state_written_by_changes_matches_a_full_rewrite(connection: psycopg.Con
     (trip_row,), (part_row,) = incremental[1], incremental[2]
     assert part_row[4] == trip_row[5] and part_row[5] == 0
     assert part_row[6] == len(trip_row[11]) - 1
+
+
+def test_vehicle_attributes_are_written_when_they_change(connection: psycopg.Connection) -> None:
+    from obehy.realtime.model import ObservationResult, VehicleAttribute
+
+    writer = _writer(connection)
+
+    def say(at: str, low_floor: str) -> None:
+        base = observe(at, key=None)
+        obs = replace(base, facts=(*base.facts, VehicleAttribute("low_floor", low_floor)))
+        writer.write([ObservationResult(obs, None, None)])
+
+    def rows() -> list[Any]:
+        return connection.execute(
+            "SELECT value, first_seen, last_seen FROM rt.vehicle_attribute_observed"
+            " WHERE source = 'duk' AND source_vehicle_id = '1001'"
+        ).fetchall()
+
+    say("2026-10-08 08:00", "true")
+    say("2026-10-08 08:01", "true")  # the same, within touch_s: not written again
+    assert rows() == [("true", local("2026-10-08 08:00"), local("2026-10-08 08:00"))]
+    say("2026-10-08 09:30", "true")  # the same after touch_s: last_seen moves
+    assert rows() == [("true", local("2026-10-08 08:00"), local("2026-10-08 09:30"))]
+    say("2026-10-08 09:31", "false")  # a change starts a new value
+    assert rows() == [("false", local("2026-10-08 09:31"), local("2026-10-08 09:31"))]

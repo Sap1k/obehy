@@ -39,6 +39,7 @@ from obehy.production_package import (
     read_manifest,
 )
 from obehy.realtime import commands as realtime_commands
+from obehy.reference import commands as reference_commands
 from obehy.release import commands as release_commands
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
@@ -515,6 +516,7 @@ def _parser() -> argparse.ArgumentParser:
     realtime_commands.add_parsers(commands)
     release_commands.add_parsers(commands)
     api_commands.add_parsers(commands)
+    reference_commands.add_parsers(commands)
     return parser
 
 
@@ -526,6 +528,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return release_commands.run(args)
     if args.command == "api":
         return api_commands.run(args)
+    if args.command == "ref":
+        return reference_commands.run(args)
     try:
         runtime = load_runtime_config(cast(Path | None, args.config))
         requested_year = cast(int | Literal["auto"], args.gvd_year)

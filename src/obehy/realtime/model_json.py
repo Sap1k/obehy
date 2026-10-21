@@ -32,6 +32,7 @@ from obehy.realtime.model import (
     StopEvent,
     TripKey,
     TripStatus,
+    VehicleAttribute,
     VehicleKey,
 )
 from obehy.realtime.times import Instant, instant
@@ -90,6 +91,8 @@ def fact_to_json(fact: Fact) -> Json:
             }
         case TripStatus(replacement_bus, diverted):
             return {"t": "trip_status", "replacement_bus": replacement_bus, "diverted": diverted}
+        case VehicleAttribute(attribute, value):
+            return {"t": "vehicle_attribute", "a": attribute, "value": value}
         case PlatformAssignment(station, kind, scheduled, value, label):
             return {
                 "t": "platform",
@@ -148,6 +151,8 @@ def fact_from_json(data: Json) -> Fact:
             return NextStopPrediction(
                 str(data["sr70"]), _instant(data.get("scheduled")), _instant(data.get("predicted"))
             )
+        case "vehicle_attribute":
+            return VehicleAttribute(str(data["a"]), str(data["value"]))
         case "trip_status":
             return TripStatus(bool(data["replacement_bus"]), bool(data["diverted"]))
         case "platform":

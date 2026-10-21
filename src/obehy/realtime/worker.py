@@ -10,7 +10,8 @@
    (`runtime/demand.py`), within the boards budget.
 3. An emit tick writes per-feed GTFS-RT files and the current-state tables.
 4. `NOTIFY obehy_publication` (sent by `obehy release activate`) rebases live journeys onto the
-   new release.
+   new release; `NOTIFY obehy_registry` (sent by `obehy ref import`) reloads the vehicle
+   registry, so identities and vehicle profiles follow the new datasets.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.core import CORE_VERSION
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.stored import stream_observations
+from obehy.realtime.emit.vehicles import REGISTRY_CHANNEL
 from obehy.realtime.index_sql import ReleaseLoads, active_loads
 from obehy.realtime.manifest import Channel, semantics_by_channel
 from obehy.realtime.model import Derivation, Feed, Observation
@@ -227,10 +229,12 @@ class _Worker:
                 _log(line)
 
     async def publications(self) -> None:
-        """Rebase live journeys when `obehy release activate` publishes a new release."""
+        """Rebase live journeys when `obehy release activate` publishes a new release; reload
+        the vehicle registry when `obehy ref import` loads a dataset."""
 
         listener = await asyncio.to_thread(psycopg.connect, self.database_url, autocommit=True)
         listener.execute("LISTEN obehy_publication")
+        listener.execute(f"LISTEN {REGISTRY_CHANNEL}")
         try:
             while not self.stop.is_set():
                 notes = await asyncio.to_thread(
@@ -239,6 +243,12 @@ class _Worker:
                 if not notes:
                     continue
                 await self.ready.wait()
+                if notes[0].channel == REGISTRY_CHANNEL:
+                    async with self.lock:
+                        if self.runner.writer is not None:
+                            self.runner.writer.reload_registry()
+                    _log("reloaded the vehicle registry")
+                    continue
                 current = active_loads(listener)  # the main connection may be loading
                 if current.run_id == self.runner.loads.run_id:
                     continue

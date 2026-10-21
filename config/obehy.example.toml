@@ -33,3 +33,9 @@ directory = "D:/src/jrutil"
 # OBEHY_SECRET_<NAME> overrides each; a source without its key is not polled.
 # [realtime.secrets]
 # golemio = "..."   # PID (Golemio), from https://api.golemio.cz/api-keys
+
+# Curated reference datasets for `obehy ref import <dataset>` (BASE_PLAN.md section 27).
+# Private ones are never committed; OBEHY_REFERENCE_<DATASET> overrides each path.
+# [reference]
+# vehicles = "D:/src/jrunify-ext-geodata/vehicles/vehicles.csv"   # our own list
+# duk-register = "D:/private/duk-vhc-data.csv"                    # a private seed

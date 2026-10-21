@@ -57,3 +57,32 @@ def line(row: DictRow) -> schema.Line:
         color=row["color"],
         text_color=row["text_color"],
     )
+
+
+def traits(row: DictRow) -> schema.VehicleTraits:
+    """A vehicle's main attributes from its profile's columns (as the worker resolved them)."""
+
+    return schema.VehicleTraits(
+        low_floor=row["low_floor"],
+        air_conditioning=row["air_conditioning"],
+        wheelchair_accessible=row["wheelchair_accessible"],
+        model=row["model"],
+        operator=row["operator"],
+        licence_plate=row["licence_plate"],
+        fleet_number=row["fleet_number"],
+    )
+
+
+def trip_vehicle(row: DictRow) -> schema.TripVehicle:
+    """A vehicle on a trip (`trip_vehicles.sql`)."""
+
+    return schema.TripVehicle(
+        vehicle_id=row["vehicle_id"],
+        state=row["state"],
+        last_seen=row["last_seen"],
+        latitude=row["latitude"],
+        longitude=row["longitude"],
+        bearing=row["bearing"],
+        traits=traits(row),
+        sources=sorted(set(row["sources"])),
+    )

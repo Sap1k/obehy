@@ -219,3 +219,26 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
             else workdir / "cache" / "route-shapes"
         ),
     )
+
+
+def load_reference_path(name: str, path: Path | None = None) -> Path | None:
+    """A reference dataset's file: ``OBEHY_REFERENCE_<NAME>`` or ``[reference] <name>`` in the
+    config. Private datasets (the DÚK register) live only there, never in the repository."""
+
+    environment = os.environ.get(f"OBEHY_REFERENCE_{name.upper().replace('-', '_')}", "").strip()
+    if environment:
+        return Path(environment)
+    source = (path or default_config_path()).resolve()
+    if not source.is_file():
+        return None
+    try:
+        with source.open("rb") as stream:
+            document = tomllib.load(stream)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigurationError(f"Invalid TOML in {source}: {error}") from error
+    reference = document.get("reference")
+    value = cast(dict[str, Any], reference).get(name) if isinstance(reference, dict) else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = Path(os.path.expandvars(value.strip()))
+    return candidate if candidate.is_absolute() else (source.parent / candidate).resolve()

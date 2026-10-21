@@ -26,13 +26,14 @@ from obehy.realtime.model import (
     Position,
     RawRef,
     TripKey,
+    VehicleAttribute,
     VehicleKey,
 )
 from obehy.realtime.times import Instant, read_local, within_skew
 
 SOURCE = "mpvnet"
 CHANNELS = ("idol", "jikord", "odis", "zlin")
-DECODER_VERSION = 2
+DECODER_VERSION = 3
 
 BUS, TRAIN = "H", "T"
 BUS_FIELDS, TRAIN_FIELDS = 22, 12
@@ -106,6 +107,8 @@ def _entry(
     if observed is not None and not within_skew(observed, received_at, max_clock_skew):
         observed = None
     facts: list[Fact] = [VehicleKey(vehicle), key]
+    if feed == "jdf":
+        facts.append(VehicleAttribute("licence_plate", vehicle))
     lat, lon = _number(entry.get("x")), _number(entry.get("y"))  # MPVNET-Q5
     # A position without a trustworthy time cannot place events in time: it is dropped.
     if observed is not None and lat is not None and lon is not None and lat != 0 and lon != 0:

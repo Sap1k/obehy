@@ -4,52 +4,54 @@
 # limits: a change of meaning is a new file. `icon` is a stable key for the frontend's icon set.
 codes_version = "1"
 
-# assignment.kind -> group, Czech and English label, icon. Groups: accessibility, bicycles,
-# reservation, onboard, operation (how the trip runs), stopping (a call), facility and
-# interchange (a stop), calendar, note, integrated_transport.
+# A feature is one source code as the timetable states it, read with its official text (the
+# tables at the end): a JDF fixed code, a CZPTT central note or a CZPTT train activity. JrUtil
+# types a code into one or more kinds (CZPTT note 28: bicycle_transport, bicycle_carry_on,
+# bicycle_reservation_available); the kinds drive the amenities, and give a feature its group,
+# icon and English label. `en` is our wording; the Czech texts are official.
 [kinds]
-note = { group = "note", cs = "Poznámka", en = "Note", icon = "note" }
-calendar_designation = { group = "calendar", cs = "Jede", en = "Runs", icon = "calendar" }
-reservation_available = { group = "reservation", cs = "Místenky", en = "Seat reservation available", icon = "reservation" }
-reservation_required = { group = "reservation", cs = "Povinná místenka", en = "Seat reservation required", icon = "reservation_required" }
-wheelchair_accessible_vehicle = { group = "accessibility", cs = "Vozidlo pro cestující na vozíku", en = "Wheelchair-accessible vehicle", icon = "wheelchair" }
-partly_wheelchair_accessible_vehicle = { group = "accessibility", cs = "Částečně bezbariérové vozidlo", en = "Partly wheelchair-accessible vehicle", icon = "wheelchair_partly" }
-wheelchair_booking_required = { group = "accessibility", cs = "Přepravu vozíku nutno objednat", en = "Wheelchair space must be booked", icon = "wheelchair_booking" }
-wheelchair_booking_recommended = { group = "accessibility", cs = "Přepravu vozíku doporučeno objednat", en = "Wheelchair space booking recommended", icon = "wheelchair_booking" }
-refreshments_on_vehicle = { group = "onboard", cs = "Občerstvení ve vozidle", en = "Refreshments on board", icon = "refreshments" }
-luggage_transport = { group = "onboard", cs = "Přeprava zavazadel", en = "Luggage carried", icon = "luggage" }
-bicycle_transport = { group = "bicycles", cs = "Přeprava jízdních kol", en = "Bicycles carried", icon = "bicycle" }
-bicycle_carry_on = { group = "bicycles", cs = "Kolo jako spoluzavazadlo", en = "Bicycles as hand luggage", icon = "bicycle" }
-bicycle_storage = { group = "bicycles", cs = "Úschovna kol ve vlaku", en = "Bicycle storage on board", icon = "bicycle" }
-bicycle_reservation_available = { group = "bicycles", cs = "Místo pro kolo lze rezervovat", en = "Bicycle space can be reserved", icon = "bicycle_reservation" }
-bicycle_reservation_required = { group = "bicycles", cs = "Povinná rezervace místa pro kolo", en = "Bicycle space reservation required", icon = "bicycle_reservation" }
-bicycle_transport_prohibited = { group = "bicycles", cs = "Přeprava kol vyloučena", en = "No bicycles", icon = "bicycle_none" }
-on_request = { group = "operation", cs = "Na znamení nebo objednávku", en = "On request", icon = "on_request" }
-conditional = { group = "operation", cs = "Jede za podmínky", en = "Runs conditionally", icon = "conditional" }
-self_service_ticketing = { group = "onboard", cs = "Samoobslužný odbavovací systém", en = "Self-service ticketing", icon = "ticket" }
-integrated_transport = { group = "integrated_transport", cs = "Integrovaná doprava", en = "Integrated transport", icon = "integrated" }
-not_stopping = { group = "stopping", cs = "Nezastavuje", en = "Does not stop", icon = "not_stopping" }
-diversion = { group = "operation", cs = "Jede odklonem", en = "Diverted", icon = "diversion" }
-request_stop = { group = "stopping", cs = "Zastávka na znamení", en = "Request stop", icon = "request_stop" }
-exit_only = { group = "stopping", cs = "Jen pro výstup", en = "Exit only", icon = "exit_only" }
-boarding_only = { group = "stopping", cs = "Jen pro nástup", en = "Boarding only", icon = "boarding_only" }
-wheelchair_accessible = { group = "facility", cs = "Bezbariérově přístupné", en = "Wheelchair accessible", icon = "wheelchair" }
-refreshments = { group = "facility", cs = "Občerstvení", en = "Refreshments", icon = "refreshments" }
-toilet = { group = "facility", cs = "WC", en = "Toilet", icon = "toilet" }
-accessible_toilet = { group = "facility", cs = "Bezbariérové WC", en = "Accessible toilet", icon = "toilet_accessible" }
-urban_transport_interchange = { group = "interchange", cs = "Přestup na MHD", en = "Interchange with city transport", icon = "interchange_city" }
-border_control_only = { group = "stopping", cs = "Jen pohraniční kontrola", en = "Border control only", icon = "border" }
-visually_impaired_accessible = { group = "facility", cs = "Přístupné pro nevidomé", en = "Accessible for the visually impaired", icon = "visually_impaired" }
-accessibility_terminal = { group = "facility", cs = "Kontaktní místo pro bezbariérovou přepravu", en = "Accessibility assistance point", icon = "accessibility_point" }
-rail_interchange = { group = "interchange", cs = "Přestup na vlak", en = "Interchange with rail", icon = "interchange_rail" }
-line_interchange = { group = "interchange", cs = "Přestup mezi linkami", en = "Interchange between lines", icon = "interchange_line" }
-metro_interchange = { group = "interchange", cs = "Přestup na metro", en = "Interchange with metro", icon = "interchange_metro" }
-ship_terminal = { group = "interchange", cs = "Přístaviště", en = "Ship terminal", icon = "ship" }
-airport_nearby = { group = "interchange", cs = "Letiště", en = "Airport nearby", icon = "airport" }
-park_and_ride = { group = "facility", cs = "Parkoviště P+R", en = "Park and ride", icon = "park_and_ride" }
+note = { group = "note", icon = "note", en = "Note" }
+calendar_designation = { group = "calendar", icon = "calendar", en = "Days of operation" }
+reservation_available = { group = "reservation", icon = "reservation", en = "Seat reservation available" }
+reservation_required = { group = "reservation", icon = "reservation_required", en = "Seat reservation required" }
+wheelchair_accessible_vehicle = { group = "accessibility", icon = "wheelchair", en = "Wheelchair-accessible vehicle" }
+partly_wheelchair_accessible_vehicle = { group = "accessibility", icon = "wheelchair_partly", en = "Partly accessible vehicle, assistance needed" }
+wheelchair_booking_required = { group = "accessibility", icon = "wheelchair_booking", en = "Wheelchair space must be booked" }
+wheelchair_booking_recommended = { group = "accessibility", icon = "wheelchair_booking", en = "Wheelchair space booking recommended" }
+refreshments_on_vehicle = { group = "onboard", icon = "refreshments", en = "Refreshments on board" }
+luggage_transport = { group = "onboard", icon = "luggage", en = "Carries luggage" }
+bicycle_transport = { group = "bicycles", icon = "bicycle", en = "Carries bicycles" }
+bicycle_carry_on = { group = "bicycles", icon = "bicycle", en = "Bicycles as accompanied luggage" }
+bicycle_storage = { group = "bicycles", icon = "bicycle", en = "Bicycles in the luggage van" }
+bicycle_reservation_available = { group = "bicycles", icon = "bicycle_reservation", en = "Bicycle space can be reserved" }
+bicycle_reservation_required = { group = "bicycles", icon = "bicycle_reservation", en = "Bicycle space reservation required" }
+bicycle_transport_prohibited = { group = "bicycles", icon = "bicycle_none", en = "No bicycles" }
+on_request = { group = "operation", icon = "on_request", en = "Runs only on request" }
+conditional = { group = "operation", icon = "conditional", en = "Runs only under the conditions noted" }
+self_service_ticketing = { group = "onboard", icon = "ticket", en = "Self-service ticketing" }
+integrated_transport = { group = "integrated_transport", icon = "integrated", en = "Part of an integrated transport system" }
+not_stopping = { group = "stopping", icon = "not_stopping", en = "Does not stop" }
+diversion = { group = "operation", icon = "diversion", en = "Runs by another route" }
+request_stop = { group = "stopping", icon = "request_stop", en = "Request stop" }
+exit_only = { group = "stopping", icon = "exit_only", en = "Stops to set down only" }
+boarding_only = { group = "stopping", icon = "boarding_only", en = "Stops to pick up only" }
+wheelchair_accessible = { group = "facility", icon = "wheelchair", en = "Wheelchair-accessible stop" }
+refreshments = { group = "facility", icon = "refreshments", en = "Refreshments at the stop" }
+toilet = { group = "facility", icon = "toilet", en = "Public toilet at the stop" }
+accessible_toilet = { group = "facility", icon = "toilet_accessible", en = "Accessible public toilet at the stop" }
+urban_transport_interchange = { group = "interchange", icon = "interchange_city", en = "Interchange with city transport" }
+border_control_only = { group = "stopping", icon = "border", en = "Border crossing with passport and customs control; not a stop for passengers" }
+visually_impaired_accessible = { group = "facility", icon = "visually_impaired", en = "Stop adapted for the visually impaired" }
+accessibility_terminal = { group = "facility", icon = "accessibility_point", en = "Terminal for the visually impaired" }
+rail_interchange = { group = "interchange", icon = "interchange_rail", en = "Interchange with rail" }
+line_interchange = { group = "interchange", icon = "interchange_line", en = "Interchange with regional buses" }
+metro_interchange = { group = "interchange", icon = "interchange_metro", en = "Interchange with metro" }
+ship_terminal = { group = "interchange", icon = "ship", en = "Interchange with boats" }
+airport_nearby = { group = "interchange", icon = "airport", en = "Airport nearby" }
+park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and ride" }
 
-# JDF calendar designations: the days a trip runs, as printed on the timetable. The calendar
-# itself is already compiled into the service dates; these are for display.
+# JDF calendar designations: the days a trip runs, as printed (JDF 1.11, verbatim). The
+# calendar itself is already compiled into the service dates; these are for display.
 [calendar]
 "X" = { cs = "jede v pracovních dnech", en = "runs on working days" }
 "+" = { cs = "jede v neděli a ve státem uznané svátky", en = "runs on Sundays and public holidays" }
@@ -60,6 +62,16 @@ park_and_ride = { group = "facility", cs = "Parkoviště P+R", en = "Park and ri
 "5" = { cs = "jede v pátek", en = "runs on Fridays" }
 "6" = { cs = "jede v sobotu", en = "runs on Saturdays" }
 "7" = { cs = "jede v neděli", en = "runs on Sundays" }
+
+# Realtime sources by name, for showing where data came from.
+[sources]
+"pid" = { cs = "PID", en = "PID" }
+"duk" = { cs = "DÚK", en = "DÚK" }
+"dpmd" = { cs = "DPMD", en = "DPMD" }
+"mpvnet" = { cs = "MPVnet", en = "MPVnet" }
+"arriva-express" = { cs = "Arriva", en = "Arriva" }
+"sz-mapa" = { cs = "Správa železnic", en = "Správa železnic" }
+"sz-tabule" = { cs = "Správa železnic (tabule)", en = "Správa železnic (tabule)" }
 
 # GTFS pickup_type / drop_off_type, as JrUtil projects them.
 [boarding]
@@ -107,3 +119,99 @@ park_and_ride = { group = "facility", cs = "Parkoviště P+R", en = "Park and ri
 "30711" = { name = "Integrovaný dopravní systém Olomouckého kraje", abbreviation = "IDSOK" }
 "30722" = { name = "Integrovaná doprava Zlínského kraje", abbreviation = "IDZK" }
 "30811" = { name = "Integrovaný dopravní systém Moravskoslezského kraje", abbreviation = "ODIS" }
+
+# The official texts of the source codes features come from, by system.
+# JDF fixed codes: the Tabulka pevných kódů (Ministerstvo dopravy, JDF 1.11, Metodický pokyn
+# č. 5, příloha 2), verbatim; `trip` is the text for a trip or its calls, `location` for a stop.
+[source_codes.jdf]
+"X" = "jede v pracovních dnech"
+"+" = "jede v neděli a ve státem uznané svátky"
+"1" = "jede v pondělí"
+"2" = "jede v úterý"
+"3" = "jede ve středu"
+"4" = "jede ve čtvrtek"
+"5" = "jede v pátek"
+"6" = "jede v sobotu"
+"7" = "jede v neděli"
+"R" = "k jízdence je možné zakoupit místenku"
+"#" = "spoj je možné použít jen s místenkou"
+"|" = "spoj zastávkou projíždí"
+"<" = "spoj jede po jiné trase"
+"@" = { trip = "spoj s bezbariérově přístupným vozidlem", location = "bezbariérově přístupná zastávka" }
+"%" = { trip = "spoj s možností občerstvení", location = "občerstvení nebo restaurace v objektu zastávky" }
+"W" = "veřejné WC v objektu zastávky"
+"w" = "veřejné WC s bezbariérovým přístupem v objektu zastávky"
+"x" = { trip = "spoj zastavuje jen na znamení nebo požádání", location = "zastávka jen na znamení nebo požádání" }
+"~" = "zastávka s možností přestupu na městskou hromadnou dopravu"
+"(" = { trip = "spoj zastavuje jen pro vystupování", location = "zastávka jen pro výstup" }
+")" = { trip = "spoj zastavuje jen pro nastupování", location = "zastávka jen pro nástup" }
+"$" = "na hraničním přechodu není zřízena zastávka pro výstup a nástup cestujících"
+"{" = "spoj s částečně bezbariérově přístupným vozidlem, nutná dopomoc průvodce"
+"}" = "zastávka upravená pro osoby s těžkým zrakovým postižením"
+"[" = "spoj přepravuje cestovní zavazadla"
+"O" = "spoj přepravuje jízdní kola"
+"v" = "zastávka s možností přestupu na železniční dopravu"
+"§" = "v označených zastávkách není povolen nástup cestujících za účelem přepravy do ostatních shodně označených zastávek spoje"
+"A" = "v označených zastávkách není povolen nástup cestujících za účelem přepravy do ostatních shodně označených zastávek spoje"
+"B" = "v označených zastávkách není povolen nástup cestujících za účelem přepravy do ostatních shodně označených zastávek spoje"
+"C" = "v označených zastávkách není povolen nástup cestujících za účelem přepravy do ostatních shodně označených zastávek spoje"
+"T" = { trip = "spoj jede jen na objednání", call = "spoj zastávku obsluhuje jen na objednání" }
+"!" = { trip = "spoj jede jen podmínečně", call = "spoj zastávku obsluhuje jen podmínečně" }
+"t" = "určený terminál s poskytováním pomoc osobám se zdravotním postižením a osobám se sníženou pohyblivostí"
+"b" = "zastávka s možností přestupu na linkovou dopravu"
+"U" = "zastávka s možností přestupu na metro"
+"S" = "zastávka u přístaviště osobní lodní dopravy"
+"J" = "zastávka u veřejného letiště"
+"P" = "zastávka u parkoviště systému „Park and ride“"
+# In JDF 1.10, no longer in 1.11 (still in older batches): the 1.10 texts.
+"I" = "spoj je v systému integrované dopravy"
+"s" = "spoj se samoobslužným způsobem odbavování cestujících"
+
+# CZPTT central notes: code -> značka (as the timetable prints it) and the KJŘ text (SŽ, Popis
+# datové komunikace IS KADR, Doplněk číselníky 1.04, 2.16).
+[source_codes.czptt_note]
+"10" = { name = "1+2", text = "u vlaků kategorie Sp a Os – ve vlaku řazeny k sezení i vozy 1. vozové třídy" }
+"11" = { name = "jednička", text = "ve vlaku řazeny k sezení pouze vozy 1. vozové třídy" }
+"12" = { name = "dvojka", text = "u vlaků kategorie R a vyšší – ve vlaku řazeny k sezení pouze vozy 2. vozové třídy" }
+"13" = { name = "lůžko", text = "lůžkový vůz" }
+"14" = { name = "lehátko", text = "lehátkový vůz" }
+"15" = { name = "vagon", text = "přímý vůz" }
+"16" = { name = "auta", text = "vůz pro přepravu osobních automobilů a motocyklů" }
+"17" = { name = "invalida", text = "nízkopodlažní vůz vhodný pro přepravu cestujících na vozíku, nebo vůz se zvedací plošinou; doporučeno objednání přepravy" }
+"18" = { name = "hospoda", text = "restaurační vůz" }
+"19" = { name = "místenka", text = "do označených vozů možno zakoupit místenku" }
+"20" = { name = "místenka nutná", text = "povinná rezervace míst" }
+"21" = { name = "kufr", text = "úschova během přepravy (do vyčerpání kapacity)" }
+"22" = { name = "kolo", text = "přeprava spoluzavazadel (do vyčerpání kapacity)" }
+"23" = { name = "přestup", text = "nutno přestoupit" }
+"24" = { name = "občerstvení", text = "občerstvení (roznášková služba nebo samoobslužný automat)" }
+"25" = { name = "bistro", text = "bistrovůz" }
+"26" = { name = "kufr rezervace možná", text = "úschova během přepravy s možností rezervace místa pro jízdní kolo" }
+"27" = { name = "kufr rezervace nutná", text = "úschova během přepravy s povinnou rezervací místa pro jízdní kolo" }
+"28" = { name = "kolo rezervace možná", text = "přeprava spoluzavazadel s možností rezervace místa pro jízdní kolo a cestujícího, v některých vlacích pouze pro jízdní kolo" }
+"29" = { name = "kolo rezervace nutná", text = "přeprava spoluzavazadel s povinnou rezervací místa pro jízdní kolo a cestujícího, v některých vlacích pouze pro jízdní kolo" }
+"30" = { name = "zásuvka", text = "ve vlaku je řazen vůz s přípojkou 230 V" }
+"32" = { name = "náhradní bus", text = "náhradní autobusová doprava" }
+"33" = { name = "dítě", text = "vůz nebo oddíly vyhrazené pro cestující s dětmi do 10 let" }
+"34" = { name = "invalida – objednání", text = "vůz vhodný pro přepravu cestujících na vozíku, je nutné objednání přepravy" }
+"35" = { name = "samoobsluha", text = "samoobslužný způsob odbavení cestujících" }
+"36" = { name = "škrtnuté kolo", text = "přeprava jízdních kol jako spoluzavazadel je vyloučena" }
+"37" = { name = "hist. vlak", text = "historický vlak" }
+"38" = { name = "dámský oddíl", text = "dámský oddíl (oddíl pro samostatně cestující ženy)" }
+"39" = { name = "tichý oddíl", text = "tichý oddíl" }
+"40" = { name = "WiFi", text = "ve vlaku je řazen vůz s bezdrátovým připojením k internetu" }
+"41" = { name = "palubní portál ČD", text = "palubní portál" }
+"42" = { name = "kino", text = "dětské kino" }
+"43" = { name = "státní sleva neplatí", text = "ve vlaku neplatí zvláštní jízdné pro žáky a studenty 18-26 let a pro cestující 65+" }
+"44" = { name = "IDS", text = "vlak kategorie R a vyšší zařazený v integrovaném dopravním systému" }
+"45" = { name = "Usměrněný nástup", text = "Usměrněný nástup" }
+"46" = { name = "Škrtnuté WC", text = "vlak není vybaven WC" }
+
+# CZPTT train activities at a call (TAF TSI codes): the Název CZ (ibid., 2.3 Úkony) and the
+# text the timetable prints for it (ibid., značky úkonů v KJŘ).
+[source_codes.czptt_activity]
+"0028" = { name = "Zastavení jen pro nástup", text = "vlak zastavuje jen pro nástup" }
+"0029" = { name = "Zastavení jen pro výstup", text = "vlak zastavuje jen pro výstup" }
+"0030" = { name = "Zastavení jen na znamení", text = "vlak zastavuje jen na znamení nebo požádání" }
+"0032" = { name = "Odjezd ihned po výstupu", text = "vlak může do konečné stanice odjet ihned po ukončení výstupu cestujících i před uvedeným časovým údajem příjezdu vlaku" }
+"0033" = { name = "Nečeká na žádné přípoje", text = "vlak nečeká na žádné přípoje" }

@@ -65,6 +65,17 @@ no arguments. The website loads only this one query. Its popup makes no further 
 `trainsCurrentLocations` (accepts `trainNumber`, `delay`, `latitude`, `longitude`). It is not
 recorded, because SŽ covers rail.
 
+## Vehicle attributes
+
+What the connector states about its vehicles (`VehicleAttribute`, the vocabulary in
+`src/obehy/data/vehicles/attributes.toml`, `BASE_PLAN.md` section 27). Values are written on
+change to `rt.vehicle_attribute_observed`; identifiers among them bind the report to a
+registered vehicle.
+
+| Field | Attribute |
+|---|---|
+| `spz` (trimmed) | `licence_plate` (an identifier) |
+
 ## Matching (replayed)
 
 Reproduce with `obehy rt replay --release <run> --from <day> --to <day> --sources arriva-express

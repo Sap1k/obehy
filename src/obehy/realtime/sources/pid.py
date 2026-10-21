@@ -31,13 +31,14 @@ from obehy.realtime.model import (
     RawRef,
     SourceState,
     TripKey,
+    VehicleAttribute,
     VehicleKey,
 )
 from obehy.realtime.times import Instant, instant, within_skew
 
 SOURCE = "pid"
 CHANNEL = "vehicles"
-DECODER_VERSION = 2
+DECODER_VERSION = 3
 
 TRAIN = 2  # GTFS route_type
 PRE_TRIP = frozenset({"before_track", "before_track_delayed"})
@@ -161,6 +162,30 @@ def _vehicle(feature: dict[str, Any]) -> str | None:
     return f"{route_type}:{fleet_number}" if fleet_number is not None else fallback
 
 
+def _attributes(trip: dict[str, Any]) -> list[VehicleAttribute]:
+    """The vehicle's equipment and its real operator, as the trip entry gives them."""
+
+    found: list[VehicleAttribute] = []
+    for field, attribute in (
+        ("wheelchair_accessible", "wheelchair_accessible"),
+        ("air_conditioned", "air_conditioning"),
+        ("usb_chargers", "usb"),
+    ):
+        value = trip.get(field)
+        if isinstance(value, bool):
+            found.append(VehicleAttribute(attribute, "true" if value else "false"))
+    operator = _table(trip.get("agency_name")).get("real")
+    if isinstance(operator, str) and operator.strip():
+        found.append(VehicleAttribute("operator", operator.strip()))
+    category = _table(trip.get("vehicle_type")).get("description_cs")
+    if isinstance(category, str) and category.strip():
+        found.append(VehicleAttribute("category", category.strip()))
+    fleet_number = _integer(trip.get("vehicle_registration_number"))
+    if fleet_number is not None:
+        found.append(VehicleAttribute("fleet_number", str(fleet_number)))
+    return found
+
+
 def _observation(
     feature: dict[str, Any],
     vehicle: str,
@@ -188,6 +213,7 @@ def _observation(
         lon, lat = (_number(point[0]), _number(point[1])) if len(point) >= 2 else (None, None)
         if lat is not None and lon is not None and lat != 0 and lon != 0:
             facts.append(Position(lat=lat, lon=lon, bearing=_number(last.get("bearing"))))
+    facts.extend(_attributes(trip))
     if keys and state in PRE_TRIP:
         facts.append(SourceState("pre_trip"))
     elif keys and state in RUNNING:

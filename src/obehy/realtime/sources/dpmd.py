@@ -25,12 +25,21 @@ import re
 from datetime import timedelta
 from typing import Any, cast
 
-from obehy.realtime.model import Delay, Fact, Observation, Position, RawRef, TripKey, VehicleKey
+from obehy.realtime.model import (
+    Delay,
+    Fact,
+    Observation,
+    Position,
+    RawRef,
+    TripKey,
+    VehicleAttribute,
+    VehicleKey,
+)
 from obehy.realtime.times import Instant, read_local, within_skew
 
 SOURCE = "dpmd"
 CHANNEL = "vehicles"
-DECODER_VERSION = 1
+DECODER_VERSION = 2
 CIS_PREFIX = "515"
 
 TIMESTAMP = re.compile(r"\s*/\*\s*(\{.*?\})\s*\*/", re.DOTALL)
@@ -273,6 +282,14 @@ def _bus(
         moving = speed is not None and int(speed.group(1)) > 0
         bearing = float(arrow) if moving and isinstance(arrow, str) and arrow.isdigit() else None
         facts.append(Position(float(coords.group(1)), float(coords.group(2)), bearing))
+    for label, attribute in (
+        ("Autobus", "fleet_number"),
+        ("Typ vozu", "model"),
+        ("SPZ", "licence_plate"),
+    ):
+        value = labels.get(label, "").strip()
+        if value:
+            facts.append(VehicleAttribute(attribute, value))
     shown = MINUTES.match(labels.get("Zpoždění", "").strip())
     # DPMD-Q4: no delay shown means on time or early, never negative.
     facts.append(Delay(int(shown.group(1)) * 60 if shown is not None else 0, "unknown"))

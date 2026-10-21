@@ -15,9 +15,9 @@ from obehy.realtime.times import Instant
 Feed = Literal["jdf", "czptt"]
 FEEDS: tuple[Feed, ...] = ("jdf", "czptt")
 
-FACT_SCHEMA_VERSION = 2
+FACT_SCHEMA_VERSION = 3
 # Stored facts of these versions still read: a new version only adds fact types.
-READABLE_FACT_SCHEMAS = (1, 2)
+READABLE_FACT_SCHEMAS = (1, 2, 3)
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -172,6 +172,16 @@ class NextStopPrediction:
 
 
 @dataclass(frozen=True, slots=True)
+class VehicleAttribute:
+    """What a source says about the vehicle itself, in the vocabulary of
+    `data/vehicles/attributes.toml` (`raw:<source>:<field>` where it has no home). The core
+    ignores it; the writer keeps the current value (BASE_PLAN.md section 27)."""
+
+    attribute: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
 class TripStatus:
     replacement_bus: bool
     diverted: bool
@@ -210,6 +220,7 @@ Fact = (
     | NextStopPrediction
     | TripStatus
     | PlatformAssignment
+    | VehicleAttribute
 )
 
 

@@ -1,20 +1,28 @@
-"""Current vehicles (BASE_PLAN.md section 30): positions of the active release, never older than
-the limits' maximum age. Without the vehicle registry, a vehicle's ID is
-`<source>:<source_vehicle_id>`."""
+"""Vehicles (BASE_PLAN.md sections 27 and 30): positions of the active release, never older
+than the limits' maximum age, and what is known about each vehicle.
+
+The worker decides which vehicle each source report is (the registry's, through a key: a
+source's vehicle ID or the licence plate it reports; else the report's own
+`<source>:<source_vehicle_id>`) and what is known about it (`rt.vehicle_profile`). Two
+sources reporting one registered vehicle are one vehicle: its freshest report, every source
+named. This module only reads.
+"""
 
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Annotated, Any, get_args
+from typing import Annotated, Any, cast, get_args
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from psycopg.rows import DictRow
 
 from obehy.api import schema
-from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
+from obehy.api.codes import load_codes
+from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache, traits
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
-from obehy.api.params import ParameterError, parse_bbox, split_vehicle_id
+from obehy.api.params import ParameterError, parse_bbox
+from obehy.reference.vocabulary import load_vocabulary
 
 router = APIRouter(tags=["vehicles"])
 
@@ -31,16 +39,16 @@ def _rows(snap: Snapshot, limits: Limits, **filters: Any) -> list[DictRow]:
         "south": None,
         "east": None,
         "north": None,
-        "source": None,
-        "source_vehicle_id": None,
+        "vehicle_id": None,
         "limit": limits.vehicles_limit,
     }
     return snap.all("vehicles", params | filters)
 
 
 def _vehicle(r: DictRow) -> schema.Vehicle:
+    on_trip = r["route_id"] is not None
     return schema.Vehicle(
-        vehicle_id=f"{r['source']}:{r['source_vehicle_id']}",
+        vehicle_id=r["vehicle_id"],
         feed=r["feed"],
         source=r["source"],
         state=r["status"],
@@ -48,11 +56,13 @@ def _vehicle(r: DictRow) -> schema.Vehicle:
         latitude=r["latitude"],
         longitude=r["longitude"],
         bearing=r["bearing"],
-        trip_id=r["trip_id"] if r["route_id"] is not None else None,
-        service_date=r["service_date"] if r["route_id"] is not None else None,
-        line=line(r) if r["route_id"] is not None else None,
+        trip_id=r["trip_id"] if on_trip else None,
+        service_date=r["service_date"] if on_trip else None,
+        line=line(r) if on_trip else None,
         headsign=r["headsign"],
         delay_s=r["delay_s"],
+        traits=traits(r),
+        sources=sorted(set(r["sources"])),
     )
 
 
@@ -91,16 +101,50 @@ def vehicles(
     "/vehicles/{vehicle_id}",
     response_model=schema.VehicleDetail,
     responses={404: {"model": schema.Problem}},
-    summary="One current vehicle",
+    summary="A vehicle: its current state, registry entry, source reports and attributes",
 )
 def vehicle(
     response: Response, snap: SnapshotDep, limits: LimitsDep, vehicle_id: str
 ) -> schema.VehicleDetail:
     realtime_cache(response, limits)
-    source, source_vehicle_id = split_vehicle_id(vehicle_id)
-    rows = _rows(snap, limits, source=source, source_vehicle_id=source_vehicle_id)
-    if not rows:
-        raise HTTPException(404, f"no current vehicle {vehicle_id}")
-    # One vehicle can be in both feeds' state (a source reporting buses and trains): the freshest.
-    freshest = max(rows, key=lambda r: (r["last_seen"], r["feed"]))
-    return schema.VehicleDetail(**envelope(snap), vehicle=_vehicle(freshest))
+    found = snap.one("vehicle_profile", {"vehicle_id": vehicle_id, "release_id": snap.release_id})
+    assert found is not None  # one row: the profile, if any, and the reports
+    if found["registered"] is None and not found["reports"]:
+        raise HTTPException(404, f"no vehicle {vehicle_id}")
+    current = _rows(snap, limits, vehicle_id=vehicle_id)
+    vocabulary = load_vocabulary()
+    codes = load_codes()
+    registry = None
+    if found["registered"]:
+        registry = schema.RegistryEntry(
+            vehicle_id=vehicle_id,
+            public_label=found["public_label"],
+            model=found["model"],
+            manufacturer=found["manufacturer"],
+            datasets=found["datasets"],
+        )
+    attributes: list[schema.VehicleAttributeValue] = []
+    stored = cast(list[dict[str, Any]], found["attributes"] or [])
+    for a in stored:
+        known = vocabulary.attributes.get(a["attribute"])
+        attributes.append(
+            schema.VehicleAttributeValue.model_validate(
+                a
+                | {
+                    "label": None if known is None else {"cs": known.cs, "en": known.en},
+                    "icon": None if known is None else known.icon,
+                }
+            )
+        )
+    return schema.VehicleDetail(
+        **envelope(snap),
+        vehicle_id=vehicle_id,
+        vehicle=_vehicle(current[0]) if current else None,
+        registry=registry,
+        reports=[
+            schema.VehicleSource.model_validate(r | {"label": codes.source(r["source"])})
+            for r in found["reports"]
+        ],
+        sources=list(found["sources"] or []),
+        attributes=attributes,
+    )

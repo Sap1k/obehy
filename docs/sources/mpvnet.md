@@ -88,6 +88,21 @@ Storage at 15 s: about 46 KB per round of four polls, about 270 MB a day.
 equal to `ds` and to 60 × `dm`. The ±1 field is unknown; it was `1` for ČD and Länderbahn and
 `-1` for Arriva vlaky.
 
+## Vehicle attributes
+
+What the connector states about its vehicles (`VehicleAttribute`, the vocabulary in
+`src/obehy/data/vehicles/attributes.toml`, `BASE_PLAN.md` section 27). Values are written on
+change to `rt.vehicle_attribute_observed`; identifiers among them bind the report to a
+registered vehicle.
+
+| Field | Attribute |
+|---|---|
+| 11 (regional buses, `jdf`) | `licence_plate` (an identifier) |
+
+The plate binds the report to a vehicle the registry knows by plate, so a DÚK bus reported
+by both is one vehicle; without a key, both reports running one journey side by side are
+paired (`bound_by = co_located`).
+
 ## Keys against the release
 
 The 40-second recording at 17:33 on 2026-10-11, against release `20261006T194555Z`. A key counts

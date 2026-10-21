@@ -114,6 +114,12 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Reference datasets are files and SQL: no realtime or API"
+type = "forbidden"
+source_modules = ["obehy.reference"]
+forbidden_modules = ["obehy.realtime", "obehy.api"]
+
+[[tool.importlinter.contracts]]
 name = "Connectors only declare and decode: no inference, timeline or core"
 type = "forbidden"
 source_modules = ["obehy.realtime.sources"]

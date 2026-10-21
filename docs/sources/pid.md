@@ -52,6 +52,22 @@ A GeoJSON FeatureCollection; one Feature per trip of each vehicle's block (PID-Q
 | `…trip.vehicle_registration_number` | fleet number → `VehicleKey("<route_type>:<number>")` (PID-Q1) |
 | `…trip.start_timestamp` | scheduled first departure: orders a vehicle's upcoming trips (PID-Q6); the keyed date rule still picks the date |
 
+## Vehicle attributes
+
+What the connector states about its vehicles (`VehicleAttribute`, the vocabulary in
+`src/obehy/data/vehicles/attributes.toml`, `BASE_PLAN.md` section 27). Values are written on
+change to `rt.vehicle_attribute_observed`; identifiers among them bind the report to a
+registered vehicle.
+
+| Field | Attribute |
+|---|---|
+| `trip.wheelchair_accessible` | `wheelchair_accessible` |
+| `trip.air_conditioned` | `air_conditioning` |
+| `trip.usb_chargers` | `usb` |
+| `trip.agency_name.real` | `operator` (the operator actually running the trip; it wins over other live sources) |
+| `trip.vehicle_type.description_cs` | `category` |
+| `trip.vehicle_registration_number` | `fleet_number` |
+
 ## Keys against the release
 
 Static PID trips carry `pid:gtfs_trip_id` keys from the regional overlay (157 105 in the probed

@@ -222,10 +222,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   feed trip's slice of its journey's calls) and a vehicle's current part. Expanded
   2026-10-20 (phase A): readable static codes, arrivals, nearby stops, multi-stop boards with
   a cursor, the vehicle on boards and trips, lines, connections and journey links, journey
-  history and line punctuality, debug endpoints. Next phases: vehicle registry and details,
-  cancellations, alerts (any source, republished in GTFS-RT), lookups and compositions (ČD on
-  request, 55p-style per-unit spans). Open beyond: PMTiles, `no_realtime`, merged station
-  boards.
+  history and line punctuality, debug endpoints. Phase B (2026-10-21): the vehicle registry
+  (`obehy ref import`: our own list over the private DÚK register seed; keys by source ID,
+  plate, EVN or series number), live attributes from PID, DÚK, DPMD, MPVnet and Arriva,
+  co-located reports of two sources paired into one vehicle, precedence curated > live >
+  model with conflicts flagged, all resolved in the worker (`rt.vehicle_profile`); vehicle
+  details and traits on boards and trips; the sources behind each trip's and vehicle's
+  realtime; features as one per source code with official JDF 1.11 / KJŘ texts; line
+  overview (validity, notes, day summary) and timetable; debug for vehicle identity,
+  pairings, registry and release. Next phases: cancellations, alerts (any source,
+  republished in GTFS-RT), lookups and compositions (ČD on request, per-unit spans; 55p.cz
+  only with permission). Open beyond: PMTiles, `no_realtime`, merged station boards.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
   GTFS-RT alerts and departures later.

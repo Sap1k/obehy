@@ -97,6 +97,19 @@ the GTFS id) and `coords`. Its body has `Sloupek` (post), `Pasport`, `GTFS`, `Oz
 (CIS stop number, `66601`), `Pásmo CIS` (fare zone) and `ID oblasti`. Static data:
 it is not needed every poll, and it makes up 69 % of the bytes (343 of 498 KB).
 
+## Vehicle attributes
+
+What the connector states about its vehicles (`VehicleAttribute`, the vocabulary in
+`src/obehy/data/vehicles/attributes.toml`, `BASE_PLAN.md` section 27). Values are written on
+change to `rt.vehicle_attribute_observed`; identifiers among them bind the report to a
+registered vehicle.
+
+| Label | Attribute |
+|---|---|
+| `Autobus` | `fleet_number` |
+| `Typ vozu` | `model` |
+| `SPZ` | `licence_plate` (an identifier) |
+
 ## Keys against the release
 
 DPMD lines are in the JDF export under agency `62240935` (DPMD's IČO) with CIS line number

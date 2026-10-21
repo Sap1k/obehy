@@ -83,6 +83,7 @@ def test_facts_round_trip_through_json() -> None:
         SourceState,
         StopEvent,
         TripKey,
+        VehicleAttribute,
         VehicleKey,
     )
     from obehy.realtime.model_json import facts_from_json, facts_to_json
@@ -100,6 +101,7 @@ def test_facts_round_trip_through_json() -> None:
         LineRef("cis:line", "580916"),
         Destination("Teplice,Celní"),
         NextStopName("Teplice,Pražská"),
+        VehicleAttribute("low_floor", "true"),
     )
     stored = json.loads(json.dumps(facts_to_json(facts)))
     assert facts_from_json(stored) == facts

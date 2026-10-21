@@ -17,6 +17,7 @@ from obehy.realtime.model import (
     Position,
     SourceState,
     TripKey,
+    VehicleAttribute,
     VehicleKey,
 )
 from obehy.realtime.replay import DECODERS
@@ -217,3 +218,22 @@ def test_pid_is_live_on_both_feeds_with_its_key_and_cursor() -> None:
     assert channel.feeds == ("jdf", "czptt") and channel.live_feeds == ("jdf", "czptt")
     assert channel.auth == Auth("X-Access-Token", "golemio")
     assert channel.cursor == Cursor("x-last-modified", "updatedSince", 120.0)
+
+
+def test_the_vehicle_says_what_it_is_and_who_runs_it() -> None:
+    trip = {
+        "wheelchair_accessible": True,
+        "air_conditioned": False,
+        "usb_chargers": True,
+        "agency_name": {"real": "ARRIVA CITY", "scheduled": "DP PRAHA"},
+        "vehicle_type": {"id": 3, "description_cs": "autobus", "description_en": "bus"},
+    }
+    (obs,) = decode(entry(trip=trip))
+    assert obs.all(VehicleAttribute) == (
+        VehicleAttribute("wheelchair_accessible", "true"),
+        VehicleAttribute("air_conditioning", "false"),
+        VehicleAttribute("usb", "true"),
+        VehicleAttribute("operator", "ARRIVA CITY"),
+        VehicleAttribute("category", "autobus"),
+        VehicleAttribute("fleet_number", "6940"),
+    )

@@ -29,13 +29,14 @@ from obehy.realtime.model import (
     Observation,
     Position,
     RawRef,
+    VehicleAttribute,
     VehicleKey,
 )
 from obehy.realtime.times import Instant, read_local, within_skew
 
 SOURCE = "arriva-express"
 CHANNEL = "buses"
-DECODER_VERSION = 1
+DECODER_VERSION = 2
 
 EXPRESS = "ARRIVA EXPRESS"  # `mainType` (ARRIVA-Q7)
 
@@ -84,7 +85,12 @@ def _entry(
     observed = _time(entry.get("updated"), received_at)
     if observed is not None and not within_skew(observed, received_at, max_clock_skew):
         observed = None
-    facts: list[Fact] = [VehicleKey(plate), LineRef("cis:line", line), Destination(destination)]
+    facts: list[Fact] = [
+        VehicleKey(plate),
+        VehicleAttribute("licence_plate", plate),
+        LineRef("cis:line", line),
+        Destination(destination),
+    ]
     following = _text(entry.get("lastStopName"))  # ARRIVA-Q2: the next stop
     if following:
         facts.append(NextStopName(following))

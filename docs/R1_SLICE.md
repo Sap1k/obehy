@@ -82,12 +82,16 @@ rt.observation              received_at, source, channel, feed, raw_sha, raw_lin
                             decoder_version, fact_schema_version, facts jsonb, result jsonb,
                             release_id; daily partitions by received_at, dropped after the
                             policy window
-rt.vehicle_state_current    one row per (feed, vehicle_key), upserted each emit tick; UNLOGGED
+rt.vehicle_state_current    one row per (feed, vehicle_key), upserted each emit tick, with the
+                            vehicle_id it is and how it was bound; UNLOGGED
 rt.trip_state_current       one row per journey of service dates today ± 1; the public per-call
-                            model as jsonb; UNLOGGED
+                            model and the sources its realtime came from as jsonb; UNLOGGED
 rt.trip_part_current        per journey, the feed trips it publishes and their slice of its
                             calls (a rail run's parts; a road trip is its own); UNLOGGED
 rt.source_health            source, channel, minute, polls, errors, rows, lag
+rt.vehicle_attribute_observed  per source vehicle and attribute: value, first and last seen
+rt.vehicle_pairing          reports of two sources seen side by side on one journey
+rt.vehicle_profile          per vehicle: the resolved attributes and their statements; UNLOGGED
 
 history.derivation          id, core_version, policy_version, release_id
 history.journey             PK (feed, key_namespace, key, service_date); first_bound_at,

@@ -82,6 +82,20 @@ conditioning, alternative fuel and USB chargers, keyed by `ID`. It covers 284 of
 vehicles seen in the capture; its low-floor flag agrees with `HasLowfloor` for all 284. The 119
 missing are mostly the 9xxx vehicles. It does not cover the `30xxxx` and `40xxxx` fleets.
 
+## Vehicle attributes
+
+What the connector states about its vehicles (`VehicleAttribute`, the vocabulary in
+`src/obehy/data/vehicles/attributes.toml`, `BASE_PLAN.md` section 27). Values are written on
+change to `rt.vehicle_attribute_observed`; identifiers among them bind the report to a
+registered vehicle.
+
+| Field | Attribute |
+|---|---|
+| `HasLowfloor` | `low_floor` |
+| `isAirConditioned` | `air_conditioning` (null in the first capture; stated for 83 of 433 vehicles in the 2026-10-06 07:00–07:15 replay) |
+
+The vehicle `ID` is the source key the DÚK register seed binds (`duk:<ID>`).
+
 ## Matching (replayed)
 
 Reproduce with `obehy rt replay --release <release-dir> --from <day> --to <day> --out <dir>`

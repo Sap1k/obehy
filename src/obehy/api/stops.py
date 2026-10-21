@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from obehy.api import schema
-from obehy.api.codes import feature, load_codes, tristate
+from obehy.api.codes import features, load_codes, tristate
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, static_cache
 from obehy.api.params import ParameterError, parse_bbox, parse_near, search_words
 
@@ -90,9 +90,10 @@ def stop_place(
     cached = static_cache(request, response, snap, limits)
     if cached is not None:
         return cached
-    row = snap.one("stop", {"location_id": location_id})
-    if row is None:
+    rows = snap.all("stops_by_id", {"location_ids": [location_id]})
+    if not rows:
         raise HTTPException(404, f"no stop place {location_id}")
+    row = rows[0]
     stop = schema.Stop.model_validate(row)
     params = {"location_id": stop.location_id}
     codes = load_codes()
@@ -100,7 +101,7 @@ def stop_place(
         **envelope(snap),
         stop=stop,
         wheelchair_boarding=tristate(row["wheelchair_boarding"]),
-        facilities=[feature(codes, r) for r in snap.all("stop_features", params)],
+        facilities=features(codes, snap.all("stop_features", params)),
         boarding_points=[
             schema.BoardingPoint.model_validate(r) for r in snap.all("stop_boarding_points", params)
         ],

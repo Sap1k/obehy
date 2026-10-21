@@ -147,3 +147,10 @@ def test_bad_payloads_raise() -> None:
         duk.decode(b"{}", "f" * 64, RECEIVED, SKEW)
     with pytest.raises(duk.PayloadError):
         duk.decode(b"<html>", "f" * 64, RECEIVED, SKEW)
+
+
+def test_low_floor_is_a_vehicle_attribute_and_a_missing_one_is_not_guessed() -> None:
+    from obehy.realtime.model import VehicleAttribute
+
+    (obs,) = decode(entry(HasLowfloor=True, isAirConditioned=None))
+    assert obs.all(VehicleAttribute) == (VehicleAttribute("low_floor", "true"),)

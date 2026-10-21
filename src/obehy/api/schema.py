@@ -8,22 +8,27 @@ boarding codes) are given in readable form (`api/codes.py`), never as raw symbol
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
+
+from obehy.realtime.times import PRAGUE
 
 CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
+# Every time is answered in Prague time, whether read as a timestamp or from a stored instant.
+Time = Annotated[datetime, AfterValidator(lambda value: value.astimezone(PRAGUE))]
 SourceClass = Literal["gps", "source", "propagated"]
 VehicleState = Literal["running", "positioning", "layover", "unmatched", "not_in_service"]
 Boarding = Literal["regular", "none", "phone", "ask_driver"]
 WheelchairAmenity = Literal["booking_required", "booking_recommended", "accessible", "partly"]
 BicycleAmenity = Literal["prohibited", "reservation_required", "reservation_available", "allowed"]
 ReservationAmenity = Literal["required", "available"]
+SourceSystem = Literal["jdf", "czptt_note", "czptt_activity"]
 
 
 class Envelope(BaseModel):
     release_id: str = Field(description="The active release the answer was read from.")
-    generated_at: datetime
+    generated_at: Time
 
 
 class Problem(BaseModel):
@@ -50,26 +55,40 @@ class IntegratedSystem(BaseModel):
 
 class Note(BaseModel):
     kind: str
+    code: str | None = Field(default=None, description="A CZPTT central note's code")
     label: str | None
-    text: str | None
+    text: str | None = Field(description="For a CZPTT central note, its official KJŘ text")
+
+
+class SourceCode(BaseModel):
+    """The source code a feature comes from and its official text."""
+
+    system: SourceSystem = Field(
+        description="JDF fixed code (pevný kód), CZPTT central note or CZPTT train activity"
+    )
+    code: str
+    name: str | None = Field(description="The short name the timetable prints, where it has one")
+    text: str | None = Field(description="The official text of the code")
 
 
 class Feature(BaseModel):
-    """A typed timetable feature (a JDF fixed code or CZPTT code), readable."""
+    """One source code as the timetable states it (a JDF fixed code, a CZPTT central note or
+    train activity), with its official Czech text and the typed meanings it carries."""
 
-    kind: str
+    kinds: list[str] = Field(description="The typed meanings (assignment kinds) of the code")
     group: str = Field(
         description="accessibility, bicycles, reservation, onboard, operation, stopping, "
         "facility, interchange, calendar, note or integrated_transport"
     )
-    label: Label
     icon: str
+    label: Label = Field(description="Czech: the code's official text where known")
+    official: bool = Field(description="The Czech label is the code's official text")
     scope: str = Field(description="trip, route, service, call, call_range or location")
     from_sequence: int | None = Field(description="First call it applies to; null: all")
     to_sequence: int | None = Field(description="Last call of a call range")
-    value: Label | None = Field(default=None, description="A calendar designation's text")
     system: IntegratedSystem | None = None
     note: Note | None = None
+    source_code: SourceCode | None = None
 
 
 class Amenities(BaseModel):
@@ -129,15 +148,29 @@ class StopPlace(Envelope):
     lines: list[Line]
 
 
+class VehicleTraits(BaseModel):
+    """The vehicle's main attributes, effective values (curated > live > model default)."""
+
+    low_floor: bool | None = None
+    air_conditioning: bool | None = None
+    wheelchair_accessible: bool | None = None
+    model: str | None = None
+    operator: str | None = None
+    licence_plate: str | None = None
+    fleet_number: str | None = None
+
+
 class TripVehicle(BaseModel):
     """The vehicle currently on a trip."""
 
     vehicle_id: str
     state: VehicleState
-    last_seen: datetime
+    last_seen: Time
     latitude: float | None
     longitude: float | None
     bearing: float | None
+    traits: VehicleTraits = Field(default_factory=VehicleTraits)
+    sources: list[str] = Field(default_factory=list, description="Sources reporting it now")
 
 
 class Departure(BaseModel):
@@ -149,21 +182,22 @@ class Departure(BaseModel):
     line: Line
     trip_short_name: str | None
     headsign: str | None
-    scheduled: datetime
-    estimated: datetime | None
+    scheduled: Time
+    estimated: Time | None
     delay_s: int | None
     status: CallStatus
     source_class: SourceClass | None
     stale: bool | None
     platform: str | None = Field(description="The scheduled platform, track or post code.")
     vehicle: TripVehicle | None = None
+    sources: list[str] = Field(default_factory=list, description="Where its realtime came from")
 
 
 class Departures(Envelope):
     stop: Stop
     stops: list[Stop] = Field(description="Every stop place of a multi-stop board")
-    since: datetime
-    until: datetime
+    since: Time
+    until: Time
     departures: list[Departure]
     next: str | None = Field(description="Cursor for the following rows (`cursor=`)")
 
@@ -171,8 +205,8 @@ class Departures(Envelope):
 class Arrivals(Envelope):
     stop: Stop
     stops: list[Stop]
-    since: datetime
-    until: datetime
+    since: Time
+    until: Time
     arrivals: list[Departure]
     next: str | None
 
@@ -191,16 +225,27 @@ class TripCall(BaseModel):
     boarding: Boarding
     alighting: Boarding
     flags: list[str] = Field(
-        description="request_stop, exit_only, boarding_only, not_stopping, "
-        "border_control_only, conditional, diversion"
+        description="request_stop, on_request, conditional, exit_only, boarding_only, "
+        "not_stopping, border_control_only"
     )
     platform: str | None
-    scheduled_arrival: datetime | None
-    scheduled_departure: datetime | None
-    estimated_arrival: datetime | None
-    estimated_departure: datetime | None
+    scheduled_arrival: Time | None
+    scheduled_departure: Time | None
+    estimated_arrival: Time | None
+    estimated_departure: Time | None
     status: CallStatus
     source_class: SourceClass | None
+
+
+class RealtimeSource(BaseModel):
+    """A source the trip's realtime came from."""
+
+    source: str
+    label: Label | None
+    heard_at: Time | None = Field(description="When it last brought anything new")
+    position_at: Time | None = Field(description="When it last gave a usable position")
+    delay_s: int | None
+    leads_position: bool = Field(description="Its positions drive the trip's progress")
 
 
 class TripRealtime(BaseModel):
@@ -208,7 +253,8 @@ class TripRealtime(BaseModel):
     delay_s: int | None
     off_route: bool
     stale: bool
-    updated_at: datetime
+    updated_at: Time
+    sources: list[RealtimeSource]
 
 
 class TripPart(BaseModel):
@@ -272,11 +318,14 @@ class GoneTrip(Problem):
 
 
 class Vehicle(BaseModel):
-    vehicle_id: str
+    vehicle_id: str = Field(
+        description="The registry's vehicle ID when the source vehicle is bound to one, "
+        "else <source>:<source_vehicle_id>; both resolve"
+    )
     feed: str
     source: str
     state: VehicleState
-    last_seen: datetime
+    last_seen: Time
     latitude: float | None
     longitude: float | None
     bearing: float | None
@@ -285,6 +334,57 @@ class Vehicle(BaseModel):
     line: Line | None
     headsign: str | None
     delay_s: int | None
+    traits: VehicleTraits = Field(default_factory=VehicleTraits)
+    sources: list[str] = Field(default_factory=list, description="Sources reporting it now")
+
+
+Origin = Literal["curated", "live", "model"]
+
+
+class VehicleStatement(BaseModel):
+    """One statement about an attribute: a registry dataset's, a source's live, or a model's."""
+
+    value: str
+    origin: Origin
+    source: str = Field(description="The dataset (curated, model) or the realtime source (live)")
+    observed_at: Time | None
+
+
+class VehicleAttributeValue(BaseModel):
+    """The value that counts (registry > live by source precedence > model), and all others."""
+
+    attribute: str
+    label: Label | None = Field(description="Null for a raw source field")
+    icon: str | None
+    value: str = Field(description="true/false, digits or text, by the attribute's type")
+    origin: Origin
+    source: str
+    observed_at: Time | None = Field(description="When a source last stated a live value")
+    conflict: bool = Field(description="Another curated or live statement says otherwise")
+    statements: list[VehicleStatement]
+
+
+class VehicleSource(BaseModel):
+    """One source's report of the vehicle (several when the registry binds them to it)."""
+
+    source: str
+    label: Label | None
+    source_vehicle_id: str
+    state: VehicleState | None
+    last_seen: Time | None
+    bound_by: Literal["source", "identifier", "co_located"] | None = Field(
+        description="What makes this report this vehicle: a registry key (its source's ID, or "
+        "an identifier it states: plate, EVN, series number), or running one journey side by "
+        "side with another source's report of it (provisional)"
+    )
+
+
+class RegistryEntry(BaseModel):
+    vehicle_id: str
+    public_label: str | None
+    model: str | None
+    manufacturer: str | None
+    datasets: list[str]
 
 
 class Vehicles(Envelope):
@@ -292,7 +392,12 @@ class Vehicles(Envelope):
 
 
 class VehicleDetail(Envelope):
-    vehicle: Vehicle
+    vehicle_id: str
+    vehicle: Vehicle | None = Field(description="Its current state, if seen lately")
+    registry: RegistryEntry | None
+    reports: list[VehicleSource] = Field(description="The source reports that are it now")
+    sources: list[str] = Field(description="Every source stating its attributes")
+    attributes: list[VehicleAttributeValue]
 
 
 class LineSummary(BaseModel):
@@ -312,20 +417,63 @@ class PatternStop(BaseModel):
 
 
 class Pattern(BaseModel):
-    """One stop sequence the line runs, with how many trips of the date use it."""
+    """One stop sequence the line runs (passenger calls), with the trips of the date on it."""
 
-    headsign: str | None
+    headsign: str | None = Field(description="The most common headsign of its trips")
+    direction: int | None = Field(description="The feed's direction (0 or 1), when it has one")
     trips: int
+    first_departure: Time | None = Field(description="Of its first trip, at its first stop")
+    last_departure: Time | None = Field(description="Of its last trip, at its first stop")
     stops: list[PatternStop]
     shape: dict[str, Any] | None = None
+
+
+class LineDay(BaseModel):
+    """The line on the service date: how many trips run, the first and the last to set off."""
+
+    trips: int
+    first_departure: Time | None
+    last_departure: Time | None
 
 
 class LineDetail(Envelope):
     line: Line
     agency: str | None
     description: str | None
+    runs_from: date | None = Field(description="The first service date it runs in the release")
+    runs_until: date | None = Field(description="The last service date it runs in the release")
+    integrated_transport: list[IntegratedSystem]
+    features: list[Feature] = Field(description="What the timetable states for the whole line")
+    notes: list[Note]
     service_date: date
+    day: LineDay
     patterns: list[Pattern]
+
+
+class TimetableTrip(BaseModel):
+    trip_id: str
+    trip_short_name: str | None
+    headsign: str | None
+    wheelchair_accessible: bool | None
+    bikes_allowed: bool | None
+    times: list[Time | None] = Field(
+        description="Scheduled departure at each of the pattern's stops (arrival at the last)"
+    )
+
+
+class TimetablePattern(BaseModel):
+    headsign: str | None
+    direction: int | None
+    stops: list[PatternStop]
+    trips: list[TimetableTrip]
+
+
+class LineTimetable(Envelope):
+    line: Line
+    service_date: date
+    patterns: list[TimetablePattern] = Field(
+        description="Per stop sequence, its trips by first departure: a timetable's columns"
+    )
 
 
 class LineTrip(BaseModel):
@@ -333,10 +481,11 @@ class LineTrip(BaseModel):
     service_date: date
     trip_short_name: str | None
     headsign: str | None
-    first_departure: datetime | None
-    last_arrival: datetime | None
+    first_departure: Time | None
+    last_arrival: Time | None
     lifecycle: str | None
     delay_s: int | None
+    vehicles: list[TripVehicle] = Field(description="The vehicles on it now")
 
 
 class LineTrips(Envelope):
@@ -348,10 +497,10 @@ class LineTrips(Envelope):
 class HistoryCall(BaseModel):
     location_id: str
     name: str
-    scheduled_arrival: datetime | None
-    scheduled_departure: datetime | None
-    actual_arrival: datetime | None
-    actual_departure: datetime | None
+    scheduled_arrival: Time | None
+    scheduled_departure: Time | None
+    actual_arrival: Time | None
+    actual_departure: Time | None
     arrival_delay_s: int | None
     departure_delay_s: int | None
 
@@ -389,7 +538,7 @@ class LinePunctuality(Envelope):
 class SourceHealth(BaseModel):
     source: str
     channel: str
-    last_minute: datetime
+    last_minute: Time
     polls: int
     errors: int
     lag_ms: int | None
@@ -397,5 +546,5 @@ class SourceHealth(BaseModel):
 
 class Status(Envelope):
     api_version: str
-    activated_at: datetime
+    activated_at: Time
     sources: list[SourceHealth] = Field(description="Polls of the last hour, per channel.")

@@ -130,7 +130,7 @@ lookup:   plan(subject, view) → UpstreamRequest | not_available     pure
 Examples:
 - DÚK: a 15 s channel.
 - SŽ: a 30 s channel.
-- 55p.cz-style vehicle assignments: a 30–60 min channel.
+- 55p.cz-style vehicle assignments (future, only with permission): a 30–60 min channel.
 - ČD compositions: a lookup only, keyed by train, date and station.
 - A minimal source: a 60 s channel with line, trip and delay.
 
@@ -166,7 +166,7 @@ flowchart TB
     sz["sz-mapa<br/>poll 30 s"]
     arr["arriva-express<br/>poll 30 s"]
     mini["minimal source<br/>poll 60 s"]
-    p55["55p<br/>poll 30–60 min"]
+    p55["55p (future)<br/>poll 30–60 min"]
     cd["cd<br/>lookup: composition"]
   end
   subgraph RUN["connector runtime — generic"]
@@ -276,26 +276,37 @@ erDiagram
 ```
 
 - **A vehicle can be identified at three levels.**
-  - An exact vehicle: `(source, source_vehicle_id)` → `vehicle_id` through curated bindings,
-    never inferred.
+  - An exact vehicle: a source report bound to a `vehicle_id` by a registry key (its
+    source's vehicle ID, else a plate, EVN or series number it states), or confirmed
+    co-located with a report of another source on the same journey.
   - A vehicle type: `vehicle_model_id`.
   - A category only.
-- **`vehicle_id`** is opaque, minted in the curated files, and never recycled.
-  - Bindings carry validity ranges, because fleet numbers are reused and plates change.
-  - EVN/UIC numbers are the natural binding for rail vehicles.
-  - An operator move changes a binding or an attribute, not the vehicle.
-  - A source vehicle without a binding still gets history under
-    `{source}:{source_vehicle_id}`, and re-attaches once a binding is curated.
-- **Attributes.** A closed vocabulary (`data/vehicles/attributes.toml`), with per-source field
-  mappings; unmapped fields are kept raw. The effective value is a SQL view: curated > live
-  upstream > model default, with disagreements flagged. Media rows carry licence and
-  attribution.
-- **Compositions are segments of a journey**, from `(location, visit)` to `(location, visit)`.
-  - A change en route is a new segment, and adjacent identical answers merge.
-  - A unit names an optional vehicle and/or an optional type, so a type-only composition still
-    yields features.
+- **The registry** (`reference/`, `ref.*`): curated datasets imported by `obehy ref import`,
+  ranked by priority. Oběhy's own list (priority 0) over seeds such as the private DÚK
+  register (priority 10).
+  - `vehicle_id` is opaque, minted in the curated files, and never recycled. Keys carry
+    validity ranges, because fleet numbers are reused and plates change.
+  - A report without a key or partner is its own `{source}:{source_vehicle_id}`, and
+    re-attaches once a key is curated. Pairings never write keys: they are review candidates
+    (`rt.vehicle_pairing`).
+- **Attributes.** A closed vocabulary (`data/vehicles/attributes.toml`), mapped by each
+  connector. Per attribute: curated > live (by source order) > model default, disagreements
+  flagged and every statement kept. Media rows carry licence and attribution.
+- **The worker resolves, the API reads.** The emitter's `VehicleBook` (`realtime/emit/
+  vehicles.py`, `pairing.py`) decides each report's vehicle and each vehicle's profile when an
+  input changes (a live value, a pairing, `NOTIFY obehy_registry` after an import) and writes
+  `rt.vehicle_state_current.vehicle_id`/`bound_by`, `rt.vehicle_profile` and
+  `rt.vehicle_pairing`.
+- **Compositions** are units with their own spans within a journey, from `(location, visit)`
+  to `(location, visit)` or open; segments are derived where spans start and end.
+  - An answer "from station S onward" stays open until a later answer closes it; adjacent
+    identical answers merge.
+  - A unit names an optional vehicle (bound through the registry's EVN or series-number keys)
+    and/or an optional type, so a type-only composition still yields features. Two sources on
+    one segment combine per unit: exact vehicles from one, coach detail from ČD.
 - **`vehicle_assignment`** (vehicle → journey) is separate from composition. It comes from
-  `vehicle_key` bindings or 55p-like sources and feeds `vehicle_day`, the observed tours.
+  bound live reports, or from sources naming the vehicle of each train, and feeds
+  `vehicle_day`, the observed tours.
 - **Tours come from four sources:**
   - static `block_key`;
   - imported rosters, by train number + validity;
