@@ -82,9 +82,10 @@ services:
     <<: *app
     command: ["api", "serve", "--host", "0.0.0.0", "--port", "8000"]
 
-  # Plain HTTP for the reverse proxy in front, which terminates TLS (deploy/nginx.conf).
+  # Plain HTTP for the reverse proxy in front, which terminates TLS (deploy/nginx.conf): the feeds,
+  # the API and the web app, which is baked into this image (web/Dockerfile).
   web:
-    image: nginx:1.30-alpine
+    image: ghcr.io/sap1k/obehy-web:${OBEHY_TAG:-latest}
     restart: unless-stopped
     depends_on:
       - api

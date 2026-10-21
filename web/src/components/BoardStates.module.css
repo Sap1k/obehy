@@ -1,0 +1,63 @@
+.card {
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+  overflow: hidden;
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 64px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ob-border);
+}
+
+.skeletonRow:last-child {
+  border-bottom: 0;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.title {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.text {
+  max-width: 360px;
+  color: var(--ob-text-secondary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.link {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ob-link);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.divider {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--ob-border);
+  background: var(--ob-surface-subtle);
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+}

@@ -281,6 +281,23 @@ Limits are in `src/obehy/data/api/api-v1.toml`, the readable static codes in `co
 next to it. On the server, `deploy/compose.yaml` runs it as the `api` service and nginx
 forwards `/api/` to it.
 
+## Web frontend
+
+`web/` is the app (Vite, React, Mantine; `BASE_PLAN.md` section 30). In development it proxies
+`/api` to obehy.cz; set `OBEHY_API=http://127.0.0.1:8000` to use a local `obehy api serve`.
+
+```powershell
+cd web
+npm ci
+npm run dev                                  # http://localhost:5173
+npm test; npm run lint; npm run typecheck
+```
+
+Its API types are generated from the OpenAPI document. After an API change, run
+`uv run obehy api openapi --out web/openapi.json` and `npm run gen:api` (CI fails when either
+is stale). On the server the `web` service is the `obehy-web` image, which is nginx with the
+built app: it serves the app at `/`, next to the feeds and `/api/`.
+
 ## Vehicle registry
 
 `obehy ref import <dataset>` mirrors a curated vehicle dataset into `ref.*` (`BASE_PLAN.md`

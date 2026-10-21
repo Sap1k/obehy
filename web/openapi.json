@@ -1,0 +1,6364 @@
+{
+  "components": {
+    "schemas": {
+      "Alert": {
+        "description": "A disruption or notice from a source, at the scope the source gave (BASE_PLAN.md\nsection 25). Texts are per language (`cs`, `en`, …); cause, effect and severity are\nGTFS-RT's.",
+        "properties": {
+          "alert_id": {
+            "description": "`<source>:<the source's ID>`",
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "cause": {
+            "title": "Cause",
+            "type": "string"
+          },
+          "cause_detail": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Cause Detail",
+            "type": "object"
+          },
+          "changed_at": {
+            "format": "date-time",
+            "title": "Changed At",
+            "type": "string"
+          },
+          "description": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Description",
+            "type": "object"
+          },
+          "details": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Source-specific (PID infotexts: display_type)",
+            "title": "Details",
+            "type": "object"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "effect_detail": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Effect Detail",
+            "type": "object"
+          },
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "header": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Header",
+            "type": "object"
+          },
+          "informs": {
+            "description": "Empty: nothing it names is in the release",
+            "items": {
+              "$ref": "#/components/schemas/AlertTarget"
+            },
+            "title": "Informs",
+            "type": "array"
+          },
+          "periods": {
+            "description": "When it applies; empty: always",
+            "items": {
+              "$ref": "#/components/schemas/AlertPeriod"
+            },
+            "title": "Periods",
+            "type": "array"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "url": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Url",
+            "type": "object"
+          },
+          "withdrawn_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Withdrawn At"
+          }
+        },
+        "required": [
+          "alert_id",
+          "source",
+          "source_label",
+          "cause",
+          "effect",
+          "severity",
+          "periods",
+          "header",
+          "description",
+          "url",
+          "cause_detail",
+          "effect_detail",
+          "details",
+          "informs",
+          "first_seen",
+          "changed_at",
+          "withdrawn_at"
+        ],
+        "title": "Alert",
+        "type": "object"
+      },
+      "AlertPeriod": {
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null: until further notice",
+            "title": "End"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "AlertPeriod",
+        "type": "object"
+      },
+      "AlertTarget": {
+        "description": "What an alert informs, in the active release.",
+        "properties": {
+          "feed": {
+            "enum": [
+              "jdf",
+              "czptt"
+            ],
+            "title": "Feed",
+            "type": "string"
+          },
+          "id": {
+            "description": "route_id, location_id (a stop or boarding point) or trip_id",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "route",
+              "stop",
+              "trip"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "service_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A trip's",
+            "title": "Service Date"
+          },
+          "stop_place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A stop's stop place",
+            "title": "Stop Place"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "feed"
+        ],
+        "title": "AlertTarget",
+        "type": "object"
+      },
+      "Alerts": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "at",
+          "alerts"
+        ],
+        "title": "Alerts",
+        "type": "object"
+      },
+      "Amenities": {
+        "description": "What holds for the whole trip; features of some calls only stay in `features`.",
+        "properties": {
+          "bicycles": {
+            "anyOf": [
+              {
+                "enum": [
+                  "prohibited",
+                  "reservation_required",
+                  "reservation_available",
+                  "allowed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bicycles"
+          },
+          "conditional": {
+            "title": "Conditional",
+            "type": "boolean"
+          },
+          "integrated_transport": {
+            "items": {
+              "$ref": "#/components/schemas/IntegratedSystem"
+            },
+            "title": "Integrated Transport",
+            "type": "array"
+          },
+          "luggage": {
+            "title": "Luggage",
+            "type": "boolean"
+          },
+          "on_request": {
+            "description": "Runs only on request (demand responsive)",
+            "title": "On Request",
+            "type": "boolean"
+          },
+          "operates": {
+            "description": "The calendar designations, as printed",
+            "items": {
+              "$ref": "#/components/schemas/Label"
+            },
+            "title": "Operates",
+            "type": "array"
+          },
+          "refreshments": {
+            "title": "Refreshments",
+            "type": "boolean"
+          },
+          "reservation": {
+            "anyOf": [
+              {
+                "enum": [
+                  "required",
+                  "available"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reservation"
+          },
+          "self_service_ticketing": {
+            "title": "Self Service Ticketing",
+            "type": "boolean"
+          },
+          "wheelchair": {
+            "anyOf": [
+              {
+                "enum": [
+                  "booking_required",
+                  "booking_recommended",
+                  "accessible",
+                  "partly"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wheelchair"
+          }
+        },
+        "required": [
+          "wheelchair",
+          "bicycles",
+          "reservation",
+          "refreshments",
+          "luggage",
+          "self_service_ticketing",
+          "on_request",
+          "conditional",
+          "integrated_transport",
+          "operates"
+        ],
+        "title": "Amenities",
+        "type": "object"
+      },
+      "Arrivals": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "arrivals": {
+            "items": {
+              "$ref": "#/components/schemas/Departure"
+            },
+            "title": "Arrivals",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "stop": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/Stop"
+            },
+            "title": "Stops",
+            "type": "array"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "stop",
+          "stops",
+          "since",
+          "until",
+          "arrivals",
+          "next",
+          "alerts"
+        ],
+        "title": "Arrivals",
+        "type": "object"
+      },
+      "BoardingPoint": {
+        "properties": {
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "public_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Code"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "public_code",
+          "latitude",
+          "longitude"
+        ],
+        "title": "BoardingPoint",
+        "type": "object"
+      },
+      "Composition": {
+        "description": "A trip's formation (BASE_PLAN.md section 28), asked for lazily: never polled, the API\nnever calls upstream. A missing or older answer is asked of the worker's lookup broker:\n`pending` (HTTP 202, `Retry-After`) until a first answer, then `fresh`; an older answer is\nserved as `stale` while a newer one is asked. `not_available`: no source answers for this\ntrip (another operator's train, a date ČD does not answer for, …), see `sources`.",
+        "properties": {
+          "answered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered At"
+          },
+          "from_location_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The call the answer was asked from; null: the next passenger call",
+            "title": "From Location Id"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
+          },
+          "retry_after_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry After S"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionSegment"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "fresh",
+              "stale",
+              "pending",
+              "not_available"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionUnit"
+            },
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "trip_id",
+          "service_date",
+          "from_location_id",
+          "status",
+          "retry_after_s",
+          "requested_at",
+          "answered_at",
+          "sources",
+          "units",
+          "segments"
+        ],
+        "title": "Composition",
+        "type": "object"
+      },
+      "CompositionCall": {
+        "properties": {
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "The trip call's sequence",
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "location_id",
+          "name"
+        ],
+        "title": "CompositionCall",
+        "type": "object"
+      },
+      "CompositionSegment": {
+        "description": "A piece of the trip between span boundaries, with the units running it.",
+        "properties": {
+          "from_call": {
+            "$ref": "#/components/schemas/CompositionCall"
+          },
+          "to_call": {
+            "$ref": "#/components/schemas/CompositionCall"
+          },
+          "units": {
+            "description": "Positions in `units`, in train order per source",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "from_call",
+          "to_call",
+          "units"
+        ],
+        "title": "CompositionSegment",
+        "type": "object"
+      },
+      "CompositionSource": {
+        "description": "What a composition source answered to the last request.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lookup": {
+            "description": "`<source>/<lookup>`",
+            "title": "Lookup",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "answered",
+                  "not_found",
+                  "not_available",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null while it is still to answer",
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lookup",
+          "source",
+          "label",
+          "outcome",
+          "reason"
+        ],
+        "title": "CompositionSource",
+        "type": "object"
+      },
+      "CompositionUnit": {
+        "description": "One vehicle of the train as a source states it: an exact vehicle (`vehicle_id`), a type\n(`vehicle_type`: `Bdmpz 896`), or neither (a locomotive the source does not name). Each unit\nhas its own span over the trip's calls: units join and leave en route.",
+        "properties": {
+          "classes": {
+            "description": "Travel classes: 1, 2",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "coach_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coach Number"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A through coach's own destination",
+            "title": "Destination"
+          },
+          "details": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Source-specific facts, kept as given",
+            "title": "Details",
+            "type": "object"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/UnitFeature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "from_call": {
+            "$ref": "#/components/schemas/CompositionCall"
+          },
+          "kind": {
+            "enum": [
+              "locomotive",
+              "coach",
+              "unit"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "open": {
+            "description": "Holds to the end of the trip until a later answer from a later call says otherwise",
+            "title": "Open",
+            "type": "boolean"
+          },
+          "role": {
+            "description": "train, attached, pusher, or `raw:<code>`",
+            "title": "Role",
+            "type": "string"
+          },
+          "sequence": {
+            "description": "Its place in the train as the source orders it, from 1",
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "to_call": {
+            "$ref": "#/components/schemas/CompositionCall"
+          },
+          "vehicle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vehicle Id"
+          },
+          "vehicle_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vehicle Type"
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "sequence",
+          "kind",
+          "role",
+          "vehicle_id",
+          "vehicle_type",
+          "coach_number",
+          "classes",
+          "features",
+          "destination",
+          "details",
+          "from_call",
+          "to_call",
+          "open",
+          "observed_at"
+        ],
+        "title": "CompositionUnit",
+        "type": "object"
+      },
+      "Connection": {
+        "description": "A connection the timetable promises at one call (JDF návaznosti, CZPTT claims).",
+        "properties": {
+          "at_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Sequence"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "direction": {
+            "enum": [
+              "waits_for",
+              "connects_to"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "trip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The resolved trip, when the claim names one"
+          },
+          "wait_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Minutes"
+          }
+        },
+        "required": [
+          "direction",
+          "at_sequence",
+          "wait_minutes",
+          "line",
+          "destination",
+          "note",
+          "trip"
+        ],
+        "title": "Connection",
+        "type": "object"
+      },
+      "Departure": {
+        "description": "A board row: a departure (or, on an arrivals board, an arrival) at a stop place.",
+        "properties": {
+          "alert_ids": {
+            "description": "The board's `alerts` informing its line, stop or trip",
+            "items": {
+              "type": "string"
+            },
+            "title": "Alert Ids",
+            "type": "array"
+          },
+          "delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay S"
+          },
+          "estimated": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "location_id": {
+            "description": "The stop place of this row (multi-stop boards)",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The scheduled platform, track or post code.",
+            "title": "Platform"
+          },
+          "scheduled": {
+            "format": "date-time",
+            "title": "Scheduled",
+            "type": "string"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "source_class": {
+            "anyOf": [
+              {
+                "enum": [
+                  "gps",
+                  "source",
+                  "propagated"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Class"
+          },
+          "sources": {
+            "description": "Where its realtime came from",
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale"
+          },
+          "status": {
+            "enum": [
+              "scheduled",
+              "predicted",
+              "actual",
+              "inferred",
+              "no_realtime",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Short Name"
+          },
+          "vehicle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripVehicle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "trip_id",
+          "service_date",
+          "location_id",
+          "line",
+          "trip_short_name",
+          "headsign",
+          "scheduled",
+          "estimated",
+          "delay_s",
+          "status",
+          "source_class",
+          "stale",
+          "platform"
+        ],
+        "title": "Departure",
+        "type": "object"
+      },
+      "Departures": {
+        "properties": {
+          "alerts": {
+            "description": "Current alerts of the stops and the rows' lines",
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "departures": {
+            "items": {
+              "$ref": "#/components/schemas/Departure"
+            },
+            "title": "Departures",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the following rows (`cursor=`)",
+            "title": "Next"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "stop": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "stops": {
+            "description": "Every stop place of a multi-stop board",
+            "items": {
+              "$ref": "#/components/schemas/Stop"
+            },
+            "title": "Stops",
+            "type": "array"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "stop",
+          "stops",
+          "since",
+          "until",
+          "departures",
+          "next",
+          "alerts"
+        ],
+        "title": "Departures",
+        "type": "object"
+      },
+      "Feature": {
+        "description": "One source code as the timetable states it (a JDF fixed code, a CZPTT central note or\ntrain activity), with its official Czech text and the typed meanings it carries.",
+        "properties": {
+          "from_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First call it applies to; null: all",
+            "title": "From Sequence"
+          },
+          "group": {
+            "description": "accessibility, bicycles, reservation, onboard, operation, stopping, facility, interchange, calendar, note or integrated_transport",
+            "title": "Group",
+            "type": "string"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "kinds": {
+            "description": "The typed meanings (assignment kinds) of the code",
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "label": {
+            "$ref": "#/components/schemas/Label",
+            "description": "Czech: the code's official text where known"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Note"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "official": {
+            "description": "The Czech label is the code's official text",
+            "title": "Official",
+            "type": "boolean"
+          },
+          "scope": {
+            "description": "trip, route, service, call, call_range or location",
+            "title": "Scope",
+            "type": "string"
+          },
+          "source_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "system": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntegratedSystem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last call of a call range",
+            "title": "To Sequence"
+          }
+        },
+        "required": [
+          "kinds",
+          "group",
+          "icon",
+          "label",
+          "official",
+          "scope",
+          "from_sequence",
+          "to_sequence"
+        ],
+        "title": "Feature",
+        "type": "object"
+      },
+      "GoneTrip": {
+        "description": "A trip ID from an older timetable version: follow `by_key` to today's trip.",
+        "properties": {
+          "by_key": {
+            "title": "By Key",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "journey": {
+            "$ref": "#/components/schemas/JourneyKey"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status",
+          "service_date",
+          "journey",
+          "by_key"
+        ],
+        "title": "GoneTrip",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HistoryCall": {
+        "properties": {
+          "actual_arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Arrival"
+          },
+          "actual_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Departure"
+          },
+          "arrival_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival Delay S"
+          },
+          "departure_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departure Delay S"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scheduled_arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Arrival"
+          },
+          "scheduled_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Departure"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "scheduled_arrival",
+          "scheduled_departure",
+          "actual_arrival",
+          "actual_departure",
+          "arrival_delay_s",
+          "departure_delay_s"
+        ],
+        "title": "HistoryCall",
+        "type": "object"
+      },
+      "HistoryDay": {
+        "properties": {
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryCall"
+            },
+            "title": "Calls",
+            "type": "array"
+          },
+          "cancelled": {
+            "description": "A source cancelled it and no vehicle was seen running it",
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_date",
+          "trip_id",
+          "cancelled",
+          "calls"
+        ],
+        "title": "HistoryDay",
+        "type": "object"
+      },
+      "IntegratedSystem": {
+        "description": "An integrated transport system or city transport network (CIS JŘ code lists).",
+        "properties": {
+          "abbreviation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abbreviation"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "abbreviation"
+        ],
+        "title": "IntegratedSystem",
+        "type": "object"
+      },
+      "JourneyKey": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "namespace",
+          "key"
+        ],
+        "title": "JourneyKey",
+        "type": "object"
+      },
+      "JourneyLink": {
+        "description": "A train continuing under another number, splitting or joining.",
+        "properties": {
+          "journey": {
+            "$ref": "#/components/schemas/JourneyKey"
+          },
+          "kind": {
+            "enum": [
+              "continues_as",
+              "continued_from",
+              "splits_from",
+              "joins"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "trip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "journey",
+          "trip"
+        ],
+        "title": "JourneyLink",
+        "type": "object"
+      },
+      "Label": {
+        "properties": {
+          "cs": {
+            "title": "Cs",
+            "type": "string"
+          },
+          "en": {
+            "title": "En",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cs",
+          "en"
+        ],
+        "title": "Label",
+        "type": "object"
+      },
+      "Line": {
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "long_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Long Name"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "route_id": {
+            "title": "Route Id",
+            "type": "string"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "text_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Color"
+          }
+        },
+        "required": [
+          "route_id",
+          "short_name",
+          "long_name",
+          "mode",
+          "color",
+          "text_color"
+        ],
+        "title": "Line",
+        "type": "object"
+      },
+      "LineDay": {
+        "description": "The line on the service date: how many trips run, the first and the last to set off.",
+        "properties": {
+          "first_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Departure"
+          },
+          "last_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Departure"
+          },
+          "trips": {
+            "title": "Trips",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trips",
+          "first_departure",
+          "last_departure"
+        ],
+        "title": "LineDay",
+        "type": "object"
+      },
+      "LineDetail": {
+        "properties": {
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          },
+          "day": {
+            "$ref": "#/components/schemas/LineDay"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "features": {
+            "description": "What the timetable states for the whole line",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "integrated_transport": {
+            "items": {
+              "$ref": "#/components/schemas/IntegratedSystem"
+            },
+            "title": "Integrated Transport",
+            "type": "array"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "patterns": {
+            "items": {
+              "$ref": "#/components/schemas/Pattern"
+            },
+            "title": "Patterns",
+            "type": "array"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "runs_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first service date it runs in the release",
+            "title": "Runs From"
+          },
+          "runs_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last service date it runs in the release",
+            "title": "Runs Until"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "line",
+          "agency",
+          "description",
+          "runs_from",
+          "runs_until",
+          "integrated_transport",
+          "features",
+          "notes",
+          "service_date",
+          "day",
+          "patterns"
+        ],
+        "title": "LineDetail",
+        "type": "object"
+      },
+      "LinePunctuality": {
+        "properties": {
+          "by_hour": {
+            "items": {
+              "$ref": "#/components/schemas/PunctualityBucket"
+            },
+            "title": "By Hour",
+            "type": "array"
+          },
+          "by_stop": {
+            "items": {
+              "$ref": "#/components/schemas/PunctualityBucket"
+            },
+            "title": "By Stop",
+            "type": "array"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "journeys": {
+            "title": "Journeys",
+            "type": "integer"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "on_time_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Time Share"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "since": {
+            "format": "date",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "line",
+          "since",
+          "until",
+          "journeys",
+          "events",
+          "on_time_share",
+          "by_hour",
+          "by_stop"
+        ],
+        "title": "LinePunctuality",
+        "type": "object"
+      },
+      "LineSummary": {
+        "properties": {
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          }
+        },
+        "required": [
+          "line",
+          "agency"
+        ],
+        "title": "LineSummary",
+        "type": "object"
+      },
+      "LineTimetable": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "patterns": {
+            "description": "Per stop sequence, its trips by first departure: a timetable's columns",
+            "items": {
+              "$ref": "#/components/schemas/TimetablePattern"
+            },
+            "title": "Patterns",
+            "type": "array"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "line",
+          "service_date",
+          "patterns"
+        ],
+        "title": "LineTimetable",
+        "type": "object"
+      },
+      "LineTrip": {
+        "properties": {
+          "delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay S"
+          },
+          "first_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Departure"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "last_arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Arrival"
+          },
+          "lifecycle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Short Name"
+          },
+          "vehicles": {
+            "description": "The vehicles on it now",
+            "items": {
+              "$ref": "#/components/schemas/TripVehicle"
+            },
+            "title": "Vehicles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "trip_id",
+          "service_date",
+          "trip_short_name",
+          "headsign",
+          "first_departure",
+          "last_arrival",
+          "lifecycle",
+          "delay_s",
+          "vehicles"
+        ],
+        "title": "LineTrip",
+        "type": "object"
+      },
+      "LineTrips": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "trips": {
+            "items": {
+              "$ref": "#/components/schemas/LineTrip"
+            },
+            "title": "Trips",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "line",
+          "service_date",
+          "trips"
+        ],
+        "title": "LineTrips",
+        "type": "object"
+      },
+      "Lines": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LineSummary"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "lines"
+        ],
+        "title": "Lines",
+        "type": "object"
+      },
+      "Note": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A CZPTT central note's code",
+            "title": "Code"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a CZPTT central note, its official KJŘ text",
+            "title": "Text"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "text"
+        ],
+        "title": "Note",
+        "type": "object"
+      },
+      "Pattern": {
+        "description": "One stop sequence the line runs (passenger calls), with the trips of the date on it.",
+        "properties": {
+          "direction": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The feed's direction (0 or 1), when it has one",
+            "title": "Direction"
+          },
+          "first_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Of its first trip, at its first stop",
+            "title": "First Departure"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most common headsign of its trips",
+            "title": "Headsign"
+          },
+          "last_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Of its last trip, at its first stop",
+            "title": "Last Departure"
+          },
+          "shape": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape"
+          },
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/PatternStop"
+            },
+            "title": "Stops",
+            "type": "array"
+          },
+          "trips": {
+            "title": "Trips",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "headsign",
+          "direction",
+          "trips",
+          "first_departure",
+          "last_departure",
+          "stops"
+        ],
+        "title": "Pattern",
+        "type": "object"
+      },
+      "PatternStop": {
+        "properties": {
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "latitude",
+          "longitude"
+        ],
+        "title": "PatternStop",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "An error (RFC 9457 problem details).",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "PunctualityBucket": {
+        "properties": {
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "key": {
+            "description": "The hour (00 to 23) or the stop's location_id",
+            "title": "Key",
+            "type": "string"
+          },
+          "mean_delay_s": {
+            "title": "Mean Delay S",
+            "type": "number"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "on_time_share": {
+            "description": "Share within the on-time band of the limits",
+            "title": "On Time Share",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "events",
+          "on_time_share",
+          "mean_delay_s"
+        ],
+        "title": "PunctualityBucket",
+        "type": "object"
+      },
+      "RealtimeSource": {
+        "description": "A source the trip's realtime came from.",
+        "properties": {
+          "delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay S"
+          },
+          "heard_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it last brought anything new",
+            "title": "Heard At"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "leads_position": {
+            "description": "Its positions drive the trip's progress",
+            "title": "Leads Position",
+            "type": "boolean"
+          },
+          "position_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it last gave a usable position",
+            "title": "Position At"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "heard_at",
+          "position_at",
+          "delay_s",
+          "leads_position"
+        ],
+        "title": "RealtimeSource",
+        "type": "object"
+      },
+      "RegistryEntry": {
+        "properties": {
+          "datasets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Datasets",
+            "type": "array"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "public_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Label"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "public_label",
+          "model",
+          "manufacturer",
+          "datasets"
+        ],
+        "title": "RegistryEntry",
+        "type": "object"
+      },
+      "SourceCode": {
+        "description": "The source code a feature comes from and its official text.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The short name the timetable prints, where it has one",
+            "title": "Name"
+          },
+          "system": {
+            "description": "JDF fixed code (pevný kód), CZPTT central note or CZPTT train activity",
+            "enum": [
+              "jdf",
+              "czptt_note",
+              "czptt_activity"
+            ],
+            "title": "System",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The official text of the code",
+            "title": "Text"
+          }
+        },
+        "required": [
+          "system",
+          "code",
+          "name",
+          "text"
+        ],
+        "title": "SourceCode",
+        "type": "object"
+      },
+      "SourceHealth": {
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "lag_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lag Ms"
+          },
+          "last_minute": {
+            "format": "date-time",
+            "title": "Last Minute",
+            "type": "string"
+          },
+          "polls": {
+            "title": "Polls",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "channel",
+          "last_minute",
+          "polls",
+          "errors",
+          "lag_ms"
+        ],
+        "title": "SourceHealth",
+        "type": "object"
+      },
+      "Status": {
+        "properties": {
+          "activated_at": {
+            "format": "date-time",
+            "title": "Activated At",
+            "type": "string"
+          },
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Polls of the last hour, per channel.",
+            "items": {
+              "$ref": "#/components/schemas/SourceHealth"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "api_version",
+          "activated_at",
+          "sources"
+        ],
+        "title": "Status",
+        "type": "object"
+      },
+      "Stop": {
+        "properties": {
+          "coordinate_precision": {
+            "title": "Coordinate Precision",
+            "type": "string"
+          },
+          "distance_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the `near` point",
+            "title": "Distance M"
+          },
+          "district": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "District"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "municipality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Municipality"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "kind",
+          "domain",
+          "municipality",
+          "district",
+          "latitude",
+          "longitude",
+          "coordinate_precision"
+        ],
+        "title": "Stop",
+        "type": "object"
+      },
+      "StopPlace": {
+        "properties": {
+          "boarding_points": {
+            "items": {
+              "$ref": "#/components/schemas/BoardingPoint"
+            },
+            "title": "Boarding Points",
+            "type": "array"
+          },
+          "facilities": {
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "title": "Facilities",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/Line"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "stop": {
+            "$ref": "#/components/schemas/Stop"
+          },
+          "wheelchair_boarding": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wheelchair Boarding"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "stop",
+          "wheelchair_boarding",
+          "facilities",
+          "boarding_points",
+          "lines"
+        ],
+        "title": "StopPlace",
+        "type": "object"
+      },
+      "Stops": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/Stop"
+            },
+            "title": "Stops",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "stops"
+        ],
+        "title": "Stops",
+        "type": "object"
+      },
+      "TimetablePattern": {
+        "properties": {
+          "direction": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/PatternStop"
+            },
+            "title": "Stops",
+            "type": "array"
+          },
+          "trips": {
+            "items": {
+              "$ref": "#/components/schemas/TimetableTrip"
+            },
+            "title": "Trips",
+            "type": "array"
+          }
+        },
+        "required": [
+          "headsign",
+          "direction",
+          "stops",
+          "trips"
+        ],
+        "title": "TimetablePattern",
+        "type": "object"
+      },
+      "TimetableTrip": {
+        "properties": {
+          "bikes_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bikes Allowed"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "times": {
+            "description": "Scheduled departure at each of the pattern's stops (arrival at the last)",
+            "items": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Times",
+            "type": "array"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Short Name"
+          },
+          "wheelchair_accessible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wheelchair Accessible"
+          }
+        },
+        "required": [
+          "trip_id",
+          "trip_short_name",
+          "headsign",
+          "wheelchair_accessible",
+          "bikes_allowed",
+          "times"
+        ],
+        "title": "TimetableTrip",
+        "type": "object"
+      },
+      "Trip": {
+        "properties": {
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          },
+          "alerts": {
+            "description": "Current alerts of the trip, its line or its stops",
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "amenities": {
+            "$ref": "#/components/schemas/Amenities"
+          },
+          "bikes_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bikes Allowed"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/TripCall"
+            },
+            "title": "Calls",
+            "type": "array"
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/Connection"
+            },
+            "title": "Connections",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "journey": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JourneyKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/JourneyLink"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "realtime": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripRealtime"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "run_parts": {
+            "description": "All parts of a rail run on the date, in order.",
+            "items": {
+              "$ref": "#/components/schemas/TripPart"
+            },
+            "title": "Run Parts",
+            "type": "array"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "shape": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GeoJSON LineString.",
+            "title": "Shape"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Short Name"
+          },
+          "vehicles": {
+            "items": {
+              "$ref": "#/components/schemas/TripVehicle"
+            },
+            "title": "Vehicles",
+            "type": "array"
+          },
+          "wheelchair_accessible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wheelchair Accessible"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "trip_id",
+          "service_date",
+          "journey",
+          "line",
+          "agency",
+          "trip_short_name",
+          "headsign",
+          "wheelchair_accessible",
+          "bikes_allowed",
+          "amenities",
+          "realtime",
+          "vehicles",
+          "run_parts",
+          "calls",
+          "features",
+          "notes",
+          "connections",
+          "links",
+          "alerts"
+        ],
+        "title": "Trip",
+        "type": "object"
+      },
+      "TripCall": {
+        "properties": {
+          "alighting": {
+            "enum": [
+              "regular",
+              "none",
+              "phone",
+              "ask_driver"
+            ],
+            "title": "Alighting",
+            "type": "string"
+          },
+          "boarding": {
+            "enum": [
+              "regular",
+              "none",
+              "phone",
+              "ask_driver"
+            ],
+            "title": "Boarding",
+            "type": "string"
+          },
+          "estimated_arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Arrival"
+          },
+          "estimated_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Departure"
+          },
+          "flags": {
+            "description": "request_stop, on_request, conditional, exit_only, boarding_only, not_stopping, border_control_only",
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "scheduled_arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Arrival"
+          },
+          "scheduled_departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Departure"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source_class": {
+            "anyOf": [
+              {
+                "enum": [
+                  "gps",
+                  "source",
+                  "propagated"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Class"
+          },
+          "status": {
+            "enum": [
+              "scheduled",
+              "predicted",
+              "actual",
+              "inferred",
+              "no_realtime",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "location_id",
+          "name",
+          "latitude",
+          "longitude",
+          "boarding",
+          "alighting",
+          "flags",
+          "platform",
+          "scheduled_arrival",
+          "scheduled_departure",
+          "estimated_arrival",
+          "estimated_departure",
+          "status",
+          "source_class"
+        ],
+        "title": "TripCall",
+        "type": "object"
+      },
+      "TripHistory": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryDay"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "journey": {
+            "$ref": "#/components/schemas/JourneyKey"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "journey",
+          "days"
+        ],
+        "title": "TripHistory",
+        "type": "object"
+      },
+      "TripPart": {
+        "properties": {
+          "run_part": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Part"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "run_part"
+        ],
+        "title": "TripPart",
+        "type": "object"
+      },
+      "TripRealtime": {
+        "properties": {
+          "delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay S"
+          },
+          "lifecycle": {
+            "description": "pre_trip, running, finished or cancelled",
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "off_route": {
+            "title": "Off Route",
+            "type": "boolean"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/RealtimeSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lifecycle",
+          "delay_s",
+          "off_route",
+          "stale",
+          "updated_at",
+          "sources"
+        ],
+        "title": "TripRealtime",
+        "type": "object"
+      },
+      "TripRef": {
+        "properties": {
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "service_date"
+        ],
+        "title": "TripRef",
+        "type": "object"
+      },
+      "TripVehicle": {
+        "description": "The vehicle currently on a trip.",
+        "properties": {
+          "bearing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearing"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "sources": {
+            "description": "Sources reporting it now",
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "positioning",
+              "layover",
+              "unmatched",
+              "not_in_service"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "traits": {
+            "$ref": "#/components/schemas/VehicleTraits"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "state",
+          "last_seen",
+          "latitude",
+          "longitude",
+          "bearing"
+        ],
+        "title": "TripVehicle",
+        "type": "object"
+      },
+      "UnitFeature": {
+        "properties": {
+          "feature": {
+            "description": "A vehicle attribute (`wifi`, `power_sockets`, `wheelchair_lift`, …) or `raw:<source>:<code>` for a code with no home in the vocabulary",
+            "title": "Feature",
+            "type": "string"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a raw code: its `text` is the source's"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The source's own wording of its code",
+            "title": "Text"
+          }
+        },
+        "required": [
+          "feature",
+          "label",
+          "icon",
+          "text"
+        ],
+        "title": "UnitFeature",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "Vehicle": {
+        "properties": {
+          "bearing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bearing"
+          },
+          "delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay S"
+          },
+          "feed": {
+            "title": "Feed",
+            "type": "string"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Line"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "service_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Date"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Sources reporting it now",
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "positioning",
+              "layover",
+              "unmatched",
+              "not_in_service"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "traits": {
+            "$ref": "#/components/schemas/VehicleTraits"
+          },
+          "trip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Id"
+          },
+          "vehicle_id": {
+            "description": "The registry's vehicle ID when the source vehicle is bound to one, else <source>:<source_vehicle_id>; both resolve",
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "feed",
+          "source",
+          "state",
+          "last_seen",
+          "latitude",
+          "longitude",
+          "bearing",
+          "trip_id",
+          "service_date",
+          "line",
+          "headsign",
+          "delay_s"
+        ],
+        "title": "Vehicle",
+        "type": "object"
+      },
+      "VehicleAttributeValue": {
+        "description": "The value that counts (registry > live by source precedence > model), and all others.",
+        "properties": {
+          "attribute": {
+            "title": "Attribute",
+            "type": "string"
+          },
+          "conflict": {
+            "description": "Another curated or live statement says otherwise",
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null for a raw source field"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a source last stated a live value",
+            "title": "Observed At"
+          },
+          "origin": {
+            "enum": [
+              "curated",
+              "live",
+              "model"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "statements": {
+            "items": {
+              "$ref": "#/components/schemas/VehicleStatement"
+            },
+            "title": "Statements",
+            "type": "array"
+          },
+          "value": {
+            "description": "true/false, digits or text, by the attribute's type",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attribute",
+          "label",
+          "icon",
+          "value",
+          "origin",
+          "source",
+          "observed_at",
+          "conflict",
+          "statements"
+        ],
+        "title": "VehicleAttributeValue",
+        "type": "object"
+      },
+      "VehicleDetail": {
+        "properties": {
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/VehicleAttributeValue"
+            },
+            "title": "Attributes",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "registry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegistryEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "reports": {
+            "description": "The source reports that are it now",
+            "items": {
+              "$ref": "#/components/schemas/VehicleSource"
+            },
+            "title": "Reports",
+            "type": "array"
+          },
+          "sources": {
+            "description": "Every source stating its attributes",
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "vehicle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Vehicle"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its current state, if seen lately"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "vehicle_id",
+          "vehicle",
+          "registry",
+          "reports",
+          "sources",
+          "attributes"
+        ],
+        "title": "VehicleDetail",
+        "type": "object"
+      },
+      "VehicleSource": {
+        "description": "One source's report of the vehicle (several when the registry binds them to it).",
+        "properties": {
+          "bound_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "source",
+                  "identifier",
+                  "co_located"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What makes this report this vehicle: a registry key (its source's ID, or an identifier it states: plate, EVN, series number), or running one journey side by side with another source's report of it (provisional)",
+            "title": "Bound By"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_vehicle_id": {
+            "title": "Source Vehicle Id",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "running",
+                  "positioning",
+                  "layover",
+                  "unmatched",
+                  "not_in_service"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "source_vehicle_id",
+          "state",
+          "last_seen",
+          "bound_by"
+        ],
+        "title": "VehicleSource",
+        "type": "object"
+      },
+      "VehicleStatement": {
+        "description": "One statement about an attribute: a registry dataset's, a source's live, or a model's.",
+        "properties": {
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "origin": {
+            "enum": [
+              "curated",
+              "live",
+              "model"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "source": {
+            "description": "The dataset (curated, model) or the realtime source (live)",
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "origin",
+          "source",
+          "observed_at"
+        ],
+        "title": "VehicleStatement",
+        "type": "object"
+      },
+      "VehicleTraits": {
+        "description": "The vehicle's main attributes, effective values (curated > live > model default).",
+        "properties": {
+          "air_conditioning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air Conditioning"
+          },
+          "fleet_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fleet Number"
+          },
+          "licence_plate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence Plate"
+          },
+          "low_floor": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Floor"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "wheelchair_accessible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wheelchair Accessible"
+          }
+        },
+        "title": "VehicleTraits",
+        "type": "object"
+      },
+      "Vehicles": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "vehicles": {
+            "items": {
+              "$ref": "#/components/schemas/Vehicle"
+            },
+            "title": "Vehicles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "vehicles"
+        ],
+        "title": "Vehicles",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "summary": "Czech public transport: stops, boards, trips, lines and vehicles, live.",
+    "title": "Oběhy",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/alerts": {
+      "get": {
+        "operationId": "alerts_api_v1_alerts_get",
+        "parameters": [
+          {
+            "description": "A route_id",
+            "in": "query",
+            "name": "line",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A route_id",
+              "title": "Line"
+            }
+          },
+          {
+            "description": "A stop place (and its boarding points)",
+            "in": "query",
+            "name": "stop",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A stop place (and its boarding points)",
+              "title": "Stop"
+            }
+          },
+          {
+            "description": "A trip_id",
+            "in": "query",
+            "name": "trip",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A trip_id",
+              "title": "Trip"
+            }
+          },
+          {
+            "description": "Current at; default now",
+            "in": "query",
+            "name": "at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Current at; default now",
+              "title": "At"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alerts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Current alerts, by scope",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/alerts/{alert_id}": {
+      "get": {
+        "operationId": "alert_api_v1_alerts__alert_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One alert, also once withdrawn or over",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/arrivals": {
+      "get": {
+        "operationId": "arrivals_of_api_v1_arrivals_get",
+        "parameters": [
+          {
+            "description": "Comma-separated stop place IDs",
+            "in": "query",
+            "name": "stops",
+            "required": true,
+            "schema": {
+              "description": "Comma-separated stop place IDs",
+              "title": "Stops",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ISO 8601 with an offset; default now",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 with an offset; default now",
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "description": "`next` of a previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next` of a previous page",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Arrivals"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One board of arrivals at several stop places",
+        "tags": [
+          "boards"
+        ]
+      }
+    },
+    "/api/v1/debug/alerts": {
+      "get": {
+        "operationId": "alerts_api_v1_debug_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1440,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Alerts Api V1 Debug Alerts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alerts with each entity and what it resolved to",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/lookups": {
+      "get": {
+        "operationId": "lookups_api_v1_debug_lookups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1440,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Lookups Api V1 Debug Lookups Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lookup requests and the upstream requests they caused",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/realtime/instances/{feed}/{namespace}/{key}/{service_date}": {
+      "get": {
+        "operationId": "instance_api_v1_debug_realtime_instances__feed___namespace___key___service_date__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed",
+            "required": true,
+            "schema": {
+              "title": "Feed",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "namespace",
+            "required": true,
+            "schema": {
+              "title": "Namespace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "service_date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Service Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1440,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Instance Api V1 Debug Realtime Instances  Feed   Namespace   Key   Service Date  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A journey's state, parts, vehicle reports and recent observations",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/realtime/sources": {
+      "get": {
+        "operationId": "sources_api_v1_debug_realtime_sources_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1440,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Sources Api V1 Debug Realtime Sources Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Polls per source channel, and what each feeds now",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/realtime/unmatched": {
+      "get": {
+        "operationId": "unmatched_api_v1_debug_realtime_unmatched_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1440,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Unmatched Api V1 Debug Realtime Unmatched Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent observations the core did not bind",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/release": {
+      "get": {
+        "operationId": "release_api_v1_debug_release_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Release Api V1 Debug Release Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The active release, its packages, loads and activations",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/static/trips/{trip_id}": {
+      "get": {
+        "operationId": "trip_codes_api_v1_debug_static_trips__trip_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Trip Codes Api V1 Debug Static Trips  Trip Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A trip's raw assignment rows",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/vehicles/pairings": {
+      "get": {
+        "operationId": "pairings_api_v1_debug_vehicles_pairings_get",
+        "parameters": [
+          {
+            "description": "Only confirmed or only candidates",
+            "in": "query",
+            "name": "confirmed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only confirmed or only candidates",
+              "title": "Confirmed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pairings Api V1 Debug Vehicles Pairings Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reports paired by running side by side",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/vehicles/registry": {
+      "get": {
+        "operationId": "registry_api_v1_debug_vehicles_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Debug Vehicles Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The registry's datasets and the profiles' conflicts",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/vehicles/{vehicle_id}": {
+      "get": {
+        "operationId": "vehicle_api_v1_debug_vehicles__vehicle_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vehicle_id",
+            "required": true,
+            "schema": {
+              "title": "Vehicle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Vehicle Api V1 Debug Vehicles  Vehicle Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Why a vehicle is what it is: reports, keys, pairings, statements, profile",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/departures": {
+      "get": {
+        "operationId": "departures_of_api_v1_departures_get",
+        "parameters": [
+          {
+            "description": "Comma-separated stop place IDs",
+            "in": "query",
+            "name": "stops",
+            "required": true,
+            "schema": {
+              "description": "Comma-separated stop place IDs",
+              "title": "Stops",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ISO 8601 with an offset; default now",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 with an offset; default now",
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "description": "`next` of a previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next` of a previous page",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departures"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One board of departures from several stop places",
+        "tags": [
+          "boards"
+        ]
+      }
+    },
+    "/api/v1/journeys/{namespace}/{key}/history": {
+      "get": {
+        "operationId": "journey_history_api_v1_journeys__namespace___key__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "namespace",
+            "required": true,
+            "schema": {
+              "title": "Namespace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First service date",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First service date",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "Last service date; default today",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last service date; default today",
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A journey's recorded runs: actual times and delays per service date",
+        "tags": [
+          "trips"
+        ]
+      }
+    },
+    "/api/v1/lines": {
+      "get": {
+        "operationId": "lines_api_v1_lines_get",
+        "parameters": [
+          {
+            "description": "Line number or name, regardless of diacritics",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Line number or name, regardless of diacritics",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lines"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search lines by name",
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/api/v1/lines/{route_id}": {
+      "get": {
+        "operationId": "line_detail_api_v1_lines__route_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "route_id",
+            "required": true,
+            "schema": {
+              "title": "Route Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Service date; default today",
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Service date; default today",
+              "title": "Date"
+            }
+          },
+          {
+            "description": "`shape` adds each pattern's path",
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`shape` adds each pattern's path",
+              "title": "Include"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A line: validity, features and notes, and its trips and stop patterns on a date",
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/api/v1/lines/{route_id}/punctuality": {
+      "get": {
+        "operationId": "line_punctuality_api_v1_lines__route_id__punctuality_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "route_id",
+            "required": true,
+            "schema": {
+              "title": "Route Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First service date",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First service date",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "Last service date; default today",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last service date; default today",
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinePunctuality"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "How punctual a line's departures were, from history",
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/api/v1/lines/{route_id}/timetable": {
+      "get": {
+        "operationId": "line_timetable_api_v1_lines__route_id__timetable_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "route_id",
+            "required": true,
+            "schema": {
+              "title": "Route Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Service date; default today",
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Service date; default today",
+              "title": "Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTimetable"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A line's timetable on a date: per stop sequence, each trip's times at its stops",
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/api/v1/lines/{route_id}/trips": {
+      "get": {
+        "operationId": "line_trips_api_v1_lines__route_id__trips_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "route_id",
+            "required": true,
+            "schema": {
+              "title": "Route Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Service date; default today",
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Service date; default today",
+              "title": "Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTrips"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A line's trips running on a date, with their realtime state",
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "status_api_v1_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Release and source freshness",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/api/v1/stop-places/{location_id}": {
+      "get": {
+        "operationId": "stop_place_api_v1_stop_places__location_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "location_id",
+            "required": true,
+            "schema": {
+              "title": "Location Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopPlace"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A stop place with its facilities, boarding points and lines",
+        "tags": [
+          "stops"
+        ]
+      }
+    },
+    "/api/v1/stop-places/{location_id}/arrivals": {
+      "get": {
+        "operationId": "arrivals_api_v1_stop_places__location_id__arrivals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "location_id",
+            "required": true,
+            "schema": {
+              "title": "Location Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ISO 8601 with an offset; default now",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 with an offset; default now",
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "description": "`next` of a previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next` of a previous page",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Arrivals"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Arrivals at a stop place and its boarding points",
+        "tags": [
+          "boards"
+        ]
+      }
+    },
+    "/api/v1/stop-places/{location_id}/departures": {
+      "get": {
+        "operationId": "departures_api_v1_stop_places__location_id__departures_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "location_id",
+            "required": true,
+            "schema": {
+              "title": "Location Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ISO 8601 with an offset; default now",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 with an offset; default now",
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minutes",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Minutes"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "description": "`next` of a previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next` of a previous page",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departures"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Departures from a stop place and its boarding points",
+        "tags": [
+          "boards"
+        ]
+      }
+    },
+    "/api/v1/stops": {
+      "get": {
+        "operationId": "stops_api_v1_stops_get",
+        "parameters": [
+          {
+            "description": "Name, regardless of case and diacritics",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Name, regardless of case and diacritics",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "minlon,minlat,maxlon,maxlat",
+            "in": "query",
+            "name": "bbox",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "minlon,minlat,maxlon,maxlat",
+              "title": "Bbox"
+            }
+          },
+          {
+            "description": "lat,lon; nearest first",
+            "in": "query",
+            "name": "near",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "lat,lon; nearest first",
+              "title": "Near"
+            }
+          },
+          {
+            "description": "Metres around `near`",
+            "in": "query",
+            "name": "radius",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Metres around `near`",
+              "title": "Radius"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stops"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search stop places by name, list those in a viewport, or those near a point",
+        "tags": [
+          "stops"
+        ]
+      }
+    },
+    "/api/v1/trips/by-key/{namespace}/{key}/{service_date}": {
+      "get": {
+        "operationId": "trip_by_key_api_v1_trips_by_key__namespace___key___service_date__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "namespace",
+            "required": true,
+            "schema": {
+              "title": "Namespace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "service_date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Service Date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "308": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Find the trip a source key names on a date (308 to the trip)",
+        "tags": [
+          "trips"
+        ]
+      }
+    },
+    "/api/v1/trips/{trip_id}/{service_date}": {
+      "get": {
+        "operationId": "trip_api_v1_trips__trip_id___service_date__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "service_date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Service Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`shape` adds the GeoJSON path",
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`shape` adds the GeoJSON path",
+              "title": "Include"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trip"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoneTrip"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A trip on a service date: calls, realtime, amenities, connections",
+        "tags": [
+          "trips"
+        ]
+      }
+    },
+    "/api/v1/trips/{trip_id}/{service_date}/composition": {
+      "get": {
+        "operationId": "composition_api_v1_trips__trip_id___service_date__composition_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "service_date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Service Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A call's location_id; default: the next passenger call",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A call's location_id; default: the next passenger call",
+              "title": "From"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Composition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Composition"
+                }
+              }
+            },
+            "description": "Asked; retry after `retry_after_s`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A trip's composition from a call onward: units with their spans, and segments",
+        "tags": [
+          "trips"
+        ]
+      }
+    },
+    "/api/v1/vehicles": {
+      "get": {
+        "operationId": "vehicles_api_v1_vehicles_get",
+        "parameters": [
+          {
+            "description": "minlon,minlat,maxlon,maxlat",
+            "in": "query",
+            "name": "bbox",
+            "required": true,
+            "schema": {
+              "description": "minlon,minlat,maxlon,maxlat",
+              "title": "Bbox",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated: unmatched, not_in_service",
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated: unmatched, not_in_service",
+              "title": "Include"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vehicles"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Vehicles in a viewport",
+        "tags": [
+          "vehicles"
+        ]
+      }
+    },
+    "/api/v1/vehicles/{vehicle_id}": {
+      "get": {
+        "operationId": "vehicle_api_v1_vehicles__vehicle_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vehicle_id",
+            "required": true,
+            "schema": {
+              "title": "Vehicle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehicleDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A vehicle: its current state, registry entry, source reports and attributes",
+        "tags": [
+          "vehicles"
+        ]
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -18,9 +19,31 @@ def add_parsers(commands: Any) -> None:
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--config", type=Path)
     serve.add_argument("--database-url", help="default: OBEHY_DATABASE_URL or [database] url")
+    openapi = api_commands.add_parser(
+        "openapi", help="write the OpenAPI document (the frontend's types come from it)"
+    )
+    openapi.add_argument("--out", type=Path, help="default: standard output")
+
+
+def openapi_document() -> str:
+    """The OpenAPI document, without a database: building the schema never opens the pool."""
+
+    from obehy.api.app import create_app
+
+    app = create_app("postgresql://unused")
+    return json.dumps(app.openapi(), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.api_command == "openapi":
+        document = openapi_document()
+        out = cast(Path | None, args.out)
+        if out is None:
+            sys.stdout.write(document)
+        else:
+            out.write_text(document, encoding="utf-8", newline="\n")
+        return 0
+
     import uvicorn
 
     from obehy.api.app import create_app

@@ -1,0 +1,46 @@
+/* The API's line colours on a 2 px white container, so any colour keeps its contrast on light
+   and dark surfaces. */
+.container {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--ob-radius-sm);
+  background: #ffffff;
+  flex: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--ob-route-fill);
+  color: var(--ob-route-text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.container {
+  max-width: 100%;
+}
+
+.lg .badge {
+  min-width: 44px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 16px;
+}
+
+.sm .badge {
+  min-width: 32px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 18px;
+}

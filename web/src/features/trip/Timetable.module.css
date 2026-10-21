@@ -1,0 +1,186 @@
+/* Columns: times | rail (line and dot) | stop name | platform. */
+.root {
+  --times: 92px;
+  --rail: 20px;
+  --platform: 32px;
+}
+
+.columns,
+.stop,
+.expander,
+.continuation {
+  display: grid;
+  grid-template-columns: var(--times) var(--rail) minmax(0, 1fr) var(--platform);
+  column-gap: 8px;
+  align-items: center;
+}
+
+.columns {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ob-border);
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.columns > span:first-child {
+  text-align: right;
+}
+
+.columns > span:nth-child(2) {
+  grid-column: 3;
+}
+
+.columns > span:last-child {
+  text-align: right;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stop {
+  min-height: 43px;
+}
+
+.times {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.scheduled {
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.rail {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--ob-action);
+}
+
+.stop[data-first="true"] .line {
+  top: 50%;
+}
+
+.stop[data-last="true"] .line {
+  bottom: 50%;
+}
+
+.stop[data-state="passed"] .line {
+  background: var(--ob-border);
+}
+
+.dot {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--ob-action);
+  border-radius: 50%;
+  background: var(--ob-surface);
+}
+
+.stop[data-state="passed"] .dot {
+  border-color: var(--ob-border-control);
+  background: var(--ob-border-control);
+  width: 8px;
+  height: 8px;
+}
+
+.stop[data-state="next"] .dot {
+  width: 14px;
+  height: 14px;
+  border-width: 3px;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.stop[data-state="next"] .name {
+  font-weight: 700;
+}
+
+.stop[data-state="passed"] .name {
+  color: var(--ob-text-secondary);
+}
+
+.flag {
+  flex: none;
+  color: var(--ob-text-secondary);
+}
+
+.platform {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.expander,
+.continuation {
+  min-height: 36px;
+}
+
+.expander .rail,
+.continuation .rail {
+  grid-column: 2;
+}
+
+.dots {
+  width: 2px;
+  height: 18px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--ob-text-secondary) 0 3px,
+    transparent 3px 7px
+  );
+}
+
+.expanderButton,
+.collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ob-link);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.collapse {
+  margin: 8px 0 0 calc(var(--times) + var(--rail) + 16px);
+}
+
+.continuationText {
+  grid-column: 3 / 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+}

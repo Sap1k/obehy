@@ -286,6 +286,21 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   resolves against them; the v4-vs-v5 comparison was dropped (different source data). Supersedes
   §5.2: the CZPTT trip ↔ operational-call link is `trip_call` itself.
 
+### 7. Web frontend
+
+- **Built:** `web/` (Vite, React, Mantine, TanStack Router and Query; types from the API's
+  OpenAPI document). The app shell has four tabs: Mapa (home), Odjezdy, Linky, Mimořádnosti.
+  Departure and arrival boards come with a time select, stop alerts, day dividers, paging, and
+  live, delayed and offline states. A trip opened from a board shows a collapsible timetable
+  over the whole run ("Dále jako" where the line changes), then notes, connections and the
+  vehicle. Served by the web image (nginx + the app); in development the app proxies to
+  obehy.cz.
+- **Next:**
+  - Mapa with per-release PMTiles and vehicles;
+  - Linky and Mimořádnosti;
+  - the composition card once ČD is asked live;
+  - code-split the bundle (180 KB gzip).
+
 ## Recent log
 
 - **2026-10-22** — Server disk at 96 %: with PID, `rt.observation` is about 7 GB per UTC day,
@@ -293,6 +308,15 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   (yesterday's partition and today's), enough for the 6-hour warm replay across midnight. Unit
   tests pass. Dropping the two oldest partitions by hand frees 14 GB now. Next to watch:
   `history.*` at 9 GB with no retention yet.
+
+- **2026-10-21** — Web frontend (`web/`, section 7 above): shell, boards and trip panel after
+  the redesigned Figma file; `obehy api openapi` writes `web/openapi.json`, and CI fails when
+  it or the generated types drift. The `obehy-web` image (nginx with the app) replaces plain
+  nginx in `deploy/compose.yaml`.
+  - **Validated:** 31 Vitest tests, ESLint, Prettier, tsc, a production build; checked in a
+    browser against obehy.cz (Děčín hl.n. boards; U1 6556 going on as U1 (NAD) to Kadaň;
+    phone and dark mode).
+  - **Not run:** the Docker image build (no Docker locally; CI builds it).
 
 - **2026-10-20** — API phase A (migration 0012): fixed codes readable through
   `codes-v1.toml` (39 kinds, calendar designations, boarding codes, 34 integrated transport

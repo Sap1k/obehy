@@ -1,0 +1,77 @@
+[
+  {
+    "trip_id": "czptt:trip:Pa%3A0054%3A--KADR370308%3A01%3A2026:1",
+    "service_date": "2026-10-22",
+    "location_id": "czptt:stop:CZ:55659",
+    "line": {
+      "route_id": "czptt:route:line:4001:3752:106",
+      "short_name": "U1",
+      "long_name": "Děčín hl.n. – Ústí nad Labem hl.n. – Most – Chomutov – Kadaň předměstí",
+      "mode": "rail",
+      "color": "1c1745",
+      "text_color": "ffffff"
+    },
+    "trip_short_name": "Os 6556",
+    "headsign": "Kadaň předměstí",
+    "scheduled": "2026-10-22T14:30:00+02:00",
+    "estimated": null,
+    "delay_s": null,
+    "status": "scheduled",
+    "source_class": null,
+    "stale": null,
+    "platform": "3",
+    "vehicle": null,
+    "sources": [],
+    "alert_ids": []
+  },
+  {
+    "trip_id": "czptt:trip:Pa%3A0054%3A--KADR367470%3A01%3A2026:1",
+    "service_date": "2026-10-22",
+    "location_id": "czptt:stop:CZ:55659",
+    "line": {
+      "route_id": "czptt:route:fallback:1154:Os:106:6658",
+      "short_name": "Os 6658",
+      "long_name": null,
+      "mode": "rail",
+      "color": "1c1745",
+      "text_color": "ffffff"
+    },
+    "trip_short_name": "Os 6658",
+    "headsign": "Rumburk",
+    "scheduled": "2026-10-22T14:36:00+02:00",
+    "estimated": null,
+    "delay_s": null,
+    "status": "scheduled",
+    "source_class": null,
+    "stale": null,
+    "platform": "6",
+    "vehicle": null,
+    "sources": [],
+    "alert_ids": []
+  },
+  {
+    "trip_id": "czptt:trip:Pa%3A0054%3A--KADR170544%3A01%3A2026:1",
+    "service_date": "2026-10-22",
+    "location_id": "czptt:stop:CZ:55659",
+    "line": {
+      "route_id": "czptt:route:line:4028:1154:106",
+      "short_name": "U28",
+      "long_name": "Děčín hl.n. – Bad Schandau – Sebnitz – Rumburk",
+      "mode": "rail",
+      "color": "1c1745",
+      "text_color": "ffffff"
+    },
+    "trip_short_name": "Os 28009",
+    "headsign": "Rumburk",
+    "scheduled": "2026-10-22T14:41:00+02:00",
+    "estimated": null,
+    "delay_s": null,
+    "status": "scheduled",
+    "source_class": null,
+    "stale": null,
+    "platform": "1",
+    "vehicle": null,
+    "sources": [],
+    "alert_ids": []
+  }
+]

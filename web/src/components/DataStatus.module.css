@@ -1,0 +1,27 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--ob-radius-sm);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.live {
+  background: var(--ob-on-time-fill);
+  color: var(--ob-on-time-text);
+}
+
+.delayed {
+  background: var(--ob-late-fill);
+  color: var(--ob-late-text);
+}
+
+.offline {
+  background: var(--ob-unknown-fill);
+  color: var(--ob-unknown-text);
+}

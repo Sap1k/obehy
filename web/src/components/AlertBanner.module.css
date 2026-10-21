@@ -1,0 +1,60 @@
+.root {
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-info-fill);
+  color: var(--ob-info-text);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  color: inherit;
+  text-align: left;
+}
+
+.head:disabled {
+  cursor: default;
+}
+
+.icon,
+.chevron {
+  flex: none;
+  margin-top: 2px;
+}
+
+.texts {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.meta {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.body {
+  padding: 0 16px 12px 44px;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-line;
+}
+
+.body p {
+  margin: 0 0 4px;
+}
+
+.body a {
+  color: inherit;
+  font-weight: 600;
+}

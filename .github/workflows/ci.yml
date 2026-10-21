@@ -37,10 +37,35 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
+      # The frontend's types come from this document: it must match the API.
+      - run: uv run obehy api openapi --out web/openapi.json && git diff --exit-code web/openapi.json
 
-  # The server image (Dockerfile, deploy/compose.yaml), published for every green main.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run gen:api && git diff --exit-code src/api/schema.d.ts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+
+  # The server image (Dockerfile, deploy/compose.yaml) and the web image (web/Dockerfile: nginx
+  # with the app), published for every green main.
   image:
-    needs: test
+    needs: [test, web]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -75,8 +100,27 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - id: web-meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}-web
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest
+      - uses: docker/build-push-action@v7
+        with:
+          context: web
+          push: true
+          tags: ${{ steps.web-meta.outputs.tags }}
+          labels: ${{ steps.web-meta.outputs.labels }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
       - name: Smoke test
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-$GITHUB_SHA"
           docker run --rm "$image" release fetch --help
           docker run --rm --entrypoint sh "$image" -c 'date && ls -la /app/data /app/deploy'
+          # With a volume at /srv, as deploy/compose.yaml mounts the data there.
+          web="ghcr.io/${GITHUB_REPOSITORY,,}-web:sha-$GITHUB_SHA"
+          docker run --rm -v "$RUNNER_TEMP:/srv:ro" --entrypoint sh "$web" \
+            -c 'test -f /usr/share/nginx/obehy/index.html && nginx -v'

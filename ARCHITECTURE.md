@@ -384,5 +384,5 @@ src/obehy/
 │   └── sql/            nightly set-wise jobs
 ├── api/                FastAPI /api/v1
 └── data/               policies, connector manifests, vehicles/attributes.toml
-web/                    frontend (later)
+web/                    frontend: Vite + React + Mantine; nginx image (web/Dockerfile)
 ```

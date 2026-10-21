@@ -397,3 +397,11 @@ def test_unreachable_source_fails_before_any_conversion(tmp_path: Path) -> None:
     assert failure["completed_stages"] == []
     assert "pid-gtfs" in failure["error"]
     assert (failure_path.parent / "sources" / "fetch-log.json").is_file()
+
+
+def test_api_openapi_writes_the_document_without_a_database(tmp_path: Path) -> None:
+    out = tmp_path / "openapi.json"
+    assert cli.main(["api", "openapi", "--out", str(out)]) == 0
+    document = json.loads(out.read_text(encoding="utf-8"))
+    assert "/api/v1/stop-places/{location_id}/departures" in document["paths"]
+    assert "Departure" in document["components"]["schemas"]

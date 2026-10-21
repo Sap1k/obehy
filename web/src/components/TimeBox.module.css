@@ -1,0 +1,70 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.onTime {
+  --tone-fill: var(--ob-on-time-fill);
+  --tone-text: var(--ob-on-time-text);
+}
+
+.late {
+  --tone-fill: var(--ob-late-fill);
+  --tone-text: var(--ob-late-text);
+}
+
+.veryLate {
+  --tone-fill: var(--ob-very-late-fill);
+  --tone-text: var(--ob-very-late-text);
+}
+
+.early {
+  --tone-fill: var(--ob-early-fill);
+  --tone-text: var(--ob-early-text);
+}
+
+.cancelled {
+  --tone-fill: var(--ob-cancelled-fill);
+  --tone-text: var(--ob-cancelled-text);
+}
+
+.unknown {
+  --tone-fill: var(--ob-unknown-fill);
+  --tone-text: var(--ob-unknown-text);
+}
+
+.time {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: var(--ob-radius-sm);
+  background: var(--tone-fill);
+  color: var(--tone-text);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.compact .time {
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.struck .time {
+  text-decoration: line-through;
+}
+
+.caption {
+  color: var(--tone-text);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.onTime .caption,
+.unknown .caption {
+  color: var(--ob-text-secondary);
+}

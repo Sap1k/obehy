@@ -68,7 +68,7 @@ obehy ref import                    one-shot: curated reference datasets → ref
 obehy realtime                      long-running realtime worker; the only upstream I/O
 obehy jobs                          nightly set-wise SQL (vehicle days, circulations, retention)
 obehy api                           FastAPI; never calls upstream
-web                                 later: React + MapLibre static assets
+web                                 React static assets in nginx (MapLibre later)
 motis                               later: managed MOTIS instance
 ```
 
@@ -199,7 +199,7 @@ obehy/                         (this repository)
 │   │   └── sql/               set-wise jobs: vehicle_day, circulation_edge, punctuality
 │   ├── api/                   FastAPI app, /api/v1 routers, debug
 │   └── data/                  versioned rules, policies and connector manifests
-├── web/                       later: Vite + React + MapLibre frontend
+├── web/                       Vite + React frontend (MapLibre later)
 ├── config/                    obehy.example.toml, local config (not committed)
 ├── docs/sources/              one dossier per realtime source, with its quirk ledger
 ├── tests/                     unit/, db/, replay/

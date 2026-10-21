@@ -1,0 +1,21 @@
+.input {
+  width: 100%;
+  max-width: 428px;
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+}
+
+.name {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.place {
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}

@@ -1,0 +1,119 @@
+/* Oběhy colour tokens (Figma "Oběhy / Colour", Light and Dark modes). The navbar is dark in
+   both schemes: .ob-dark-scope takes the dark values. */
+
+:root,
+[data-mantine-color-scheme="light"] {
+  --ob-bg: #f4f7ef;
+  --ob-text: #153438;
+  --ob-text-secondary: #526760;
+  --ob-text-disabled: #6d8079;
+  --ob-surface: #ffffff;
+  --ob-surface-subtle: #f7f9f6;
+  --ob-border: #d4dfd7;
+  --ob-border-control: #6d8079;
+  --ob-action: #246568;
+  --ob-action-hover: #1c5356;
+  --ob-action-on: #ffffff;
+  --ob-action-disabled: #eaf0e9;
+  --ob-selection: #deeeea;
+  --ob-selection-text: #1c5356;
+  --ob-focus: #246568;
+  --ob-link: #246568;
+  --ob-logo: #246568;
+
+  --ob-on-time-text: #256342;
+  --ob-on-time-fill: #e6f3e9;
+  --ob-late-text: #875200;
+  --ob-late-fill: #fff0cf;
+  --ob-very-late-text: #9a3412;
+  --ob-very-late-fill: #ffedd5;
+  --ob-early-text: #1e40af;
+  --ob-early-fill: #dbeafe;
+  --ob-cancelled-text: #af3038;
+  --ob-cancelled-fill: #fce8e8;
+  --ob-unknown-text: #526760;
+  --ob-unknown-fill: #eaf0e9;
+  --ob-info-text: #285aa0;
+  --ob-info-fill: #e7effb;
+  --ob-disruption-text: #af3038;
+  --ob-disruption-fill: #fce8e8;
+}
+
+[data-mantine-color-scheme="dark"],
+.ob-dark-scope {
+  --ob-bg: #102b2d;
+  --ob-text: #f4f7ef;
+  --ob-text-secondary: #b6c8bd;
+  --ob-text-disabled: #526760;
+  --ob-surface: #18383a;
+  --ob-surface-subtle: #214447;
+  --ob-border: #365352;
+  --ob-border-control: #b6c8bd;
+  --ob-action: #c5ed62;
+  --ob-action-hover: #d4f48a;
+  --ob-action-on: #102b2d;
+  --ob-action-disabled: #214447;
+  --ob-selection: #284d4c;
+  --ob-selection-text: #f4f7ef;
+  --ob-focus: #c5ed62;
+  --ob-link: #c5ed62;
+  --ob-logo: #c5ed62;
+
+  --ob-on-time-text: #9bdeb1;
+  --ob-on-time-fill: #193e2c;
+  --ob-late-text: #ffd278;
+  --ob-late-fill: #443417;
+  --ob-very-late-text: #fdba74;
+  --ob-very-late-fill: #492719;
+  --ob-early-text: #a9caff;
+  --ob-early-fill: #172e50;
+  --ob-cancelled-text: #ffadb1;
+  --ob-cancelled-fill: #4a252b;
+  --ob-unknown-text: #b6c8bd;
+  --ob-unknown-fill: #214447;
+  --ob-info-text: #a9caff;
+  --ob-info-fill: #1e3654;
+  --ob-disruption-text: #ffadb1;
+  --ob-disruption-fill: #4a252b;
+}
+
+/* Line colours come from the API and are never inverted; the default is ink on white. */
+:root {
+  --ob-route-fill: #153438;
+  --ob-route-text: #ffffff;
+  --ob-radius-sm: 4px;
+  --ob-radius-md: 8px;
+}
+
+/* Mantine's own variables follow the tokens. */
+:root,
+[data-mantine-color-scheme="light"],
+[data-mantine-color-scheme="dark"],
+.ob-dark-scope {
+  --mantine-color-body: var(--ob-bg);
+  --mantine-color-text: var(--ob-text);
+  --mantine-color-dimmed: var(--ob-text-secondary);
+  --mantine-color-default: var(--ob-surface);
+  --mantine-color-default-hover: var(--ob-surface-subtle);
+  --mantine-color-default-color: var(--ob-text);
+  --mantine-color-default-border: var(--ob-border-control);
+  --mantine-color-placeholder: var(--ob-text-secondary);
+  --mantine-color-anchor: var(--ob-link);
+  --mantine-primary-color-filled: var(--ob-action);
+  --mantine-primary-color-filled-hover: var(--ob-action-hover);
+  --mantine-primary-color-contrast: var(--ob-action-on);
+  --mantine-primary-color-light: var(--ob-selection);
+  --mantine-primary-color-light-hover: var(--ob-selection);
+  --mantine-primary-color-light-color: var(--ob-selection-text);
+}
+
+body {
+  background: var(--ob-bg);
+  color: var(--ob-text);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ob-focus);
+  outline-offset: 2px;
+}
