@@ -82,6 +82,7 @@ def test_facts_round_trip_through_json() -> None:
         SourceDeparture,
         SourceState,
         StopEvent,
+        TripCancelled,
         TripKey,
         VehicleAttribute,
         VehicleKey,
@@ -102,6 +103,7 @@ def test_facts_round_trip_through_json() -> None:
         Destination("Teplice,Celní"),
         NextStopName("Teplice,Pražská"),
         VehicleAttribute("low_floor", "true"),
+        TripCancelled(),
     )
     stored = json.loads(json.dumps(facts_to_json(facts)))
     assert facts_from_json(stored) == facts

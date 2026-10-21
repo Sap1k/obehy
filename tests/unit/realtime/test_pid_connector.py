@@ -16,6 +16,7 @@ from obehy.realtime.model import (
     Observation,
     Position,
     SourceState,
+    TripCancelled,
     TripKey,
     VehicleAttribute,
     VehicleKey,
@@ -122,18 +123,40 @@ def test_pid_q4_before_the_trip_is_pre_trip_without_delay(state: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "last",
-    [
-        {"state_position": "after_track"},
-        {"state_position": "after_track_delayed"},
-        {"state_position": "canceled"},
-        {"is_canceled": True},
-    ],
+    "last", [{"state_position": "after_track"}, {"state_position": "after_track_delayed"}]
 )
-def test_pid_q4_a_finished_or_cancelled_trip_is_not_claimed(last: dict[str, Any]) -> None:
+def test_pid_q4_a_finished_trip_is_not_claimed(last: dict[str, Any]) -> None:
     (obs,) = decode(entry(last=last))
     assert obs.first(TripKey) is None and obs.first(SourceState) is None
     assert obs.first(VehicleKey) == VehicleKey("3:6940") and obs.first(Position) is not None
+
+
+@pytest.mark.parametrize(
+    "fleet_number", [None, 6940], ids=["listed without a vehicle", "with a vehicle"]
+)
+def test_pid_q4_a_cancelled_trip_is_a_cancellation_without_a_vehicle(
+    fleet_number: int | None,
+) -> None:
+    """2026-10-15: ten cancelled trips, each listed once or twice near its start, `canceled`
+    and `is_canceled`, no fleet number, not tracked."""
+
+    cancelled = entry(
+        trip={
+            "cis": {"line_id": "100394", "trip_number": 1028},
+            "gtfs": {"route_type": 3, "trip_id": "394_703_260316"},
+            "vehicle_registration_number": fleet_number,
+        },
+        last={"state_position": "canceled", "is_canceled": True, "tracking": False},
+    )
+    (obs,) = decode(cancelled, entry())[:1]
+    assert obs.first(VehicleKey) is None and obs.first(Position) is None
+    assert obs.facts == (
+        TripKey("pid:gtfs_trip_id", "394_703_260316"),
+        TripKey("cis:line_trip", "100394:1028"),
+        TripCancelled(),
+    )
+    # The vehicle's own entry is still its own observation.
+    assert [o.first(VehicleKey) for o in decode(cancelled, entry())] == [None, VehicleKey("3:6940")]
 
 
 def block_trip(trip_id: str, state: str, start: str) -> dict[str, Any]:

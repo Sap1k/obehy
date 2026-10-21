@@ -30,6 +30,7 @@ from obehy.realtime.model import (
     SourceDeparture,
     SourceState,
     StopEvent,
+    TripCancelled,
     TripKey,
     TripStatus,
     VehicleAttribute,
@@ -91,6 +92,8 @@ def fact_to_json(fact: Fact) -> Json:
             }
         case TripStatus(replacement_bus, diverted):
             return {"t": "trip_status", "replacement_bus": replacement_bus, "diverted": diverted}
+        case TripCancelled():
+            return {"t": "trip_cancelled"}
         case VehicleAttribute(attribute, value):
             return {"t": "vehicle_attribute", "a": attribute, "value": value}
         case PlatformAssignment(station, kind, scheduled, value, label):
@@ -155,6 +158,8 @@ def fact_from_json(data: Json) -> Fact:
             return VehicleAttribute(str(data["a"]), str(data["value"]))
         case "trip_status":
             return TripStatus(bool(data["replacement_bus"]), bool(data["diverted"]))
+        case "trip_cancelled":
+            return TripCancelled()
         case "platform":
             kind = str(data["kind"])
             if kind not in ("arrival", "departure"):

@@ -62,6 +62,9 @@ and `Kolej` (track) at Poniklá.
 `platform` per call (arrival and departure). The actual times and last positions duplicate the
 SŽ map and are not used.
 
+Cancellations: not decoded. No board capture is kept locally to look for a cancelled row's
+form; check the server archive before relying on boards for it.
+
 ## Quirks
 
 | ID | Quirk | Handling |

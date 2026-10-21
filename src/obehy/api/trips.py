@@ -256,10 +256,10 @@ def journey_history(
     rows = snap.all(
         "trip_history", {"namespace": namespace, "key": key, "since": start, "until": end}
     )
-    days: dict[date, tuple[str, list[schema.HistoryCall]]] = {}
+    days: dict[date, tuple[str, bool]] = {}  # per service date: its trip, whether cancelled
     calls: defaultdict[date, list[schema.HistoryCall]] = defaultdict(list)
     for r in rows:
-        days.setdefault(r["service_date"], (r["trip_id"], calls[r["service_date"]]))
+        days.setdefault(r["service_date"], (r["trip_id"], r["cancelled"]))
         calls[r["service_date"]].append(
             schema.HistoryCall(
                 location_id=r["location_id"],
@@ -276,7 +276,9 @@ def journey_history(
         **envelope(snap),
         journey=schema.JourneyKey(namespace=namespace, key=key),
         days=[
-            schema.HistoryDay(service_date=day, trip_id=trip_id, calls=day_calls)
-            for day, (trip_id, day_calls) in days.items()
+            schema.HistoryDay(
+                service_date=day, trip_id=trip_id, cancelled=cancelled, calls=calls[day]
+            )
+            for day, (trip_id, cancelled) in days.items()
         ],
     )

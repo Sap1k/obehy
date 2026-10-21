@@ -249,7 +249,7 @@ class RealtimeSource(BaseModel):
 
 
 class TripRealtime(BaseModel):
-    lifecycle: str
+    lifecycle: str = Field(description="pre_trip, running, finished or cancelled")
     delay_s: int | None
     off_route: bool
     stale: bool
@@ -508,6 +508,7 @@ class HistoryCall(BaseModel):
 class HistoryDay(BaseModel):
     service_date: date
     trip_id: str
+    cancelled: bool = Field(description="A source cancelled it and no vehicle was seen running it")
     calls: list[HistoryCall]
 
 

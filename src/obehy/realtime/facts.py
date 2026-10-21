@@ -15,9 +15,9 @@ from obehy.realtime.times import Instant
 Feed = Literal["jdf", "czptt"]
 FEEDS: tuple[Feed, ...] = ("jdf", "czptt")
 
-FACT_SCHEMA_VERSION = 3
+FACT_SCHEMA_VERSION = 4
 # Stored facts of these versions still read: a new version only adds fact types.
-READABLE_FACT_SCHEMAS = (1, 2, 3)
+READABLE_FACT_SCHEMAS = (1, 2, 3, 4)
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -187,6 +187,12 @@ class TripStatus:
     diverted: bool
 
 
+@dataclass(frozen=True, slots=True)
+class TripCancelled:
+    """The source says the trip its keys name does not run (the whole trip). Stated without a
+    vehicle: no vehicle runs it."""
+
+
 PlatformLabel = Literal["platform", "track"]
 
 
@@ -219,6 +225,7 @@ Fact = (
     | NextPoint
     | NextStopPrediction
     | TripStatus
+    | TripCancelled
     | PlatformAssignment
     | VehicleAttribute
 )

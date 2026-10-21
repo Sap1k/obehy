@@ -94,6 +94,9 @@ from obehy.realtime.facts import (
     StopEvent as StopEvent,
 )
 from obehy.realtime.facts import (
+    TripCancelled as TripCancelled,
+)
+from obehy.realtime.facts import (
     TripKey as TripKey,
 )
 from obehy.realtime.facts import (
@@ -184,7 +187,7 @@ class KeylessEpisode:
 
 # --- instance state ----------------------------------------------------------------------------
 
-Lifecycle = Literal["forecast", "pre_trip", "running", "finished"]
+Lifecycle = Literal["forecast", "pre_trip", "running", "finished", "cancelled"]
 CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
 SourceClass = Literal["gps", "source", "propagated"]
 
@@ -633,6 +636,17 @@ class AssignVehicle:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordCancellation:
+    """A public journey cancelled by `source` at `at`, or (`cancelled` false) seen running
+    after all (`history.journey_cancellation`)."""
+
+    journey: JourneyKey
+    source: str
+    at: Instant
+    cancelled: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ObservationResult:
     observation: Observation
     journey: JourneyKey | None  # the instance (rail: the run, `czptt:pa`)
@@ -661,6 +675,7 @@ Effect = (
     | ObservationResult
     | LinkJourneys
     | RecordPlatform
+    | RecordCancellation
     | Unresolved
 )
 

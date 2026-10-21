@@ -1,5 +1,6 @@
 -- A journey's recorded runs between two service dates: per date the latest schedule revision's
--- passenger calls with the actual arrival and departure (history keeps them self-described).
+-- passenger calls with the actual arrival and departure (history keeps them self-described),
+-- and whether a source cancelled it (and no vehicle was seen running it after all).
 WITH latest AS (
     SELECT DISTINCT ON (s.service_date) s.feed, s.service_date, s.revision, s.trip_id
     FROM history.journey_schedule s
@@ -10,7 +11,12 @@ WITH latest AS (
 SELECT l.service_date, l.trip_id, c.ordinal, c.location_id, c.name,
        control.obehy_instant_fast(l.service_date, c.scheduled_arrival) AS scheduled_arrival,
        control.obehy_instant_fast(l.service_date, c.scheduled_departure) AS scheduled_departure,
-       a.event_time AS actual_arrival, d.event_time AS actual_departure
+       a.event_time AS actual_arrival, d.event_time AS actual_departure,
+       EXISTS (
+           SELECT 1 FROM history.journey_cancellation x
+           WHERE x.feed = l.feed AND x.key_namespace = %(namespace)s AND x.key = %(key)s
+               AND x.service_date = l.service_date AND x.restored_at IS NULL
+       ) AS cancelled
 FROM latest l
 JOIN history.journey_call c
     ON c.feed = l.feed AND c.key_namespace = %(namespace)s AND c.key = %(key)s

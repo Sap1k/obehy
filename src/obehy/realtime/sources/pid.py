@@ -8,7 +8,8 @@ Quirks normalized here: PID-Q1 (fleet numbers are unique per mode only: the vehi
 `<route_type>:<number>`), PID-Q2 (trains and metro have no fleet number: trains are keyed by
 train number, metro by trip), PID-Q3 (`cis.line_id` is `"none"` for trains and null for city
 lines), PID-Q4 (`state_position`: before the trip is pre-trip, after it the entry still names the
-finished trip, which is dropped; a cancelled trip likewise), PID-Q6 (each vehicle is listed once
+finished trip, which is dropped; a cancelled trip is listed without a vehicle and becomes a
+cancellation of its trip, `TripCancelled`), PID-Q6 (each vehicle is listed once
 per trip of its block, all at its one position: only the trip it is running, else its next one,
 is kept). Trains go to czptt by train number,
 since the static PID overlay leaves rail out; other vehicles bind by PID GTFS trip ID, with the
@@ -30,6 +31,7 @@ from obehy.realtime.model import (
     Position,
     RawRef,
     SourceState,
+    TripCancelled,
     TripKey,
     VehicleAttribute,
     VehicleKey,
@@ -38,12 +40,13 @@ from obehy.realtime.times import Instant, instant, within_skew
 
 SOURCE = "pid"
 CHANNEL = "vehicles"
-DECODER_VERSION = 3
+DECODER_VERSION = 4
 
 TRAIN = 2  # GTFS route_type
 PRE_TRIP = frozenset({"before_track", "before_track_delayed"})
 RUNNING = frozenset({"on_track", "at_stop", "off_track"})
 OFF_ROUTE = "off_track"
+CANCELLED = "canceled"
 MODES = {0: "tram", 1: "metro", 2: "train", 3: "bus", 4: "ferry", 7: "funicular", 11: "trolleybus"}
 
 
@@ -88,12 +91,16 @@ def decode(
     if not isinstance(features, list):
         raise PayloadError("payload lacks features")
     blocks: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    observations: list[Observation] = []
     for item, raw in enumerate(cast(list[object], features)):
         feature = _table(raw)
+        if _cancelled(feature):  # PID-Q4: the trip, not a vehicle
+            found = _cancellation(feature, RawRef(sha256, item), received_at, max_clock_skew)
+            observations.extend([] if found is None else [found])
+            continue
         vehicle = _vehicle(feature)
         if vehicle is not None:
             blocks.setdefault(vehicle, []).append((item, feature))
-    observations: list[Observation] = []
     for vehicle, entries in blocks.items():
         item, feature, bound = _current(entries)
         observations.append(
@@ -101,6 +108,41 @@ def decode(
         )
     observations.sort(key=lambda observation: observation.raw.item)
     return observations
+
+
+def _cancelled(feature: dict[str, Any]) -> bool:
+    last = _table(_table(feature.get("properties")).get("last_position"))
+    return last.get("state_position") == CANCELLED or last.get("is_canceled") is True
+
+
+def _cancellation(
+    feature: dict[str, Any], raw: RawRef, received_at: Instant, max_clock_skew: timedelta
+) -> Observation | None:
+    """PID-Q4: a cancelled trip's entry, listed without a fleet number and not tracked: the
+    trip's keys and `TripCancelled`, no vehicle and no position (it is where the trip would
+    start)."""
+
+    properties = _table(feature.get("properties"))
+    trip = _table(properties.get("trip"))
+    route_type = _integer(_table(trip.get("gtfs")).get("route_type"))
+    if route_type is None:
+        return None
+    feed, keys, _ = _keys(trip, route_type)
+    if not keys:
+        return None
+    observed = _time(_table(properties.get("last_position")).get("origin_timestamp"))
+    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
+        observed = None
+    return Observation(
+        source=SOURCE,
+        channel=CHANNEL,
+        feed=feed,
+        received_at=received_at,
+        observed_at=observed,
+        raw=raw,
+        decoder_version=DECODER_VERSION,
+        facts=(*keys, TripCancelled()),
+    )
 
 
 def _state(feature: dict[str, Any]) -> object:
@@ -199,9 +241,8 @@ def _observation(
     last = _table(properties.get("last_position"))
     feed, keys, _ = _keys(trip, cast(int, _table(trip.get("gtfs")).get("route_type")))
     state = last.get("state_position")
-    # PID-Q4: an entry after its trip (`after_track*`), or a cancelled one (`canceled`,
-    # `is_canceled`), names a trip it is not running.
-    if not bound or state not in PRE_TRIP | RUNNING or last.get("is_canceled") is True:
+    # PID-Q4: an entry after its trip (`after_track*`) names a trip it is not running.
+    if not bound or state not in PRE_TRIP | RUNNING:
         keys = []
     observed = _time(last.get("origin_timestamp"))
     if observed is not None and not within_skew(observed, received_at, max_clock_skew):

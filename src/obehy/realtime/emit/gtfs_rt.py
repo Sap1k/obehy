@@ -8,7 +8,8 @@ the whole trip to the timetable, the calls already made included, and plan on to
 never happened. A finished journey keeps its TripUpdate (the calls it made, no vehicle) for
 `lifecycle.publish_finished_s` after its last call; a lost one (nothing heard for
 `predict_without_data_s`) keeps the calls it made, every call ahead `NO_DATA`, until it is
-forgotten. Vehicle positions are published for live journeys only, and not while stale.
+forgotten. A cancelled one is `CANCELED`, without calls or vehicle, until it is forgotten.
+Vehicle positions are published for live journeys only, and not while stale.
 
 A rail run is published per trip part (docs/R2_SLICE.md section 2): each part gets its own
 TripUpdate with its own `stop_sequence`s, the junction call shared by two parts carries the
@@ -54,17 +55,21 @@ LIVE = ("pre_trip", "running")
 TIMED = ("actual", "inferred", "predicted")
 MADE = ("actual", "inferred")  # calls with an observed or inferred crossing
 
-Publication = Literal["live", "lost", "finished"]
+Publication = Literal["live", "lost", "finished", "cancelled"]
 
 
 def _epoch(value: Instant) -> int:
     return int(value.timestamp())
 
 
-def _trip(descriptor: rt.TripDescriptor, trip_id: str, journey: JourneyKey) -> None:
+def _trip(
+    descriptor: rt.TripDescriptor, trip_id: str, journey: JourneyKey, *, cancelled: bool = False
+) -> None:
     descriptor.trip_id = trip_id
     descriptor.start_date = journey.service_date.strftime("%Y%m%d")
-    descriptor.schedule_relationship = rt.TripDescriptor.SCHEDULED
+    descriptor.schedule_relationship = (
+        rt.TripDescriptor.CANCELED if cancelled else rt.TripDescriptor.SCHEDULED
+    )
 
 
 def _entity_id(instance: Instance, part: PartSpan) -> str:
@@ -142,6 +147,8 @@ def publication(instance: Instance, now: Instant, policy: LifecyclePolicy) -> Pu
 
     if instance.lifecycle in LIVE:
         return "lost" if instance.freshness.lost else "live"
+    if instance.lifecycle == "cancelled":
+        return "cancelled"
     if instance.lifecycle != "finished":
         return None
     made = [
@@ -184,6 +191,8 @@ def _trip_updates(
 
     journey = instance.journey
     parts = published_parts(instance)
+    if publication == "cancelled":
+        return tuple(_cancelled(instance, part) for part in parts)
     timed_statuses = TIMED if publication == "live" else MADE
     out: list[bytes] = []
     for n, part in enumerate(parts):
@@ -225,6 +234,15 @@ def _trip_updates(
                 stop.stop_time_properties.assigned_stop_id = assigned
         out.append(entity.SerializeToString(deterministic=True))
     return tuple(out)
+
+
+def _cancelled(instance: Instance, part: PartSpan) -> bytes:
+    entity = rt.FeedEntity()
+    entity.id = _entity_id(instance, part)
+    update = entity.trip_update
+    _trip(update.trip, part.trip_id, instance.journey, cancelled=True)
+    update.timestamp = _epoch(instance.freshness.updated_at)
+    return entity.SerializeToString(deterministic=True)
 
 
 def _field(number: int, payload: bytes) -> bytes:

@@ -230,9 +230,15 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   details and traits on boards and trips; the sources behind each trip's and vehicle's
   realtime; features as one per source code with official JDF 1.11 / KJŘ texts; line
   overview (validity, notes, day summary) and timetable; debug for vehicle identity,
-  pairings, registry and release. Next phases: cancellations, alerts (any source,
-  republished in GTFS-RT), lookups and compositions (ČD on request, per-unit spans; 55p.cz
-  only with permission). Open beyond: PMTiles, `no_realtime`, merged station boards.
+  pairings, registry and release. Phase C (2026-10-21): cancelled trips. PID's cancelled
+  entries (PID-Q4, 10 on 2026-10-15) become `TripCancelled` without a vehicle; the core
+  cancels a journey not yet running (every call `cancelled`), a vehicle seen starting it
+  restores it; GTFS-RT `CANCELED`; `history.journey_cancellation`; boards, trips and history
+  days show it. Replayed on dev: line 394 trip 1028 cancelled at 07:24. DÚK and the SŽ map have
+  no cancellation signal; SŽ boards not checked (no local capture). Next phases: alerts (any
+  source, republished in GTFS-RT; partial cancellations with them), lookups and compositions
+  (ČD on request, per-unit spans; 55p.cz only with permission). Open beyond: PMTiles,
+  `no_realtime`, merged station boards.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
   GTFS-RT alerts and departures later.

@@ -62,7 +62,7 @@ and 5 requests per second and treats a 403 as blocked.
 | `nsn`, `nsn70`, `nst`, `nsp` | name, **5-digit** SR70 (no check digit), `HH:mm` ×2, or empty | next passenger stop, timetabled and predicted time | prediction for the next stop |
 | `r`, `d` | company code, name | operator | `Operator` |
 | `s` | 0 / 1 (30 trains) | rail-replacement bus | NAD handling |
-| `di` | always 0 in the sample | diverted | `trip_status` |
+| `di` | 0; 1 on 111 of 1.2 M entries on 2026-10-14 | diverted | `trip_status` |
 | `e` | 0 / 1 (set at some point on 33% of train-days) | most likely: the train runs under ETCS supervision (see below) | train attribute for display; not used for matching or progress |
 
 Names are Unicode (escaped in the JSON).
@@ -155,6 +155,9 @@ keys derived for the measurement):
 and operational points), `delay`, `prediction` (next stop), `trip_status` (replacement bus,
 diversion). Platforms are not in this endpoint; they come from the station boards
 (`sz-tabule.md`).
+
+No cancellations: the map lists trains that run, and no field marks one cancelled (every field
+and its values over 2,775 polls of 2026-10-14 checked).
 
 ## Quirks
 

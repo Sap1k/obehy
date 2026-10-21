@@ -29,6 +29,7 @@ from obehy.realtime.model import (
     LinkJourneys,
     ObservationResult,
     PartSpan,
+    RecordCancellation,
     RecordPlatform,
     SnapshotJourney,
     VehicleId,
@@ -49,6 +50,7 @@ HISTORY_TABLES = (
     "vehicle_day",
     "journey_link",
     "platform_evidence",
+    "journey_cancellation",
 )
 
 
@@ -143,9 +145,10 @@ class Writer:
         assigned = [e for e in effects if isinstance(e, AssignVehicle)]
         links = [e for e in effects if isinstance(e, LinkJourneys)]
         platforms = [e for e in effects if isinstance(e, RecordPlatform)]
+        cancellations = [e for e in effects if isinstance(e, RecordCancellation)]
         for result in results:
             self._observation_partition(result.observation.received_at.astimezone(UTC).date())
-        for day in {e.journey.service_date for e in (*snapshots, *platforms)}:
+        for day in {e.journey.service_date for e in (*snapshots, *platforms, *cancellations)}:
             self._history_partition(day)
         with self.connection.transaction():
             self._observations(results)
@@ -155,6 +158,7 @@ class Writer:
             self._assignments(results, assigned)
             self._links(links)
             self._platforms(platforms)
+            self._cancellations(cancellations)
             self.vehicles.write(self.connection, self.vehicles.observe(results))
 
     def _observations(self, results: Sequence[ObservationResult]) -> None:
@@ -380,6 +384,35 @@ class Writer:
                     for link in links
                 ],
             )
+
+    def _cancellations(self, cancellations: Sequence[RecordCancellation]) -> None:
+        """A cancellation is kept per journey and source (first and last said); a vehicle seen
+        running the journey after all restores it, whichever source cancelled it, until a
+        later cancellation."""
+
+        for c in cancellations:
+            if c.cancelled:
+                self.connection.execute(
+                    "INSERT INTO history.journey_cancellation (feed, key_namespace, key,"
+                    " service_date, source, first_seen, last_seen, derivation_id)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+                    " ON CONFLICT (feed, key_namespace, key, service_date, source) DO UPDATE SET"
+                    " first_seen = least(history.journey_cancellation.first_seen,"
+                    " excluded.first_seen),"
+                    " last_seen = greatest(history.journey_cancellation.last_seen,"
+                    " excluded.last_seen),"
+                    " restored_at = CASE WHEN history.journey_cancellation.restored_at"
+                    " < excluded.last_seen THEN NULL"
+                    " ELSE history.journey_cancellation.restored_at END",
+                    (*_key(c.journey), c.source, c.at, c.at, self.derivation_id),
+                )
+            else:
+                self.connection.execute(
+                    "UPDATE history.journey_cancellation SET restored_at = %s"
+                    " WHERE (feed, key_namespace, key, service_date) = (%s, %s, %s, %s)"
+                    " AND restored_at IS NULL AND last_seen <= %s",
+                    (c.at, *_key(c.journey), c.at),
+                )
 
     def _platforms(self, platforms: Sequence[RecordPlatform]) -> None:
         if not platforms:

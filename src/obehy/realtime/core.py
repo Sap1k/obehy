@@ -22,6 +22,12 @@ named by the key that bound it, except that a national key of the observation fi
 trip on the same day names it instead (`IDENTITY_NAMESPACES`): PID binds by its own GTFS trip
 ID, DÚK by the CIS line and trip, and the bus both report is one journey.
 
+Cancellations (BASE_PLAN.md section 20.7): a source stating `TripCancelled` without a vehicle
+cancels the journey its keys bind, opened if need be, unless a vehicle is already seen running
+it; a vehicle later seen starting it restores it. Evidence of running beats a cancellation in
+either order. A cancelled journey has no progress, events or estimates; every call is
+`cancelled`. A run of several train numbers is not cancelled by one of them.
+
 Keyless sources (`infer/keyless`, BASE_PLAN.md sections 19.2 and 19.5): an observation with a
 `LineRef` and no `TripKey` is bound by inference over its episode, keyed by the trip's own key
 (method `inferred`), once. The binding is kept without re-inference while the episode (line
@@ -56,10 +62,12 @@ from obehy.realtime.model import (
     PlatformAssignment,
     Position,
     Reason,
+    RecordCancellation,
     ServiceDay,
     SourceDeparture,
     SourceSemantics,
     SourceState,
+    TripCancelled,
     TripKey,
     VehicleId,
     VehicleKey,
@@ -129,6 +137,8 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
             lambda o: _bind(o, ctx, platform.scheduled),
             lambda match: _open(state, match, ctx, observation),
         )
+    if vehicle is None and observation.first(TripCancelled) is not None:
+        return _cancel(state, observation, ctx)
     previous = state.vehicles.get(vehicle) if vehicle is not None else None
     if (
         previous is not None
@@ -207,30 +217,71 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         instance = with_lead(instance, vehicle, observation)
         before = previous.position if previous is not None else None
         start = span(trip, binding.journey)[0]
+        cancelled = instance.lifecycle == "cancelled"
         instance = _lifecycle(instance, trip, observation, start, before, ctx)
-        calls_before = instance.calls
-        instance, timeline_effects = timeline.advance(
-            instance,
-            trip,
-            observation,
-            ctx.index,
-            ctx.policy,
-            ctx.plans,
-            ctx.semantics_of(observation),
-        )
-        state.instances[binding.journey] = instance
-        state.dirty.add(binding.journey)
-        if binding.confirmed and instance.calls is not calls_before:
-            plan = ctx.plans.plan(trip, binding.journey.service_date, ctx.index, ctx.policy)
-            record(state.hops, instance, calls_before, plan.scheduled, ctx.policy.prediction)
-        if not binding.confirmed:  # realtime only until continuity confirms the inference
-            timeline_effects = [e for e in timeline_effects if not isinstance(e, WriteEvent)]
-        effects.extend(timeline_effects)
-    status = "positioning" if instance.lifecycle in ("forecast", "pre_trip") else "running"
+        if cancelled and instance.lifecycle != "cancelled":  # seen running after all
+            instance = instance.evolve(calls=_call_states(trip))
+            effects.extend(
+                RecordCancellation(journey, observation.source, observation.at, False)
+                for journey in instance.public
+            )
+        if instance.lifecycle == "cancelled":  # not seen running: no progress
+            state.instances[binding.journey] = instance
+        else:
+            calls_before = instance.calls
+            instance, timeline_effects = timeline.advance(
+                instance,
+                trip,
+                observation,
+                ctx.index,
+                ctx.policy,
+                ctx.plans,
+                ctx.semantics_of(observation),
+            )
+            state.instances[binding.journey] = instance
+            state.dirty.add(binding.journey)
+            if binding.confirmed and instance.calls is not calls_before:
+                plan = ctx.plans.plan(trip, binding.journey.service_date, ctx.index, ctx.policy)
+                record(state.hops, instance, calls_before, plan.scheduled, ctx.policy.prediction)
+            if not binding.confirmed:  # realtime only until continuity confirms the inference
+                timeline_effects = [e for e in timeline_effects if not isinstance(e, WriteEvent)]
+            effects.extend(timeline_effects)
+    status: VehicleStatus = "running"
+    if instance.lifecycle in ("forecast", "pre_trip", "cancelled"):
+        status = "positioning"
     if instance.lifecycle == "finished":
         status = "layover"
     since = _set_vehicle(state, observation, vehicle, status, key, binding, None, episode)
     effects.append(ObservationResult(observation, binding.journey, None, instance.public, since))
+    return effects
+
+
+def _cancel(state: FeedState, observation: Observation, ctx: Context) -> list[Effect]:
+    """A source cancelling the trip its keys name (see the module)."""
+
+    result = _bind(observation, ctx)
+    if not isinstance(result, Match):
+        return [ObservationResult(observation, None, result)]
+    effects = _open(state, result, ctx, observation)
+    instance = state.instances[result.journey]
+    if instance.lifecycle in ("forecast", "pre_trip", "cancelled") and len(instance.public) == 1:
+        heard = replace(
+            instance.freshness, updated_at=observation.at, heard_at=observation.received_at
+        )
+        instance = instance.evolve(
+            lifecycle="cancelled",
+            calls=tuple(c.estimated(None, None, "cancelled", None) for c in instance.calls),
+            freshness=heard,
+        )
+        state.instances[result.journey] = instance
+        state.dirty.add(result.journey)
+        effects.extend(
+            RecordCancellation(journey, observation.source, observation.at, True)
+            for journey in instance.public
+        )
+    # A journey bound by a cancellation is read back on a warm start like a station board's.
+    since = observation.received_at
+    effects.append(ObservationResult(observation, result.journey, None, instance.public, since))
     return effects
 
 
@@ -270,7 +321,7 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
     due.update(j for j, instance in state.instances.items() if _behind(instance, now))
     for journey in sorted(due):
         instance = state.instances.get(journey)
-        if instance is None:
+        if instance is None or instance.lifecycle == "cancelled":
             continue
         trip = ctx.index.trip(instance.trip_id)
         plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
@@ -348,7 +399,7 @@ def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
                 timedelta(seconds=policy.lifecycle.predict_without_data_s(mode)),
             )
         stale_after, lost_after = limits[mode]
-        live = instance.lifecycle != "finished"
+        live = instance.lifecycle not in ("finished", "cancelled")
         stale, lost = live and idle > stale_after, live and idle > lost_after
         fresh = instance.freshness
         if (stale, lost) != (fresh.stale, fresh.lost):
@@ -460,9 +511,10 @@ def _lifecycle(
     previous: Position | None,
     ctx: Context,
 ) -> Instance:
-    """`pre_trip` becomes `running` when the source says so, or, for a source without trip
-    states, once the scheduled start has passed. A pre-trip source state (DUK-Q5) holds it,
-    unless the source shows a missed departure (DUK-Q18). A running state counts while the
+    """`pre_trip` (or `cancelled`: seen running after all) becomes `running` when the source
+    says so, or, for a source without trip states, once the scheduled start has passed. A
+    pre-trip source state (DUK-Q5) holds it, unless the source shows a missed departure
+    (DUK-Q18). A running state counts while the
     vehicle waits at the first stop or once it is seen moving along the path past it, no
     further ahead of the timetable than the start prior allows (DUK-Q19): an early departure is
     observed, never assumed. Also after the scheduled start (PID-Q8: Golemio switches a vehicle
@@ -470,7 +522,7 @@ def _lifecycle(
     projects it onto the trip's path; on 2026-10-15 a bus deadheading out of Prague at 07:11
     was put 12 km along line 388, 23 minutes early)."""
 
-    if instance.lifecycle != "pre_trip":
+    if instance.lifecycle not in ("pre_trip", "cancelled"):
         return instance
     source = observation.first(SourceState)
     if source is None:

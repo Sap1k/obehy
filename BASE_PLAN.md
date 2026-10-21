@@ -1441,6 +1441,7 @@ The first call has only a departure, the last only an arrival, and a passage has
 
 ```text
 forecast → pre_trip → running → finished          flags: off_route, stale, lost
+     └──────┴→ cancelled ─(seen running)→ running
 ```
 
 - **Forecast:** proposed by a circulation edge or `block_key` (section 22), before any
@@ -1458,6 +1459,15 @@ forecast → pre_trip → running → finished          flags: off_route, stale,
   are `layover`, never progress, and the vehicle is free for its next binding.
 - Departure boards show departure delay, arrival boards arrival delay; they are never merged into
   one number.
+- **Cancelled:** a source says the trip does not run (`TripCancelled`, stated without a
+  vehicle: PID-Q4). A journey not yet running is cancelled, opened if need be: every call
+  `cancelled`, no progress, events or estimates, never stale or lost, GTFS-RT `CANCELED` per
+  published trip part until it is forgotten. Evidence of running beats a cancellation in either
+  order: a journey already running ignores it, and a vehicle seen starting a cancelled one
+  restores it. A run of several train numbers is not cancelled by one of them. History keeps
+  each cancellation per journey and source, and when it was restored
+  (`history.journey_cancellation`). Partial cancellations (skipped calls) come with alerts
+  (section 25).
 
 **Off-route with grace.** Until real shapes exist the path is the stop-to-stop polyline, so
 deviations are expected and some are correct.

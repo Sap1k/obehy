@@ -177,6 +177,11 @@ confidence in circulation learning.
 States 2 and 3 matter for progress integrity: a vehicle driving empty to its first stop can pass
 the trip's later stops, and must not trigger events for them.
 
+## Cancellations
+
+None: a vehicle reports what it runs, `State` takes only 0–3 and 255 (1.44 M entries of
+2026-10-06), and no field marks a trip cancelled.
+
 ## Time and delay semantics
 
 - **Timed source.** `GPSPositionDT` is the position's event time; `LastActivityDT` the

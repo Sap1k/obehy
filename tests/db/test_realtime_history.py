@@ -242,3 +242,37 @@ def test_vehicle_attributes_are_written_when_they_change(connection: psycopg.Con
     assert rows() == [("true", local("2026-10-08 08:00"), local("2026-10-08 09:30"))]
     say("2026-10-08 09:31", "false")  # a change starts a new value
     assert rows() == [("false", local("2026-10-08 09:31"), local("2026-10-08 09:31"))]
+
+
+def test_a_cancellation_is_kept_and_a_journey_seen_running_restores_it(
+    connection: psycopg.Connection,
+) -> None:
+    index = (
+        timetable().trip("582492:143", days=[D8], calls=[("A", "08:00"), ("B", "08:30")]).index()
+    )
+    ctx = Context(index, POLICY)
+    state = FeedState("jdf")
+    writer = _writer(connection)
+    cancel = observe("2026-10-08 07:58", vehicle=None, source="pid", cancelled=True)
+    writer.write(step(state, cancel, ctx))
+    writer.write_state({"jdf": state})
+    assert connection.execute(
+        "SELECT source, restored_at FROM history.journey_cancellation"
+    ).fetchall() == [("pid", None)]
+    assert connection.execute(
+        "SELECT lifecycle, calls -> 0 ->> 'status' FROM rt.trip_state_current"
+    ).fetchall() == [("cancelled", "cancelled")]
+    # A cancellation stored without a vehicle is still journey evidence for a warm start.
+    assert (
+        _scalar(
+            connection,
+            "SELECT count(*) FROM rt.observation WHERE vehicle_id IS NULL"
+            " AND journey_key = '582492:143' AND state_since IS NOT NULL",
+        )
+        == 1
+    )
+    running = observe("2026-10-08 08:01", state="running", position=ORIGIN)
+    writer.write(step(state, running, ctx))
+    assert _scalar(connection, "SELECT restored_at FROM history.journey_cancellation") == local(
+        "2026-10-08 08:01"
+    )

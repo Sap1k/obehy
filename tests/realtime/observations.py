@@ -13,6 +13,7 @@ from obehy.realtime.model import (
     RawRef,
     SourceDeparture,
     SourceState,
+    TripCancelled,
     TripKey,
     VehicleKey,
 )
@@ -37,9 +38,10 @@ def observe(
     departure: str | None = None,
     source: str = "duk",
     feed: Feed = "jdf",
+    cancelled: bool = False,
 ) -> Observation:
     """An observation at local time `at`; `position` is (lon, lat); `departure` is the source's
-    planned departure, local time."""
+    planned departure, local time; `cancelled` states the trip does not run."""
 
     facts: list[Fact] = []
     if vehicle is not None:
@@ -54,5 +56,7 @@ def observe(
         facts.append(SourceState(state))
     if departure is not None:
         facts.append(SourceDeparture(local(departure)))
+    if cancelled:
+        facts.append(TripCancelled())
     when = local(at)
     return Observation(source, "vehicles", feed, when, when, RawRef("0" * 64, 0), 1, tuple(facts))

@@ -105,6 +105,8 @@ history.actual_stop_event   journey, location_id, visit_n, event_type; revision,
                             derivation_id
 history.vehicle_assignment  feed, vehicle_key, journey, valid_from, valid_to, method,
                             derivation_id
+history.journey_cancellation  journey, source; first_seen, last_seen, restored_at,
+                            derivation_id
 history.vehicle_day         feed, vehicle_key, service_date, seq; journeys[], tour_id,
                             tour_match_share (written by the nightly SQL job)
 ```
@@ -182,7 +184,8 @@ episode, which inference reads whole; otherwise the observation itself). A vehic
 its last observation is younger than `lifecycle.forget_after_s` plus the clock skew; the replay
 reads each live vehicle's observations from its `state_since`, and every observation of the
 journeys live vehicles and recent station boards are on, so a journey is rebuilt from its first
-observation whichever vehicle or source made it. The guarantee: every live vehicle and every
+observation whichever vehicle or source made it (a cancellation, stated without a vehicle, is
+read like a board row). The guarantee: every live vehicle and every
 journey it is bound to continue exactly as in an uninterrupted run. A journey no live vehicle is
 on (finished before the restart) is not restored; its events are already in history. Warm-up
 then grows with the vehicles running, not with hours of history. `mode = "window"` reads
@@ -313,7 +316,8 @@ rail, and count on the reception clock from the last observation bringing a new 
 clock offset does not matter and a GPS time frozen while payloads keep coming is a gap. A
 finished journey keeps its trip update, the calls made and no vehicle, for `publish_finished_s`
 after its last call: a trip leaving the feed would be reverted to the timetable by consumers,
-the calls already made included.
+the calls already made included. A cancelled journey (`BASE_PLAN.md` section 20.7) is
+`CANCELED`, one trip update per published part without calls or vehicle, until it is forgotten.
 
 **Running time ahead (road vehicles).** Each call ahead also gets the time its hop (the two
 consecutive passenger calls into it) takes now beyond the timetable's: the recency-weighted

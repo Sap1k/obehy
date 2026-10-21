@@ -126,7 +126,7 @@ def _call(sequence: int, location: str, status: str, at: str | None) -> dict[str
         "status": status,
         "estimated_arrival": stamp,
         "estimated_departure": stamp,
-        "source_class": "gps" if status != "scheduled" else None,
+        "source_class": "gps" if status not in ("scheduled", "cancelled") else None,
         "passenger": True,
         "platform": None,
     }
@@ -267,6 +267,18 @@ def client(
         ],
         [("czptt:trip:1:1", 0, 2), ("czptt:trip:1:2", 2, 3)],
     )
+    # PID cancelled trip 2 of the 6th (its 24:30 run).
+    p2 = ("jdf", "pid:gtfs_trip_id", "P2", "2026-10-06")
+    _state(
+        connection,
+        p2,
+        "jdf:trip:2",
+        [_call(1, stop, "cancelled", None), _call(2, "jdf:stop:2", "cancelled", None)],
+        [("jdf:trip:2", 0, 1)],
+    )
+    connection.execute(
+        "UPDATE rt.trip_state_current SET lifecycle = 'cancelled', delay_s = NULL WHERE key = 'P2'"
+    )
     _vehicles(connection)
     # A trip ID of an earlier timetable version, kept by history.
     connection.execute(
@@ -283,7 +295,7 @@ def client(
         " (SELECT min(derivation_id) FROM history.derivation))"
     )
     # That run's calls and what it did: left 2 min late, arrived 1 min late.
-    for table in ("journey_call", "actual_stop_event", "journey_link"):
+    for table in ("journey_call", "actual_stop_event", "journey_link", "journey_cancellation"):
         connection.execute(
             f"CREATE TABLE history.{table}_test PARTITION OF history.{table}"
             " FOR VALUES FROM ('2026-10-01') TO ('2026-11-01')"
@@ -303,6 +315,12 @@ def client(
         " 'gps', 'duk', (SELECT min(derivation_id) FROM history.derivation)"
         " FROM (VALUES ('jdf:stop:1', 'departure', timestamptz '2026-10-06 06:02+02'),"
         "  ('jdf:stop:2', 'arrival', timestamptz '2026-10-06 06:16+02')) v (l, e, t)"
+    )
+    # It was cancelled on the 6th, then seen running after all.
+    connection.execute(
+        "INSERT INTO history.journey_cancellation VALUES ('jdf', 'cis:line_trip', '000001:1',"
+        " '2026-10-06', 'pid', '2026-10-06 05:55+02', '2026-10-06 05:55+02',"
+        " '2026-10-06 06:01+02', (SELECT min(derivation_id) FROM history.derivation))"
     )
     # Train 6600 continues as 6601 and continued from 6599 (neither in the release).
     connection.execute(
@@ -635,7 +653,7 @@ def test_a_line_overview_timetable_and_live_trips(client: TestClient) -> None:
         for t in trips
     ] == [
         ("jdf:trip:1", "running", 600, ["duk:1001"]),
-        ("jdf:trip:2", None, None, []),
+        ("jdf:trip:2", "cancelled", None, []),
     ]
     _get(client, "/lines/jdf:route:nope", 404)
     _get(client, "/lines/jdf:route:nope/timetable", 404)
@@ -661,6 +679,7 @@ def test_history_and_punctuality_from_recorded_runs(client: TestClient) -> None:
     )
     (day,) = history["days"]
     assert (day["service_date"], day["trip_id"]) == ("2026-10-06", "jdf:trip:old")
+    assert day["cancelled"] is False  # cancelled, then seen running
     assert [(c["departure_delay_s"], c["arrival_delay_s"]) for c in day["calls"]] == [
         (120, None),
         (None, 60),
@@ -785,3 +804,17 @@ def test_boards_and_trips_name_the_vehicle_traits_and_realtime_sources(client: T
     assert [(v["vehicle_id"], v["sources"]) for v in trip["vehicles"]] == [
         ("duk:1001", ["duk", "mpvnet"])
     ]
+
+
+def test_a_cancelled_trip_on_the_board_and_in_its_detail(client: TestClient) -> None:
+    board = "/stop-places/jdf:stop:1/departures"
+    (row,) = _get(client, board, start="2026-10-07T00:20:00+02:00")["departures"]
+    assert (row["trip_id"], row["status"], row["estimated"], row["delay_s"]) == (
+        "jdf:trip:2",
+        "cancelled",
+        None,
+        None,
+    )
+    trip = _get(client, "/trips/jdf:trip:2/2026-10-06")
+    assert trip["realtime"]["lifecycle"] == "cancelled"
+    assert {c["status"] for c in trip["calls"]} == {"cancelled"}

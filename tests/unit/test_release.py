@@ -154,6 +154,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "api",
         "api_lines",
         "vehicles",
+        "cancellations",
     ]
 
 
