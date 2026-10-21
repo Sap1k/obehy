@@ -1,7 +1,8 @@
 # PID vehicle positions from Golemio (docs/sources/pid.md): Prague and Central Bohemia buses,
 # trams, metro, trolleybuses and trains. Needs a Golemio API key (secret "golemio"). Polls
 # deltas: the last response's x-last-modified goes back as updatedSince. Live on both feeds since
-# the server capture of 2026-10-15 replayed at 97–100 % per mode.
+# the server capture of 2026-10-15 replayed at 97–100 % per mode. Alerts and infotexts from
+# VYMI (the same key) are written to rt.alert and republished per feed, not replayed.
 source = "pid"
 manifest_version = 1
 # The public feed list (obehy release feed-list) names the source by these.
@@ -27,4 +28,35 @@ key_namespaces = { jdf = "pid:gtfs_trip_id", czptt = "czptt:train_number" }
 [channel.request]
 method = "GET"
 url = "https://api.golemio.cz/v2/vehiclepositions?limit=10000&includeNotTracking=true"
+headers = { accept-encoding = "gzip" }
+
+# PID alerts (docs/sources/pid.md, Alerts): the VYMI events as a full GTFS-RT dataset, routes by
+# PID GTFS ID. Cached by Golemio for 40 s.
+[[channel]]
+name = "alerts"
+poll = { kind = "interval", seconds = 60 }
+backoff = { after_failures = 5, max_s = 600 }
+timeout_s = 20
+feeds = ["jdf", "czptt"]
+capabilities = ["alert"]
+auth = { header = "X-Access-Token", secret = "golemio" }
+
+[channel.request]
+method = "GET"
+url = "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/alerts.pb"
+headers = { accept-encoding = "gzip" }
+
+# The VYMI infotexts departure boards show: stop-scoped, Czech and English, current and future.
+[[channel]]
+name = "infotexts"
+poll = { kind = "interval", seconds = 60 }
+backoff = { after_failures = 5, max_s = 600 }
+timeout_s = 20
+feeds = ["jdf", "czptt"]
+capabilities = ["alert"]
+auth = { header = "X-Access-Token", secret = "golemio" }
+
+[channel.request]
+method = "GET"
+url = "https://api.golemio.cz/v3/pid/infotexts?includeFuture=true"
 headers = { accept-encoding = "gzip" }

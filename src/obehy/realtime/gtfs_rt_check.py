@@ -2,7 +2,8 @@
 
 The subset of the GTFS-RT validator's error rules that our output can break: unknown trip IDs or
 stop sequences, a trip not running on its start date, times decreasing along a trip, departure
-before arrival, duplicate entity IDs, the header version and positions outside the region.
+before arrival, duplicate entity IDs, the header version, positions outside the region, and
+alerts informing a route, stop or trip the static GTFS does not have.
 MobilityData's realtime validator remains the reference; this runs without it.
 """
 
@@ -32,6 +33,14 @@ def _trip(entity: rt.FeedEntity) -> rt.TripDescriptor:
     return entity.trip_update.trip if entity.HasField("trip_update") else entity.vehicle.trip
 
 
+def _trip_ids(message: rt.FeedMessage) -> Iterator[str]:
+    for entity in message.entity:
+        if entity.HasField("alert"):
+            yield from (e.trip.trip_id for e in entity.alert.informed_entity if e.trip.trip_id)
+        else:
+            yield _trip(entity).trip_id
+
+
 class _Static:
     """The parts of the static GTFS the snapshots refer to."""
 
@@ -42,6 +51,8 @@ class _Static:
                 for r in _rows(archive, "trips.txt")
                 if r["trip_id"] in trip_ids
             }
+            self.routes = {r["route_id"] for r in _rows(archive, "routes.txt")}
+            self.stops = {r["stop_id"] for r in _rows(archive, "stops.txt")}
             self.sequences: dict[str, set[int]] = defaultdict(set)
             for r in _rows(archive, "stop_times.txt"):
                 if r["trip_id"] in self.trips:
@@ -76,7 +87,7 @@ def check(gtfs: Path, snapshots: list[Path]) -> tuple[Counter[str], Counter[str]
         message = rt.FeedMessage()
         message.ParseFromString(path.read_bytes())
         messages.append(message)
-    static = _Static(gtfs, {_trip(e).trip_id for m in messages for e in m.entity})
+    static = _Static(gtfs, {trip_id for m in messages for trip_id in _trip_ids(m)})
     problems: Counter[str] = Counter()
     totals: Counter[str] = Counter(snapshots=len(messages), trips=len(static.trips))
     for message in messages:
@@ -94,6 +105,10 @@ def _check_message(
         problems["header version"] += 1
     for entity in message.entity:
         totals["entities"] += 1
+        if entity.HasField("alert"):
+            totals["alerts"] += 1
+            _check_alert(entity.alert, static, problems)
+            continue
         trip = _trip(entity)
         if trip.trip_id not in static.trips:
             problems["unknown trip_id"] += 1
@@ -104,6 +119,18 @@ def _check_message(
             _check_position(entity.vehicle.position, problems)
         else:
             _check_trip_update(entity.trip_update, static.sequences[trip.trip_id], problems, totals)
+
+
+def _check_alert(alert: rt.Alert, static: _Static, problems: Counter[str]) -> None:
+    if not alert.informed_entity:
+        problems["alert informs nothing"] += 1
+    for informed in alert.informed_entity:
+        if informed.route_id and informed.route_id not in static.routes:
+            problems["unknown alert route_id"] += 1
+        if informed.stop_id and informed.stop_id not in static.stops:
+            problems["unknown alert stop_id"] += 1
+        if informed.trip.trip_id and informed.trip.trip_id not in static.trips:
+            problems["unknown alert trip_id"] += 1
 
 
 def _check_position(position: rt.Position, problems: Counter[str]) -> None:

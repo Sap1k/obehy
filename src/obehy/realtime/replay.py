@@ -27,6 +27,7 @@ from typing import Any, cast
 import psycopg
 
 from obehy.pipeline.files import atomic_output_path
+from obehy.realtime.alerts import Alert
 from obehy.realtime.archive import ArchivedPoll, iter_polls
 from obehy.realtime.core import CORE_VERSION, estimate_all
 from obehy.realtime.emit.db import Writer, clear_observations
@@ -48,7 +49,16 @@ from obehy.realtime.model import (
 from obehy.realtime.policy import Policy
 from obehy.realtime.quality import QualityLog
 from obehy.realtime.runner import Runner
-from obehy.realtime.sources import arriva_express, dpmd, duk, mpvnet, pid, sz, sz_tabule
+from obehy.realtime.sources import (
+    arriva_express,
+    dpmd,
+    duk,
+    mpvnet,
+    pid,
+    pid_alerts,
+    sz,
+    sz_tabule,
+)
 from obehy.realtime.times import Instant, instant, local_date, next_multiple
 
 REPORT_SCHEMA_VERSION = 2
@@ -72,6 +82,15 @@ DECODERS: dict[tuple[str, str], Decoder] = {
         )
         for name in mpvnet.CHANNELS
     },
+}
+
+
+# Alert channels (BASE_PLAN.md section 25): body, reception time. Never replayed: alerts do
+# not pass through the core.
+AlertDecoder = Callable[[bytes, Instant], list[Alert]]
+ALERT_DECODERS: dict[tuple[str, str], AlertDecoder] = {
+    (pid_alerts.SOURCE, pid_alerts.ALERTS): pid_alerts.decode_alerts,
+    (pid_alerts.SOURCE, pid_alerts.INFOTEXTS): pid_alerts.decode_infotexts,
 }
 
 

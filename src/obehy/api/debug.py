@@ -1,8 +1,9 @@
 """Debugging (BASE_PLAN.md section 30): the active release; each source's polls and what it
 contributes now; unbound observations; one journey's state, parts, vehicles and evidence; one
 vehicle's identity (reports, keys, pairings, statements, profile); the pairings to review as
-registry keys; the registry's datasets and disagreements; a trip's raw static codes. Not
-cached; raw rows, whose shapes follow the tables and may change."""
+registry keys; the registry's datasets and disagreements; alerts with each entity resolved or
+not; a trip's raw static codes. Not cached; raw rows, whose shapes follow the tables and may
+change."""
 
 from __future__ import annotations
 
@@ -80,6 +81,13 @@ def instance(
         "vehicles": found["vehicle"],
         "observations": found["observation"],
     }
+
+
+@router.get("/alerts", summary="Alerts with each entity and what it resolved to")
+def alerts(snap: SnapshotDep, limits: LimitsDep, minutes: Minutes = None) -> dict[str, Any]:
+    since = snap.now - timedelta(minutes=minutes or limits.debug_window_min)
+    rows = snap.all("debug_alerts", {"since": since, "limit": limits.alerts_limit})
+    return envelope(snap) | {"since": since, "alerts": rows}
 
 
 @router.get("/vehicles/pairings", summary="Reports paired by running side by side")

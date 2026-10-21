@@ -235,10 +235,14 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   cancels a journey not yet running (every call `cancelled`), a vehicle seen starting it
   restores it; GTFS-RT `CANCELED`; `history.journey_cancellation`; boards, trips and history
   days show it. Replayed on dev: line 394 trip 1028 cancelled at 07:24. DÚK and the SŽ map have
-  no cancellation signal; SŽ boards not checked (no local capture). Next phases: alerts (any
-  source, republished in GTFS-RT; partial cancellations with them), lookups and compositions
-  (ČD on request, per-unit spans; 55p.cz only with permission). Open beyond: PMTiles,
-  `no_realtime`, merged station boards.
+  no cancellation signal; SŽ boards not checked (no local capture). Phase D (2026-10-21):
+  alerts from any source in one shape (`rt.alert`), resolved per feed in SQL against the
+  active release, republished in each feed's GTFS-RT and served at `/alerts`, on boards and on
+  trips. PID: VYMI events (GTFS-RT, routes) and infotexts (stops), polled every 60 s; on dev
+  47/56 routes and 36/36 stops resolve (the rest PID rail lines, PID-Q9). The full VYMI export
+  is internal to Golemio (403). Next: SŽ alerts for trains; lookups and compositions (ČD on
+  request, per-unit spans; 55p.cz only with permission). Open beyond: PMTiles, `no_realtime`,
+  merged station boards.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
   GTFS-RT alerts and departures later.

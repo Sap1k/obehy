@@ -3,7 +3,7 @@
 Status: **probed 2026-10-15 around 00:10 local with a test API key; a 12.75 h server capture
 replayed at 97–100 % per mode; live on jdf and czptt since 2026-10-15.** Keys first checked
 against release `20261012T080259Z-8f416ec58c3a` (serving schema 5.x). Connector `sources/pid.py`
-(decoder version 2).
+(decoder version 4); alerts `sources/pid_alerts.py`.
 
 PID (Pražská integrovaná doprava) covers Prague city buses, trams, metro, trolleybuses and the
 ferry, the regional buses of Central Bohemia and the trains in its area. Golemio, Prague's data
@@ -68,6 +68,24 @@ registered vehicle.
 | `trip.vehicle_type.description_cs` | `category` |
 | `trip.vehicle_registration_number` | `fleet_number` |
 
+## Alerts
+
+PID's disruptions come from VYMI (JIS), ROPID's incident system. Golemio exposes three forms
+(probed once each on 2026-10-21 with the same API key):
+
+| Endpoint | What | Used |
+| --- | --- | --- |
+| `/v2/vehiclepositions/gtfsrt/alerts.pb` | the VYMI events as a full GTFS-RT dataset: 13 alerts, 56 informed entities, all `route_id` (`L316`, PID GTFS); cause and effect (REDUCED_SERVICE, NO_SERVICE, STOP_MOVED, SIGNIFICANT_DELAYS, DETOUR); Czech header and description; a `pid.cz/mimoradnost` link; the VYMI cause as `cause_detail` (cs, en); 7 of 13 without an end; cached 40 s | channel `alerts` |
+| `/v3/pid/infotexts?includeFuture=true` | the VYMI infotexts boards show: 15 texts on 36 stops (PID GTFS stop IDs `U515Z1P`), Czech and English, priority low/normal/high (the VYMI severity), `display_type` inline or general, optional daily window | channel `infotexts` |
+| `/v1/jis/events/custom-format` | the full VYMI export: type, severity, display period, cs/en/de, HTML, attachments | 403 for our key: internal to Golemio |
+
+Both channels are polled every 60 s and written to `rt.alert` as whole sets
+(`realtime/sources/pid_alerts.py`, `emit/alerts.py`); entities resolve through
+`pid:gtfs_route_id` and `pid:gtfs_stop_id`. On dev (release `20261015T014009Z`): 47 of 56 route
+entities and 36 of 36 stops resolved, 25 alerts published in the jdf feed. A route-wide
+NO_SERVICE may describe one train (`Os 9715 NEJEDE` on `L1040`, `L1240`): alerts never
+cancel trips.
+
 ## Keys against the release
 
 Static PID trips carry `pid:gtfs_trip_id` keys from the regional overlay (157 105 in the probed
@@ -105,6 +123,8 @@ delta is about 2.8 MB uncompressed, since nearly every vehicle moves within 10 s
 | PID-Q7 | a regional bus is also reported by DÚK, which names it by CIS line and trip; PID's own key is its GTFS trip ID | a journey whose trip and day the observation's CIS key also finds is named by the CIS key (core `IDENTITY_NAMESPACES`), so both sources share one journey, one TripUpdate and one vehicle |
 | PID-Q6 | `includeNotTracking` lists every trip of a vehicle's block (the previous `after_track`, the running one, the upcoming `before_track` ones), all at the vehicle's one position; in the capture about 45 % of vehicles in a poll had 2+ entries | one observation per vehicle and payload: the running entry (on the route over `off_track`; two still on it at once, 0.5 %, bind no trip), else the next trip to start as `pre_trip`, else the vehicle alone |
 | PID-Q8 | at a trip's scheduled start Golemio reports the vehicle running it wherever it is, still driving to the first stop (late from its previous run or deadheading), and projects it onto the trip's path: `delay` then says it is far early (2026-10-15, vehicle `3:7694` on line 388 at 07:11, heading out of Prague: `delay` −1421 s, placed 12 km along) | a running state starts a trip only at the first stop or once the vehicle is seen moving along the path no further ahead of the timetable than the start prior allows, also after the scheduled start (core `_seen_starting`, as DUK-Q19); a trip not yet departed is never shown early |
+| PID-Q9 | alerts name PID's rail lines (`L1001`, `L1040`) as routes; no source key names them (the PID overlay leaves rail out) | left unresolved, visible in `/debug`; trains get their alerts from SŽ |
+| PID-Q10 | an infotext may repeat daily in a window that wraps midnight (`23:00`–`04:30`, Europe/Prague) | expanded into one period per day, from the day before reception for 7 days, clipped to its validity |
 
 ## Open questions (for the capture)
 

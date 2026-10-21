@@ -12,6 +12,8 @@
 4. `NOTIFY obehy_publication` (sent by `obehy release activate`) rebases live journeys onto the
    new release; `NOTIFY obehy_registry` (sent by `obehy ref import`) reloads the vehicle
    registry, so identities and vehicle profiles follow the new datasets.
+5. Alert channels (BASE_PLAN.md section 25) are archived and written to `rt.alert` on their own
+   connection, never through the core; the emit tick republishes them in each feed.
 """
 
 from __future__ import annotations
@@ -22,15 +24,17 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg
 
+from obehy.realtime.alerts import Alert
 from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.core import CORE_VERSION
+from obehy.realtime.emit.alerts import AlertFeed, write_alerts
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.stored import stream_observations
 from obehy.realtime.emit.vehicles import REGISTRY_CHANNEL
@@ -40,7 +44,7 @@ from obehy.realtime.model import Derivation, Feed, Observation
 from obehy.realtime.phases import Phases
 from obehy.realtime.policy import Policy
 from obehy.realtime.record import SUMMARY_INTERVAL_S, ChannelStats, archive_poll, fetch
-from obehy.realtime.replay import DECODERS
+from obehy.realtime.replay import ALERT_DECODERS, DECODERS
 from obehy.realtime.runner import Runner
 from obehy.realtime.runtime.demand import FetchBody, StationDemand, run_demand
 from obehy.realtime.runtime.fetch import fetch_body
@@ -71,15 +75,25 @@ class WorkerOptions:
     once: bool = False  # poll every channel once and stop (tests)
 
 
+AlertSink = Callable[[Channel, Instant, list[Alert]], None]
+
+
 class PollHandler:
     """What the worker does with one poll: archive it, decode it, and run its live feeds'
-    observations through the runner. `obehy rt bench` drives the same object with archived
-    polls."""
+    observations through the runner; an alert channel's alerts go to `alerts` instead. `obehy rt
+    bench` drives the same object with archived polls."""
 
-    def __init__(self, runner: Runner, archive: ArchiveWriter, policy: Policy) -> None:
+    def __init__(
+        self,
+        runner: Runner,
+        archive: ArchiveWriter,
+        policy: Policy,
+        alerts: AlertSink | None = None,
+    ) -> None:
         self.runner = runner
         self.archive = archive
         self.policy = policy
+        self.alerts = alerts
         self.stats: dict[str, ChannelStats] = {}
 
     def handle(self, channel: Channel, poll: Poll) -> None:
@@ -93,6 +107,16 @@ class PollHandler:
         stats = self.stats.setdefault(channel.name, ChannelStats())
         with phases.time("archive"):
             sha256, body = archive_poll(self.archive, channel, poll, stats)
+        alert_decoder = ALERT_DECODERS.get((channel.source, channel.channel))
+        if alert_decoder is not None:
+            if self.alerts is not None and poll.ok and body is not None:
+                try:
+                    alerts = alert_decoder(body, instant(poll.received_at))
+                except ValueError as error:
+                    _log(f"{channel.name}: undecodable payload: {error}")
+                    return []
+                self.alerts(channel, instant(poll.received_at), alerts)
+            return []
         decoder = DECODERS.get((channel.source, channel.channel))
         if decoder is None or not poll.ok or body is None or sha256 is None:
             return []
@@ -148,7 +172,12 @@ class _Worker:
             options.gtfs_rt_dir,
             semantics_by_channel(channels),
         )
-        self.handler = PollHandler(self.runner, ArchiveWriter(options.archive), policy)
+        # Alerts are written on their own connection: warm replay uses the main one meanwhile.
+        self.alert_connection = psycopg.connect(database_url, autocommit=True)
+        self.runner.alerts = AlertFeed()
+        self.handler = PollHandler(
+            self.runner, ArchiveWriter(options.archive), policy, self._write_alerts
+        )
         # Until warm replay is done, polls are only archived and decoded into the backlog.
         self.ready = asyncio.Event()
         self.backlog: list[Observation] = []
@@ -159,6 +188,11 @@ class _Worker:
             # Its own connection: due calls are queried off the event loop's thread.
             demand_connection = psycopg.connect(database_url, autocommit=True)
             self.demand = StationDemand(demand_connection, loads.load_ids["czptt"], policy.boards)
+
+    def _write_alerts(self, channel: Channel, at: Instant, alerts: list[Alert]) -> None:
+        write_alerts(self.alert_connection, channel.source, channel.channel, alerts, at)
+        assert self.runner.alerts is not None
+        self.runner.alerts.dirty = True
 
     async def start(self) -> None:
         """Warm replay on a thread while the channels are polled, then the backlog."""
@@ -268,6 +302,7 @@ class _Worker:
         for name, channel_stats in sorted(self.handler.stats.items()):
             _log(channel_stats.line(name))
         self.connection.close()
+        self.alert_connection.close()
         if self.demand is not None:
             self.demand.connection.close()
 

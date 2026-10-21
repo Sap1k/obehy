@@ -307,6 +307,10 @@ erDiagram
 - **`vehicle_assignment`** (vehicle → journey) is separate from composition. It comes from
   bound live reports, or from sources naming the vehicle of each train, and feeds
   `vehicle_day`, the observed tours.
+- **Alerts** (`realtime/alerts.py`, `emit/alerts.py`) are not core state: alert channels write
+  whole sets to `rt.alert` on their own connection, SQL resolves their entities per feed
+  against the active release (`rt.alert_target`), and the emit tick appends them to each
+  feed's GTFS-RT. An alert stating a trip's fate reaches the core as a fact, never as an alert.
 - **Tours come from four sources:**
   - static `block_key`;
   - imported rosters, by train number + validity;

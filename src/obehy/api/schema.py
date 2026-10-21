@@ -106,6 +106,50 @@ class Amenities(BaseModel):
     operates: list[Label] = Field(description="The calendar designations, as printed")
 
 
+class AlertPeriod(BaseModel):
+    start: Time | None
+    end: Time | None = Field(description="Null: until further notice")
+
+
+class AlertTarget(BaseModel):
+    """What an alert informs, in the active release."""
+
+    kind: Literal["route", "stop", "trip"]
+    id: str = Field(description="route_id, location_id (a stop or boarding point) or trip_id")
+    feed: Literal["jdf", "czptt"]
+    service_date: date | None = Field(default=None, description="A trip's")
+    stop_place: str | None = Field(default=None, description="A stop's stop place")
+
+
+class Alert(BaseModel):
+    """A disruption or notice from a source, at the scope the source gave (BASE_PLAN.md
+    section 25). Texts are per language (`cs`, `en`, …); cause, effect and severity are
+    GTFS-RT's."""
+
+    alert_id: str = Field(description="`<source>:<the source's ID>`")
+    source: str
+    source_label: Label | None
+    cause: str
+    effect: str
+    severity: str
+    periods: list[AlertPeriod] = Field(description="When it applies; empty: always")
+    header: dict[str, str]
+    description: dict[str, str]
+    url: dict[str, str]
+    cause_detail: dict[str, str]
+    effect_detail: dict[str, str]
+    details: dict[str, str] = Field(description="Source-specific (PID infotexts: display_type)")
+    informs: list[AlertTarget] = Field(description="Empty: nothing it names is in the release")
+    first_seen: Time
+    changed_at: Time
+    withdrawn_at: Time | None
+
+
+class Alerts(Envelope):
+    at: Time
+    alerts: list[Alert]
+
+
 class Stop(BaseModel):
     location_id: str
     name: str
@@ -191,6 +235,9 @@ class Departure(BaseModel):
     platform: str | None = Field(description="The scheduled platform, track or post code.")
     vehicle: TripVehicle | None = None
     sources: list[str] = Field(default_factory=list, description="Where its realtime came from")
+    alert_ids: list[str] = Field(
+        default_factory=list, description="The board's `alerts` informing its line, stop or trip"
+    )
 
 
 class Departures(Envelope):
@@ -200,6 +247,7 @@ class Departures(Envelope):
     until: Time
     departures: list[Departure]
     next: str | None = Field(description="Cursor for the following rows (`cursor=`)")
+    alerts: list[Alert] = Field(description="Current alerts of the stops and the rows' lines")
 
 
 class Arrivals(Envelope):
@@ -209,6 +257,7 @@ class Arrivals(Envelope):
     until: Time
     arrivals: list[Departure]
     next: str | None
+    alerts: list[Alert]
 
 
 class JourneyKey(BaseModel):
@@ -306,6 +355,7 @@ class Trip(Envelope):
     notes: list[Note]
     connections: list[Connection]
     links: list[JourneyLink]
+    alerts: list[Alert] = Field(description="Current alerts of the trip, its line or its stops")
     shape: dict[str, Any] | None = Field(default=None, description="GeoJSON LineString.")
 
 

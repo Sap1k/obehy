@@ -24,6 +24,7 @@ from obehy.realtime.core import (
     step,
     vehicle_of,
 )
+from obehy.realtime.emit.alerts import AlertFeed
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.gtfs_rt import FeedEmitter, write_feed
 from obehy.realtime.index import KeyRef
@@ -124,6 +125,8 @@ class Runner:
     next_compaction: Instant | None = None
     next_sweep: Instant | None = None
     emitters: dict[Feed, FeedEmitter] = field(default_factory=dict[Feed, FeedEmitter])
+    # The worker's alerts, republished in each feed's GTFS-RT; None: no alerts (replay).
+    alerts: AlertFeed | None = None
 
     def __post_init__(self) -> None:
         for feed in self.feeds:
@@ -263,8 +266,14 @@ class Runner:
             if emit and self.gtfs_rt_dir is not None:
                 with self.phases.time("gtfs_rt"):
                     emitter = self.emitters.setdefault(feed, FeedEmitter(self.policy.lifecycle))
+                    alerts = (
+                        []
+                        if self.alerts is None
+                        else self.alerts.entities(self.connection, feed, now)
+                    )
                     write_feed(
-                        self.gtfs_rt_dir / f"{feed}.pb", emitter.serialize(runtime.state, now)
+                        self.gtfs_rt_dir / f"{feed}.pb",
+                        emitter.serialize(runtime.state, now, alerts),
                     )
         if emit and self.writer is not None:
             with self.phases.time("state"):
@@ -320,6 +329,8 @@ class Runner:
 
         self.loads = loads
         self.writer = writer
+        if self.alerts is not None:
+            self.alerts.dirty = True  # resolved against the new release
         effects: list[Effect] = []
         for feed, runtime in sorted(self.runtimes.items()):
             loader = IndexLoader(self.connection, loads, feed)

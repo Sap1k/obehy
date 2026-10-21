@@ -236,7 +236,9 @@ def test_a_body_without_features_is_a_payload_error() -> None:
 
 
 def test_pid_is_live_on_both_feeds_with_its_key_and_cursor() -> None:
-    (channel,) = [c for c in record.load_channels() if c.source == "pid"]
+    (channel,) = [
+        c for c in record.load_channels() if c.source == "pid" and c.channel == "vehicles"
+    ]
     assert (channel.source, channel.channel) in DECODERS
     assert channel.feeds == ("jdf", "czptt") and channel.live_feeds == ("jdf", "czptt")
     assert channel.auth == Auth("X-Access-Token", "golemio")

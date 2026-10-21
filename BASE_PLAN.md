@@ -1751,6 +1751,26 @@ scope without becoming misleading, publish the closest safe selector, keep the p
 the project API and expose provenance. Alerts are emitted per feed, with entities of that feed
 only.
 
+- **Any source, one shape** (`realtime/alerts.py`): cause, effect and severity in GTFS-RT terms,
+  active periods, texts per language, and the entities as the source names them (an identifier
+  in a source key namespace). An alert channel's poll states its whole current set: alerts are
+  upserted into `rt.alert`, those missing withdrawn; withdrawn ones are deleted after the raw
+  archive window.
+- **Resolution is SQL** (`rt.alert_target`): entities join `source_key` of the active release,
+  and the key's load gives the feed. A new release re-resolves them; an entity no key names
+  stays unresolved and visible, never guessed.
+- **Not core state.** An alert informs a scope; it does not move a vehicle or a journey. Alerts
+  are not replayed and do not pass through the core. An alert that states a trip's fate (a
+  trip-scoped NO_SERVICE, skipped calls of a trip) is also emitted by its decoder as a fact
+  (`TripCancelled`, section 20.7) and goes through the core like any observation; a route- or
+  stop-wide alert never does (rule 10). No source states one yet.
+- **Published** in each feed's GTFS-RT message after its trip updates and positions, under our
+  IDs, informing only that feed's entities; in the API at `/alerts` (by line, stop place,
+  trip) and on boards (with each row's alert IDs) and trips. Stop places and lines, cached per
+  release, are not given alerts: their alerts are `/alerts?stop=` and `/alerts?line=`.
+- **Sources:** PID's VYMI events (GTFS-RT, route-scoped) and infotexts (stop-scoped,
+  `docs/sources/pid.md`). Trains: SŽ (to come).
+
 ---
 
 # 26. Realtime sources
@@ -2054,7 +2074,7 @@ PID, DÚK, SŽ or another provider.
 /api/v1/vehicles?bbox=…[&include=unmatched,not_in_service]
 /api/v1/vehicles/<vehicle_id>               state, registry entry, source reports and how each
                                             was bound, attributes with every statement
-/api/v1/alerts
+/api/v1/alerts?line=…|stop=…|trip=…[&at=…]  current alerts by scope; /alerts/<id> any
 
 /api/v1/debug/release                       the active release, packages, loads, activations
 /api/v1/debug/realtime/sources              polls per channel; what each source feeds now

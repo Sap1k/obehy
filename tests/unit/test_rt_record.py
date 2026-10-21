@@ -65,10 +65,13 @@ def test_shipped_manifests_load() -> None:
         "mpvnet/odis",
         "mpvnet/zlin",
         "pid/vehicles",
+        "pid/alerts",
+        "pid/infotexts",
         "sz-mapa/trains",
         "sz-tabule/board",
     ]
-    arriva, dpmd, duk, idol, *_, pid, sz, boards = channels
+    arriva, dpmd, duk, idol, *_, pid, alerts, infotexts, sz, boards = channels
+    assert alerts.capabilities == infotexts.capabilities == ("alert",)
     assert pid.auth is not None and pid.cursor is not None and pid.live_feeds == ("jdf", "czptt")
     assert (dpmd.filter, dpmd.method) == ("dpmd", "GET") and "{epoch_ms}" in dpmd.url
     assert idol.headers["origin"] == "https://www.mpvnet.cz" and idol.feeds == ("jdf", "czptt")

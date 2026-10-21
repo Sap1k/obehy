@@ -259,14 +259,32 @@ def test_worker_polls_decodes_and_emits(
         }
     ).encode()
 
+    infotexts = json.dumps(
+        [
+            {
+                "id": "c59e1287",
+                "text": "Zastávka přesunuta.",
+                "text_en": None,
+                "priority": "normal",
+                "display_type": "inline",
+                "related_stops": [{"id": "U1Z1", "name": "A", "platform_code": None}],
+                "valid_from": None,
+                "valid_to": None,
+                "repeat": {"time_start": None, "time_end": None},
+            }
+        ]
+    ).encode()
+
     def fetch(channel: Channel) -> Poll:
-        return Poll(now, now, 200, body, "application/json")
+        payload = infotexts if channel.channel == "infotexts" else body
+        return Poll(now, now, 200, payload, "application/json")
 
     channel = Channel("duk", "vehicles", "GET", "https://x.invalid", 15.0, 5.0)
+    alerts = Channel("pid", "infotexts", "GET", "https://x.invalid", 60.0, 5.0)
     asyncio.run(
         run_worker(
             database_url,
-            [channel],
+            [channel, alerts],
             POLICY,
             WorkerOptions(
                 archive=tmp_path / "live-archive",
@@ -283,4 +301,7 @@ def test_worker_polls_decodes_and_emits(
     ).fetchone()
     assert row is not None  # bound today or not in service: either way decoded and stepped
     count = connection.execute("SELECT count(*) FROM rt.observation").fetchone()
-    assert count is not None and count[0] == 1
+    assert count is not None and count[0] == 1  # the infotext is no observation
+    assert connection.execute("SELECT alert_id, channel FROM rt.alert").fetchall() == [
+        ("infotext-c59e1287", "infotexts")
+    ]

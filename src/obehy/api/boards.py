@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from psycopg.rows import DictRow
 
 from obehy.api import schema
+from obehy.api.alerts import alert_ids, find_alerts
 from obehy.api.common import (
     LimitsDep,
     SnapshotDep,
@@ -175,6 +176,15 @@ def _respond(
         limit=limit,
         cursor=cursor,
     )
+    alerts = find_alerts(
+        snap,
+        limits,
+        routes=sorted({r.line.route_id for r in rows}),
+        stops=[s.location_id for s in stops],
+        trips=sorted({r.trip_id for r in rows}),
+    )
+    for r in rows:
+        r.alert_ids = alert_ids(alerts, route=r.line.route_id, stop=r.location_id, trip=r.trip_id)
     return envelope(snap) | {
         "stop": stops[0],
         "stops": stops,
@@ -182,6 +192,7 @@ def _respond(
         "until": until,
         "arrivals" if arrivals else "departures": rows,
         "next": following,
+        "alerts": alerts,
     }
 
 

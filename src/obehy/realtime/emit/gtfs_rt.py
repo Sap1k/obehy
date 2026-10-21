@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -268,7 +269,10 @@ class FeedEmitter:
         self.trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
         self.positions: dict[str, tuple[Instance, VehicleState, bytes]] = {}
 
-    def serialize(self, state: FeedState, now: Instant) -> bytes:
+    def serialize(self, state: FeedState, now: Instant, alerts: Sequence[bytes] = ()) -> bytes:
+        """The feed's message: its trip updates, its vehicle positions, then `alerts` (the
+        feed's serialized `Alert` entities, `emit/alerts.py`)."""
+
         header = rt.FeedHeader()
         header.gtfs_realtime_version = "2.0"
         header.incrementality = rt.FeedHeader.FULL_DATASET
@@ -323,6 +327,7 @@ class FeedEmitter:
             positions[vehicle_id] = hit
             chunks.append(_field(2, hit[2]))
         self.positions = positions
+        chunks.extend(_field(2, entity) for entity in alerts)
         return b"".join(chunks)
 
 

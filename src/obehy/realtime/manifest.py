@@ -30,6 +30,7 @@ CAPABILITIES = (
     "stop_event",
     "next_stop",
     "platform",
+    "alert",
 )
 
 

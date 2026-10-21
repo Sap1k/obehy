@@ -47,3 +47,24 @@ def test_consistent_snapshots_pass_and_broken_ones_fail(tmp_path: Path) -> None:
     assert cli.main(["rt", "check-gtfs-rt", "--gtfs", str(gtfs), str(backwards)]) == 1
     unknown = _snapshot(tmp_path / "unknown.pb", [100], trip_id="t9")
     assert cli.main(["rt", "check-gtfs-rt", "--gtfs", str(gtfs), str(unknown)]) == 1
+
+
+def _alert(path: Path, route_id: str) -> Path:
+    message = rt.FeedMessage()
+    message.header.gtfs_realtime_version = "2.0"
+    entity = message.entity.add()
+    entity.id = "alert:pid:1"
+    entity.alert.informed_entity.add().route_id = route_id
+    entity.alert.header_text.translation.add(text="Odklon", language="cs")
+    path.write_bytes(message.SerializeToString())
+    return path
+
+
+def test_alerts_must_inform_what_the_static_feed_has(tmp_path: Path) -> None:
+    gtfs = _gtfs(tmp_path / "gtfs.zip")
+    with zipfile.ZipFile(gtfs, "a") as archive:
+        archive.writestr("routes.txt", "route_id,route_type\nr,3\n")
+    good = _alert(tmp_path / "good.pb", "r")
+    assert cli.main(["rt", "check-gtfs-rt", "--gtfs", str(gtfs), str(good)]) == 0
+    unknown = _alert(tmp_path / "unknown.pb", "L1001")
+    assert cli.main(["rt", "check-gtfs-rt", "--gtfs", str(gtfs), str(unknown)]) == 1

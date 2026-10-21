@@ -272,7 +272,8 @@ It answers under `/api/v1`: `status`; `stops?q=|bbox=|near=`; `stop-places/<id>`
 `departures` and `arrivals` (and `departures|arrivals?stops=a,b` for several, paged by `next`);
 `trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/<key>/<service_date>`, which
 redirects); `journeys/<namespace>/<key>/history`; `lines?q=`, `lines/<route_id>` with its
-`timetable`, `trips` and `punctuality`; `vehicles?bbox=` and `vehicles/<vehicle_id>`; and
+`timetable`, `trips` and `punctuality`; `vehicles?bbox=` and `vehicles/<vehicle_id>`;
+`alerts?line=|stop=|trip=` and `alerts/<id>`; and
 `debug/…` (raw rows, uncached, shapes may change). The interactive docs are
 `/api/v1/docs`; the OpenAPI document is
 `/api/v1/openapi.json`. Trip IDs go into paths percent-encoded (CZPTT IDs contain `%`).

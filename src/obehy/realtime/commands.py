@@ -16,6 +16,7 @@ import psycopg
 
 from obehy.realtime import bench, record, replay
 from obehy.realtime.archive import prune as prune_archive
+from obehy.realtime.emit.alerts import prune_alerts
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError, active_loads
 from obehy.realtime.jobs import drop_observations, vehicle_day
@@ -249,10 +250,14 @@ def _local_time(value: str) -> Instant:
 
 
 def _replay(args: argparse.Namespace) -> int:
-    channels = select_channels(
-        record.load_channels(cast(Path, args.manifest)),
-        cast(list[str] | None, args.sources) or list(replay.SOURCES),
-    )
+    channels = [
+        channel
+        for channel in select_channels(
+            record.load_channels(cast(Path, args.manifest)),
+            cast(list[str] | None, args.sources) or list(replay.SOURCES),
+        )
+        if (channel.source, channel.channel) not in replay.ALERT_DECODERS
+    ]
     options = replay.ReplayOptions(
         release=cast(str, args.release),
         archive=cast(Path, args.archive),
@@ -351,6 +356,10 @@ def _jobs(args: argparse.Namespace) -> int:
             cutoff = now.date() - timedelta(days=policy.observation_retention_days)
             dropped = drop_observations(connection, cutoff)
             print(f"dropped {len(dropped)} observation partitions before {cutoff}")
+            withdrawn = now - timedelta(days=policy.raw_retention_days)
+            print(
+                f"deleted {prune_alerts(connection, withdrawn)} alerts withdrawn before {withdrawn}"
+            )
     if args.job_command == "nightly":
         cutoff = now.date() - timedelta(days=policy.raw_retention_days)
         pruned = prune_archive(cast(Path, args.archive), cutoff)

@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.api.app import create_app
+from obehy.realtime.alerts import Alert, AlertEntity, Period
+from obehy.realtime.emit.alerts import AlertFeed, prune_alerts, write_alerts
 from obehy.realtime.emit.vehicles import VehicleBook
-from obehy.realtime.times import local_date
+from obehy.realtime.times import Instant, instant, local_date
 from obehy.reference import duk_register, vehicle_list
 from obehy.reference.load import load_dataset
 from obehy.release import activate as activation
@@ -56,6 +60,22 @@ def _jdf() -> Rows:
             "binding_method": "regional_overlay",
         }
     )
+    # PID's own IDs of the line and the stop, which its alerts name (keys valid on any date).
+    for kind, namespace, identifier, public_id in (
+        ("route", "pid:gtfs_route_id", "L1", "jdf:route:000001"),
+        ("location", "pid:gtfs_stop_id", "U1Z1", "jdf:stop:1"),
+    ):
+        rows["source_key"].append(
+            {
+                "entity_kind": kind,
+                "namespace": namespace,
+                "identifier": identifier,
+                "public_id": public_id,
+                "valid_from": date(2026, 1, 1),
+                "valid_to": date(2099, 12, 31),
+                "binding_method": "identity",
+            }
+        )
     # Fixed codes: X and @ on the trip, O for bicycles, T (on request) at Nový Bor, the line in
     # PID (30001), and a barrier-free stop with a toilet.
     rows["location"][0]["wheelchair_boarding"] = 1
@@ -115,6 +135,39 @@ def _czptt() -> Rows:
     ]
     rows["source_key"].append(rows["source_key"][0] | {"public_id": second})
     return rows
+
+
+_ALERT = Alert(
+    source="pid",
+    channel="alerts",
+    alert_id="alert-1",
+    cause="CONSTRUCTION",
+    effect="DETOUR",
+    severity="UNKNOWN_SEVERITY",
+    periods=(Period(None, None),),
+    header=(("cs", "Česká Lípa"),),
+    description=(("cs", "Linka 1 jede odklonem."),),
+    entities=(
+        AlertEntity("route", "pid:gtfs_route_id", "L1"),
+        AlertEntity("route", "pid:gtfs_route_id", "L1001"),
+    ),
+)
+_INFOTEXT = Alert(
+    source="pid",
+    channel="infotexts",
+    alert_id="infotext-1",
+    cause="UNKNOWN_CAUSE",
+    effect="UNKNOWN_EFFECT",
+    severity="SEVERE",
+    periods=(Period(None, None),),
+    header=(("cs", "Zastávka přesunuta."), ("en", "Stop moved.")),
+    entities=(AlertEntity("stop", "pid:gtfs_stop_id", "U1Z1"),),
+    details=(("display_type", "general"),),
+)
+
+
+def local_now() -> Instant:
+    return instant(datetime.now(UTC))
 
 
 def _call(sequence: int, location: str, status: str, at: str | None) -> dict[str, Any]:
@@ -330,6 +383,10 @@ def client(
         " ('czptt', 'czptt:train_number', '6599', 'czptt:train_number', '6600', '2026-10-07',"
         "  'continues_as', (SELECT min(derivation_id) FROM history.derivation))"
     )
+    # PID alerts: line 1 detoured (also naming a rail line no key resolves), and an infotext at
+    # the stop.
+    write_alerts(connection, "pid", "alerts", [_ALERT], local_now())
+    write_alerts(connection, "pid", "infotexts", [_INFOTEXT], local_now())
     # What the worker does each tick: which vehicle each report is, and the profiles.
     book = VehicleBook.load(connection)
     for source, vehicle, seen in connection.execute(
@@ -536,6 +593,8 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/lines/{route_id}/punctuality",
         "/api/v1/vehicles",
         "/api/v1/vehicles/{vehicle_id}",
+        "/api/v1/alerts",
+        "/api/v1/alerts/{alert_id}",
         "/api/v1/debug/release",
         "/api/v1/debug/realtime/sources",
         "/api/v1/debug/realtime/unmatched",
@@ -543,6 +602,7 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/debug/vehicles/pairings",
         "/api/v1/debug/vehicles/registry",
         "/api/v1/debug/vehicles/{vehicle_id}",
+        "/api/v1/debug/alerts",
         "/api/v1/debug/static/trips/{trip_id}",
     }
 
@@ -818,3 +878,65 @@ def test_a_cancelled_trip_on_the_board_and_in_its_detail(client: TestClient) -> 
     trip = _get(client, "/trips/jdf:trip:2/2026-10-06")
     assert trip["realtime"]["lifecycle"] == "cancelled"
     assert {c["status"] for c in trip["calls"]} == {"cancelled"}
+
+
+def test_alerts_by_scope_and_on_boards_and_trips(client: TestClient) -> None:
+    every = _get(client, "/alerts")["alerts"]
+    # The infotext is severe: first.
+    assert [a["alert_id"] for a in every] == ["pid:infotext-1", "pid:alert-1"]
+    infotext, detour = every
+    assert infotext["header"] == {"cs": "Zastávka přesunuta.", "en": "Stop moved."}
+    assert infotext["details"] == {"display_type": "general"}
+    assert infotext["source_label"]["cs"] == "PID"
+    # Our IDs; the rail line no key names is left out, never guessed.
+    assert detour["informs"] == [
+        {
+            "kind": "route",
+            "id": "jdf:route:000001",
+            "feed": "jdf",
+            "service_date": None,
+            "stop_place": None,
+        }
+    ]
+    assert [a["alert_id"] for a in _get(client, "/alerts", line="jdf:route:000001")["alerts"]] == [
+        "pid:alert-1"
+    ]
+    assert [a["alert_id"] for a in _get(client, "/alerts", stop="jdf:stop:1")["alerts"]] == [
+        "pid:infotext-1"
+    ]
+    board = _get(client, "/stop-places/jdf:stop:1/departures", start="2026-10-06T06:05:00+02:00")
+    assert [a["alert_id"] for a in board["alerts"]] == ["pid:infotext-1", "pid:alert-1"]
+    (row,) = board["departures"]
+    assert row["alert_ids"] == ["pid:infotext-1", "pid:alert-1"]
+    trip = _get(client, "/trips/jdf:trip:1/2026-10-06")
+    assert [a["alert_id"] for a in trip["alerts"]] == ["pid:infotext-1", "pid:alert-1"]
+    _get(client, "/alerts/pid:nope", 404)
+    # The rail line is left unresolved, and shown so.
+    (debug,) = [a for a in _get(client, "/debug/alerts")["alerts"] if a["alert_id"] == "alert-1"]
+    assert [(e["identifier"], e["targets"]) for e in debug["entities"]] == [
+        ("L1", [{"feed": "jdf", "id": "jdf:route:000001"}]),
+        ("L1001", []),
+    ]
+
+
+def test_a_withdrawn_alert_leaves_lists_and_feeds(
+    client: TestClient, connection: psycopg.Connection
+) -> None:
+    feed = AlertFeed()
+    now = local_now()
+    jdf = [rt.FeedEntity.FromString(e) for e in feed.entities(connection, "jdf", now)]
+    assert [e.id for e in jdf] == ["alert:pid:alert-1", "alert:pid:infotext-1"]
+    assert [e.route_id for e in jdf[0].alert.informed_entity] == ["jdf:route:000001"]
+    assert feed.entities(connection, "czptt", now) == []
+    first = _get(client, "/alerts/pid:alert-1")["changed_at"]
+    write_alerts(connection, "pid", "alerts", [_ALERT], local_now())  # unchanged
+    assert _get(client, "/alerts/pid:alert-1")["changed_at"] == first
+    write_alerts(connection, "pid", "alerts", [], local_now())  # gone from the source
+    assert [a["alert_id"] for a in _get(client, "/alerts")["alerts"]] == ["pid:infotext-1"]
+    assert _get(client, "/alerts/pid:alert-1")["withdrawn_at"] is not None
+    feed.dirty = True
+    assert [e.id for e in map(rt.FeedEntity.FromString, feed.entities(connection, "jdf", now))] == [
+        "alert:pid:infotext-1"
+    ]
+    assert prune_alerts(connection, local_now() + timedelta(seconds=1)) == 1
+    _get(client, "/alerts/pid:alert-1", 404)

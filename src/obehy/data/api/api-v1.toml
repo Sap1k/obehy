@@ -46,6 +46,10 @@ default_days = 7
 on_time_early_s = -60
 on_time_late_s = 179
 
+[alerts]
+# The most alerts one answer lists (a stop place, a line, a board, or all current ones).
+limit = 200
+
 [debug]
 window_min = 60
 limit = 50
