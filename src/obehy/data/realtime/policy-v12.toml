@@ -4,10 +4,10 @@
 # preference, v8 two days of rt.observation, v9 the raw archive window, v10 trip updates
 # kept after the trip ends, observed dwell credited at stops without a timetabled one, and
 # the distance driven followed where a shape misses the road, v11 hop running times learned
-# live).
+# live, v12 one day of rt.observation).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "11"
+policy_version = "12"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -161,8 +161,9 @@ compact_index_at_s = 12600
 # Daily rt.observation partitions (UTC days) older than this are dropped by `obehy jobs nightly`.
 # Only warm replay reads them (the last `warm_replay.max_hours`); delay history and vehicle
 # tours live in history.*, which is rebuilt from the raw archive, not from here. A day of all
-# sources is several GB.
-observation_days = 2
+# sources is about 7 GB with PID, so one day is kept: today's partition and yesterday's, which
+# covers the replay window across midnight.
+observation_days = 1
 # Raw archive day directories (data/rt-raw/<source>/<channel>/<UTC day>) older than this are
 # deleted by the same job. Inside the window history can be rebuilt by replay; outside it is
 # kept as recorded. Pinned corpora are copies elsewhere and stay. All sources together are about

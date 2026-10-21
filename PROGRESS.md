@@ -288,6 +288,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-22** — Server disk at 96 %: with PID, `rt.observation` is about 7 GB per UTC day,
+  and the two kept days plus today's partition made 21 GB. Policy v12 keeps one day
+  (yesterday's partition and today's), enough for the 6-hour warm replay across midnight. Unit
+  tests pass. Dropping the two oldest partitions by hand frees 14 GB now. Next to watch:
+  `history.*` at 9 GB with no retention yet.
+
 - **2026-10-20** — API phase A (migration 0012): fixed codes readable through
   `codes-v1.toml` (39 kinds, calendar designations, boarding codes, 34 integrated transport
   systems from the CIS JŘ MHD and IDS lists), arrivals, `near`, multi-stop boards with a

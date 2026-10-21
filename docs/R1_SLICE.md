@@ -169,7 +169,7 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | `[prediction]` | propagation (BASE_PLAN.md 20.5): dwell recovery, early departure limit, observed dwell credit, early fade; hop running times `runtime_decay_s`, `runtime_prior_weight`, `runtime_ratio_max`, `publish_deadband_s`, `floor_fresh_s` (v11) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
-| `[retention]` | observation_days = 2 (v8; was 30), raw_days = 14 (v9; raw archive days), both dropped by `obehy jobs nightly` |
+| `[retention]` | observation_days = 1 (v12; 2 in v8, 30 before), raw_days = 14 (v9; raw archive days), both dropped by `obehy jobs nightly` |
 
 The file carries `policy_version`, which goes into `derivation`. Code holds no defaults for
 policy values: a missing key is a load error.
