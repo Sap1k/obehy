@@ -91,6 +91,12 @@ rt.trip_part_current        per journey, the feed trips it publishes and their s
 rt.source_health            source, channel, minute, polls, errors, rows, lag
 rt.alert                    source, alert_id; channel, cause, effect, severity, periods, texts,
                             entities as named, first/last seen, changed_at, withdrawn_at
+rt.lookup_request           what the API was asked to look up (a trip's composition from a
+                            call), pending or answered, one outcome per lookup
+rt.lookup_fetch             every upstream request a lookup sent, its raw answer and outcome
+rt.detail_cache             the last answer per (source, lookup, cache key), until it expires
+rt.composition              a source's answer about a journey's formation, from a call until a
+                            later answer closes it; its units in rt.composition_unit
 rt.vehicle_attribute_observed  per source vehicle and attribute: value, first and last seen
 rt.vehicle_pairing          reports of two sources seen side by side on one journey
 rt.vehicle_profile          per vehicle: the resolved attributes and their statements; UNLOGGED

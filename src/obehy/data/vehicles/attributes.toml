@@ -59,3 +59,9 @@ evn = { type = "text", cs = "Evropské číslo vozidla (EVN)", en = "European ve
 series_number = { type = "text", cs = "Řada a číslo", en = "Series and number", icon = "series_number" }
 operator = { type = "text", cs = "Dopravce", en = "Operator", icon = "operator" }
 category = { type = "text", cs = "Druh vozidla", en = "Vehicle category", icon = "category" }
+# Coach features compositions state (ČD's service icons, docs/sources/cd.md).
+wheelchair_lift = { type = "bool", cs = "Zvedací plošina pro vozík", en = "Wheelchair lift", icon = "wheelchair_lift" }
+bicycle_reservation_required = { type = "bool", cs = "Jízdní kolo s povinnou rezervací", en = "Bicycle reservation required", icon = "bicycle_reservation" }
+open_saloon = { type = "bool", cs = "Velkoprostorový vůz", en = "Open saloon", icon = "open_saloon" }
+family_compartment = { type = "bool", cs = "Oddíl pro cestující s dětmi", en = "Family compartment", icon = "family" }
+children_cinema = { type = "bool", cs = "Dětské kino", en = "Children's cinema", icon = "cinema" }

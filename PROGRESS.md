@@ -240,9 +240,18 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   active release, republished in each feed's GTFS-RT and served at `/alerts`, on boards and on
   trips. PID: VYMI events (GTFS-RT, routes) and infotexts (stops), polled every 60 s; on dev
   47/56 routes and 36/36 stops resolve (the rest PID rail lines, PID-Q9). The full VYMI export
-  is internal to Golemio (403). Next: SŽ alerts for trains; lookups and compositions (ČD on
-  request, per-unit spans; 55p.cz only with permission). Open beyond: PMTiles, `no_realtime`,
-  merged station boards.
+  is internal to Golemio (403). Phase E (2026-10-21): lookups and compositions. The API
+  records what it is asked (`rt.lookup_request`, 202 `pending`, `stale` while asked again);
+  the worker's lookup broker plans through the connector from a SQL view of the trip, reuses
+  answers by cache key, keeps a token bucket and a daily budget, archives and logs each answer
+  (`rt.lookup_fetch`). ČD connector (`docs/sources/cd.md`): ČD's trains by train number and
+  the next passenger call's SR70 (CD-Q1 `54` + SR70), coaches as units with types, numbers,
+  classes and services on the vehicle vocabulary. Compositions per journey key with per-unit
+  spans; a later answer closes an earlier one, identical ones merge; segments in SQL
+  (`rt.composition_spans`). On dev: 607 from Cheb plans `5475035` (the captured answer's
+  station); today's 607 (Chomutov město – Praha) ran the whole flow with the captured answer
+  (broker 137 ms, API 108 ms), rows deleted after. ČD itself not asked yet. Next: SŽ alerts for trains; 55p.cz only with permission. Open
+  beyond: PMTiles, `no_realtime`, merged station boards.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
   GTFS-RT alerts and departures later.

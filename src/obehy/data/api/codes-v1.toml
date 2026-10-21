@@ -72,6 +72,7 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 "arriva-express" = { cs = "Arriva", en = "Arriva" }
 "sz-mapa" = { cs = "Správa železnic", en = "Správa železnic" }
 "sz-tabule" = { cs = "Správa železnic (tabule)", en = "Správa železnic (tabule)" }
+"cd" = { cs = "České dráhy", en = "České dráhy" }
 
 # GTFS pickup_type / drop_off_type, as JrUtil projects them.
 [boarding]

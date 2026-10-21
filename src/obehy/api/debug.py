@@ -90,6 +90,13 @@ def alerts(snap: SnapshotDep, limits: LimitsDep, minutes: Minutes = None) -> dic
     return envelope(snap) | {"since": since, "alerts": rows}
 
 
+@router.get("/lookups", summary="Lookup requests and the upstream requests they caused")
+def lookups(snap: SnapshotDep, limits: LimitsDep, minutes: Minutes = None) -> dict[str, Any]:
+    since = snap.now - timedelta(minutes=minutes or limits.debug_window_min)
+    rows = snap.all("debug_lookups", {"since": since, "limit": limits.debug_limit})
+    return envelope(snap) | {"since": since, "lookups": rows}
+
+
 @router.get("/vehicles/pairings", summary="Reports paired by running side by side")
 def pairings(
     snap: SnapshotDep,

@@ -1,4 +1,5 @@
-"""The FastAPI application: routers under `/api/v1`, problem+json errors, one pool."""
+"""The FastAPI application: routers under `/api/v1`, problem+json errors, a read-only pool and a
+small one for lookup requests."""
 
 from __future__ import annotations
 
@@ -12,8 +13,19 @@ from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool
 from starlette.exceptions import HTTPException
 
-from obehy.api import alerts, boards, debug, lines, schema, status, stops, trips, vehicles
-from obehy.api.db import NoActiveRelease, open_pool
+from obehy.api import (
+    alerts,
+    boards,
+    compositions,
+    debug,
+    lines,
+    schema,
+    status,
+    stops,
+    trips,
+    vehicles,
+)
+from obehy.api.db import NoActiveRelease, open_pool, open_request_pool
 from obehy.api.limits import Limits, load_limits
 from obehy.api.params import ParameterError
 
@@ -63,9 +75,11 @@ def create_app(
         owned = pool is None
         app.state.pool = pool if pool is not None else open_pool(str(database_url))
         app.state.limits = limits or load_limits()
+        app.state.requests = open_request_pool(str(database_url or app.state.pool.conninfo))
         try:
             yield
         finally:
+            app.state.requests.close()
             if owned:
                 app.state.pool.close()
 
@@ -82,6 +96,6 @@ def create_app(
     app.add_exception_handler(ParameterError, _parameter_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(NoActiveRelease, _no_release)
-    for module in (status, stops, boards, trips, lines, vehicles, alerts, debug):
+    for module in (status, stops, boards, trips, compositions, lines, vehicles, alerts, debug):
         app.include_router(module.router, prefix=PREFIX)
     return app

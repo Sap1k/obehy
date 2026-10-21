@@ -1,0 +1,27 @@
+# ČD train compositions (docs/sources/cd.md), decoded by realtime/sources/cd.py. A lookup, never
+# polled: asked per train when someone asks for its composition (the API's
+# trips/<trip_id>/<date>/composition), within the rate and the daily budget below. The request
+# is the one the composition pages of cd.cz send.
+source = "cd"
+manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "ČD train compositions"
+covers = "The coaches of ČD trains from a station onward: types, numbers, classes and services. Asked per train, on request."
+
+[[lookup]]
+name = "composition"
+kind = "composition"
+feeds = ["czptt"]
+capabilities = ["composition"]
+timeout_s = 15
+# A formation rarely changes en route; a later station is another question (another answer).
+ttl_s = 900
+not_found_ttl_s = 3600
+retry_s = 300
+rate = { per_minute = 6, burst = 3 }
+daily_budget = 1000
+
+[lookup.request]
+method = "GET"
+url = "https://razeniws.cdis.cz/apiws.svc/getTrains?trainParams={params}&lang=cs&client=TrainDetail&format=json"
+headers = { Referer = "https://www.cd.cz/" }

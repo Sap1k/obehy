@@ -8,6 +8,7 @@ import contextlib
 import shutil
 import sys
 import tomllib
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -25,6 +26,7 @@ from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
 from obehy.realtime.runtime.demand import StationDemand
 from obehy.realtime.runtime.egress import Egress, EgressError, build_egress
+from obehy.realtime.runtime.lookups import prune_lookups
 from obehy.realtime.times import PRAGUE, Instant, instant, local_date
 from obehy.realtime.worker import WorkerOptions, run_worker
 from obehy.runtime_config import ConfigurationError, load_database_url
@@ -187,12 +189,17 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
 
-def _egress(channels: list[Channel], args: argparse.Namespace) -> tuple[list[Channel], Egress]:
-    """The channels that may poll and their fetcher: egress channels only through their proxy
-    pool, and not at all without one (docs/R2_SLICE.md section 7)."""
+def _egress(
+    channels: list[Channel], args: argparse.Namespace, lookups: Sequence[Channel] = ()
+) -> tuple[list[Channel], Egress]:
+    """The channels that may poll and their fetcher (of lookups' requests too): egress channels
+    only through their proxy pool, and not at all without one (docs/R2_SLICE.md section 7)."""
 
     egress = build_egress(
-        channels, load_policy().egress, config=cast(Path | None, args.config), log=record.log
+        [*channels, *lookups],
+        load_policy().egress,
+        config=cast(Path | None, args.config),
+        log=record.log,
     )
     usable = egress.usable(channels, record.log)
     if not usable:
@@ -313,12 +320,18 @@ def _bench(args: argparse.Namespace) -> int:
 
 
 def _worker(args: argparse.Namespace) -> int:
+    sources = cast(list[str] | None, args.sources)
+    lookups = [
+        lookup
+        for lookup in record.load_lookups(cast(Path, args.manifest))
+        if not sources or lookup.source in sources
+    ]
     channels, egress = _egress(
-        select_channels(
-            record.load_channels(cast(Path, args.manifest)), cast(list[str] | None, args.sources)
-        ),
+        select_channels(record.load_channels(cast(Path, args.manifest)), sources),
         args,
+        [lookup.request for lookup in lookups],
     )
+    lookups = [lookup for lookup in lookups if egress.usable([lookup.request], record.log)]
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(
             run_worker(
@@ -331,6 +344,7 @@ def _worker(args: argparse.Namespace) -> int:
                     feeds=cast(tuple[Feed, ...], args.feeds),
                     fetcher=egress.fetch,
                     body_fetcher=egress.fetch,
+                    lookups=lookups,
                 ),
             )
         )
@@ -359,6 +373,9 @@ def _jobs(args: argparse.Namespace) -> int:
             withdrawn = now - timedelta(days=policy.raw_retention_days)
             print(
                 f"deleted {prune_alerts(connection, withdrawn)} alerts withdrawn before {withdrawn}"
+            )
+            print(
+                f"deleted {prune_lookups(connection, withdrawn)} lookup requests before {withdrawn}"
             )
     if args.job_command == "nightly":
         cutoff = now.date() - timedelta(days=policy.raw_retention_days)

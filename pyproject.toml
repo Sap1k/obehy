@@ -87,6 +87,7 @@ source_modules = [
     "obehy.realtime.evaluate",
     "obehy.realtime.quality",
     "obehy.realtime.platforms",
+    "obehy.realtime.compositions",
 ]
 forbidden_modules = [
     "psycopg",

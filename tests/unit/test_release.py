@@ -156,6 +156,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "vehicles",
         "cancellations",
         "alerts",
+        "compositions",
     ]
 
 

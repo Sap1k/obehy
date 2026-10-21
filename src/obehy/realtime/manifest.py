@@ -1,7 +1,7 @@
 """Connector manifests: `realtime/sources/<source>.toml` (docs/R1_SLICE.md section 4).
 
-A connector declares how its channels are polled; the generic runtime (recorder, worker)
-executes that. Lookups arrive with the first lookup connector.
+A connector declares how its channels are polled and how its lookups are asked (BASE_PLAN.md
+section 18.2); the generic runtime (recorder, worker, lookup broker) executes that.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from obehy.realtime.model import SourceSemantics
 SOURCES = Path(__file__).resolve().parent / "sources"
 FEED_NAMES = ("jdf", "czptt")
 POLL_KINDS = ("interval", "demand")
+LOOKUP_KINDS = ("composition",)
 DEMAND_QUERIES = ("station_boards",)
 CAPABILITIES = (
     "vehicle_key",
@@ -31,6 +32,7 @@ CAPABILITIES = (
     "next_stop",
     "platform",
     "alert",
+    "composition",
 )
 
 
@@ -99,13 +101,45 @@ class Channel:
 
 
 @dataclass(frozen=True)
+class Rate:
+    """A token bucket: `per_minute` requests on average, at most `burst` at once."""
+
+    per_minute: float
+    burst: int
+
+
+@dataclass(frozen=True)
+class Lookup:
+    """A lazy detail (a composition): asked for on demand, never polled. `request` is the
+    upstream call as a channel (method, URL whose `{name}` placeholders the connector's plan
+    fills, headers, timeout, egress), so it is fetched and archived like a poll."""
+
+    source: str
+    name: str
+    kind: str
+    feeds: tuple[str, ...]
+    request: Channel
+    ttl_s: float  # an answer is reused this long
+    not_found_ttl_s: float  # "no such train" is believed this long
+    retry_s: float  # a failed request is not repeated sooner
+    rate: Rate
+    daily_budget: int  # requests per day (Europe/Prague)
+
+    @property
+    def qualified(self) -> str:
+        return f"{self.source}/{self.name}"
+
+
+@dataclass(frozen=True)
 class Source:
-    """One connector manifest: its channels and how the public feed list names it."""
+    """One connector manifest: its channels and lookups, and how the public feed list names
+    it."""
 
     source: str
     title: str  # e.g. "DÚK vehicle positions (Ústecký kraj)"
     covers: str  # what it covers and contributes, one or two sentences
     channels: tuple[Channel, ...]
+    lookups: tuple[Lookup, ...] = ()
 
     @property
     def live_feeds(self) -> tuple[str, ...]:
@@ -254,6 +288,55 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     )
 
 
+def _lookup(source: str, raw: object, where: str) -> Lookup:
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where}: not a table")
+    table = cast(dict[str, Any], raw)
+    name = _string(table, "name", where)
+    if not _IDENTIFIER.match(name):
+        raise ManifestError(f"{where}: {name!r} must be lowercase ASCII and dashes")
+    kind = table.get("kind")
+    if kind not in LOOKUP_KINDS:
+        raise ManifestError(f"{where}: kind must be one of {LOOKUP_KINDS}")
+    request = _table(table, "request", where)
+    if request.get("method") != "GET":
+        raise ManifestError(f"{where}: a lookup's request.method must be GET")
+    headers = request.get("headers", {})
+    if not isinstance(headers, dict) or any(
+        not isinstance(value, str) for value in cast(dict[str, object], headers).values()
+    ):
+        raise ManifestError(f"{where}: request.headers must be a table of strings")
+    egress = table.get("egress")
+    if egress is not None and (not isinstance(egress, str) or not _IDENTIFIER.match(egress)):
+        raise ManifestError(f"{where}: egress must be a lowercase ASCII name")
+    rate = _table(table, "rate", where)
+    feeds = _strings(table, "feeds", where, FEED_NAMES)
+    channel = Channel(
+        source=source,
+        channel=name,
+        method="GET",
+        url=_string(request, "url", where),
+        interval_s=0.0,  # never polled
+        timeout_s=_positive(table, "timeout_s", where),
+        headers=dict(cast(dict[str, str], headers)),
+        feeds=feeds,
+        capabilities=_strings(table, "capabilities", where, CAPABILITIES),
+        egress=egress,
+    )
+    return Lookup(
+        source=source,
+        name=name,
+        kind=str(kind),
+        feeds=feeds,
+        request=channel,
+        ttl_s=_positive(table, "ttl_s", where),
+        not_found_ttl_s=_positive(table, "not_found_ttl_s", where),
+        retry_s=_positive(table, "retry_s", where),
+        rate=Rate(_positive(rate, "per_minute", where), int(_positive(rate, "burst", where))),
+        daily_budget=int(_positive(table, "daily_budget", where)),
+    )
+
+
 def load_source(path: Path, filters: Sequence[str] = ()) -> Source:
     try:
         with path.open("rb") as stream:
@@ -265,20 +348,31 @@ def load_source(path: Path, filters: Sequence[str] = ()) -> Source:
     source = _string(document, "source", str(path))
     if not _IDENTIFIER.match(source) or path.stem != source:
         raise ManifestError(f"{path}: source {source!r} must match the file name")
-    tables = document.get("channel")
-    if not isinstance(tables, list) or not tables:
-        raise ManifestError(f"{path} defines no [[channel]]")
+    tables = document.get("channel", [])
+    lookup_tables = document.get("lookup", [])
+    if not isinstance(tables, list) or not isinstance(lookup_tables, list):
+        raise ManifestError(f"{path}: [[channel]] and [[lookup]] must be arrays of tables")
+    if not tables and not lookup_tables:
+        raise ManifestError(f"{path} defines no [[channel]] and no [[lookup]]")
     channels: list[Channel] = []
     for number, raw in enumerate(cast(list[object], tables), start=1):
         channel = _channel(source, raw, f"{path} channel {number}", filters)
         if any(existing.name == channel.name for existing in channels):
             raise ManifestError(f"{path}: duplicate channel {channel.name}")
         channels.append(channel)
+    lookups: list[Lookup] = []
+    for number, raw in enumerate(cast(list[object], lookup_tables), start=1):
+        lookup = _lookup(source, raw, f"{path} lookup {number}")
+        taken = {c.channel for c in channels} | {existing.name for existing in lookups}
+        if lookup.name in taken:
+            raise ManifestError(f"{path}: duplicate channel or lookup {lookup.name}")
+        lookups.append(lookup)
     return Source(
         source=source,
         title=_string(document, "title", str(path)),
         covers=_string(document, "covers", str(path)),
         channels=tuple(channels),
+        lookups=tuple(lookups),
     )
 
 
@@ -303,6 +397,12 @@ def load_channels(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Cha
     """Every channel of a manifest file, or of every `*.toml` in a directory (by file name)."""
 
     return [channel for source in load_sources(path, filters) for channel in source.channels]
+
+
+def load_lookups(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Lookup]:
+    """Every lookup of a manifest file, or of every `*.toml` in a directory (by file name)."""
+
+    return [lookup for source in load_sources(path, filters) for lookup in source.lookups]
 
 
 def select_channels(channels: Sequence[Channel], sources: Sequence[str] | None) -> list[Channel]:

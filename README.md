@@ -271,7 +271,7 @@ uv run obehy api serve --port 8000          # http://127.0.0.1:8000/api/v1/docs
 It answers under `/api/v1`: `status`; `stops?q=|bbox=|near=`; `stop-places/<id>` with its
 `departures` and `arrivals` (and `departures|arrivals?stops=a,b` for several, paged by `next`);
 `trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/<key>/<service_date>`, which
-redirects); `journeys/<namespace>/<key>/history`; `lines?q=`, `lines/<route_id>` with its
+redirects) with its `composition?from=` (asked of the worker: 202 until answered); `journeys/<namespace>/<key>/history`; `lines?q=`, `lines/<route_id>` with its
 `timetable`, `trips` and `punctuality`; `vehicles?bbox=` and `vehicles/<vehicle_id>`;
 `alerts?line=|stop=|trip=` and `alerts/<id>`; and
 `debug/…` (raw rows, uncached, shapes may change). The interactive docs are
@@ -344,3 +344,9 @@ rebuilds them for the last two service dates and drops `rt.observation` days old
 `[retention] observation_days` (2; a day of all sources is several GB) and raw archive days older than `raw_days` (14, about
 1 GB a day with PID; pin days to keep with `obehy rt corpus pin` first). The design is in
 `docs/R1_SLICE.md` and, for rail, `docs/R2_SLICE.md`.
+
+The worker also answers what the API is asked to look up (`rt.lookup_request`): ČD train
+compositions (`src/obehy/realtime/sources/cd.toml`, `docs/sources/cd.md`), one request per
+train and station, at most 6 a minute and 1000 a day, each answer archived under
+`data/rt-raw/cd/composition`. `obehy jobs nightly` deletes lookup requests and their fetch
+records after `raw_days`; compositions are kept.

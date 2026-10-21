@@ -22,8 +22,16 @@ from pathlib import Path
 from typing import Any, cast
 
 from obehy.realtime.archive import ArchiveWriter, Poll
-from obehy.realtime.manifest import SOURCES, Channel, ManifestError, Source, select_channels
+from obehy.realtime.manifest import (
+    SOURCES,
+    Channel,
+    Lookup,
+    ManifestError,
+    Source,
+    select_channels,
+)
 from obehy.realtime.manifest import load_channels as _load_channels
+from obehy.realtime.manifest import load_lookups as _load_lookups
 from obehy.realtime.manifest import load_sources as _load_sources
 from obehy.realtime.policy import BoardPolicy
 from obehy.realtime.runtime.demand import DueCalls, FetchBody, run_demand
@@ -115,6 +123,12 @@ def load_sources(path: Path = SOURCES) -> list[Source]:
     return _load_sources(path, tuple(FILTERS))
 
 
+def load_lookups(path: Path = SOURCES) -> list[Lookup]:
+    """Connector lookups, their manifests read with the recorder's payload filters known."""
+
+    return _load_lookups(path, tuple(FILTERS))
+
+
 __all__ = [
     "Channel",
     "ManifestError",
@@ -122,6 +136,7 @@ __all__ = [
     "backoff_interval",
     "fetch",
     "load_channels",
+    "load_lookups",
     "load_sources",
     "select_channels",
 ]

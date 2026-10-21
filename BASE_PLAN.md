@@ -839,7 +839,7 @@ operation exist:
   ```text
   plan(subject, view) → UpstreamRequest | not_available     pure
   fetch(request) → bytes                                     I/O, run by the broker under budget
-  decode(bytes, subject) → Observations                      pure; declares what the answer covers
+  decode(bytes, request) → the detail                        pure; holds from the request's call
   ```
 
   The subject is what the caller asks about (a journey, optionally from a call onward, or a
@@ -850,10 +850,15 @@ operation exist:
   the connector's `request.cache_key`, so different questions that need the same upstream call
   share one fetch.
 
-The **lookup broker** owns `rt.detail_cache` and `rt.lookup_request`: it coalesces identical
-requests, enforces rates and budgets and runs prefetch rules through the same `plan`. **The API
-never calls upstream**: on a missing or stale detail it inserts a lookup request and answers
-`pending` with `retry_after`. Every lookup response is archived like a poll.
+The **lookup broker** (`realtime/runtime/lookups.py`, in the worker on its own connection and
+thread) owns `rt.detail_cache` and answers `rt.lookup_request`: it reads the view in SQL
+(`realtime/sql/lookup_view.sql`), reuses a cached answer by cache key, enforces the token bucket
+(a request without a token waits) and the daily budget (spent: failed), and will run prefetch
+rules through the same `plan` (none yet). **The API never calls upstream**: on a missing or older
+answer it upserts a lookup request (the only row it writes, on a small pool of its own), NOTIFYs
+`obehy_lookup` and answers `pending` with `retry_after`, or `stale` with the older answer. Every
+lookup response is archived like a poll and logged in `rt.lookup_fetch`. A detail is not core
+state: nothing replays it through the core.
 
 The manifest also declares:
 
@@ -955,9 +960,10 @@ changes). Its manifest semantics must be backed by captured examples.
 - `obehy rt replay --release R --from --to [--sources]` runs archived payloads through the same
   core with a simulated clock. Outputs are deterministic and golden-testable. When R is not one
   of the retained database loads, replay loads it into a scratch database with the release
-  loader first. Lookups are replayed from the *recorded* request/response pairs at their
-  received time; replay never re-runs `plan`, so changed code cannot ask for data that was
-  never fetched.
+  loader first. Lookups never pass through the core, so replay does not need them; their
+  answers are archived with the request (`rt.lookup_fetch` holds the recorded pairs) and can
+  be decoded again. A lookup that one day yields core facts is replayed from those recorded
+  pairs at their received time, never by re-running `plan`.
 - Raw retention is a rolling window (default 3 months, per-source where a licence requires
   less; the single server keeps 14 days, `[retention] raw_days`, since all sources with PID are
   about 1 GB a day). **Pinned corpora** — the dossier captures, regression days, DST and holiday days — are
@@ -1949,11 +1955,16 @@ Two different facts, kept apart:
   types, or neither.
 
 ```text
-composition        journey, source_id, observed_at, raw_ref
-composition_unit   composition, sequence, from (location_id, visit_n), to (location_id,
-                   visit_n) | open, vehicle_id?, vehicle_model_id?, vehicle_type, role,
-                   coach_number, classes, features
+rt.composition       journey (feed, key_namespace, key, service_date), source, from (location_id,
+                     visit_n), to (location_id, visit_n) | open, digest, first_seen, observed_at,
+                     fetch_id (→ rt.lookup_fetch: the raw answer)
+rt.composition_unit  composition, sequence, kind, role, vehicle_id?, vehicle_type, coach_number,
+                     classes, features, texts, destination, details, its own from/to | null
 ```
+
+- **Kept per journey key**, the first a trip has of `czptt:tr`, `cis:line_trip`,
+  `pid:gtfs_trip_id`: stable across timetable versions. The parts of one train can share a TR
+  key; each trip shows the spans on its own calls (`rt.composition_spans`).
 
 - **Each unit has its own span** within the journey: units join and leave en route.
   `650.002+650.003pk (Most – Ústí nad Labem hl.n.)` is 650.002 for the whole run and 650.003
@@ -1963,7 +1974,8 @@ composition_unit   composition, sequence, from (location_id, visit_n), to (locat
   units (start–Most `650.002`; Most–Ústí `650.002 + 650.003 (pusher)`; Ústí–end `650.002`).
   The API answers both `units[]` as stored and `segments[]`.
 - **Answers "from station S onward"** (ČD) are units open from S until a later answer from a
-  later station closes them; adjacent identical answers merge.
+  later station closes them; adjacent identical answers merge (an identical answer from
+  further on only moves `observed_at`; one from the same station replaces its units).
 - **A unit naming a vehicle binds through the registry's keys** (EVN, series number), so the
   unit, the vehicle's live report and its registry entry are one `vehicle_id`. A type-only unit
   gets features from its model.
@@ -1971,12 +1983,13 @@ composition_unit   composition, sequence, from (location_id, visit_n), to (locat
   EVN per unit) and ČD's type-level answer (series and coach numbers, classes, services) are
   matched per segment by sequence and type: the vehicle identity from the first, the coach
   detail from ČD. Units that do not match stay listed with their own source, and the segment
-  is flagged.
+  is flagged. With ČD the only source so far, units are listed per source.
 - Composition sources are **lookups** (section 18.2): fetched on demand or by bounded
   prefetch, never polled for every train. Their `plan` picks the station from the schedule and
   live state, for example the next passenger call.
 
-Order: the ČD source first. 55p.cz (exact vehicles per train) is a future source only: nothing
+Order: the ČD source first (`docs/sources/cd.md`: coach types, numbers, classes and services
+from a station onward, for ČD's trains). 55p.cz (exact vehicles per train) is a future source only: nothing
 retrieves its data until explicit permission covers retrieval, storage, display,
 redistribution and caching duration. The project API is the rich source of truth; GTFS-RT
 carriage details are populated only where suitable.
@@ -2062,7 +2075,8 @@ PID, DÚK, SŽ or another provider.
                                             journey links, vehicles, realtime state
 /api/v1/trips/by-key/<namespace>/<key>/<service_date>
                                             308 to the trip a source key names
-/api/v1/trips/…/composition?from=<location> pending | fresh | stale (section 28)
+/api/v1/trips/…/composition?from=<location> pending | fresh | stale | not_available:
+                                            units with spans, segments (section 28)
 /api/v1/journeys/<namespace>/<key>/history  recorded runs: actual times and delays
 /api/v1/lines?q=…                           search
 /api/v1/lines/<route_id>                    validity, integrated systems, features and notes;
@@ -2081,6 +2095,7 @@ PID, DÚK, SŽ or another provider.
 /api/v1/debug/realtime/unmatched            unbound observations by reason, with examples
 /api/v1/debug/realtime/instances/<instance> state, parts, vehicle reports, observations
 /api/v1/debug/vehicles/<vehicle_id>         reports, keys, pairings, statements, profile
+/api/v1/debug/lookups                       lookup requests and the upstream requests they sent
 /api/v1/debug/vehicles/pairings             co-located reports: candidate registry keys
 /api/v1/debug/vehicles/registry             datasets and what they hold; conflicts
 /api/v1/debug/static/trips/<trip_id>        the raw static codes behind the readable features

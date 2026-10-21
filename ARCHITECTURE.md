@@ -91,8 +91,9 @@ implements scheduling, rate limits, budgets or caching itself.
   feed routing, capabilities = [...], semantics = {...}   (time, delay, namespaces)
 
 [[lookup]]             lazy: details fetched only when needed
-  kind = "composition" | "vehicle_detail" | "trip_detail" | ...
-  ttl, rate (token bucket), daily_budget, prefetch rule
+  kind = "composition" (later: "vehicle_detail", "trip_detail", ...)
+  request (URL with {placeholders} the plan fills), ttl_s, not_found_ttl_s, retry_s,
+  rate = { per_minute, burst } (token bucket), daily_budget
 ```
 
 Both are written as the same pure steps around one I/O step:
@@ -102,7 +103,7 @@ channel:  fetch() → bytes → decode(bytes) → Observations
 
 lookup:   plan(subject, view) → UpstreamRequest | not_available     pure
           fetch(request) → bytes                                     I/O, under budget
-          decode(bytes, subject) → Observations                      pure
+          decode(bytes, request) → the detail (a composition's units) pure
 ```
 
 - **`subject`** is what the caller asks about: a journey, optionally from a call onward, or a
@@ -117,15 +118,20 @@ lookup:   plan(subject, view) → UpstreamRequest | not_available     pure
   passenger call".
 - **The cache key is the connector's `request.cache_key`**, so different questions that need
   the same upstream call share one fetch.
-- **Responses are archived like polls.** Replay feeds the *recorded* request/response pairs at
-  their received time and never re-runs `plan`, so changed code cannot make replay ask for data
-  that was never fetched.
-- **The API never calls upstream.** It reads `rt.detail_cache`. On a miss or a stale entry it
-  inserts a `rt.lookup_request` and answers `pending` with `retry_after`. The lookup broker:
-  - checks the cache;
-  - coalesces identical requests;
-  - enforces the token bucket and daily budget;
-  - runs prefetch rules through the same `plan`.
+- **Responses are archived like polls** (`<source>/<lookup>` in the raw archive) and logged
+  with their cache key in `rt.lookup_fetch`: the recorded pairs. A detail is not core state, so
+  nothing replays it through the core; an archived answer can be decoded again.
+- **The API never calls upstream.** It reads the journey's compositions and the last answer to
+  its request; with no answer or an older one it upserts `rt.lookup_request`, NOTIFYs
+  `obehy_lookup` and answers `pending` (202, `retry_after`) or `stale`. That request row is the
+  only thing the API writes, on a small pool of its own. The lookup broker
+  (`realtime/runtime/lookups.py`, its own connection and thread in the worker):
+  - reads the view in SQL (`realtime/sql/lookup_view.sql`: the trip's calls with their SR70,
+    which the train has left, its keys);
+  - reuses `rt.detail_cache` by cache key, so requests planned to one key share one fetch;
+  - enforces the token bucket (a request without a token waits for a later pass) and the daily
+    budget (spent: failed);
+  - prefetch rules: none yet.
 
 Examples:
 - DÚK: a 15 s channel.
@@ -174,6 +180,7 @@ flowchart TB
     broker["lookup broker<br/>cache · coalescing · budget · prefetch"]
   end
   api["obehy api"] -->|"rt.lookup_request"| broker
+  broker -->|"units"| comp[("rt.composition<br/>rt.detail_cache")]
   sched -->|"fetch · decode"| CONN
   broker -->|"plan · fetch · decode"| CONN
   ctx -.->|"view: schedule · live state · crosswalks"| broker
@@ -192,10 +199,8 @@ flowchart TB
   ctx[("release index · vehicle index<br/>policy · clock")] --> CORE
 
   split -->|attributes| attr[("rt.vehicle_attribute_observed")]
-  split -->|composition| comp[("rt.composition")]
   split -->|vehicle_assignment| vas[("rt.vehicle_assignment")]
   split -->|platform| arb
-  comp --> dc[("rt.detail_cache")]
   arb --> emit["emit tick<br/>GTFS-RT · trip state · history"]
   vst --> vjson["vehicles.json"]
 ```
@@ -219,25 +224,26 @@ sequenceDiagram
   participant B as lookup broker
   participant C as cd connector
   participant U as upstream
-  W->>A: GET journey composition from station S
-  A->>P: rt.detail_cache for subject
-  alt fresh
-    P-->>A: composition
-    A-->>W: 200 fresh
-  else missing or stale
-    A->>P: insert lookup_request + NOTIFY
-    A-->>W: 202 pending, retry_after
+  W->>A: GET trip composition from station S
+  A->>P: compositions of the journey · last answer to the request
+  alt answered lately
+    P-->>A: units, segments
+    A-->>W: 200 fresh (or not_available)
+  else not asked, or answered long ago
+    A->>P: upsert lookup_request + NOTIFY
+    A-->>W: 202 pending, retry_after (200 stale with an older answer)
     P-->>B: NOTIFY
+    B->>P: view (lookup_view.sql)
     B->>C: plan(subject, view)
-    Note over B,C: view = schedule snapshot · live state ·<br/>identifier crosswalks (e.g. SR70 of next stop)
+    Note over B,C: view = the trip's calls · which it has left ·<br/>identifier crosswalks (SR70, train number)
     C-->>B: UpstreamRequest (cache_key) or not_available
-    B->>B: cache by cache_key · coalesce · budget
+    B->>B: detail_cache by cache_key · token bucket · budget
     B->>C: fetch(request)
     C->>U: HTTP
     U-->>C: payload
-    B->>C: decode(bytes, subject)
-    C-->>B: Observations (segment from S onward)
-    B->>P: raw archived · rt.composition · detail_cache
+    B->>C: decode(bytes, request)
+    C-->>B: units (from S onward)
+    B->>P: raw archived · lookup_fetch · rt.composition (merged) · detail_cache · answered
     W->>A: retry
     A-->>W: 200 fresh
   end
@@ -299,11 +305,16 @@ erDiagram
   `rt.vehicle_pairing`.
 - **Compositions** are units with their own spans within a journey, from `(location, visit)`
   to `(location, visit)` or open; segments are derived where spans start and end.
+  - Kept per journey key (`rt.composition`, `rt.composition_unit`): the trip's CZPTT TR key,
+    which the parts of one train can share, so each trip shows the spans on its own calls.
+    `rt.composition_spans` resolves spans to a trip's calls; the API derives segments from them
+    in SQL.
   - An answer "from station S onward" stays open until a later answer closes it; adjacent
     identical answers merge.
   - A unit names an optional vehicle (bound through the registry's EVN or series-number keys)
     and/or an optional type, so a type-only composition still yields features. Two sources on
-    one segment combine per unit: exact vehicles from one, coach detail from ČD.
+    one segment will combine per unit: exact vehicles from one, coach detail from ČD (one
+    source so far: units are listed per source).
 - **`vehicle_assignment`** (vehicle → journey) is separate from composition. It comes from
   bound live reports, or from sources naming the vehicle of each train, and feeds
   `vehicle_day`, the observed tours.

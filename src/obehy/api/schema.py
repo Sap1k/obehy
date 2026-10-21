@@ -359,6 +359,89 @@ class Trip(Envelope):
     shape: dict[str, Any] | None = Field(default=None, description="GeoJSON LineString.")
 
 
+class CompositionCall(BaseModel):
+    sequence: int = Field(description="The trip call's sequence")
+    location_id: str
+    name: str
+
+
+class UnitFeature(BaseModel):
+    feature: str = Field(
+        description="A vehicle attribute (`wifi`, `power_sockets`, `wheelchair_lift`, …) or "
+        "`raw:<source>:<code>` for a code with no home in the vocabulary"
+    )
+    label: Label | None = Field(description="Null for a raw code: its `text` is the source's")
+    icon: str | None
+    text: str | None = Field(description="The source's own wording of its code")
+
+
+class CompositionUnit(BaseModel):
+    """One vehicle of the train as a source states it: an exact vehicle (`vehicle_id`), a type
+    (`vehicle_type`: `Bdmpz 896`), or neither (a locomotive the source does not name). Each unit
+    has its own span over the trip's calls: units join and leave en route."""
+
+    source: str
+    label: Label | None
+    sequence: int = Field(description="Its place in the train as the source orders it, from 1")
+    kind: Literal["locomotive", "coach", "unit"]
+    role: str = Field(description="train, attached, pusher, or `raw:<code>`")
+    vehicle_id: str | None
+    vehicle_type: str | None
+    coach_number: str | None
+    classes: list[int] = Field(description="Travel classes: 1, 2")
+    features: list[UnitFeature]
+    destination: str | None = Field(description="A through coach's own destination")
+    details: dict[str, str] = Field(description="Source-specific facts, kept as given")
+    from_call: CompositionCall
+    to_call: CompositionCall
+    open: bool = Field(
+        description="Holds to the end of the trip until a later answer from a later call says "
+        "otherwise"
+    )
+    observed_at: Time
+
+
+class CompositionSegment(BaseModel):
+    """A piece of the trip between span boundaries, with the units running it."""
+
+    from_call: CompositionCall
+    to_call: CompositionCall
+    units: list[int] = Field(description="Positions in `units`, in train order per source")
+
+
+class CompositionSource(BaseModel):
+    """What a composition source answered to the last request."""
+
+    lookup: str = Field(description="`<source>/<lookup>`")
+    source: str
+    label: Label | None
+    outcome: Literal["answered", "not_found", "not_available", "failed"] | None = Field(
+        description="Null while it is still to answer"
+    )
+    reason: str | None
+
+
+class Composition(Envelope):
+    """A trip's formation (BASE_PLAN.md section 28), asked for lazily: never polled, the API
+    never calls upstream. A missing or older answer is asked of the worker's lookup broker:
+    `pending` (HTTP 202, `Retry-After`) until a first answer, then `fresh`; an older answer is
+    served as `stale` while a newer one is asked. `not_available`: no source answers for this
+    trip (another operator's train, a date ČD does not answer for, …), see `sources`."""
+
+    trip_id: str
+    service_date: date
+    from_location_id: str | None = Field(
+        description="The call the answer was asked from; null: the next passenger call"
+    )
+    status: Literal["fresh", "stale", "pending", "not_available"]
+    retry_after_s: int | None
+    requested_at: Time | None
+    answered_at: Time | None
+    sources: list[CompositionSource]
+    units: list[CompositionUnit]
+    segments: list[CompositionSegment]
+
+
 class GoneTrip(Problem):
     """A trip ID from an older timetable version: follow `by_key` to today's trip."""
 

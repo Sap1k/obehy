@@ -14,6 +14,8 @@
    registry, so identities and vehicle profiles follow the new datasets.
 5. Alert channels (BASE_PLAN.md section 25) are archived and written to `rt.alert` on their own
    connection, never through the core; the emit tick republishes them in each feed.
+6. Lookups (compositions, BASE_PLAN.md section 18.2) are answered by the lookup broker on its
+   own connection and thread (`runtime/lookups.py`), never through the core.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.stored import stream_observations
 from obehy.realtime.emit.vehicles import REGISTRY_CHANNEL
 from obehy.realtime.index_sql import ReleaseLoads, active_loads
-from obehy.realtime.manifest import Channel, semantics_by_channel
+from obehy.realtime.manifest import Channel, Lookup, semantics_by_channel
 from obehy.realtime.model import Derivation, Feed, Observation
 from obehy.realtime.phases import Phases
 from obehy.realtime.policy import Policy
@@ -48,6 +50,7 @@ from obehy.realtime.replay import ALERT_DECODERS, DECODERS
 from obehy.realtime.runner import Runner
 from obehy.realtime.runtime.demand import FetchBody, StationDemand, run_demand
 from obehy.realtime.runtime.fetch import fetch_body
+from obehy.realtime.runtime.lookups import open_broker, run_broker
 from obehy.realtime.runtime.scheduler import FetchFn, run_channel
 from obehy.realtime.times import Instant, instant
 from obehy.realtime.warm import warm_start, warm_window
@@ -73,6 +76,7 @@ class WorkerOptions:
     fetcher: FetchFn = fetch
     body_fetcher: FetchBody = fetch_body  # demand channels: a body per read
     once: bool = False  # poll every channel once and stop (tests)
+    lookups: Sequence[Lookup] = ()  # answered by the lookup broker, fetched by `fetcher`
 
 
 AlertSink = Callable[[Channel, Instant, list[Alert]], None]
@@ -349,12 +353,16 @@ async def run_worker(
             raise
 
     helpers: list[asyncio.Task[None]] = []
+    broker = None
     if not options.once:
         helpers = [
             asyncio.create_task(worker.ticks()),
             asyncio.create_task(worker.summaries()),
             asyncio.create_task(worker.publications()),
         ]
+        if options.lookups:
+            broker = open_broker(database_url, options.lookups, options.fetcher, options.archive)
+            helpers.append(asyncio.create_task(run_broker(broker, database_url, stop)))
     try:
         await asyncio.gather(
             start(), *(_poller(worker, channel, options, stop) for channel in channels)
@@ -363,4 +371,6 @@ async def run_worker(
         for helper in helpers:
             helper.cancel()
         await worker.close()
+        if broker is not None:
+            broker.connection.close()
     return worker.runner

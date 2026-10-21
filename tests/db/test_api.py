@@ -4,19 +4,28 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psycopg
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from google.transit import gtfs_realtime_pb2 as rt
+from psycopg.rows import DictRow, dict_row
 
 from obehy.api.app import create_app
+from obehy.realtime import record
 from obehy.realtime.alerts import Alert, AlertEntity, Period
+from obehy.realtime.archive import ArchiveWriter, Poll
+from obehy.realtime.compositions import TripView, Unit
 from obehy.realtime.emit.alerts import AlertFeed, prune_alerts, write_alerts
+from obehy.realtime.emit.compositions import write_composition
 from obehy.realtime.emit.vehicles import VehicleBook
+from obehy.realtime.manifest import Channel
+from obehy.realtime.runtime.lookups import LookupBroker, read_view
 from obehy.realtime.times import Instant, instant, local_date
 from obehy.reference import duk_register, vehicle_list
 from obehy.reference.load import load_dataset
@@ -134,6 +143,27 @@ def _czptt() -> Rows:
         call(second, 4, "CZ54003", 6 * 3600 + 1800, 6 * 3600 + 1800),
     ]
     rows["source_key"].append(rows["source_key"][0] | {"public_id": second})
+    # ČD's: each part's CZPTT TR key (company 1154) and the stations' SR70 codes, which the
+    # composition lookup plans with.
+    for part, public_id in enumerate((first, second)):
+        rows["source_key"].append(
+            rows["source_key"][0]
+            | {
+                "namespace": "czptt:tr",
+                "identifier": f"Tr:1154:--KADR006600:0{part}:2026",
+                "public_id": public_id,
+            }
+        )
+    for code in ("54000", "54002", "54003"):
+        rows["source_key"].append(
+            rows["source_key"][0]
+            | {
+                "entity_kind": "location",
+                "namespace": "sr70",
+                "identifier": code,
+                "public_id": f"czptt:location:CZ{code}",
+            }
+        )
     return rows
 
 
@@ -585,6 +615,7 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/arrivals",
         "/api/v1/trips/by-key/{namespace}/{key}/{service_date}",
         "/api/v1/trips/{trip_id}/{service_date}",
+        "/api/v1/trips/{trip_id}/{service_date}/composition",
         "/api/v1/journeys/{namespace}/{key}/history",
         "/api/v1/lines",
         "/api/v1/lines/{route_id}",
@@ -603,6 +634,7 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/debug/vehicles/registry",
         "/api/v1/debug/vehicles/{vehicle_id}",
         "/api/v1/debug/alerts",
+        "/api/v1/debug/lookups",
         "/api/v1/debug/static/trips/{trip_id}",
     }
 
@@ -940,3 +972,185 @@ def test_a_withdrawn_alert_leaves_lists_and_feeds(
     ]
     assert prune_alerts(connection, local_now() + timedelta(seconds=1)) == 1
     _get(client, "/alerts/pid:alert-1", 404)
+
+
+COMPOSITION = Path(__file__).resolve().parents[1] / "realtime" / "compositions" / "cd-607.json"
+# The 7th, at 06:10 in Prague: ČD answers for trains around today.
+ON_THE_DAY = instant(datetime(2026, 10, 7, 4, 10, tzinfo=UTC))
+
+
+def _dict_connection(database_url: str) -> psycopg.Connection[DictRow]:
+    return psycopg.Connection[DictRow].connect(database_url, autocommit=True, row_factory=dict_row)
+
+
+def _broker(database_url: str, tmp_path: Path, fetched: list[str]) -> LookupBroker:
+    def fetcher(channel: Channel) -> Poll:
+        fetched.append(channel.url)
+        now = datetime.now(UTC)
+        return Poll(now, now, 200, COMPOSITION.read_bytes())
+
+    return LookupBroker(
+        _dict_connection(database_url),
+        record.load_lookups(),
+        fetcher,
+        ArchiveWriter(tmp_path / "raw"),
+        clock=lambda: ON_THE_DAY,
+    )
+
+
+def _fresh_for(client: TestClient, seconds: int) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.limits = replace(app.state.limits, composition_fresh_s=seconds)
+
+
+def test_a_composition_is_asked_then_answered_by_the_broker(
+    client: TestClient, database_url: str, tmp_path: Path
+) -> None:
+    path = "/trips/czptt:trip:1:2/2026-10-07/composition"
+    response = client.get(f"/api/v1{path}")
+    assert response.status_code == 202 and response.headers["Retry-After"] == "3"
+    asked = response.json()
+    assert (asked["status"], asked["units"], asked["sources"]) == ("pending", [], [])
+    _get(client, path, 202)  # still pending: asked once
+    fetched: list[str] = []
+    broker = _broker(database_url, tmp_path, fetched)
+    with broker.connection:
+        assert broker.serve() == 1
+        # The part runs from Zákupy, which the train has not left: asked from there, once.
+        assert len(fetched) == 1 and "%22SR70%22%3A%225454002%22" in fetched[0]
+        answer = _get(client, path)
+        assert answer["status"] == "fresh"
+        assert answer["sources"] == [
+            {
+                "lookup": "cd/composition",
+                "source": "cd",
+                "label": {"cs": "České dráhy", "en": "České dráhy"},
+                "outcome": "answered",
+                "reason": None,
+            }
+        ]
+        units = answer["units"]
+        assert [(u["kind"], u["vehicle_type"]) for u in units][:2] == [
+            ("locomotive", None),
+            ("coach", "Bdmpz 896"),
+        ]
+        bicycles = units[1]
+        assert (bicycles["coach_number"], bicycles["classes"], bicycles["open"]) == (
+            "367",
+            [2],
+            True,
+        )
+        assert bicycles["from_call"]["location_id"] == "czptt:location:CZ54002"
+        assert bicycles["to_call"]["location_id"] == "czptt:location:CZ54003"
+        assert bicycles["features"][0] == {
+            "feature": "bicycle_reservation_required",
+            "label": {
+                "cs": "Jízdní kolo s povinnou rezervací",
+                "en": "Bicycle reservation required",
+            },
+            "icon": "bicycle_reservation",
+            "text": None,
+        }
+        assert [s["units"] for s in answer["segments"]] == [list(range(6))]
+        # Older than fresh: served stale and asked again; the broker reuses its cached answer.
+        _fresh_for(client, 0)
+        stale = _get(client, path)
+        assert stale["status"] == "stale" and len(stale["units"]) == 6
+        assert broker.serve() == 1 and len(fetched) == 1
+        # A bus: no source answers it.
+        _get(client, "/trips/jdf:trip:1/2026-10-06/composition", 202)
+        assert broker.serve() == 1 and len(fetched) == 1
+        _fresh_for(client, 300)
+        bus = _get(client, "/trips/jdf:trip:1/2026-10-06/composition")
+        assert (bus["status"], bus["sources"]) == ("not_available", [])
+        # The run's first part has left its only departing call.
+        _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition", 202)
+        assert broker.serve() == 1 and len(fetched) == 1
+        left = _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition")
+        assert left["status"] == "not_available"
+        assert left["sources"][0]["reason"] == "the trip has left its last departing call"
+        _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition", 404, **{"from": "jdf:stop:1"})
+        logged = broker.connection.execute(
+            "SELECT lookup, cache_key, outcome FROM rt.lookup_fetch"
+        ).fetchall()
+        assert logged == [
+            {"lookup": "composition", "cache_key": "6600/2026-10-07/5454002", "outcome": "answered"}
+        ]
+        assert (tmp_path / "raw" / "cd" / "composition").is_dir()
+
+
+def _units(*types: str) -> list[Unit]:
+    return [Unit(n, "coach", vehicle_type=t) for n, t in enumerate(types, 1)]
+
+
+def test_answers_from_later_calls_close_earlier_ones_into_segments(
+    client: TestClient, database_url: str
+) -> None:
+    with _dict_connection(database_url) as connection:
+        view = read_view(connection, "czptt:trip:1:1", date(2026, 10, 7), ON_THE_DAY)
+        assert isinstance(view, TripView)
+        assert view.keys["czptt:tr"] == "Tr:1154:--KADR006600:00:2026"
+        assert [(c.location_id, c.left, dict(c.keys)) for c in view.calls] == [
+            ("czptt:location:CZ54000", True, {"sr70": "54000"}),
+            ("czptt:location:CZ54001", True, {}),
+            ("czptt:location:CZ54002", False, {"sr70": "54002"}),
+        ]
+        origin, passing, _ = view.calls
+        first = write_composition(connection, view, "cd", origin, _units("A", "B"), ON_THE_DAY, 1)
+        # An identical answer from further on extends it; a changed one closes it there.
+        same = write_composition(connection, view, "cd", passing, _units("A", "B"), ON_THE_DAY, 2)
+        assert same == first
+        later = write_composition(connection, view, "cd", passing, _units("A"), ON_THE_DAY, 3)
+        assert later != first
+    answer = _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition")
+    assert answer["status"] == "stale"
+    spans = [
+        (u["vehicle_type"], u["from_call"]["sequence"], u["to_call"]["sequence"], u["open"])
+        for u in answer["units"]
+    ]
+    assert spans == [("A", 1, 2, False), ("B", 1, 2, False), ("A", 2, 3, True)]
+    pieces = [
+        (s["from_call"]["sequence"], s["to_call"]["sequence"], s["units"])
+        for s in answer["segments"]
+    ]
+    assert pieces == [(1, 2, [0, 1]), (2, 3, [2])]
+
+
+def test_a_failed_lookup_is_not_repeated_and_the_budget_holds(
+    client: TestClient, database_url: str, tmp_path: Path
+) -> None:
+    fetched: list[str] = []
+
+    def refusing(channel: Channel) -> Poll:
+        fetched.append(channel.url)
+        now = datetime.now(UTC)
+        return Poll(now, now, 503, None, error="HTTP 503 Service Unavailable")
+
+    (lookup,) = record.load_lookups()
+    broker = LookupBroker(
+        _dict_connection(database_url),
+        [replace(lookup, daily_budget=1)],
+        refusing,
+        ArchiveWriter(tmp_path / "raw"),
+        clock=lambda: ON_THE_DAY,
+    )
+    with broker.connection:
+        path = "/trips/czptt:trip:1:2/2026-10-07/composition"
+        _get(client, path, 202)
+        assert broker.serve() == 1 and len(fetched) == 1
+        failed = _get(client, path)
+        assert failed["status"] == "not_available"
+        assert failed["sources"][0]["outcome"] == "failed"
+        assert failed["sources"][0]["reason"] == "HTTP 503 Service Unavailable"
+        # Asked again within retry_s: the failure stands, nothing is sent.
+        _fresh_for(client, 0)
+        _get(client, path, 202)
+        assert broker.serve() == 1 and len(fetched) == 1
+        # Another question (the first part from its origin) once the day's budget is spent:
+        # failed without a request.
+        first = "/trips/czptt:trip:1:1/2026-10-07/composition"
+        _get(client, first, 202, **{"from": "czptt:location:CZ54000"})
+        assert broker.serve() == 1 and len(fetched) == 1
+        _fresh_for(client, 300)
+        spent = _get(client, first, 200, **{"from": "czptt:location:CZ54000"})["sources"][0]
+        assert (spent["outcome"], spent["reason"]) == ("failed", "the daily budget is spent")

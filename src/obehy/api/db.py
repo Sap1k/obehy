@@ -1,5 +1,8 @@
 """Database access: one read-only, repeatable-read transaction per request.
 
+The one thing the API writes is what it is asked to look up (`rt.lookup_request`, BASE_PLAN.md
+section 18.2), on a small pool of its own (`open_request_pool`); it never calls upstream.
+
 The request reads the active publication first and every later query in the same snapshot, so
 the static rows (`active.*`) and the realtime rows (filtered by that `release_id`) belong to one
 release. Right after an activation a trip shows as scheduled until the worker re-emits; it never
@@ -79,6 +82,32 @@ class Snapshot:
 
     def one(self, name: str, params: dict[str, Any] | None = None) -> DictRow | None:
         return self.connection.execute(query(name), params).fetchone()
+
+
+LOOKUP_CHANNEL: LiteralString = "obehy_lookup"
+
+
+def open_request_pool(conninfo: str) -> ConnectionPool[Any]:
+    """Read-write, autocommit, at most two connections: lookup requests are rare and short."""
+
+    pool: ConnectionPool[Any] = ConnectionPool(
+        conninfo,
+        min_size=0,
+        max_size=2,
+        kwargs={"autocommit": True},
+        open=False,
+        name="obehy-api-requests",
+    )
+    pool.open(wait=True, timeout=30)
+    return pool
+
+
+def request_lookup(pool: ConnectionPool[Any], params: dict[str, Any]) -> None:
+    """Record a lookup request and wake the broker."""
+
+    with pool.connection() as connection:
+        connection.execute(query("request_lookup"), params)
+        connection.execute(f"NOTIFY {LOOKUP_CHANNEL}")
 
 
 def snapshot(pool: ConnectionPool[Any]) -> Iterator[Snapshot]:
