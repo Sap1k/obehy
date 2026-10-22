@@ -4,8 +4,13 @@ import { api, unwrap, type Alert, type Departure, type Stop } from "../../api/cl
 /** Boards and trips poll this often while the page is visible. */
 export const POLL_MS = 15_000;
 
-/** A board looks this far ahead (the API's `departures.minutes_max`), so a quiet stop still
- * fills a page; the row limit decides how much of it shows. */
+/** A board first looks this far ahead: a busy stop fills a page well within it, and the API
+ * builds only these rows (each with its realtime and vehicle) on every poll. */
+export const SHORT_WINDOW_MIN = 90;
+
+/** A board that does not fill its page in the short window looks this far ahead (the API's
+ * `departures.minutes_max`), so a quiet stop still fills a page; the row limit decides how much
+ * of it shows. */
 export const WINDOW_MIN = 360;
 
 export function useStopPlace(stopId: string) {
@@ -41,10 +46,21 @@ export interface BoardScope {
   limit: number;
 }
 
-async function fetchBoard(scope: BoardScope, signal: AbortSignal): Promise<Board> {
+/** One answer: the short window when it fills the page (the API has a `next`), else the long
+ * one, so the rows, `until` and `next` on screen always come from one window. */
+export async function fetchBoard(scope: BoardScope, signal: AbortSignal): Promise<Board> {
+  const short = await fetchWindow(scope, SHORT_WINDOW_MIN, signal);
+  return short.next !== null ? short : fetchWindow(scope, WINDOW_MIN, signal);
+}
+
+async function fetchWindow(
+  scope: BoardScope,
+  minutes: number,
+  signal: AbortSignal,
+): Promise<Board> {
   const params = {
     path: { location_id: scope.stopId },
-    query: { from: scope.from, limit: scope.limit, minutes: WINDOW_MIN },
+    query: { from: scope.from, limit: scope.limit, minutes },
   };
   if (scope.arrivals) {
     const a = unwrap(
