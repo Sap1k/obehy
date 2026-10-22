@@ -1,15 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import classes from "./BottomSheet.module.css";
 
-// A sheet over the map on the phone: peek (the header), half, or full. Non-modal, so the map
-// stays usable above it. Dragged by its handle; a tap on the handle steps it up (and from full
-// back to peek).
+// A sheet over the map on the phone: peek (the header), half (45 % of the map) or full (70 %, so
+// the map always shows above it). Non-modal, so the map stays usable. Dragged by its handle; a
+// tap on the handle steps it up (and from full back to peek). Its content scrolls inside.
 
 export type SheetSnap = "peek" | "half" | "full";
 
-const PEEK_PX = 168;
+const PEEK_PX = 148;
 const HANDLE_PX = 28;
-const TOP_GAP_PX = 16;
+const HALF = 0.45;
+const FULL = 0.7;
 /** A flick faster than this (px/ms) goes on to the next snap in its direction. */
 const FLICK = 0.5;
 const ORDER: SheetSnap[] = ["peek", "half", "full"];
@@ -40,10 +41,10 @@ export function BottomSheet({
     return () => observer.disconnect();
   }, []);
 
-  const full = Math.max(PEEK_PX, hostHeight - TOP_GAP_PX);
+  const full = Math.max(PEEK_PX, Math.round(hostHeight * FULL));
   const heights: Record<SheetSnap, number> = {
     peek: Math.min(PEEK_PX, full),
-    half: Math.max(PEEK_PX, Math.round(hostHeight / 2)),
+    half: Math.min(full, Math.max(PEEK_PX, Math.round(hostHeight * HALF))),
     full,
   };
   const visible = heights[snap];

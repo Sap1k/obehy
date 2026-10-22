@@ -1,6 +1,7 @@
 import { IconAlertTriangle, IconChevronRight, IconRoute } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { useState, type ComponentType } from "react";
+import { Panel } from "../components/Panel";
 import { StopSearch } from "../features/search/StopSearch";
 import { readRecent } from "../lib/recent";
 import classes from "./pages.module.css";
@@ -17,19 +18,21 @@ function Placeholder({
   withSearch?: boolean;
 }) {
   return (
-    <section className={classes.placeholder}>
-      <span className={classes.icon} aria-hidden>
-        <Icon size={28} stroke={2} />
-      </span>
-      <h1 className={classes.title}>{title}</h1>
-      <p className={classes.text}>{text}</p>
-      {withSearch && (
-        <div className={classes.search}>
-          <StopSearch />
-        </div>
-      )}
-      <RecentStops />
-    </section>
+    <Panel label={title}>
+      <section className={classes.placeholder}>
+        <span className={classes.icon} aria-hidden>
+          <Icon size={28} stroke={2} />
+        </span>
+        <h1 className={classes.title}>{title}</h1>
+        <p className={classes.text}>{text}</p>
+        {withSearch && (
+          <div className={classes.search}>
+            <StopSearch />
+          </div>
+        )}
+        <RecentStops />
+      </section>
+    </Panel>
   );
 }
 

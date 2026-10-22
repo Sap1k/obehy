@@ -21,6 +21,24 @@ describe("collapsed timetable", () => {
     expect(collapse(8, 6)).toEqual({ before: [0, 5], head: [6, 7], middle: null, last: null });
   });
 
+  it("opens each hidden range on its own", () => {
+    expect(collapse(12, 4, { before: true, middle: false })).toEqual({
+      before: null,
+      head: [0, 1, 2, 3, 4, 5, 6],
+      middle: [7, 10],
+      last: 11,
+    });
+    expect(collapse(12, 4, { before: false, middle: true })).toEqual({
+      before: [0, 3],
+      head: [4, 5, 6, 7, 8, 9, 10],
+      middle: null,
+      last: 11,
+    });
+    expect(collapse(12, 4, { before: true, middle: true })).toBeNull();
+    // Nothing left hidden: every call shows.
+    expect(collapse(11, 0, { before: false, middle: true })).toBeNull();
+  });
+
   it("anchors on the boarding stop, else the next call", () => {
     const calls = [{ location_id: "a" }, { location_id: "b" }, { location_id: "c" }];
     expect(anchorIndex(calls, [true, false, false], "c")).toBe(2);

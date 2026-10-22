@@ -1,11 +1,12 @@
 import { UnstyledButton } from "@mantine/core";
 import { IconBell, IconChevronDown, IconChevronUp, IconCornerDownRight } from "@tabler/icons-react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { LineBadge } from "../../components/LineBadge";
 import { PlatformBox } from "../../components/PlatformBox";
 import { TimeBox } from "../../components/TimeBox";
 import { timeState } from "../../lib/punctuality";
-import { anchorIndex, collapse } from "../../lib/timetable";
+import { keepInPlace } from "../../lib/scroll";
+import { CLOSED, anchorIndex, collapse, type Opened } from "../../lib/timetable";
 import { formatClock } from "../../lib/time";
 import { callTimes, isPassed, type RunCall } from "./runCalls";
 import classes from "./Timetable.module.css";
@@ -17,7 +18,7 @@ function stopsWord(n: number): string {
 }
 
 /** The run's calls (Figma "Timetable stop"): collapsed to the boarding stop, the two after it,
- * an expander and the last stop; expandable in full. */
+ * an expander and the last stop; each hidden range opens on its own. */
 export function Timetable({
   calls,
   boardedAt,
@@ -29,7 +30,20 @@ export function Timetable({
   now: number;
   stale: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState<Opened>(CLOSED);
+  // Opening or closing the earlier calls keeps the anchor row still on screen.
+  const list = useRef<HTMLOListElement>(null);
+  const anchorTop = useRef<number | null>(null);
+  const anchorRow = () => list.current?.querySelector<HTMLElement>("[data-anchor]") ?? null;
+  const change = (next: Opened) => {
+    anchorTop.current = anchorRow()?.getBoundingClientRect().top ?? null;
+    setOpen(next);
+  };
+  useLayoutEffect(() => {
+    const row = anchorRow();
+    if (row && anchorTop.current !== null) keepInPlace(row, anchorTop.current);
+    anchorTop.current = null;
+  }, [open]);
   const passed = calls.map((c) => isPassed(c.call, now));
   const anchor = anchorIndex(
     calls.map((c) => c.call),
@@ -37,7 +51,8 @@ export function Timetable({
     boardedAt,
   );
   const next = passed.findIndex((p) => !p);
-  const plan = expanded ? null : collapse(calls.length, anchor);
+  const plan = collapse(calls.length, anchor, open);
+  const anyOpen = open.before || open.middle;
 
   const row = (i: number) => {
     const item = calls[i];
@@ -50,21 +65,10 @@ export function Timetable({
         first={i === 0}
         last={i === calls.length - 1}
         stale={stale}
+        anchor={i === anchor}
       />
     );
   };
-
-  const expander = (count: number, label?: string) => (
-    <li className={classes.expander}>
-      <span className={classes.rail} aria-hidden>
-        <span className={classes.dots} />
-      </span>
-      <UnstyledButton className={classes.expanderButton} onClick={() => setExpanded(true)}>
-        {label ?? stopsWord(count)}
-        <IconChevronDown size={14} stroke={2} />
-      </UnstyledButton>
-    </li>
-  );
 
   return (
     <div className={classes.root}>
@@ -73,29 +77,49 @@ export function Timetable({
         <span>Zastávka</span>
         <span>Nást.</span>
       </div>
-      <ol className={classes.list}>
+      <ol ref={list} className={classes.list}>
         {plan ? (
           <>
-            {plan.before &&
-              expander(
-                plan.before[1] - plan.before[0] + 1,
-                `Předchozí zastávky (${plan.before[1] + 1})`,
-              )}
+            {plan.before && (
+              <Expander
+                label={`Předchozí zastávky (${plan.before[1] + 1})`}
+                onOpen={() => change({ ...open, before: true })}
+              />
+            )}
             {plan.head.map(row)}
-            {plan.middle && expander(plan.middle[1] - plan.middle[0] + 1)}
+            {plan.middle && (
+              <Expander
+                label={stopsWord(plan.middle[1] - plan.middle[0] + 1)}
+                onOpen={() => change({ ...open, middle: true })}
+              />
+            )}
             {plan.last !== null && row(plan.last)}
           </>
         ) : (
           calls.map((_, i) => row(i))
         )}
       </ol>
-      {expanded && calls.length > 6 && (
-        <UnstyledButton className={classes.collapse} onClick={() => setExpanded(false)}>
+      {anyOpen && (
+        <UnstyledButton className={classes.collapse} onClick={() => change(CLOSED)}>
           Sbalit zastávky
           <IconChevronUp size={14} stroke={2} />
         </UnstyledButton>
       )}
     </div>
+  );
+}
+
+function Expander({ label, onOpen }: { label: string; onOpen: () => void }) {
+  return (
+    <li className={classes.expander}>
+      <span className={classes.rail} aria-hidden>
+        <span className={classes.dots} />
+      </span>
+      <UnstyledButton className={classes.expanderButton} onClick={onOpen}>
+        {label}
+        <IconChevronDown size={14} stroke={2} />
+      </UnstyledButton>
+    </li>
   );
 }
 
@@ -105,12 +129,15 @@ function Stop({
   first,
   last,
   stale,
+  anchor,
 }: {
   item: RunCall;
   state: "passed" | "next" | "upcoming";
   first: boolean;
   last: boolean;
   stale: boolean;
+  /** The row the timetable is anchored on (kept still while ranges open). */
+  anchor: boolean;
 }) {
   const { call } = item;
   const { scheduled, estimated } = callTimes(call);
@@ -131,7 +158,13 @@ function Stop({
           </span>
         </li>
       )}
-      <li className={classes.stop} data-state={state} data-first={first} data-last={last}>
+      <li
+        className={classes.stop}
+        data-state={state}
+        data-anchor={anchor || undefined}
+        data-first={first}
+        data-last={last}
+      >
         <span className={classes.times}>
           {showScheduled && scheduled && (
             <span className={classes.scheduled}>{formatClock(scheduled)}</span>

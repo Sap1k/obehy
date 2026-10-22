@@ -1,14 +1,9 @@
 import { createContext, useContext } from "react";
-import type { Vehicle } from "../../api/client";
 import type { SheetSnap } from "../../components/BottomSheet";
 
-/** What the map shares with the panel of the vehicle open on it. */
+/** What the map tab shares with the vehicle panel: whether it is in the phone's sheet, and the
+ * sheet's snap. The open vehicle and following are the map store's (`store.ts`). */
 export interface MapState {
-  /** The open vehicle: its own answer, else the row it was clicked on; null without a position. */
-  vehicle: Vehicle | null;
-  following: boolean;
-  setFollowing: (on: boolean) => void;
-  /** The phone shows the panel in a bottom sheet. */
   phone: boolean;
   snap: SheetSnap;
   setSnap: (snap: SheetSnap) => void;

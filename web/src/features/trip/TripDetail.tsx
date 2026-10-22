@@ -1,11 +1,20 @@
-import { IconChevronRight, IconClock } from "@tabler/icons-react";
+import { Tooltip, UnstyledButton } from "@mantine/core";
+import {
+  IconCalendar,
+  IconChevronDown,
+  IconChevronRight,
+  IconChevronUp,
+  IconClock,
+} from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import type { Alert, Trip } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { tripAlerts } from "../../lib/alerts";
 import { timeState } from "../../lib/punctuality";
 import { Timetable } from "./Timetable";
+import { noteGroups } from "./notes";
 import { callTimes, isPassed, type RunCall } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
@@ -120,21 +129,63 @@ export function TripBody({
   );
 }
 
+const NOTES_OPEN_KEY = "obehy.notes.open";
+
+function readNotesOpen(): boolean {
+  try {
+    return sessionStorage.getItem(NOTES_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** The timetable's notes: when it runs, the train's short notes as chips (the full wording on
+ * hover), and the longer texts behind a toggle remembered for the session. */
 function Notes({ trip }: { trip: Trip }) {
-  // Notes repeat per call range; each text once.
-  const lines = [
-    ...new Set([
-      ...trip.amenities.operates.map((l) => l.cs),
-      ...trip.notes.map((n) => n.text ?? n.label).filter((t): t is string => Boolean(t)),
-    ]),
-  ];
-  if (lines.length === 0) return null;
+  const { operates, short, long } = noteGroups(trip);
+  const [open, setOpen] = useState(readNotesOpen);
+  if (operates.length + short.length + long.length === 0) return null;
+  const toggle = () => {
+    setOpen(!open);
+    try {
+      sessionStorage.setItem(NOTES_OPEN_KEY, open ? "0" : "1");
+    } catch {
+      // Not remembered.
+    }
+  };
   return (
     <section className={classes.notes}>
       <h3 className={classes.notesTitle}>Poznámky jízdního řádu</h3>
-      {lines.map((text, i) => (
-        <p key={i}>{text}</p>
+      {operates.map((text) => (
+        <p key={text} className={classes.operates}>
+          <IconCalendar size={14} stroke={2} aria-hidden />
+          {text}
+        </p>
       ))}
+      {short.length > 0 && (
+        <ul className={classes.noteChips}>
+          {short.map((n) => (
+            <li key={n.label}>
+              <Tooltip label={n.text} disabled={!n.text} multiline w={260} withArrow>
+                <span className={classes.noteChip}>{n.label}</span>
+              </Tooltip>
+            </li>
+          ))}
+        </ul>
+      )}
+      {long.length > 0 && open && (
+        <ul className={classes.noteTexts}>
+          {long.map((text) => (
+            <li key={text}>{text}</li>
+          ))}
+        </ul>
+      )}
+      {long.length > 0 && (
+        <UnstyledButton className={classes.notesToggle} onClick={toggle} aria-expanded={open}>
+          {open ? "Skrýt poznámky" : `Další poznámky (${long.length})`}
+          {open ? <IconChevronUp size={14} stroke={2} /> : <IconChevronDown size={14} stroke={2} />}
+        </UnstyledButton>
+      )}
     </section>
   );
 }

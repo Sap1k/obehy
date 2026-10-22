@@ -15,6 +15,9 @@ import type { Positioned } from "./queries";
 // then the vehicles: dots when zoomed out, pucks with bearing pointers when zoomed in, and the
 // selected vehicle always as a puck with a halo.
 
+/** The selected vehicle's puck is this much larger. */
+const SELECTED_SCALE = 1.15;
+
 /** From this zoom vehicles are pucks with their line's name. */
 export const PUCK_ZOOM = 11;
 
@@ -39,6 +42,8 @@ export interface LayerInput {
   zoom: number;
   selectedId: string | undefined;
   trip: TripOverlay | null;
+  /** A board's stop place, [lon, lat]. */
+  stop: [number, number] | null;
   /** The halo's colour (the action token of the scheme). */
   accent: string;
   onPick: (vehicle: Positioned) => void;
@@ -93,6 +98,24 @@ export function vehicleLayers(input: LayerInput): Layer[] {
     );
   }
 
+  if (stop) {
+    layers.push(
+      new ScatterplotLayer<[number, number]>({
+        id: "focus-stop",
+        data: [stop],
+        getPosition: (s) => s,
+        getRadius: 7,
+        radiusUnits: "pixels",
+        getFillColor: [255, 255, 255, 255],
+        getLineColor: [...rgb(accent), 255],
+        getLineWidth: 3,
+        lineWidthUnits: "pixels",
+        stroked: true,
+        updateTriggers: { getLineColor: accent },
+      }),
+    );
+  }
+
   if (!pucks) {
     layers.push(
       new ScatterplotLayer<Positioned>({
@@ -143,22 +166,47 @@ export function vehicleLayers(input: LayerInput): Layer[] {
   }
 
   if (selected.length > 0) {
+    // The selected vehicle on top of the rest, a little larger: a soft shadow, its pointer (the
+    // tip showing past the ring), a crisp ring (a white gap, then the accent) and its puck.
     const atSelected = (_: unknown, { index }: { index: number }) =>
       at(null, { index: selected[index]! });
-    const [r, g, b] = rgb(accent);
+    const vehicleOf = (i: number) => vehicles[i]!;
+    const puckRadius = (PUCK_PX / 2) * SELECTED_SCALE;
     layers.push(
       new ScatterplotLayer<number>({
-        id: "selected-halo",
+        id: "selected-shadow",
         data: selected,
         getPosition: atSelected,
-        getRadius: PUCK_PX / 2 + 8,
+        getRadius: puckRadius + 9,
         radiusUnits: "pixels",
-        getFillColor: [r, g, b, 70],
-        getLineColor: [r, g, b, 255],
-        getLineWidth: 2,
+        getFillColor: [0, 0, 0, 45],
+        updateTriggers: { getPosition: frame },
+      }),
+      new IconLayer<number>({
+        id: "selected-arrow",
+        data: selected,
+        iconAtlas,
+        iconMapping,
+        getPosition: atSelected,
+        getIcon: () => ARROW_KEY,
+        getSize: 56, // the tip reaches past the ring
+        sizeUnits: "pixels",
+        getAngle: (i) => -(vehicleOf(i).bearing ?? 0),
+        getColor: (i) => (vehicleOf(i).bearing === null ? [0, 0, 0, 0] : [...rgb(accent), 255]),
+        updateTriggers: { getPosition: frame, getAngle: vehicles, getColor: [vehicles, accent] },
+      }),
+      new ScatterplotLayer<number>({
+        id: "selected-ring",
+        data: selected,
+        getPosition: atSelected,
+        getRadius: puckRadius + 4.5,
+        radiusUnits: "pixels",
+        getFillColor: [255, 255, 255, 255],
+        getLineColor: [...rgb(accent), 255],
+        getLineWidth: 3,
         lineWidthUnits: "pixels",
         stroked: true,
-        updateTriggers: { getPosition: frame, getFillColor: accent, getLineColor: accent },
+        updateTriggers: { getPosition: frame, getLineColor: accent },
       }),
       new IconLayer<number>({
         id: "selected-puck",
@@ -167,7 +215,7 @@ export function vehicleLayers(input: LayerInput): Layer[] {
         iconMapping,
         getPosition: atSelected,
         getIcon: (i) => keys[i]!,
-        getSize: PUCK_ICON_PX,
+        getSize: PUCK_ICON_PX * SELECTED_SCALE,
         sizeUnits: "pixels",
         updateTriggers: { getPosition: frame, getIcon: vehicles },
       }),

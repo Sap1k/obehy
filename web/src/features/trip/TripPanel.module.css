@@ -128,11 +128,67 @@
   background: var(--ob-surface-subtle);
 }
 
-.notes p {
-  margin: 4px 0 0;
-  color: var(--ob-text-secondary);
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.operates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
   font-size: 14px;
   line-height: 20px;
+  font-weight: 500;
+}
+
+.noteChips,
+.noteTexts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.noteChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.noteChip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.noteTexts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.notesToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  color: var(--ob-link);
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 600;
 }
 
 .connection {

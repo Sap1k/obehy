@@ -13,6 +13,7 @@ import { ApiError } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { BoardMessage, BoardSkeleton, DayDivider } from "../../components/BoardStates";
 import { DepartureRow, rowClasses } from "../../components/DepartureRow";
+import { Panel } from "../../components/Panel";
 import { TimeSelect } from "../../components/TimeSelect";
 import { stopAlerts } from "../../lib/alerts";
 import { freshnessOf, reportFreshness } from "../../lib/freshness";
@@ -20,6 +21,7 @@ import { ago, useNow } from "../../lib/hooks";
 import { rememberStop } from "../../lib/recent";
 import { platformsText } from "../../lib/stops";
 import { dayDividerLabel, dayKey, formatClock, formatLongDay } from "../../lib/time";
+import { useMapFocus } from "../map/store";
 import { useBoard, useStopPlace } from "./queries";
 import classes from "./BoardPage.module.css";
 
@@ -70,6 +72,13 @@ export function BoardPage() {
   useEffect(() => {
     if (stop) rememberStop(stop);
   }, [stop]);
+  // The map marks the stop and brings it into view.
+  useMapFocus({
+    stop:
+      stop && stop.latitude !== null && stop.longitude !== null
+        ? { id: stop.location_id, latitude: stop.latitude, longitude: stop.longitude }
+        : undefined,
+  });
 
   // The phone shows the trip on its own page.
   if (phone && tripOpen) return <Outlet />;
@@ -86,50 +95,52 @@ export function BoardPage() {
   const noun = arrivals ? "příjezdy" : "odjezdy";
 
   return (
-    <div className={`${classes.layout} ${tripOpen ? classes.withPanel : ""}`}>
-      <section className={classes.board} aria-label={arrivals ? "Příjezdy" : "Odjezdy"}>
-        <header className={classes.header}>
-          <h1 className={classes.title}>{stop?.name ?? (place.isError ? "Zastávka" : " ")}</h1>
-          <p className={classes.subtitle}>{subtitle}</p>
-        </header>
-        <div className={classes.controls}>
-          <SegmentedControl
-            value={arrivals ? "arrivals" : "departures"}
-            onChange={(v) => setScope({ smer: v === "arrivals" ? "prijezdy" : undefined })}
-            data={[
-              { value: "departures", label: "Odjezdy" },
-              { value: "arrivals", label: "Příjezdy" },
-            ]}
+    <>
+      <Panel label={arrivals ? "Příjezdy" : "Odjezdy"}>
+        <section className={classes.board}>
+          <header className={classes.header}>
+            <h1 className={classes.title}>{stop?.name ?? (place.isError ? "Zastávka" : " ")}</h1>
+            <p className={classes.subtitle}>{subtitle}</p>
+          </header>
+          <div className={classes.controls}>
+            <SegmentedControl
+              value={arrivals ? "arrivals" : "departures"}
+              onChange={(v) => setScope({ smer: v === "arrivals" ? "prijezdy" : undefined })}
+              data={[
+                { value: "departures", label: "Odjezdy" },
+                { value: "arrivals", label: "Příjezdy" },
+              ]}
+            />
+            <TimeSelect value={from} now={now} onChange={(cas) => setScope({ cas })} />
+          </div>
+
+          {data &&
+            stopAlerts(
+              data.alerts,
+              data.stops.map((s) => s.location_id),
+            ).map((a) => <AlertBanner key={a.alert_id} alert={a} now={now} />)}
+
+          <BoardBody
+            stopId={stopId}
+            arrivals={arrivals}
+            from={from}
+            limit={limit}
+            setLimit={setLimit}
+            setFrom={(cas) => setScope({ cas })}
+            board={board}
+            offline={offline}
+            now={now}
+            noun={noun}
+            phone={phone}
           />
-          <TimeSelect value={from} now={now} onChange={(cas) => setScope({ cas })} />
-        </div>
-
-        {data &&
-          stopAlerts(
-            data.alerts,
-            data.stops.map((s) => s.location_id),
-          ).map((a) => <AlertBanner key={a.alert_id} alert={a} now={now} />)}
-
-        <BoardBody
-          stopId={stopId}
-          arrivals={arrivals}
-          from={from}
-          limit={limit}
-          setLimit={setLimit}
-          setFrom={(cas) => setScope({ cas })}
-          board={board}
-          offline={offline}
-          now={now}
-          noun={noun}
-          phone={phone}
-        />
-      </section>
+        </section>
+      </Panel>
       {tripOpen && (
-        <aside className={classes.panel}>
+        <Panel label="Detail spoje" narrow flush>
           <Outlet />
-        </aside>
+        </Panel>
       )}
-    </div>
+    </>
   );
 }
 

@@ -4,6 +4,18 @@
   min-height: 100dvh;
 }
 
+.shell[data-collapsed] {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.shell[data-collapsed] .navbar {
+  padding: 24px 10px 16px;
+}
+
+.shell[data-collapsed] .foot {
+  justify-content: center;
+}
+
 /* The navbar is dark in both schemes (.ob-dark-scope). */
 .navbar {
   position: sticky;
@@ -58,6 +70,10 @@
 }
 
 .foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: auto;
   color: var(--ob-text-secondary);
   font-size: 12px;
@@ -66,38 +82,45 @@
   text-transform: uppercase;
 }
 
+/* The web: the map fills the main area under everything; the search and data status float
+   over its top left, the tab's panels under them, side by side. */
 .main {
+  position: relative;
   min-width: 0;
-  padding: 24px;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
 }
 
 .toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-/* The map fills the main area; the search and data status float over its top left. */
-.main[data-bleed] {
-  position: relative;
-  height: 100dvh;
-  padding: 0;
-}
-
-.main[data-bleed] .toolbar {
   position: absolute;
   top: 16px;
   left: 16px;
   z-index: 2;
-  justify-content: flex-start;
-  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
   pointer-events: none;
 }
 
-.main[data-bleed] .toolbar > * {
+.toolbar > * {
   pointer-events: auto;
+}
+
+.panels {
+  position: absolute;
+  top: 72px;
+  bottom: 16px;
+  left: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
 }
 
 .topbar,
@@ -134,13 +157,26 @@
     gap: 8px;
   }
 
+  /* The phone: the tab is a page; the map tab fills the space between the bars. */
   .main {
+    height: auto;
+    overflow: visible;
     padding: 8px 16px 16px;
+  }
+
+  .panels {
+    position: static;
+    display: block;
+    pointer-events: auto;
   }
 
   .main[data-bleed] {
     height: calc(100dvh - 56px - 68px - env(safe-area-inset-bottom));
     padding: 0;
+  }
+
+  .main[data-bleed] .panels {
+    height: 100%;
   }
 
   .bottom {

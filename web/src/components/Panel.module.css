@@ -1,0 +1,40 @@
+.panel {
+  flex: none;
+  box-sizing: border-box;
+  width: 440px;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  pointer-events: auto;
+}
+
+.panel[data-narrow] {
+  width: 400px;
+}
+
+.panel[data-flush] {
+  padding: 0;
+}
+
+/* The phone shows a tab's content as a page. */
+@media (max-width: $mantine-breakpoint-sm) {
+  .panel {
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .panel[data-narrow] {
+    width: auto;
+  }
+}

@@ -1,6 +1,7 @@
 // Which calls a collapsed timetable shows (Figma 08, "Trip timetable"): the anchor (the call
 // boarded at, else the next one), the two after it, an expander, and the last call. Six calls or
-// fewer always show in full.
+// fewer always show in full. Each hidden range opens on its own: the earlier calls, or the ones
+// between the head and the last call.
 
 export const SHOW_ALL_UP_TO = 6;
 export const AFTER_ANCHOR = 2;
@@ -16,7 +17,34 @@ export interface Collapsed {
   last: number | null;
 }
 
-export function collapse(count: number, anchor: number): Collapsed | null {
+/** Which hidden ranges are open. */
+export interface Opened {
+  before: boolean;
+  middle: boolean;
+}
+
+export const CLOSED: Opened = { before: false, middle: false };
+
+/** The collapsed plan with the `open` ranges shown; null when every call shows. */
+export function collapse(count: number, anchor: number, open: Opened = CLOSED): Collapsed | null {
+  const plan = closedPlan(count, anchor);
+  if (!plan) return null;
+  const range = ([from, to]: [number, number]) =>
+    Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  let { before, head, middle } = plan;
+  if (open.before && before) {
+    head = [...range(before), ...head];
+    before = null;
+  }
+  if (open.middle && middle) {
+    head = [...head, ...range(middle)];
+    middle = null;
+  }
+  if (!before && !middle) return null;
+  return { before, head, middle, last: plan.last };
+}
+
+function closedPlan(count: number, anchor: number): Collapsed | null {
   if (count <= SHOW_ALL_UP_TO) return null;
   const a = Math.min(Math.max(anchor, 0), count - 1);
   const headEnd = Math.min(a + AFTER_ANCHOR, count - 1);

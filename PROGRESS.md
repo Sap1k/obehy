@@ -297,14 +297,27 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   obehy.cz. Mapa (home): every vehicle in Czechia on an OpenFreeMap base map in our style,
   drawn by deck.gl into MapLibre's canvas (dots, then line pucks with bearing from z11), gliding
   between answers; fetched by fixed 1° grid cells (a cell at the API's 3000 is split into
-  quarters) behind a 5 s nginx micro-cache. A vehicle opens in a sidebar (web) or a bottom
-  sheet (phone) with its trip and the vehicle, and can be followed. Map code loads lazily.
+  quarters) behind a 5 s nginx micro-cache. On the desktop the map is the base under every
+  tab, with the tab's panels over it (board, trip beside it, vehicle), a board's stop and a
+  trip's path drawn; the navbar collapses. On the phone a vehicle opens in a bottom sheet
+  (peek, 45 %, 70 %). One marker per journey; a vehicle can be followed.
 - **Next:**
   - stops and per-release route PMTiles on the map;
   - Linky and Mimořádnosti;
   - the composition card once ČD is asked live.
 
 ## Recent log
+
+- **2026-10-22** — Map polish (migration 0019). `/vehicles` showed 75 of 1,646 trips twice (the
+  SŽ map's train and the unit's GPS) and flipped a vehicle two sources bind differently to the
+  other's trip every few pings; it now lists one vehicle per journey (the GTFS-RT rule, written
+  by the worker as `represents`) and takes a vehicle's trip from its best-ranked report.
+  `/vehicles/{id}` answers IDs with slashes (every SŽ train was a 404). Web: the map is the
+  desktop base with fixed-width panels; timetable ranges open on their own without moving the
+  anchor; notes grouped (chips for train notes, long texts behind a toggle); a crisp selection
+  ring; sheet snaps 45/70 %. Validated: unit + DB tests, ruff, pyright, lint-imports, Vitest,
+  build, live against obehy.cz (desktop and 375 px). Needs deploying to check the duplicate
+  and flip counts on production.
 
 - **2026-10-22** — Vehicle map. MapLibre 5.24 (deck.gl 9.4 does not support MapLibre 6 yet) with
   deck.gl drawing every vehicle on the canvas, a style of our own over OpenFreeMap's tiles,
