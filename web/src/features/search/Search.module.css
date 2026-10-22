@@ -3,15 +3,30 @@
   max-width: 428px;
 }
 
+.options {
+  max-height: min(480px, 70dvh);
+  overflow-y: auto;
+}
+
 .option {
   display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.texts {
+  display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .name {
+  overflow: hidden;
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .place {

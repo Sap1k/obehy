@@ -3712,6 +3712,18 @@
             ],
             "title": "Delay S"
           },
+          "distance_m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Metres from `near`, when a search gives it",
+            "title": "Distance M"
+          },
           "feed": {
             "title": "Feed",
             "type": "string"
@@ -3812,6 +3824,18 @@
               }
             ],
             "title": "Trip Id"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The train number (Os 6819)",
+            "title": "Trip Short Name"
           },
           "vehicle_id": {
             "description": "The registry's vehicle ID when the source vehicle is bound to one, else <source>:<source_vehicle_id>; both resolve",
@@ -6332,11 +6356,73 @@
             "description": "minlon,minlat,maxlon,maxlat",
             "in": "query",
             "name": "bbox",
-            "required": true,
+            "required": false,
             "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "minlon,minlat,maxlon,maxlat",
-              "title": "Bbox",
-              "type": "string"
+              "title": "Bbox"
+            }
+          },
+          {
+            "description": "Line, train number, headsign, fleet number or plate, regardless of case and diacritics: an exact line or train number first, then the number or plate, a line it starts, any match",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Line, train number, headsign, fleet number or plate, regardless of case and diacritics: an exact line or train number first, then the number or plate, a line it starts, any match",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "lat,lon: with `q`, the nearest first in each rank",
+            "in": "query",
+            "name": "near",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "lat,lon: with `q`, the nearest first in each rank",
+              "title": "Near"
+            }
+          },
+          {
+            "description": "With `q`",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "With `q`",
+              "title": "Limit"
             }
           },
           {
@@ -6380,7 +6466,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Vehicles in a viewport",
+        "summary": "Vehicles in a viewport, or found by line, train number, headsign or number",
         "tags": [
           "vehicles"
         ]

@@ -21,7 +21,7 @@ from obehy.api.codes import load_codes
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache, traits
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
-from obehy.api.params import ParameterError, parse_bbox
+from obehy.api.params import ParameterError, parse_bbox, parse_near, search_words
 from obehy.reference.vocabulary import load_vocabulary
 
 router = APIRouter(tags=["vehicles"])
@@ -40,6 +40,10 @@ def _rows(snap: Snapshot, limits: Limits, **filters: Any) -> list[DictRow]:
         "east": None,
         "north": None,
         "vehicle_id": None,
+        "text": None,
+        "words": [],
+        "lat": None,
+        "lon": None,
         "limit": limits.vehicles_limit,
     }
     return snap.all("vehicles", params | filters)
@@ -59,41 +63,75 @@ def _vehicle(r: DictRow) -> schema.Vehicle:
         trip_id=r["trip_id"] if on_trip else None,
         service_date=r["service_date"] if on_trip else None,
         line=line(r) if on_trip else None,
+        trip_short_name=r["trip_short_name"] if on_trip else None,
         headsign=r["headsign"],
         delay_s=r["delay_s"],
         traits=traits(r),
         sources=sorted(set(r["sources"])),
+        distance_m=None if r["distance_m"] is None else round(r["distance_m"]),
     )
 
 
 @router.get(
     "/vehicles",
     response_model=schema.Vehicles,
-    summary="Vehicles in a viewport",
+    summary="Vehicles in a viewport, or found by line, train number, headsign or number",
 )
 def vehicles(
     response: Response,
     snap: SnapshotDep,
     limits: LimitsDep,
-    bbox: Annotated[str, Query(description="minlon,minlat,maxlon,maxlat")],
+    bbox: Annotated[str | None, Query(description="minlon,minlat,maxlon,maxlat")] = None,
+    q: Annotated[
+        str | None,
+        Query(
+            description="Line, train number, headsign, fleet number or plate, regardless of "
+            "case and diacritics: an exact line or train number first, then the number or "
+            "plate, a line it starts, any match"
+        ),
+    ] = None,
+    near: Annotated[
+        str | None, Query(description="lat,lon: with `q`, the nearest first in each rank")
+    ] = None,
+    limit: Annotated[int | None, Query(ge=1, description="With `q`")] = None,
     include: Annotated[
         str | None, Query(description="Comma-separated: unmatched, not_in_service")
     ] = None,
 ) -> schema.Vehicles:
     realtime_cache(response, limits)
-    box = parse_bbox(bbox, limits.vehicles_bbox_max_deg2)
+    if (bbox is None) == (q is None):
+        raise ParameterError("give exactly one of bbox and q")
     extra = {w for w in (include or "").split(",") if w}
     if not extra <= OPTIONAL:
         raise ParameterError(f"include takes {', '.join(sorted(OPTIONAL))}")
-    rows = _rows(
-        snap,
-        limits,
-        states=SHOWN + sorted(extra),
-        west=box.west,
-        south=box.south,
-        east=box.east,
-        north=box.north,
-    )
+    states = SHOWN + sorted(extra)
+    if q is not None:
+        words = search_words(q)
+        if not words:
+            raise ParameterError("q needs a letter or digit")
+        lat, lon = parse_near(near) if near is not None else (None, None)
+        rows = _rows(
+            snap,
+            limits,
+            states=states,
+            text=" ".join(words),
+            words=words,
+            lat=lat,
+            lon=lon,
+            limit=min(limit or limits.vehicles_search_limit, limits.vehicles_search_limit_max),
+        )
+    else:
+        assert bbox is not None
+        box = parse_bbox(bbox, limits.vehicles_bbox_max_deg2)
+        rows = _rows(
+            snap,
+            limits,
+            states=states,
+            west=box.west,
+            south=box.south,
+            east=box.east,
+            north=box.north,
+        )
     return schema.Vehicles(**envelope(snap), vehicles=[_vehicle(r) for r in rows])
 
 

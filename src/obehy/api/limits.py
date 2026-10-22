@@ -42,6 +42,8 @@ class Limits:
     vehicle_max_age_s: int
     vehicles_bbox_max_deg2: float
     vehicles_limit: int
+    vehicles_search_limit: int
+    vehicles_search_limit_max: int
     cache_realtime_s: int
     cache_static_s: int
 
@@ -92,6 +94,8 @@ def load_limits(path: Path = LIMITS) -> Limits:
         vehicle_max_age_s=int(vehicles["max_age_s"]),
         vehicles_bbox_max_deg2=float(vehicles["bbox_max_deg2"]),
         vehicles_limit=int(vehicles["limit"]),
+        vehicles_search_limit=int(vehicles["search_limit"]),
+        vehicles_search_limit_max=int(vehicles["search_limit_max"]),
         cache_realtime_s=int(cache["realtime_s"]),
         cache_static_s=int(cache["static_s"]),
     )

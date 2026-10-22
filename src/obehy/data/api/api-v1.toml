@@ -31,6 +31,9 @@ stops_max = 10
 max_age_s = 300
 bbox_max_deg2 = 4.0
 limit = 3000
+# Search by line, train number, headsign, fleet number or plate: the most vehicles answered.
+search_limit = 20
+search_limit_max = 50
 
 [lines]
 search_limit = 20

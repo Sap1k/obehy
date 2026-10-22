@@ -20,3 +20,6 @@ class ResizeObserverStub {
   disconnect() {}
 }
 window.ResizeObserver = ResizeObserverStub;
+
+// Mantine scrolls the selected option into view.
+Element.prototype.scrollIntoView = () => {};

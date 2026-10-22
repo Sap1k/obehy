@@ -487,7 +487,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Vehicles in a viewport */
+        /** Vehicles in a viewport, or found by line, train number, headsign or number */
         get: operations["vehicles_api_v1_vehicles_get"];
         put?: never;
         post?: never;
@@ -1905,6 +1905,11 @@ export interface components {
             bearing: number | null;
             /** Delay S */
             delay_s: number | null;
+            /**
+             * Distance M
+             * @description Metres from `near`, when a search gives it
+             */
+            distance_m?: number | null;
             /** Feed */
             feed: string;
             /** Headsign */
@@ -1936,6 +1941,11 @@ export interface components {
             traits?: components["schemas"]["VehicleTraits"];
             /** Trip Id */
             trip_id: string | null;
+            /**
+             * Trip Short Name
+             * @description The train number (Os 6819)
+             */
+            trip_short_name?: string | null;
             /**
              * Vehicle Id
              * @description The registry's vehicle ID when the source vehicle is bound to one, else <source>:<source_vehicle_id>; both resolve
@@ -3177,9 +3187,15 @@ export interface operations {
     };
     vehicles_api_v1_vehicles_get: {
         parameters: {
-            query: {
+            query?: {
                 /** @description minlon,minlat,maxlon,maxlat */
-                bbox: string;
+                bbox?: string | null;
+                /** @description Line, train number, headsign, fleet number or plate, regardless of case and diacritics: an exact line or train number first, then the number or plate, a line it starts, any match */
+                q?: string | null;
+                /** @description lat,lon: with `q`, the nearest first in each rank */
+                near?: string | null;
+                /** @description With `q` */
+                limit?: number | null;
                 /** @description Comma-separated: unmatched, not_in_service */
                 include?: string | null;
             };

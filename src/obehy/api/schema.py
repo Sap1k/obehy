@@ -470,10 +470,14 @@ class Vehicle(BaseModel):
     trip_id: str | None
     service_date: date | None
     line: Line | None
+    trip_short_name: str | None = Field(default=None, description="The train number (Os 6819)")
     headsign: str | None
     delay_s: int | None
     traits: VehicleTraits = Field(default_factory=VehicleTraits)
     sources: list[str] = Field(default_factory=list, description="Sources reporting it now")
+    distance_m: int | None = Field(
+        default=None, description="Metres from `near`, when a search gives it"
+    )
 
 
 Origin = Literal["curated", "live", "model"]

@@ -14,7 +14,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { DataStatus } from "../components/DataStatus";
 import { Logo } from "../components/Logo";
 import { setInsetLeft } from "../features/map/store";
-import { StopSearch } from "../features/search/StopSearch";
+import { Search } from "../features/search/Search";
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap } from "../api/client";
 import { freshnessOf, useReportedFailing } from "../lib/freshness";
@@ -178,7 +178,7 @@ export function Shell() {
           </div>
         )}
         <div className={classes.toolbar}>
-          <StopSearch />
+          <Search />
           {freshness && <DataStatus freshness={freshness} />}
         </div>
         <div ref={panels} className={classes.panels}>
@@ -202,13 +202,8 @@ export function Shell() {
         ))}
       </nav>
 
-      <Modal
-        opened={searching}
-        onClose={() => setSearching(false)}
-        title="Hledat zastávku"
-        fullScreen
-      >
-        <StopSearch autoFocus onPicked={() => setSearching(false)} />
+      <Modal opened={searching} onClose={() => setSearching(false)} title="Hledat" fullScreen>
+        <Search autoFocus onPicked={() => setSearching(false)} />
       </Modal>
     </div>
   );

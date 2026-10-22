@@ -916,6 +916,21 @@ def test_boards_and_trips_name_the_vehicle_traits_and_realtime_sources(client: T
     ]
 
 
+def test_vehicles_found_by_line_headsign_or_number_nearest_first(client: TestClient) -> None:
+    (bus,) = _get(client, "/vehicles", q="1")["vehicles"]  # line 1, exactly
+    assert (bus["vehicle_id"], bus["distance_m"]) == ("duk:1001", None)
+    # Every word somewhere, in any order, regardless of case and diacritics.
+    assert [v["vehicle_id"] for v in _get(client, "/vehicles", q="bor NOVY")["vehicles"]] == [
+        "duk:1001"
+    ]
+    near = _get(client, "/vehicles", q="nový bor", near="50.69,14.54")["vehicles"]
+    assert 1000 < near[0]["distance_m"] < 1200  # 0.01° of latitude
+    assert _get(client, "/vehicles", q="Liberec")["vehicles"] == []
+    _get(client, "/vehicles", 422)
+    _get(client, "/vehicles", 422, q="1", bbox="14.5,50.6,14.6,50.7")
+    _get(client, "/vehicles", 422, q=",,")
+
+
 def test_one_marker_per_journey_and_a_stable_trip_per_vehicle(
     client: TestClient, connection: psycopg.Connection
 ) -> None:

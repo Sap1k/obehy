@@ -2,7 +2,7 @@ import { IconAlertTriangle, IconChevronRight, IconRoute } from "@tabler/icons-re
 import { Link } from "@tanstack/react-router";
 import { useState, type ComponentType } from "react";
 import { Panel } from "../components/Panel";
-import { StopSearch } from "../features/search/StopSearch";
+import { Search } from "../features/search/Search";
 import { readRecent } from "../lib/recent";
 import classes from "./pages.module.css";
 
@@ -27,7 +27,7 @@ function Placeholder({
         <p className={classes.text}>{text}</p>
         {withSearch && (
           <div className={classes.search}>
-            <StopSearch />
+            <Search />
           </div>
         )}
         <RecentStops />

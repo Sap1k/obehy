@@ -308,6 +308,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-22** — Vehicle search: `/vehicles?q=` finds vehicles by line, train number,
+  headsign, fleet number or plate (folded, every word somewhere), exact line or train number
+  first, the nearest first with `near`. The search box lists vehicles beside stops; it uses a
+  position only when the site already has it (Moje poloha or a granted permission) and sends it
+  rounded to about a kilometre. Validated: DB test, Vitest (component with a mocked API).
+
 - **2026-10-22** — Data status. It read "delayed" whenever one board row was stale and judged
   the map by the answer's own time; `/status` listed no sources (`rt.source_health` is never
   written). `/status` now gives each source's newest vehicle report and `realtime_at`; the

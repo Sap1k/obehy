@@ -7,6 +7,7 @@ import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { reportFailing } from "../../lib/freshness";
 import { useNow } from "../../lib/hooks";
+import { rememberPosition } from "../../lib/position";
 import { useTrip } from "../trip/queries";
 import { isPassed } from "../trip/runCalls";
 import { AREA, type Bounds } from "./grid";
@@ -213,6 +214,10 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
       fitBoundsOptions: { maxZoom: 15 },
     });
     locate.on("trackuserlocationstart", () => setFollowing(false));
+    // The search orders vehicles by distance from here.
+    locate.on("geolocate", (e: GeolocationPosition) =>
+      rememberPosition(e.coords.latitude, e.coords.longitude),
+    );
     map.addControl(locate, "top-right");
     const overlay = new MapboxOverlay({
       interleaved: true,
