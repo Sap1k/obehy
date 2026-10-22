@@ -911,6 +911,38 @@ def test_boards_and_trips_name_the_vehicle_traits_and_realtime_sources(client: T
     ]
 
 
+def test_one_marker_per_journey_and_a_stable_trip_per_vehicle(
+    client: TestClient, connection: psycopg.Connection
+) -> None:
+    connection.execute(
+        "INSERT INTO rt.vehicle_state_current (feed, source, source_vehicle_id, status, last_seen,"
+        " trip_id, service_date, latitude, longitude, bearing, release_id, vehicle_id,"
+        " represents) VALUES"
+        # The SŽ map's train on a run whose unit's GPS stands for it.
+        " ('czptt', 'sz-mapa', 'TR/1154/KASO--100201', 'running', now(), 'czptt:trip:1:1',"
+        "  '2026-10-07', 50.65, 14.55, NULL, 'run-a', 'sz-mapa:TR/1154/KASO--100201', false),"
+        # One registered bus two sources bind differently: PID to its next trip, DÚK (fresher)
+        # to the one after.
+        " ('jdf', 'pid', '3:9', 'positioning', now() - interval '20 seconds', 'jdf:trip:1',"
+        "  '2026-10-06', 50.66, 14.56, NULL, 'run-a', 'pid:3:9', true),"
+        " ('jdf', 'duk', '9', 'layover', now(), 'jdf:trip:2', '2026-10-06',"
+        "  50.661, 14.561, 45, 'run-a', 'pid:3:9', true)"
+    )
+    shown = {
+        v["vehicle_id"]: v
+        for v in _get(client, "/vehicles", bbox="14.5,50.6,14.6,50.7")["vehicles"]
+    }
+    assert "sz-mapa:TR/1154/KASO--100201" not in shown
+    # Asked by its ID it answers, slashes and all (SŽ train IDs have them).
+    train = _get(client, "/vehicles/sz-mapa:TR%2F1154%2FKASO--100201")
+    assert train["vehicle"]["trip_id"] == "czptt:trip:1:1"
+    bus = shown["pid:3:9"]
+    # The trip of the best-ranked report, the position of the freshest.
+    assert (bus["trip_id"], bus["state"], bus["source"]) == ("jdf:trip:1", "positioning", "pid")
+    assert (bus["latitude"], bus["longitude"], bus["bearing"]) == (50.661, 14.561, 45)
+    assert sorted(bus["sources"]) == ["duk", "pid"]
+
+
 def test_a_cancelled_trip_on_the_board_and_in_its_detail(client: TestClient) -> None:
     board = "/stop-places/jdf:stop:1/departures"
     (row,) = _get(client, board, start="2026-10-07T00:20:00+02:00")["departures"]

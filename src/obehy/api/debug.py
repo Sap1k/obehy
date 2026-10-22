@@ -121,7 +121,7 @@ def registry(snap: SnapshotDep, limits: LimitsDep) -> dict[str, Any]:
 
 
 @router.get(
-    "/vehicles/{vehicle_id}",
+    "/vehicles/{vehicle_id:path}",
     summary="Why a vehicle is what it is: reports, keys, pairings, statements, profile",
 )
 def vehicle(snap: SnapshotDep, vehicle_id: str) -> dict[str, Any]:

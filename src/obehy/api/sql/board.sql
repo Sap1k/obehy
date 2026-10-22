@@ -75,14 +75,15 @@ vehicles AS (
     SELECT DISTINCT ON (r.trip_id, r.service_date) r.*
     FROM (
         SELECT v.trip_id, v.service_date, v.vehicle_id, v.status, v.last_seen, v.latitude,
-               v.longitude, v.bearing, v.source, v.source_vehicle_id,
+               v.longitude, v.bearing, v.source, v.source_vehicle_id, v.represents,
                array_agg(v.source) OVER (PARTITION BY v.trip_id, v.service_date, v.vehicle_id)
                    AS vehicle_sources
         FROM rt.vehicle_state_current v
         WHERE v.release_id = %(release_id)s AND v.last_seen >= %(seen_since)s
             AND (v.trip_id, v.service_date) IN (SELECT trip_id, service_date FROM running)
     ) r
-    ORDER BY r.trip_id, r.service_date, r.last_seen DESC, r.source, r.source_vehicle_id
+    ORDER BY r.trip_id, r.service_date, r.represents DESC, r.last_seen DESC, r.source,
+        r.source_vehicle_id
 ),
 live AS (
     SELECT r.*, x.call, x.stale, x.sources,

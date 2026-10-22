@@ -16,6 +16,7 @@ from typing import Any, LiteralString, cast
 import psycopg
 from psycopg import sql
 
+from obehy.realtime.emit.represent import representing
 from obehy.realtime.emit.vehicles import VehicleBook
 from obehy.realtime.model import (
     AssignVehicle,
@@ -461,10 +462,11 @@ class Writer:
             with self.connection.transaction():
                 for feed, state in sorted(states.items()):
                     before = self._state.get(feed)
+                    shown = representing(state)
                     now = _Written(
                         {
                             (feed, v.source, v.source_vehicle_id): _vehicle_row(
-                                feed, v, current, state, self.vehicles, release_id
+                                feed, v, current, state, self.vehicles, release_id, v in shown
                             )
                             for v, current in state.vehicles.items()
                         },
@@ -599,6 +601,7 @@ _VEHICLES = _Table(
         "release_id",
         "vehicle_id",
         "bound_by",
+        "represents",
     ),
     ("feed", "source", "source_vehicle_id"),
     ("text", "text", "text"),
@@ -657,8 +660,10 @@ def _vehicle_row(
     state: FeedState,
     book: VehicleBook,
     release_id: str,
+    represents: bool,
 ) -> tuple[Any, ...]:
-    """The vehicle's trip is the feed trip it is on: on a rail run, the part it is driving."""
+    """The vehicle's trip is the feed trip it is on: on a rail run, the part it is driving.
+    `represents`: it stands for its journey on the map (`emit/represent.py`)."""
 
     b = v.binding
     instance = None if b is None else state.instances.get(b.journey)
@@ -679,6 +684,7 @@ def _vehicle_row(
         None if v.reason is None else v.reason.value,
         release_id,
         *book.identify((vehicle.source, vehicle.source_vehicle_id), local_date(v.last_seen)),
+        represents,
     )
 
 

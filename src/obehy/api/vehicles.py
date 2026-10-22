@@ -98,7 +98,7 @@ def vehicles(
 
 
 @router.get(
-    "/vehicles/{vehicle_id}",
+    "/vehicles/{vehicle_id:path}",
     response_model=schema.VehicleDetail,
     responses={404: {"model": schema.Problem}},
     summary="A vehicle: its current state, registry entry, source reports and attributes",

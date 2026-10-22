@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 from obehy.realtime.core import Context, estimate_all, refresh, step
 from obehy.realtime.emit.gtfs_rt import feed_message, run_vehicle_id
+from obehy.realtime.emit.represent import representing
 from obehy.realtime.index import Index
 from obehy.realtime.manifest import semantics_by_channel
 from obehy.realtime.model import (
@@ -220,6 +221,21 @@ def test_a_train_is_one_vehicle_however_many_report_it() -> None:
     ]
     assert entity.vehicle.vehicle.id == run_vehicle_id(PA)
     assert abs(entity.vehicle.position.longitude - sz_fix.lon) < 1e-5
+
+
+def test_a_train_stands_on_the_map_once() -> None:
+    sz_fix = Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.9 * STEP_LON)
+    state, _, _ = _run(
+        _index(),
+        _duk("2026-10-08 08:00:30", 0.2),
+        _duk("2026-10-08 08:00:35", 0.21, unit="951"),  # the coupled unit
+        _sz("2026-10-08 08:01:00", sz_fix),
+        _duk("2026-10-08 08:01:30", 0.4),
+    )
+    on_run = {v for v, s in state.vehicles.items() if s.binding is not None}
+    assert len(on_run) == 3  # two DÚK units and the SŽ map's train
+    (shown,) = representing(state) & on_run
+    assert shown.source == "duk"  # the lead of the source fusion tracks
 
 
 def test_an_early_train_waits_for_its_departure() -> None:

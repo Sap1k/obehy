@@ -2139,6 +2139,15 @@ PID, DÚK, SŽ or another provider.
 - Vehicles are drawn on the map's WebGL canvas (deck.gl, never DOM markers) and glide to each new
   position. The map asks `/vehicles` by fixed grid cells, not by its viewport, so every viewer
   asks for the same URLs and nginx's 5 s micro-cache answers them all.
+- One marker per journey, by the GTFS-RT rule (`emit/represent.py`): a rail run is one train
+  (the SŽ map's train and a unit's GPS are one), a bus several sources report is the vehicles
+  of the source the tracker follows. The worker writes it as `represents`; `/vehicles` lists
+  only those. A vehicle two sources report takes its trip and state from its best-ranked report
+  (standing for its journey, then the state, then the source), its position from its freshest.
+- On the desktop the map is the base under every tab; a tab's content is fixed-width panels
+  over it on the left (a trip opened from a board beside the board), and the map draws what
+  they focus on: a board's stop, a trip's path and vehicle. The phone shows tabs as pages and
+  the map tab with the vehicle in a bottom sheet.
 - Vehicles are read from `rt.vehicle_state_current` of the active release, filtered by bounding
   box and the maximum age; a vehicle's trip is the feed trip (rail: the run's part) it is on.
 - Departures join `active.*` with the realtime state of the active `release_id` by feed trip

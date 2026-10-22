@@ -29,7 +29,6 @@ number; the position is the leading vehicle's of the source fusion last tracked
 from __future__ import annotations
 
 import hashlib
-from collections import defaultdict
 from collections.abc import Sequence
 from datetime import timedelta
 from functools import lru_cache
@@ -39,13 +38,13 @@ from typing import Literal
 from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.pipeline.files import atomic_output_path
+from obehy.realtime.emit.represent import one_source, run_position, vehicles_by_journey
 from obehy.realtime.model import (
     CallState,
     FeedState,
     Instance,
     JourneyKey,
     PartSpan,
-    VehicleId,
     VehicleState,
 )
 from obehy.realtime.policy import LifecyclePolicy
@@ -101,46 +100,6 @@ def _train_number(instance: Instance) -> str | None:
         if reached < span.last:
             return span.journey.key
     return instance.journeys[-1].journey.key if instance.journeys else None
-
-
-def _run_position(instance: Instance, bound: list[VehicleState]) -> VehicleState | None:
-    """The vehicle whose position stands for the run: the lead of the source fusion tracked
-    last, else that source's first vehicle, else the first with a position."""
-
-    placed = [v for v in bound if v.position is not None]
-    source = instance.track_source
-    if source is not None:
-        track = instance.source_track(source)
-        lead = instance.lead
-        if lead is None or lead.vehicle.source != source:
-            lead = track.lead if track is not None else None
-        for candidate in placed:
-            if lead is not None and candidate.vehicle == lead.vehicle:
-                return candidate
-        for candidate in placed:
-            if candidate.vehicle.source == source:
-                return candidate
-    return placed[0] if placed else None
-
-
-def _one_source(instance: Instance, vehicles: list[VehicleId], state: FeedState) -> list[VehicleId]:
-    """The vehicles that stand for a journey (not a rail run): those of one source. Several
-    sources report some buses (DÚK and a city's own feed); each would be a vehicle of its own,
-    one bus twice on the map. The source the tracker follows is chosen (the preferred fresh
-    one), else the first source with a position; several vehicles of one source stay
-    (DUK-Q11)."""
-
-    sources = {v.source for v in vehicles}
-    if len(sources) <= 1:
-        return vehicles
-    placed = sorted({v.source for v in vehicles if state.vehicles[v].position is not None})
-    if instance.track_source in placed:
-        source = instance.track_source
-    elif placed:
-        source = placed[0]
-    else:
-        source = min(sources)
-    return [v for v in vehicles if v.source == source]
 
 
 def publication(instance: Instance, now: Instant, policy: LifecyclePolicy) -> Publication | None:
@@ -279,14 +238,11 @@ class FeedEmitter:
         header.timestamp = _epoch(now)
         chunks = [_field(1, header.SerializeToString(deterministic=True))]
 
-        vehicles_of: dict[JourneyKey, list[VehicleId]] = defaultdict(list)
-        for vehicle, current in sorted(state.vehicles.items()):
-            if current.binding is not None:
-                vehicles_of[current.binding.journey].append(vehicle)
+        vehicles_of = vehicles_by_journey(state)
         for journey, vehicles in vehicles_of.items():
             instance = state.instances.get(journey)
             if instance is not None and not instance.parts:
-                vehicles_of[journey] = _one_source(instance, vehicles, state)
+                vehicles_of[journey] = one_source(instance, vehicles, state)
 
         trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
         for journey, instance in sorted(state.instances.items()):
@@ -314,7 +270,7 @@ class FeedEmitter:
                 continue
             bound = [state.vehicles[v] for v in vehicles]
             if instance.parts:
-                lead = _run_position(instance, bound)
+                lead = run_position(instance, bound)
                 if lead is not None:
                     chosen.append((run_vehicle_id(journey), instance, lead))
                 continue
