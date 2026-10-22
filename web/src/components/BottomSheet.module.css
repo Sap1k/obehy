@@ -1,0 +1,45 @@
+/* Fills the map; only the sheet takes pointer events. */
+.host {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--ob-radius-md) var(--ob-radius-md) 0 0;
+  background: var(--ob-surface);
+  box-shadow: 0 -4px 16px rgb(0 0 0 / 16%);
+  pointer-events: auto;
+  transition: transform 220ms ease-out;
+  will-change: transform;
+}
+
+.handle {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+.grip {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ob-border-control);
+}
+
+.content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px 16px;
+}

@@ -294,14 +294,24 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   live, delayed and offline states. A trip opened from a board shows a collapsible timetable
   over the whole run ("Dále jako" where the line changes), then notes, connections and the
   vehicle. Served by the web image (nginx + the app); in development the app proxies to
-  obehy.cz.
+  obehy.cz. Mapa (home): every vehicle in Czechia on an OpenFreeMap base map in our style,
+  drawn by deck.gl into MapLibre's canvas (dots, then line pucks with bearing from z11), gliding
+  between answers; fetched by fixed 1° grid cells (a cell at the API's 3000 is split into
+  quarters) behind a 5 s nginx micro-cache. A vehicle opens in a sidebar (web) or a bottom
+  sheet (phone) with its trip and the vehicle, and can be followed. Map code loads lazily.
 - **Next:**
-  - Mapa with per-release PMTiles and vehicles;
+  - stops and per-release route PMTiles on the map;
   - Linky and Mimořádnosti;
-  - the composition card once ČD is asked live;
-  - code-split the bundle (180 KB gzip).
+  - the composition card once ČD is asked live.
 
 ## Recent log
+
+- **2026-10-22** — Vehicle map. MapLibre 5.24 (deck.gl 9.4 does not support MapLibre 6 yet) with
+  deck.gl drawing every vehicle on the canvas, a style of our own over OpenFreeMap's tiles,
+  grid-cell fetching, a vehicle sidebar or bottom sheet, and following. The board's trip panel
+  now shares `TripDetail` with it. Validated: Vitest (grid, glide, style), typecheck, lint,
+  build (main chunk 165 KB gzip, map chunk 465 KB), live against obehy.cz. The nginx cache
+  config is untested locally (no Docker here).
 
 - **2026-10-22** — A trip's alerts are its own, its line's, and the severe ones of its stops.
   The trip panel shows a stop's severe alert only while that stop is still ahead of where one

@@ -1,17 +1,13 @@
 import { ActionIcon, Skeleton } from "@mantine/core";
-import { IconArrowLeft, IconChevronRight, IconClock, IconX } from "@tabler/icons-react";
-import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { type Alert, ApiError, type Trip } from "../../api/client";
-import { AlertBanner } from "../../components/AlertBanner";
+import { IconArrowLeft, IconX } from "@tabler/icons-react";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { ApiError } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
-import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { VehicleCard } from "../../components/VehicleCard";
-import { tripAlerts } from "../../lib/alerts";
 import { useNow } from "../../lib/hooks";
-import { timeState } from "../../lib/punctuality";
-import { Timetable } from "./Timetable";
+import { TripBody, TripHeader } from "./TripDetail";
 import { useFollowingParts, useTrip } from "./queries";
-import { callTimes, isPassed, runCalls } from "./runCalls";
+import { runCalls } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
 /** A trip opened from a board (Figma 11 panel, 15 phone): header, alerts, the run's timetable,
@@ -87,68 +83,23 @@ export function TripPanel() {
   );
   const stale = Boolean(data.realtime?.stale) || trip.isError;
   const boarded = calls.find((c) => c.call.location_id === search.od) ?? calls[0];
-  // The run's alerts: its parts' own and lines', and severe ones of the stops still ahead of
-  // where one boards (the boarded stop's are on the board one came from).
   const parts = [data, ...following.flatMap((q) => (q.data ? [q.data] : []))];
-  const ahead = calls
-    .slice(boarded ? calls.indexOf(boarded) + 1 : 0)
-    .filter((c) => !isPassed(c.call, now))
-    .map((c) => c.call);
-  const alerts = tripAlerts(
-    [...new Map(parts.flatMap((p) => p.alerts).map((a) => [a.alert_id, a])).values()],
-    { routeIds: parts.map((p) => p.line.route_id), tripIds: parts.map((p) => p.trip_id), ahead },
-  );
-  const alertContext = (alert: Alert, stopName: string | null) => {
-    if (stopName) return `Zastávka ${stopName}`;
-    const part =
-      parts.find((p) =>
-        alert.informs.some(
-          (t) =>
-            (t.kind === "trip" && t.id === p.trip_id) ||
-            (t.kind === "route" && t.id === p.line.route_id),
-        ),
-      ) ?? data;
-    return `Linka ${lineLabel(part.line, part.trip_short_name)}`;
-  };
-  const headState = boarded ? headTime(boarded.call, stale) : null;
   const vehicle = data.vehicles[0];
 
   return (
     <div className={classes.root}>
       {top}
-      <header className={classes.header}>
-        <div className={classes.titleRow}>
-          <LineBadge line={data.line} tripShortName={data.trip_short_name} size="lg" />
-          <h2 className={classes.title}>{data.headsign ?? lineLabel(data.line)}</h2>
-        </div>
-        <div className={classes.meta}>
-          {headState && (
-            <span className={`${classes.delay} ${classes[headState.tone]}`}>
-              <IconClock size={14} stroke={2} aria-hidden />
-              {headState.caption}
-            </span>
-          )}
-          <span>{[data.trip_short_name, data.agency].filter(Boolean).join(" · ")}</span>
-        </div>
-      </header>
-
-      {alerts.map(({ alert, stopName }) => (
-        <AlertBanner
-          key={alert.alert_id}
-          alert={alert}
-          now={now}
-          context={alertContext(alert, stopName)}
-        />
-      ))}
-
-      <section className={classes.section}>
-        <h3 className={classes.sectionTitle}>Jízdní řád</h3>
-        <Timetable calls={calls} boardedAt={search.od} now={now} stale={stale} />
-      </section>
-
-      <Notes trip={data} />
-      <Connections trip={data} stopId={stopId} />
-
+      <TripHeader trip={data} at={boarded} stale={stale} />
+      <TripBody
+        trip={data}
+        parts={parts}
+        calls={calls}
+        boardedAt={search.od}
+        aheadFrom={boarded}
+        now={now}
+        stale={stale}
+        stopId={stopId}
+      />
       {vehicle && (
         <section className={classes.section}>
           <h3 className={classes.sectionTitle}>Vozidlo</h3>
@@ -156,75 +107,5 @@ export function TripPanel() {
         </section>
       )}
     </div>
-  );
-}
-
-function headTime(call: Trip["calls"][number], stale: boolean) {
-  const { scheduled, estimated } = callTimes(call);
-  return scheduled ? timeState(scheduled, estimated, call.status, stale) : null;
-}
-
-function Notes({ trip }: { trip: Trip }) {
-  // Notes repeat per call range; each text once.
-  const lines = [
-    ...new Set([
-      ...trip.amenities.operates.map((l) => l.cs),
-      ...trip.notes.map((n) => n.text ?? n.label).filter((t): t is string => Boolean(t)),
-    ]),
-  ];
-  if (lines.length === 0) return null;
-  return (
-    <section className={classes.notes}>
-      <h3 className={classes.notesTitle}>Poznámky jízdního řádu</h3>
-      {lines.map((text, i) => (
-        <p key={i}>{text}</p>
-      ))}
-    </section>
-  );
-}
-
-function Connections({ trip, stopId }: { trip: Trip; stopId: string }) {
-  if (trip.connections.length === 0) return null;
-  const callName = (sequence: number | null) =>
-    sequence === null ? null : (trip.calls.find((c) => c.sequence === sequence)?.name ?? null);
-  return (
-    <section className={classes.section}>
-      <h3 className={classes.sectionTitle}>Návaznosti</h3>
-      {trip.connections.map((c, i) => {
-        const what = [c.line, c.destination].filter(Boolean).join(" · ") || "spoj";
-        const title = c.direction === "waits_for" ? `Čeká na ${what}` : `Návaznost na ${what}`;
-        const meta = [
-          callName(c.at_sequence),
-          c.wait_minutes ? `nejvýše ${c.wait_minutes} min` : null,
-          c.note,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        const body = (
-          <>
-            <span className={classes.connectionTexts}>
-              <span className={classes.connectionTitle}>{title}</span>
-              {meta && <span className={classes.connectionMeta}>{meta}</span>}
-            </span>
-            {c.trip && <IconChevronRight size={20} stroke={2} aria-hidden />}
-          </>
-        );
-        return c.trip ? (
-          <Link
-            key={i}
-            className={classes.connection}
-            to="/odjezdy/$stopId/spoj/$tripId/$date"
-            params={{ stopId, tripId: c.trip.trip_id, date: c.trip.service_date }}
-            search={(prev) => ({ ...prev, od: undefined })}
-          >
-            {body}
-          </Link>
-        ) : (
-          <div key={i} className={classes.connection}>
-            {body}
-          </div>
-        );
-      })}
-    </section>
   );
 }

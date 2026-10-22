@@ -68,7 +68,7 @@ obehy ref import                    one-shot: curated reference datasets → ref
 obehy realtime                      long-running realtime worker; the only upstream I/O
 obehy jobs                          nightly set-wise SQL (vehicle days, circulations, retention)
 obehy api                           FastAPI; never calls upstream
-web                                 React static assets in nginx (MapLibre later)
+web                                 React static assets in nginx
 motis                               later: managed MOTIS instance
 ```
 
@@ -161,7 +161,7 @@ realtime process are enough for one machine. Revisit only when measurements show
 
 ## Frontend
 
-- **React** and **MapLibre GL JS**.
+- **React**, **MapLibre GL JS** for the map and **deck.gl** for the vehicles drawn on it.
 
 ## Deployment
 
@@ -199,7 +199,7 @@ obehy/                         (this repository)
 │   │   └── sql/               set-wise jobs: vehicle_day, circulation_edge, punctuality
 │   ├── api/                   FastAPI app, /api/v1 routers, debug
 │   └── data/                  versioned rules, policies and connector manifests
-├── web/                       Vite + React frontend (MapLibre later)
+├── web/                       Vite + React frontend
 ├── config/                    obehy.example.toml, local config (not committed)
 ├── docs/sources/              one dossier per realtime source, with its quirk ledger
 ├── tests/                     unit/, db/, replay/
@@ -2133,8 +2133,12 @@ PID, DÚK, SŽ or another provider.
 - **Debug endpoints are in the OpenAPI document** under the `debug` tag, uncached; they answer
   raw rows whose shapes follow the tables and may change.
 - The frontend lives in `web/` (Vite, React, MapLibre GL JS) with its own toolchain.
-- Stops and routes are PMTiles, generated per release and served as static files. The base map
-  needs no tile server and puts no load on the database.
+- The base map is OpenStreetMap vector tiles in the OpenMapTiles schema from a public host
+  (OpenFreeMap, no key) in the project's own style; it puts no load on our servers. Stops and
+  routes are PMTiles, generated per release and served as static files.
+- Vehicles are drawn on the map's WebGL canvas (deck.gl, never DOM markers) and glide to each new
+  position. The map asks `/vehicles` by fixed grid cells, not by its viewport, so every viewer
+  asks for the same URLs and nginx's 5 s micro-cache answers them all.
 - Vehicles are read from `rt.vehicle_state_current` of the active release, filtered by bounding
   box and the maximum age; a vehicle's trip is the feed trip (rail: the run's part) it is on.
 - Departures join `active.*` with the realtime state of the active `release_id` by feed trip

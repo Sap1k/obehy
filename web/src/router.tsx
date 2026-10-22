@@ -1,11 +1,17 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+} from "@tanstack/react-router";
 import { BoardPage } from "./features/board/BoardPage";
 import { TripPanel } from "./features/trip/TripPanel";
 import { Shell } from "./shell/Shell";
-import { AlertsPage, DeparturesIndex, LinesPage, MapPage } from "./shell/pages";
+import { AlertsPage, DeparturesIndex, LinesPage } from "./shell/pages";
 
 // Czech paths match the tabs. A board keeps its scope in the URL (?smer=prijezdy&cas=…), and a
-// trip opened from it is its child, with the stop boarded at (?od=…).
+// trip opened from it is its child, with the stop boarded at (?od=…). The map is a layout that
+// stays mounted while a vehicle opens on it (/vozidlo/…); MapLibre and deck.gl load with it.
 
 export interface BoardSearch {
   smer?: "prijezdy";
@@ -20,7 +26,23 @@ const text = (v: unknown): string | undefined => (typeof v === "string" && v ? v
 
 const rootRoute = createRootRoute({ component: Shell });
 
-const mapRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: MapPage });
+const mapRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "map",
+  component: lazyRouteComponent(() => import("./features/map/MapPage"), "MapPage"),
+});
+
+const mapIndexRoute = createRoute({
+  getParentRoute: () => mapRoute,
+  path: "/",
+  component: () => null,
+});
+
+const vehicleRoute = createRoute({
+  getParentRoute: () => mapRoute,
+  path: "/vozidlo/$vehicleId",
+  component: lazyRouteComponent(() => import("./features/map/MapPage"), "VehiclePanel"),
+});
 
 const departuresRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -62,7 +84,7 @@ const alertsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  mapRoute,
+  mapRoute.addChildren([mapIndexRoute, vehicleRoute]),
   departuresRoute,
   boardRoute.addChildren([tripRoute]),
   linesRoute,

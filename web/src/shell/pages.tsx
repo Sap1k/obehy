@@ -1,4 +1,4 @@
-import { IconAlertTriangle, IconChevronRight, IconMap, IconRoute } from "@tabler/icons-react";
+import { IconAlertTriangle, IconChevronRight, IconRoute } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { useState, type ComponentType } from "react";
 import { StopSearch } from "../features/search/StopSearch";
@@ -59,17 +59,6 @@ function RecentStops() {
         ))}
       </ul>
     </div>
-  );
-}
-
-export function MapPage() {
-  return (
-    <Placeholder
-      title="Mapa"
-      text="Mapa zastávek, linek a vozidel se připravuje. Zatím najděte zastávku a podívejte se na její odjezdy."
-      Icon={IconMap}
-      withSearch
-    />
   );
 }
 

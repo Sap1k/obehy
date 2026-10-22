@@ -1,6 +1,6 @@
 import { ActionIcon, Modal } from "@mantine/core";
 import { IconAlertTriangle, IconList, IconMap, IconRoute, IconSearch } from "@tabler/icons-react";
-import { Link, Outlet } from "@tanstack/react-router";
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { DataStatus } from "../components/DataStatus";
 import { Logo } from "../components/Logo";
@@ -15,11 +15,20 @@ const TABS = [
   { to: "/mimoradnosti", label: "Mimořádnosti", Icon: IconAlertTriangle, exact: false },
 ] as const;
 
+/** The map's paths: it fills the main area, with the search floating over it. */
+function isMapPath(pathname: string): boolean {
+  return pathname === "/" || pathname.startsWith("/vozidlo/");
+}
+
 /** The app shell (Figma 11, 13): a dark navbar with the tabs on the web; on the phone a top bar
  * with the data status and search, and a bottom tab bar. */
 export function Shell() {
   const freshness = useReportedFreshness();
   const [searching, setSearching] = useState(false);
+  const onMap = isMapPath(useRouterState({ select: (s) => s.location.pathname }));
+  // The Mapa tab is active on a vehicle too (its path is not under "/" for exact matching).
+  const tabProps = (to: string) =>
+    to === "/" && onMap ? { "data-active": true as const } : undefined;
   return (
     <div className={classes.shell}>
       <nav className={`${classes.navbar} ob-dark-scope`} aria-label="Hlavní">
@@ -34,6 +43,7 @@ export function Shell() {
                 className={classes.tab}
                 activeOptions={{ exact }}
                 activeProps={{ "data-active": true }}
+                {...tabProps(to)}
               >
                 <Icon size={20} stroke={2} />
                 {label}
@@ -62,7 +72,7 @@ export function Shell() {
         </span>
       </header>
 
-      <main className={classes.main}>
+      <main className={classes.main} data-bleed={onMap || undefined}>
         <div className={classes.toolbar}>
           <StopSearch />
           {freshness && <DataStatus freshness={freshness} />}
@@ -78,6 +88,7 @@ export function Shell() {
             className={classes.bottomTab}
             activeOptions={{ exact }}
             activeProps={{ "data-active": true }}
+            {...tabProps(to)}
           >
             <Icon size={22} stroke={2} />
             {label}

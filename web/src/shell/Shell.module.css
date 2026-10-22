@@ -79,6 +79,27 @@
   margin-bottom: 24px;
 }
 
+/* The map fills the main area; the search and data status float over its top left. */
+.main[data-bleed] {
+  position: relative;
+  height: 100dvh;
+  padding: 0;
+}
+
+.main[data-bleed] .toolbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  justify-content: flex-start;
+  margin: 0;
+  pointer-events: none;
+}
+
+.main[data-bleed] .toolbar > * {
+  pointer-events: auto;
+}
+
 .topbar,
 .bottom {
   display: none;
@@ -115,6 +136,11 @@
 
   .main {
     padding: 8px 16px 16px;
+  }
+
+  .main[data-bleed] {
+    height: calc(100dvh - 56px - 68px - env(safe-area-inset-bottom));
+    padding: 0;
   }
 
   .bottom {

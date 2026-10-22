@@ -29,7 +29,7 @@ flowchart LR
     raw[("raw archive")]
     pg[("PostgreSQL<br/>control · static · ref · rt · history")]
   end
-  web["web<br/>React + MapLibre"]
+  web["web<br/>React + MapLibre + deck.gl"]
   ext["GTFS-RT consumers"]
 
   relpub --> rel --> pg
