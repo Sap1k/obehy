@@ -1659,7 +1659,7 @@ export interface components {
             agency: string | null;
             /**
              * Alerts
-             * @description Current alerts of the trip, its line or its stops
+             * @description Current alerts of the trip or its line, and the severe ones of its stops (a stop's others are on its board)
              */
             alerts: components["schemas"]["Alert"][];
             amenities: components["schemas"]["Amenities"];

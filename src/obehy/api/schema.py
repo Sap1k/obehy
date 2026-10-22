@@ -357,7 +357,10 @@ class Trip(Envelope):
     notes: list[Note]
     connections: list[Connection]
     links: list[JourneyLink]
-    alerts: list[Alert] = Field(description="Current alerts of the trip, its line or its stops")
+    alerts: list[Alert] = Field(
+        description="Current alerts of the trip or its line, and the severe ones of its stops"
+        " (a stop's others are on its board)"
+    )
     shape: dict[str, Any] | None = Field(default=None, description="GeoJSON LineString.")
 
 

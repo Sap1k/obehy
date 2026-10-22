@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from psycopg.rows import DictRow
 
 from obehy.api import schema
-from obehy.api.alerts import find_alerts
+from obehy.api.alerts import find_alerts, trip_alerts
 from obehy.api.codes import amenities, call_flags, features, load_codes, tristate
 from obehy.api.common import (
     LimitsDep,
@@ -222,12 +222,16 @@ def trip(
             )
             for k in links
         ],
-        alerts=find_alerts(
-            snap,
-            limits,
-            routes=[row["route_id"]],
-            stops=sorted({c["location_id"] for c in calls}),
-            trips=[trip_id],
+        alerts=trip_alerts(
+            find_alerts(
+                snap,
+                limits,
+                routes=[row["route_id"]],
+                stops=sorted({c["location_id"] for c in calls}),
+                trips=[trip_id],
+            ),
+            route=row["route_id"],
+            trip=trip_id,
         ),
         shape=shape,
     )

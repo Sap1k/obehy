@@ -1,16 +1,17 @@
 import { ActionIcon, Skeleton } from "@mantine/core";
 import { IconArrowLeft, IconChevronRight, IconClock, IconX } from "@tabler/icons-react";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { ApiError, type Trip } from "../../api/client";
+import { type Alert, ApiError, type Trip } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { BoardMessage } from "../../components/BoardStates";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { VehicleCard } from "../../components/VehicleCard";
+import { tripAlerts } from "../../lib/alerts";
 import { useNow } from "../../lib/hooks";
 import { timeState } from "../../lib/punctuality";
 import { Timetable } from "./Timetable";
 import { useFollowingParts, useTrip } from "./queries";
-import { callTimes, runCalls } from "./runCalls";
+import { callTimes, isPassed, runCalls } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
 /** A trip opened from a board (Figma 11 panel, 15 phone): header, alerts, the run's timetable,
@@ -86,6 +87,29 @@ export function TripPanel() {
   );
   const stale = Boolean(data.realtime?.stale) || trip.isError;
   const boarded = calls.find((c) => c.call.location_id === search.od) ?? calls[0];
+  // The run's alerts: its parts' own and lines', and severe ones of the stops still ahead of
+  // where one boards (the boarded stop's are on the board one came from).
+  const parts = [data, ...following.flatMap((q) => (q.data ? [q.data] : []))];
+  const ahead = calls
+    .slice(boarded ? calls.indexOf(boarded) + 1 : 0)
+    .filter((c) => !isPassed(c.call, now))
+    .map((c) => c.call);
+  const alerts = tripAlerts(
+    [...new Map(parts.flatMap((p) => p.alerts).map((a) => [a.alert_id, a])).values()],
+    { routeIds: parts.map((p) => p.line.route_id), tripIds: parts.map((p) => p.trip_id), ahead },
+  );
+  const alertContext = (alert: Alert, stopName: string | null) => {
+    if (stopName) return `Zastávka ${stopName}`;
+    const part =
+      parts.find((p) =>
+        alert.informs.some(
+          (t) =>
+            (t.kind === "trip" && t.id === p.trip_id) ||
+            (t.kind === "route" && t.id === p.line.route_id),
+        ),
+      ) ?? data;
+    return `Linka ${lineLabel(part.line, part.trip_short_name)}`;
+  };
   const headState = boarded ? headTime(boarded.call, stale) : null;
   const vehicle = data.vehicles[0];
 
@@ -108,12 +132,12 @@ export function TripPanel() {
         </div>
       </header>
 
-      {data.alerts.map((a) => (
+      {alerts.map(({ alert, stopName }) => (
         <AlertBanner
-          key={a.alert_id}
-          alert={a}
+          key={alert.alert_id}
+          alert={alert}
           now={now}
-          context={`Linka ${lineLabel(data.line, data.trip_short_name)}`}
+          context={alertContext(alert, stopName)}
         />
       ))}
 

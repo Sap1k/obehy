@@ -303,6 +303,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-22** — A trip's alerts are its own, its line's, and the severe ones of its stops.
+  The trip panel shows a stop's severe alert only while that stop is still ahead of where one
+  boarded. A stop's other alerts (most PID infotexts) show only on that stop's board.
+  Validated: unit + DB tests, Vitest.
+
 - **2026-10-22** — API performance (migrations 0017, 0018). Before this, obehy.cz answered
   boards in 5–7 s at any window, a trip in 5.5 s, and `/alerts` alone in 5–6 s (32 alerts).
   `rt.alert_target` hashed every `source_key` partition of every retained load: it joined

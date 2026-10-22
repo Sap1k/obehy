@@ -2981,7 +2981,7 @@
             "title": "Agency"
           },
           "alerts": {
-            "description": "Current alerts of the trip, its line or its stops",
+            "description": "Current alerts of the trip or its line, and the severe ones of its stops (a stop's others are on its board)",
             "items": {
               "$ref": "#/components/schemas/Alert"
             },

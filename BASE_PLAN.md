@@ -1772,8 +1772,11 @@ only.
   stop-wide alert never does (rule 10). No source states one yet.
 - **Published** in each feed's GTFS-RT message after its trip updates and positions, under our
   IDs, informing only that feed's entities; in the API at `/alerts` (by line, stop place,
-  trip) and on boards (with each row's alert IDs) and trips. Stop places and lines, cached per
-  release, are not given alerts: their alerts are `/alerts?stop=` and `/alerts?line=`.
+  trip) and on boards (with each row's alert IDs) and trips (the trip's and its line's, and of its
+  stops' only the severe ones, which the web app shows for stops still ahead: a stop's other
+  alerts are shown on that stop's board, not on every trip calling there). Stop places
+  and lines, cached per release, are not given alerts: their alerts are `/alerts?stop=` and
+  `/alerts?line=`.
 - **Sources:** PID's VYMI events (GTFS-RT, route-scoped) and infotexts (stop-scoped,
   `docs/sources/pid.md`). Trains: SŽ (to come).
 

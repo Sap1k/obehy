@@ -35,3 +35,41 @@ export function stopAlerts(alerts: readonly Alert[], stopIds: readonly string[])
     ),
   );
 }
+
+/** A trip panel's alert, with the stop ahead it is shown for (null: the trip's or its line's). */
+export interface TripAlert {
+  alert: Alert;
+  stopName: string | null;
+}
+
+/** The alerts a trip panel shows: those informing the run's lines or trips, and the stop alerts
+ * (the API sends a trip only the severe ones) of a stop still `ahead`, with its name; a stop's
+ * other alerts are on its board. */
+export function tripAlerts(
+  alerts: readonly Alert[],
+  run: {
+    routeIds: readonly string[];
+    tripIds: readonly string[];
+    ahead: readonly { location_id: string; name: string }[];
+  },
+): TripAlert[] {
+  const routes = new Set(run.routeIds);
+  const trips = new Set(run.tripIds);
+  const shown: TripAlert[] = [];
+  for (const alert of alerts) {
+    const own = alert.informs.some(
+      (t) => (t.kind === "route" && routes.has(t.id)) || (t.kind === "trip" && trips.has(t.id)),
+    );
+    if (own) {
+      shown.push({ alert, stopName: null });
+      continue;
+    }
+    const stop = run.ahead.find((s) =>
+      alert.informs.some(
+        (t) => t.kind === "stop" && (t.id === s.location_id || t.stop_place === s.location_id),
+      ),
+    );
+    if (stop) shown.push({ alert, stopName: stop.name });
+  }
+  return shown;
+}

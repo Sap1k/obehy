@@ -953,6 +953,7 @@ def test_alerts_by_scope_and_on_boards_and_trips(client: TestClient) -> None:
     assert [a["alert_id"] for a in board["alerts"]] == ["pid:infotext-1", "pid:alert-1"]
     (row,) = board["departures"]
     assert row["alert_ids"] == ["pid:infotext-1", "pid:alert-1"]
+    # The trip calls at jdf:stop:1: its severe infotext comes along.
     trip = _get(client, "/trips/jdf:trip:1/2026-10-06")
     assert [a["alert_id"] for a in trip["alerts"]] == ["pid:infotext-1", "pid:alert-1"]
     _get(client, "/alerts/pid:nope", 404)
@@ -962,6 +963,25 @@ def test_alerts_by_scope_and_on_boards_and_trips(client: TestClient) -> None:
         ("L1", [{"feed": "jdf", "id": "jdf:route:000001"}]),
         ("L1001", []),
     ]
+
+
+def test_a_trip_has_only_the_severe_alerts_of_its_stops(
+    client: TestClient, connection: psycopg.Connection
+) -> None:
+    minor = replace(
+        _INFOTEXT, alert_id="infotext-2", severity="INFO", header=(("cs", "Lavička opravena."),)
+    )
+    write_alerts(connection, "pid", "infotexts", [_INFOTEXT, minor], local_now())
+    board = _get(client, "/stop-places/jdf:stop:1/departures", start="2026-10-06T06:05:00+02:00")
+    assert [a["alert_id"] for a in board["alerts"]] == [
+        "pid:infotext-1",
+        "pid:infotext-2",
+        "pid:alert-1",
+    ]
+    # The minor one stays on the stop's board; the line's alert is the trip's whatever its
+    # severity.
+    trip = _get(client, "/trips/jdf:trip:1/2026-10-06")
+    assert [a["alert_id"] for a in trip["alerts"]] == ["pid:infotext-1", "pid:alert-1"]
 
 
 def test_a_withdrawn_alert_leaves_lists_and_feeds(

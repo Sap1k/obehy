@@ -77,6 +77,18 @@ def alert_ids(alerts: Sequence[schema.Alert], *, route: str, stop: str, trip: st
     return [a.alert_id for a in alerts if any(informs(t) for t in a.informs)]
 
 
+def trip_alerts(alerts: Sequence[schema.Alert], *, route: str, trip: str) -> list[schema.Alert]:
+    """A trip's alerts among those of its line, its stops and itself: its own and its line's,
+    and of its stops' only the severe ones (a stop's others belong on that stop's board)."""
+
+    def own(target: schema.AlertTarget) -> bool:
+        return (target.kind == "route" and target.id == route) or (
+            target.kind == "trip" and target.id == trip
+        )
+
+    return [a for a in alerts if a.severity == "SEVERE" or any(own(t) for t in a.informs)]
+
+
 @router.get("/alerts", response_model=schema.Alerts, summary="Current alerts, by scope")
 def alerts(
     response: Response,
