@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from obehy.runtime_config import ConfigurationError, load_database_url
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+# How `serve` hands the resolved database URL to its worker processes (`serve_app`).
+SERVE_URL = "OBEHY_API_SERVE_DATABASE_URL"
 
 
 def add_parsers(commands: Any) -> None:
@@ -19,6 +26,9 @@ def add_parsers(commands: Any) -> None:
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--config", type=Path)
     serve.add_argument("--database-url", help="default: OBEHY_DATABASE_URL or [database] url")
+    serve.add_argument(
+        "--workers", type=int, default=1, help="processes, each with its own connection pools"
+    )
     openapi = api_commands.add_parser(
         "openapi", help="write the OpenAPI document (the frontend's types come from it)"
     )
@@ -34,6 +44,14 @@ def openapi_document() -> str:
     return json.dumps(app.openapi(), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
+def serve_app() -> FastAPI:
+    """The app of one `serve` worker process (a uvicorn factory)."""
+
+    from obehy.api.app import create_app
+
+    return create_app(os.environ[SERVE_URL])
+
+
 def run(args: argparse.Namespace) -> int:
     if args.api_command == "openapi":
         document = openapi_document()
@@ -46,8 +64,6 @@ def run(args: argparse.Namespace) -> int:
 
     import uvicorn
 
-    from obehy.api.app import create_app
-
     try:
         url = cast(str | None, args.database_url) or load_database_url(
             cast(Path | None, args.config)
@@ -55,8 +71,11 @@ def run(args: argparse.Namespace) -> int:
     except ConfigurationError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    os.environ[SERVE_URL] = url
     uvicorn.run(
-        create_app(url),
+        "obehy.api.commands:serve_app",
+        factory=True,
+        workers=cast(int, args.workers),
         host=cast(str, args.host),
         port=cast(int, args.port),
         proxy_headers=True,

@@ -604,6 +604,17 @@ def test_no_active_release_is_a_503(database_url: str) -> None:
     assert response.status_code == 503
 
 
+def test_serve_workers_build_the_app_from_the_handed_url(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from obehy.api.commands import SERVE_URL, serve_app
+
+    monkeypatch.setenv(SERVE_URL, database_url)
+    with TestClient(serve_app()) as test_client:
+        # Migrated, nothing active yet.
+        assert test_client.get("/api/v1/status").status_code == 503
+
+
 def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
     with TestClient(create_app(database_url)) as test_client:
         paths = set(test_client.get("/api/v1/openapi.json").json()["paths"])
