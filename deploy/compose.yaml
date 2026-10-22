@@ -32,7 +32,11 @@ services:
       SYSTEM_RAM_GB: ${SYSTEM_RAM_GB:?set SYSTEM_RAM_GB in .env}
     # Sized from the host's RAM: about half goes to the database (an eighth as shared buffers,
     # the rest as the OS cache it counts on), the other half to the worker, the jobs and the OS.
-    # JIT only slows the worker's short lookups. random_page_cost assumes an SSD.
+    # JIT only slows the worker's short lookups. random_page_cost and effective_io_concurrency
+    # assume an SSD. The worker writes every tick: a larger WAL and spread checkpoints keep that
+    # from stalling the API's reads, and autovacuum wakes often for the rt.*_current tables it
+    # rewrites. pg_stat_statements and the slow-statement log are for tuning
+    # (SELECT * FROM pg_stat_statements ORDER BY total_exec_time DESC).
     shm_size: 256m
     entrypoint:
       - sh
@@ -45,7 +49,17 @@ services:
           -c effective_cache_size=$$((mb / 2))MB \
           -c maintenance_work_mem=$$((mb / 16))MB \
           -c work_mem=16MB \
-          -c random_page_cost=1.1
+          -c random_page_cost=1.1 \
+          -c effective_io_concurrency=200 \
+          -c max_wal_size=4GB \
+          -c checkpoint_timeout=15min \
+          -c wal_compression=on \
+          -c autovacuum_naptime=15s \
+          -c autovacuum_vacuum_cost_limit=2000 \
+          -c shared_preload_libraries=pg_stat_statements \
+          -c pg_stat_statements.track=top \
+          -c track_io_timing=on \
+          -c log_min_duration_statement=250ms
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U obehy -d obehy"]
       interval: 5s

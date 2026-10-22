@@ -117,6 +117,15 @@ INDEXES = (
         ),
         "gin",
     ),
+    # Migration 0017: a board's calls at its stops by scheduled time.
+    Index(
+        "trip_call_location_departure",
+        "trip_call",
+        ("load_id", "location_id", "scheduled_departure"),
+    ),
+    Index(
+        "trip_call_location_arrival", "trip_call", ("load_id", "location_id", "scheduled_arrival")
+    ),
 )
 
 

@@ -49,6 +49,8 @@ def _configure(connection: psycopg.Connection[DictRow]) -> None:
     # time in SQL is always explicit (`AT TIME ZONE 'Europe/Prague'`, `obehy_instant`). The
     # response models answer in Prague time (`schema.Time`).
     connection.execute("SET TIME ZONE 'UTC'")
+    # Every API query is a short lookup: JIT compiles for longer than they run.
+    connection.execute("SET jit = off")
     connection.read_only = True
     connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
     connection.autocommit = False
