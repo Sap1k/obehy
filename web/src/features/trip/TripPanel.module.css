@@ -14,7 +14,11 @@
   opacity: 0.45;
 }
 
+/* Above the header it overlaps on the web (the close button sits in the header's top right):
+   the header is painted later, and fading in, it would take the button's clicks. */
 .top {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -29,7 +33,7 @@
 
 .close {
   margin-left: auto;
-  margin-bottom: -48px;
+  margin-bottom: -52px;
 }
 
 .topTitle {
@@ -48,7 +52,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-right: 40px;
+  padding-right: 44px;
 }
 
 .titleRow {

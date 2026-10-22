@@ -35,6 +35,7 @@ export function TripPanel() {
       <ActionIcon
         variant="subtle"
         color="gray"
+        size="lg"
         onClick={close}
         aria-label="Zpět na odjezdy"
         className={classes.back}
@@ -45,6 +46,7 @@ export function TripPanel() {
       <ActionIcon
         variant="subtle"
         color="gray"
+        size="lg"
         onClick={close}
         aria-label="Zavřít"
         className={classes.close}
