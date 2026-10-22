@@ -34,7 +34,7 @@ export function MapPage() {
         </div>
       ) : (
         open && (
-          <Panel label="Vozidlo" flush>
+          <Panel name="vehicle" label="Vozidlo" flush>
             <Outlet />
           </Panel>
         )

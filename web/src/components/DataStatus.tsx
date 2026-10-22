@@ -11,7 +11,7 @@ const LOOK = {
 export function DataStatus({ freshness }: { freshness: Freshness }) {
   const { label, Icon } = LOOK[freshness];
   return (
-    <span className={`${classes.root} ${classes[freshness]}`} role="status">
+    <span className={`${classes.root} ${classes[freshness]} ob-fade-in`} role="status">
       <Icon size={14} stroke={2} />
       {label}
     </span>

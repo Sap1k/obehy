@@ -99,7 +99,11 @@ export function BottomSheet({
 
   return (
     <div ref={host} className={classes.host}>
-      <div ref={sheet} className={classes.sheet} style={{ height: full }}>
+      <div
+        ref={sheet}
+        className={classes.sheet}
+        style={{ height: full, viewTransitionName: "sheet" }}
+      >
         <div
           className={classes.handle}
           style={{ height: HANDLE_PX }}

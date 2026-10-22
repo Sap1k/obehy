@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { api, unwrap, type Trip } from "../../api/client";
 import { POLL_MS } from "../board/queries";
 
@@ -19,11 +19,18 @@ function tripQuery(tripId: string, date: string, shape = false) {
   };
 }
 
-/** A trip, with its GeoJSON path when `shape` (the map draws it). */
-export function useTrip(tripId: string | undefined, date: string | undefined, shape = false) {
+/** A trip, with its GeoJSON path when `shape` (the map draws it). `keep`: the trip shown
+ * before stays (dimmed by the panel) while another one loads, so the panel does not collapse. */
+export function useTrip(
+  tripId: string | undefined,
+  date: string | undefined,
+  shape = false,
+  keep = false,
+) {
   return useQuery({
     ...tripQuery(tripId ?? "", date ?? "", shape),
     enabled: Boolean(tripId && date),
+    placeholderData: keep ? keepPreviousData : undefined,
   });
 }
 

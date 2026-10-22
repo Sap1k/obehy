@@ -1,6 +1,7 @@
 import "@fontsource-variable/manrope";
 import "@mantine/core/styles.css";
 import "./theme/tokens.css";
+import "./theme/motion.css";
 
 import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

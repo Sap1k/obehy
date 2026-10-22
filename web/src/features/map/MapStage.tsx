@@ -60,6 +60,23 @@ function boundsOf(map: maplibregl.Map): Bounds {
   return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
 }
 
+/** Whether a point shows in the part of the map no panel covers, with a margin. */
+function inView(
+  map: maplibregl.Map,
+  at: [number, number],
+  pad: { top: number; right: number; bottom: number; left: number },
+  margin = 32,
+): boolean {
+  const p = map.project(at);
+  const { clientWidth: w, clientHeight: h } = map.getContainer();
+  return (
+    p.x >= pad.left + margin &&
+    p.x <= w - pad.right - margin &&
+    p.y >= pad.top + margin &&
+    p.y <= h - pad.bottom - margin
+  );
+}
+
 /** Which layer set a zoom draws, so layers are rebuilt only when it changes. */
 const zoomBand = (z: number) => (z >= PUCK_ZOOM ? 2 : z >= 9 ? 1 : 0);
 
@@ -78,6 +95,8 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
   const overlayRef = useRef<MapboxOverlay | null>(null);
   /** The scheme the map's style was made for. */
   const appliedDark = useRef<boolean | null>(null);
+  /** What the camera leaves out when it centres: the panels (desktop) or the sheet (phone). */
+  const padding = useRef({ top: 0, right: 0, left: 0, bottom: 0 });
   // What this map has already brought into view (a new map, a new start).
   const shownFor = useRef<string | null>(null);
   const stopShown = useRef<string | null>(null);
@@ -346,10 +365,21 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
 
   const lat = drawnSelected?.latitude ?? null;
   const lon = drawnSelected?.longitude ?? null;
+  // The open vehicle's position, for the camera's own handlers.
+  const selectedAt = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    selectedAt.current = lat === null || lon === null ? null : [lon, lat];
+  }, [lat, lon]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!following || !map || lat === null || lon === null) return;
-    map.easeTo({ center: [lon, lat], duration: GLIDE_MS, easing: (t: number) => t });
+    map.easeTo({
+      center: [lon, lat],
+      padding: padding.current,
+      duration: GLIDE_MS,
+      easing: (t: number) => t,
+    });
   }, [following, lat, lon]);
 
   // A vehicle opened from a link, or out of view, is brought into view once.
@@ -359,8 +389,13 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
       return;
     }
     shownFor.current = vehicleId;
-    if (!map.getBounds().contains([lon, lat])) {
-      map.jumpTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), OPEN_ZOOM) });
+    if (!inView(map, [lon, lat], padding.current)) {
+      map.flyTo({
+        center: [lon, lat],
+        zoom: Math.max(map.getZoom(), OPEN_ZOOM),
+        padding: padding.current,
+        maxDuration: 1500,
+      });
     }
   }, [vehicleId, lat, lon]);
   useEffect(() => {
@@ -375,12 +410,30 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
     map.easeTo({
       center: [stop.longitude, stop.latitude],
       zoom: Math.max(map.getZoom(), OPEN_ZOOM),
+      padding: padding.current,
     });
   }, [stop]);
 
-  // The panels over the map (desktop) and the phone's sheet: centring leaves them out.
+  // The panels over the map (desktop) and the phone's sheet: centring leaves them out. A panel
+  // opening or closing moves nothing on the map (the camera takes the new padding and keeps
+  // what is on screen where it is), unless it would cover the open or followed vehicle: then
+  // the map glides it into the open part.
   useEffect(() => {
-    mapRef.current?.setPadding({ top: 0, right: 0, left: insetLeft, bottom: bottomInset });
+    const map = mapRef.current;
+    const next = { top: 0, right: 0, left: insetLeft, bottom: bottomInset };
+    padding.current = next;
+    if (!map) return;
+    const at = selectedAt.current;
+    if (at && (live.current.following || !inView(map, at, next))) {
+      map.easeTo({ center: at, padding: next, duration: 450 });
+      return;
+    }
+    const { clientWidth: w, clientHeight: h } = map.getContainer();
+    const middle = map.unproject([
+      next.left + (w - next.left - next.right) / 2,
+      next.top + (h - next.top - next.bottom) / 2,
+    ]);
+    map.jumpTo({ center: middle, padding: next });
   }, [insetLeft, bottomInset]);
 
   // The shell's data status: whether the vehicles' requests fail.

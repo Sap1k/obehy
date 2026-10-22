@@ -17,7 +17,7 @@ export function TripPanel() {
   const { stopId, tripId, date } = useParams({ from: "/odjezdy/$stopId/spoj/$tripId/$date" });
   const search = useSearch({ from: "/odjezdy/$stopId/spoj/$tripId/$date" });
   const navigate = useNavigate();
-  const trip = useTrip(tripId, date);
+  const trip = useTrip(tripId, date, false, true);
   // The map draws the trip and selects its vehicle.
   useMapFocus({ trip: { tripId, date } });
   const following = useFollowingParts(trip.data);
@@ -90,7 +90,7 @@ export function TripPanel() {
   const vehicle = data.vehicles[0];
 
   return (
-    <div className={classes.root}>
+    <div className={classes.root} data-loading={trip.isPlaceholderData || undefined}>
       {top}
       <TripHeader trip={data} at={boarded} stale={stale} />
       <TripBody

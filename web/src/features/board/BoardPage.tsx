@@ -16,6 +16,7 @@ import { DepartureRow, rowClasses } from "../../components/DepartureRow";
 import { Panel } from "../../components/Panel";
 import { TimeSelect } from "../../components/TimeSelect";
 import { stopAlerts } from "../../lib/alerts";
+import { useFlip } from "../../lib/flip";
 import { reportFailing } from "../../lib/freshness";
 import { ago, useNow } from "../../lib/hooks";
 import { rememberStop } from "../../lib/recent";
@@ -87,7 +88,7 @@ export function BoardPage() {
 
   return (
     <>
-      <Panel label={arrivals ? "Příjezdy" : "Odjezdy"}>
+      <Panel name="board" label={arrivals ? "Příjezdy" : "Odjezdy"}>
         <section className={classes.board}>
           <header className={classes.header}>
             <h1 className={classes.title}>{stop?.name ?? (place.isError ? "Zastávka" : " ")}</h1>
@@ -127,7 +128,7 @@ export function BoardPage() {
         </section>
       </Panel>
       {tripOpen && (
-        <Panel label="Detail spoje" narrow flush>
+        <Panel name="trip" label="Detail spoje" narrow flush>
           <Outlet />
         </Panel>
       )}
@@ -191,6 +192,14 @@ function BoardBody({
     return () => observer.disconnect();
   });
 
+  // Each poll, the rows that stay glide to their new places (a departed one leaves), new ones
+  // fade in: the board never jumps.
+  const list = useRef<HTMLDivElement>(null);
+  useFlip(
+    list,
+    (data?.rows ?? []).map((r) => `${r.trip_id}/${r.service_date}/${r.location_id}`).join("|"),
+  );
+
   if (!data) {
     if (board.isError) {
       const notFound = board.error instanceof ApiError && board.error.status === 404;
@@ -230,16 +239,22 @@ function BoardBody({
     return { row, divider: dayKey(shownAt) !== previousDay ? dayDividerLabel(shownAt, now) : null };
   });
   return (
-    <div className={classes.card}>
+    <div className={`${classes.card} ob-fade-in`}>
       {offline && <div className={classes.offline}>Offline · uložená data</div>}
-      <div role="list">
+      <div role="list" ref={list}>
         {rows.map(({ row, divider }) => {
           const selected = openTrip?.tripId === row.trip_id && openTrip?.date === row.service_date;
+          const key = `${row.trip_id}/${row.service_date}/${row.location_id}`;
           return (
-            <Fragment key={`${row.trip_id}/${row.service_date}/${row.location_id}`}>
-              {divider && <DayDivider label={divider} />}
+            <Fragment key={key}>
+              {divider && (
+                <div data-flip={`day:${divider}`}>
+                  <DayDivider label={divider} />
+                </div>
+              )}
               <Link
                 role="listitem"
+                data-flip={key}
                 className={rowClasses.row}
                 data-selected={selected}
                 to="/odjezdy/$stopId/spoj/$tripId/$date"

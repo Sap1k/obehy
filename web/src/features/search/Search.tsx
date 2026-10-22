@@ -102,7 +102,12 @@ export function Search({
   );
 
   return (
-    <Combobox store={combobox} onOptionSubmit={open} withinPortal={false}>
+    <Combobox
+      store={combobox}
+      onOptionSubmit={open}
+      withinPortal={false}
+      transitionProps={{ transition: "fade-down", duration: 140 }}
+    >
       <Combobox.Target>
         <TextInput
           className={classes.input}

@@ -1,4 +1,4 @@
-import { Tooltip, UnstyledButton } from "@mantine/core";
+import { Collapse, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconCalendar,
   IconChevronDown,
@@ -42,7 +42,7 @@ export function TripHeader({
 }) {
   const headState = at ? headTime(at.call, stale) : null;
   return (
-    <header className={classes.header}>
+    <header className={`${classes.header} ob-fade-in`}>
       <div className={classes.titleRow}>
         <LineBadge line={trip.line} tripShortName={trip.trip_short_name} size="lg" />
         <h2 className={classes.title}>{trip.headsign ?? lineLabel(trip.line)}</h2>
@@ -173,12 +173,14 @@ function Notes({ trip }: { trip: Trip }) {
           ))}
         </ul>
       )}
-      {long.length > 0 && open && (
-        <ul className={classes.noteTexts}>
-          {long.map((text) => (
-            <li key={text}>{text}</li>
-          ))}
-        </ul>
+      {long.length > 0 && (
+        <Collapse expanded={open} transitionDuration={180}>
+          <ul className={classes.noteTexts}>
+            {long.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+        </Collapse>
       )}
       {long.length > 0 && (
         <UnstyledButton className={classes.notesToggle} onClick={toggle} aria-expanded={open}>

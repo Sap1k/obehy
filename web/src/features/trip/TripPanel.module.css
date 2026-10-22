@@ -5,6 +5,15 @@
   padding: 16px;
 }
 
+/* Another trip loading: the one shown stays, dimmed, until it is in. */
+.root > * {
+  transition: opacity 150ms ease-out;
+}
+
+.root[data-loading] > :not(.top) {
+  opacity: 0.45;
+}
+
 .top {
   display: flex;
   align-items: center;
