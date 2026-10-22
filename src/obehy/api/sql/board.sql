@@ -10,27 +10,30 @@
 WITH spans (service_date, lo, hi) AS (
     SELECT * FROM unnest(%(dates)s::date[], %(lo)s::integer[], %(hi)s::integer[])
 ),
--- The stops' calls first, by their index (materialized: estimated inside the join, the planner
--- scans the whole table instead), then the window.
+-- The stops' calls in each span first, by their index on the stop and the scheduled time (one
+-- branch runs: the other's condition is false). Materialized: estimated inside the join, the
+-- planner scans the whole table instead.
 at_stop AS MATERIALIZED (
     SELECT c.trip_id, c.sequence, c.location_id, c.boarding_point_id, c.stop_headsign,
-           CASE WHEN %(arrivals)s THEN c.scheduled_arrival ELSE c.scheduled_departure END
-               AS seconds
-    FROM active.trip_call c
-    WHERE c.location_id = ANY(%(locations)s::text[]) AND c.passenger_service
-        AND CASE WHEN %(arrivals)s THEN c.dropoff_type ELSE c.pickup_type END <> 1
+           s.service_date, c.scheduled_departure AS seconds
+    FROM spans s
+    JOIN active.trip_call c
+        ON c.location_id = ANY(%(locations)s::text[])
+        AND c.scheduled_departure BETWEEN s.lo AND s.hi
+    WHERE NOT %(arrivals)s AND c.passenger_service AND c.pickup_type <> 1
+    UNION ALL
+    SELECT c.trip_id, c.sequence, c.location_id, c.boarding_point_id, c.stop_headsign,
+           s.service_date, c.scheduled_arrival AS seconds
+    FROM spans s
+    JOIN active.trip_call c
+        ON c.location_id = ANY(%(locations)s::text[])
+        AND c.scheduled_arrival BETWEEN s.lo AND s.hi
+    WHERE %(arrivals)s AND c.passenger_service AND c.dropoff_type <> 1
 ),
 board AS MATERIALIZED (
     SELECT a.trip_id, a.sequence, a.location_id, a.boarding_point_id, a.stop_headsign,
-           s.service_date, control.obehy_instant_fast(s.service_date, a.seconds) AS scheduled
+           a.service_date, control.obehy_instant_fast(a.service_date, a.seconds) AS scheduled
     FROM at_stop a
-    JOIN spans s ON a.seconds BETWEEN s.lo AND s.hi
-    WHERE EXISTS (
-        SELECT 1 FROM active.trip_call n
-        WHERE n.trip_id = a.trip_id AND n.passenger_service
-            AND CASE WHEN %(arrivals)s THEN n.sequence < a.sequence
-                     ELSE n.sequence > a.sequence END
-    )
 ),
 -- The stops' own platforms and posts: the codes of their calls' boarding points.
 posts AS (
@@ -45,6 +48,13 @@ running AS (
     JOIN active.service_date d
         ON d.service_id = t.service_id AND d.service_date = b.service_date
     WHERE b.scheduled >= %(since)s AND b.scheduled < %(until)s
+        -- Not the trip's last (first) passenger call, checked once the trip runs on the date.
+        AND EXISTS (
+            SELECT 1 FROM active.trip_call n
+            WHERE n.trip_id = b.trip_id AND n.passenger_service
+                AND CASE WHEN %(arrivals)s THEN n.sequence < b.sequence
+                         ELSE n.sequence > b.sequence END
+        )
 ),
 -- The realtime calls of the running trips: each trip's slice of its current journey's calls
 -- (the freshest journey, should two hold the trip).
