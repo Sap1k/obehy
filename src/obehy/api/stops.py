@@ -85,7 +85,14 @@ def stops(
     summary="A stop place with its facilities, boarding points and lines",
 )
 def stop_place(
-    request: Request, response: Response, snap: SnapshotDep, limits: LimitsDep, location_id: str
+    request: Request,
+    response: Response,
+    snap: SnapshotDep,
+    limits: LimitsDep,
+    location_id: str,
+    include: Annotated[
+        str | None, Query(description="`lines` adds every line calling here (a hub has hundreds)")
+    ] = None,
 ) -> schema.StopPlace | Response:
     cached = static_cache(request, response, snap, limits)
     if cached is not None:
@@ -105,5 +112,5 @@ def stop_place(
         boarding_points=[
             schema.BoardingPoint.model_validate(r) for r in snap.all("stop_boarding_points", params)
         ],
-        lines=[line(r) for r in snap.all("stop_lines", params)],
+        lines=[line(r) for r in snap.all("stop_lines", params)] if include == "lines" else None,
     )

@@ -1595,8 +1595,11 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
-            /** Lines */
-            lines: components["schemas"]["Line"][];
+            /**
+             * Lines
+             * @description Every line calling here, with `include=lines`
+             */
+            lines?: components["schemas"]["Line"][] | null;
             /**
              * Release Id
              * @description The active release the answer was read from.
@@ -2819,7 +2822,10 @@ export interface operations {
     };
     stop_place_api_v1_stop_places__location_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `lines` adds every line calling here (a hub has hundreds) */
+                include?: string | null;
+            };
             header?: never;
             path: {
                 location_id: string;

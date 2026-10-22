@@ -189,7 +189,9 @@ class StopPlace(Envelope):
     wheelchair_boarding: bool | None
     facilities: list[Feature]
     boarding_points: list[BoardingPoint]
-    lines: list[Line]
+    lines: list[Line] | None = Field(
+        default=None, description="Every line calling here, with `include=lines`"
+    )
 
 
 class VehicleTraits(BaseModel):

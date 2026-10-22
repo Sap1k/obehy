@@ -2768,11 +2768,19 @@
             "type": "string"
           },
           "lines": {
-            "items": {
-              "$ref": "#/components/schemas/Line"
-            },
-            "title": "Lines",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Line"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Every line calling here, with `include=lines`",
+            "title": "Lines"
           },
           "release_id": {
             "description": "The active release the answer was read from.",
@@ -2800,8 +2808,7 @@
           "stop",
           "wheelchair_boarding",
           "facilities",
-          "boarding_points",
-          "lines"
+          "boarding_points"
         ],
         "title": "StopPlace",
         "type": "object"
@@ -5582,6 +5589,24 @@
             "schema": {
               "title": "Location Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "`lines` adds every line calling here (a hub has hundreds)",
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`lines` adds every line calling here (a hub has hundreds)",
+              "title": "Include"
             }
           }
         ],

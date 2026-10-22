@@ -479,7 +479,9 @@ def test_a_stop_place_with_its_posts_lines_and_release_etag(client: TestClient) 
     assert [(b["location_id"], b["public_code"]) for b in body["boarding_points"]] == [
         ("jdf:stop:1:post:1", "1")
     ]
-    assert [line["short_name"] for line in body["lines"]] == ["1"]
+    assert body["lines"] is None  # only asked for: a hub has hundreds
+    with_lines = _get(client, "/stop-places/jdf:stop:1", include="lines")
+    assert [line["short_name"] for line in with_lines["lines"]] == ["1"]
     assert response.headers["etag"] == '"run-a"'
     again = client.get("/api/v1/stop-places/jdf:stop:1", headers={"If-None-Match": '"run-a"'})
     assert again.status_code == 304
