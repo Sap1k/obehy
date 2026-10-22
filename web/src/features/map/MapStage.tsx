@@ -23,6 +23,15 @@ const VIEW_KEY = "obehy.map.view";
 const DEFAULT_VIEW = { lng: 15.45, lat: 49.8, zoom: 6.6 };
 /** A vehicle opened from a link, or a board's stop, is shown at least this close. */
 const OPEN_ZOOM = 14;
+/** The map's own controls in Czech. */
+const LOCALE = {
+  "GeolocateControl.FindMyLocation": "Moje poloha",
+  "GeolocateControl.LocationNotAvailable": "Poloha není k dispozici",
+  "NavigationControl.ZoomIn": "Přiblížit",
+  "NavigationControl.ZoomOut": "Oddálit",
+  "AttributionControl.ToggleAttribution": "Zdroje mapy",
+};
+
 /** The tokens' action colour, for the selection halo. */
 const ACCENT = { light: "#246568", dark: "#c5ed62" };
 
@@ -187,12 +196,24 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
       pitchWithRotate: false,
       touchPitch: false,
       attributionControl: { compact: true },
+      locale: LOCALE,
     });
     appliedDark.current = dark;
     shownFor.current = null;
     stopShown.current = null;
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    // Where one is: the browser's position (it never leaves the browser), the map kept on it
+    // until one pans. Keeping the map on oneself and on a vehicle exclude each other: our
+    // following moves the camera, which puts the control in the background.
+    const locate = new maplibregl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 },
+      trackUserLocation: true,
+      showAccuracyCircle: true,
+      fitBoundsOptions: { maxZoom: 15 },
+    });
+    locate.on("trackuserlocationstart", () => setFollowing(false));
+    map.addControl(locate, "top-right");
     const overlay = new MapboxOverlay({
       interleaved: true,
       layers: [],
