@@ -158,6 +158,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "alerts",
         "compositions",
         "api_performance",
+        "alert_target_lookup",
     ]
 
 
