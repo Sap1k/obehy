@@ -1453,6 +1453,20 @@ export interface components {
             on_time_share: number;
         };
         /**
+         * RealtimeFreshness
+         * @description A realtime source's newest vehicle report in the active release.
+         */
+        RealtimeFreshness: {
+            label: components["schemas"]["Label"] | null;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Source */
+            source: string;
+        };
+        /**
          * RealtimeSource
          * @description A source the trip's realtime came from.
          */
@@ -1547,6 +1561,16 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
+            /**
+             * Realtime
+             * @description Each realtime source's newest vehicle report
+             */
+            realtime: components["schemas"]["RealtimeFreshness"][];
+            /**
+             * Realtime At
+             * @description The newest vehicle report of any source: how live the realtime is
+             */
+            realtime_at?: string | null;
             /**
              * Release Id
              * @description The active release the answer was read from.

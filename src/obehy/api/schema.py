@@ -683,7 +683,22 @@ class SourceHealth(BaseModel):
     lag_ms: int | None
 
 
+class RealtimeFreshness(BaseModel):
+    """A realtime source's newest vehicle report in the active release."""
+
+    source: str
+    label: Label | None
+    last_seen: Time
+
+
 class Status(Envelope):
     api_version: str
     activated_at: Time
     sources: list[SourceHealth] = Field(description="Polls of the last hour, per channel.")
+    realtime: list[RealtimeFreshness] = Field(
+        description="Each realtime source's newest vehicle report"
+    )
+    realtime_at: Time | None = Field(
+        default=None,
+        description="The newest vehicle report of any source: how live the realtime is",
+    )

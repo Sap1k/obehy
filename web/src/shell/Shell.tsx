@@ -1,5 +1,5 @@
 import { ActionIcon, Modal, Tooltip } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
+import { useMediaQuery, useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle,
   IconLayoutSidebarLeftCollapse,
@@ -15,7 +15,10 @@ import { DataStatus } from "../components/DataStatus";
 import { Logo } from "../components/Logo";
 import { setInsetLeft } from "../features/map/store";
 import { StopSearch } from "../features/search/StopSearch";
-import { useReportedFreshness } from "../lib/freshness";
+import { useQuery } from "@tanstack/react-query";
+import { api, unwrap } from "../api/client";
+import { freshnessOf, useReportedFailing } from "../lib/freshness";
+import { useNow } from "../lib/hooks";
 import classes from "./Shell.module.css";
 
 // The desktop's base: the map, loaded with its own chunk (MapLibre and deck.gl).
@@ -37,6 +40,30 @@ function isMapPath(pathname: string): boolean {
   return pathname === "/" || pathname.startsWith("/vozidlo/");
 }
 
+/** The data status: how recently any source's vehicle report came in (`/status`, polled), and
+ * whether the page's own requests fail. Nothing until the first answer. */
+function useFreshness() {
+  const status = useQuery({
+    queryKey: ["status"],
+    queryFn: async ({ signal }) => unwrap(await api.GET("/api/v1/status", { signal })),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+  const pageFailing = useReportedFailing();
+  const network = useNetwork();
+  const now = useNow(5000);
+  if (!status.data && !status.isError) return null;
+  // An API from before `realtime_at` cannot say how live the data is: only failures show.
+  const failing = pageFailing || status.isError || !network.online;
+  if (status.data && status.data.realtime_at === undefined) return failing ? "offline" : null;
+  return freshnessOf({
+    failing: pageFailing || status.isError,
+    online: network.online,
+    realtimeAt: status.data?.realtime_at,
+    now,
+  });
+}
+
 function readCollapsed(): boolean {
   try {
     return localStorage.getItem(COLLAPSED_KEY) === "1";
@@ -49,7 +76,7 @@ function readCollapsed(): boolean {
  * and the map under everything, the tab's panels over it on the left. The phone: a top bar
  * with the data status and search, the tab as a page, and a bottom tab bar. */
 export function Shell() {
-  const freshness = useReportedFreshness();
+  const freshness = useFreshness();
   const [searching, setSearching] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const phone = useMediaQuery("(max-width: 48em)", false, { getInitialValueInEffect: false });

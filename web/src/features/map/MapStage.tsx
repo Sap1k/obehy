@@ -2,11 +2,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { useComputedColorScheme } from "@mantine/core";
-import { useNetwork } from "@mantine/hooks";
 import { useNavigate } from "@tanstack/react-router";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { freshnessOf, reportFreshness } from "../../lib/freshness";
+import { reportFailing } from "../../lib/freshness";
 import { useNow } from "../../lib/hooks";
 import { useTrip } from "../trip/queries";
 import { isPassed } from "../trip/runCalls";
@@ -62,7 +61,6 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
   const { focus, followedId, insetLeft } = useMapStore();
   const navigate = useNavigate();
   const dark = useComputedColorScheme("light") === "dark";
-  const network = useNetwork();
   const now = useNow(5000);
 
   const container = useRef<HTMLDivElement>(null);
@@ -359,21 +357,11 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
     mapRef.current?.setPadding({ top: 0, right: 0, left: insetLeft, bottom: bottomInset });
   }, [insetLeft, bottomInset]);
 
-  // The shell's data status follows the vehicles' answers, except under a board (its own).
-  const freshness = cells.generatedAt
-    ? freshnessOf({
-        failing: cells.failing,
-        online: network.online,
-        generatedAt: cells.generatedAt,
-        anyStale: false,
-        now,
-      })
-    : null;
-  const ownsStatus = !stop;
+  // The shell's data status: whether the vehicles' requests fail.
   useEffect(() => {
-    if (ownsStatus) reportFreshness(freshness);
-  }, [ownsStatus, freshness]);
-  useEffect(() => () => reportFreshness(null), []);
+    reportFailing("map", cells.failing);
+  }, [cells.failing]);
+  useEffect(() => () => reportFailing("map", false), []);
 
   return <div ref={container} className={classes.map} />;
 }

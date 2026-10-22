@@ -2388,6 +2388,37 @@
         "title": "PunctualityBucket",
         "type": "object"
       },
+      "RealtimeFreshness": {
+        "description": "A realtime source's newest vehicle report in the active release.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "last_seen"
+        ],
+        "title": "RealtimeFreshness",
+        "type": "object"
+      },
       "RealtimeSource": {
         "description": "A source the trip's realtime came from.",
         "properties": {
@@ -2629,6 +2660,27 @@
             "title": "Generated At",
             "type": "string"
           },
+          "realtime": {
+            "description": "Each realtime source's newest vehicle report",
+            "items": {
+              "$ref": "#/components/schemas/RealtimeFreshness"
+            },
+            "title": "Realtime",
+            "type": "array"
+          },
+          "realtime_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest vehicle report of any source: how live the realtime is",
+            "title": "Realtime At"
+          },
           "release_id": {
             "description": "The active release the answer was read from.",
             "title": "Release Id",
@@ -2648,7 +2700,8 @@
           "generated_at",
           "api_version",
           "activated_at",
-          "sources"
+          "sources",
+          "realtime"
         ],
         "title": "Status",
         "type": "object"

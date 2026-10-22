@@ -308,6 +308,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-22** — Data status. It read "delayed" whenever one board row was stale and judged
+  the map by the answer's own time; `/status` listed no sources (`rt.source_health` is never
+  written). `/status` now gives each source's newest vehicle report and `realtime_at`; the
+  shell polls it (delayed after 2 min without a report, offline when requests fail).
+  Validated: unit + DB status test, Vitest, build.
+
 - **2026-10-22** — Map polish (migration 0019). `/vehicles` showed 75 of 1,646 trips twice (the
   SŽ map's train and the unit's GPS) and flipped a vehicle two sources bind differently to the
   other's trip every few pings; it now lists one vehicle per journey (the GTFS-RT rule, written

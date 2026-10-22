@@ -450,6 +450,11 @@ def _times(departures: list[dict[str, Any]]) -> list[tuple[str, str, str | None,
 def test_status_names_the_active_release(client: TestClient) -> None:
     body = _get(client, "/status")
     assert (body["release_id"], body["api_version"], body["sources"]) == ("run-a", "1", [])
+    # The newest report of each source of this release (an older release's are not its).
+    realtime = {r["source"]: r for r in body["realtime"]}
+    assert sorted(realtime) == ["duk", "mpvnet"]
+    assert realtime["duk"]["label"]["cs"] == "DÚK"
+    assert body["realtime_at"] == max(r["last_seen"] for r in body["realtime"])
 
 
 def test_stop_search_ignores_case_and_diacritics(client: TestClient) -> None:

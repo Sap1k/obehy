@@ -16,7 +16,7 @@ import { DepartureRow, rowClasses } from "../../components/DepartureRow";
 import { Panel } from "../../components/Panel";
 import { TimeSelect } from "../../components/TimeSelect";
 import { stopAlerts } from "../../lib/alerts";
-import { freshnessOf, reportFreshness } from "../../lib/freshness";
+import { reportFailing } from "../../lib/freshness";
 import { ago, useNow } from "../../lib/hooks";
 import { rememberStop } from "../../lib/recent";
 import { platformsText } from "../../lib/stops";
@@ -53,20 +53,11 @@ export function BoardPage() {
   const data = board.data;
   const failing = board.isError;
   const offline = Boolean(data) && (failing || !network.online);
-  const freshness = data
-    ? freshnessOf({
-        failing,
-        online: network.online,
-        generatedAt: data.generatedAt,
-        anyStale: data.rows.some((r) => r.stale),
-        now,
-      })
-    : null;
-
+  // The shell's data status: whether the board's requests fail.
   useEffect(() => {
-    reportFreshness(freshness);
-  }, [freshness]);
-  useEffect(() => () => reportFreshness(null), []);
+    reportFailing("board", failing);
+  }, [failing]);
+  useEffect(() => () => reportFailing("board", false), []);
 
   const stop = place.data?.stop ?? data?.stop;
   useEffect(() => {
