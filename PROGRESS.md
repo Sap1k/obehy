@@ -303,6 +303,28 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-22** — API performance (migrations 0017, 0018). Before this, obehy.cz answered
+  boards in 5–7 s at any window, a trip in 5.5 s, and `/alerts` alone in 5–6 s (32 alerts).
+  `rt.alert_target` hashed every `source_key` partition of every retained load: it joined
+  `control.publication`, so nothing pruned. It now looks each entity up by PK, per active
+  load (0018). With 3M keys locally that's 2.7 s → 2 ms, and it also speeds up the worker's
+  alert feed. Boards and trips resolve current alerts only. Boards range-scan a stop's calls by
+  scheduled time (new `trip_call` indexes, also built per load) and check "not the last call"
+  only for trips running on the date. `vehicle_state_trip` index. The `rt.*_current` tables
+  get fillfactor 50 and eager autovacuum. The web board asks for 90 min and widens to 360 only
+  when the page isn't full. A stop place lists its lines only with `include=lines`: Praha
+  hl.n.'s 408 were 66 of its 67 kB. API connections run with `jit = off`.
+  `obehy api serve --workers` (compose: `OBEHY_API_WORKERS`, 4). Postgres gets
+  pg_stat_statements, a 250 ms slow-statement log, and WAL, checkpoint and autovacuum tuning
+  (needs a DB restart).
+  - **Validated:** unit + DB tests on PostgreSQL 16 + PostGIS. EXPLAIN on a fixture inflated
+    to 80k calls and 3M source keys: the range indexes and the `source_key` PK are used, with
+    run-time partition pruning. 33 Vitest tests, ESLint, tsc. Two-worker serve smoke test.
+  - **Still slow, not used by the web app yet:** `/lines/{id}` 1.4 s; `/vehicles` in a Prague
+    bbox is 887 kB.
+  - **Not run:** prod timings. Once deployed, read `pg_stat_statements`. Run
+    `VACUUM (FULL, ANALYZE)` once on the `rt.*_current` tables to shed existing bloat.
+
 - **2026-10-22** — Server disk at 96 %: with PID, `rt.observation` is about 7 GB per UTC day,
   and the two kept days plus today's partition made 21 GB. Policy v12 keeps one day
   (yesterday's partition and today's), enough for the 6-hour warm replay across midnight. Unit
