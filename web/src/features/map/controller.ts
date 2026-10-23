@@ -238,11 +238,15 @@ export class MapController {
   private render(): void {
     const input = this.input;
     if (!input.ready) return;
+    // The pucks drawn: all of them at street zoom, otherwise only the selected vehicle's (the
+    // country's dots would fill the atlas with pucks no one sees).
+    const selected = this.drawn.findIndex((v) => v.vehicle_id === input.selectedId);
+    const shown = this.zoom >= PUCK_ZOOM ? this.keys : selected >= 0 ? [this.keys[selected]!] : [];
     this.overlay.setProps({
       layers: vehicleLayers({
         vehicles: this.drawn,
         keys: this.keys,
-        atlas: atlasWith(this.keys),
+        atlas: atlasWith(shown),
         positions: this.positions,
         frame: this.frame,
         zoom: this.zoom,
