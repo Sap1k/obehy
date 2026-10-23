@@ -5,7 +5,9 @@ import { toneOf, type Tone } from "../../lib/punctuality";
 // A vehicle at street zoom is a puck in its line's colours with the line's name, ringed by its
 // punctuality; under it, a pointer turns to its bearing. The pucks are drawn into one atlas
 // canvas as their lines first appear (at any zoom), so zooming in to pucks draws nothing new;
-// deck.gl takes the atlas with its mapping instead of packing an image per icon.
+// deck.gl takes the atlas's pixels with its mapping instead of packing an image per icon. The
+// pixels, not the canvas: copying a canvas into a texture came out black on some mobile GPUs
+// (Xclipse).
 
 /** The puck's diameter on screen, in CSS pixels. */
 export const PUCK_PX = 26;
@@ -67,10 +69,11 @@ export interface IconFrame {
   mask: boolean;
 }
 
-/** The atlas: a canvas (replaced, not redrawn, when it gains icons, so deck.gl uploads it
- * again) and where each icon is on it. */
+/** The atlas: a canvas (replaced, not redrawn, when it gains icons), its pixels (new with each
+ * canvas, so deck.gl uploads them again) and where each icon is on it. */
 export interface Atlas {
   canvas: HTMLCanvasElement;
+  image: ImageData;
   mapping: Record<string, IconFrame>;
 }
 
@@ -126,7 +129,8 @@ export function atlasWith(keys: Iterable<string>): Atlas {
   const canvas = document.createElement("canvas");
   canvas.width = COLUMNS * CELL;
   canvas.height = rows * CELL;
-  const g = canvas.getContext("2d")!;
+  // Read back once per new atlas: kept in memory, not on the GPU.
+  const g = canvas.getContext("2d", { willReadFrequently: true })!;
   if (atlas) g.drawImage(atlas.canvas, 0, 0);
 
   let slot = Object.keys(mapping).length;
@@ -143,6 +147,6 @@ export function atlasWith(keys: Iterable<string>): Atlas {
       mapping[key] = { x, y, width: size, height: size, mask: false };
     }
   }
-  atlas = { canvas, mapping };
+  atlas = { canvas, image: g.getImageData(0, 0, canvas.width, canvas.height), mapping };
   return atlas;
 }

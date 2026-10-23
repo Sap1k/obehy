@@ -308,6 +308,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-23** — Map: vehicle pucks drawn as black squares on dots → pucks (Exynos 2400e,
+  Xclipse). The icon atlas now goes to deck.gl as `ImageData` (no canvas → texture GPU copy) and
+  is sampled without mipmaps. Typecheck, lint, format, vitest and a headless Chromium render
+  check pass; confirmation on the device is pending (next: one shared mip-less texture).
 - **2026-10-23** — Registry seed `pid-vehicles`: PID's vehicle models and equipment from
   Golemio's per-vehicle descriptors (`/v2/public/vehiclepositions/{id}?scopes=vehicle_descriptor`;
   the position feed has no model), fetched slowly into a CSV (`obehy ref fetch`) and imported
