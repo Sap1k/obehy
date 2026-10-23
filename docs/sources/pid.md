@@ -68,6 +68,17 @@ registered vehicle.
 | `trip.vehicle_type.description_cs` | `category` |
 | `trip.vehicle_registration_number` | `fleet_number` |
 
+The position feed names only the kind of vehicle (`autobus`), never its model. Golemio's public
+API gives the model per vehicle: `GET /v2/public/vehiclepositions/{id}?scopes=vehicle_descriptor`
+(`id` = `service-<route_type>-<fleet number>`, the same pair as our vehicle key), whose
+`vehicle_descriptor.vehicle_type` is the manufacturer and model ("Iveco Crossway LE CITY 12M",
+"Škoda 15T3"), with the operator and equipment. Checked 2026-10-23: buses, trams and
+trolleybuses have one; metro, trains and ferries do not (metro and trains also have other ID
+forms). No list endpoint carries it. `obehy ref fetch pid-vehicles` asks for it slowly (one
+vehicle every 1.5 s; new vehicles, and each again after 30 days) and the `pid-vehicles` seed
+imports the model and equipment (not the operator: the descriptor's is the vehicle's owner) for
+each vehicle that has a model.
+
 ## Alerts
 
 PID's disruptions come from VYMI (JIS), ROPID's incident system. Golemio exposes three forms

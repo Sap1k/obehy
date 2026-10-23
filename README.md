@@ -304,13 +304,21 @@ built app: it serves the app at `/`, next to the feeds and `/api/`.
 section 27) and tells a running worker to reload it. `vehicles` is Oběhy's own list (CSV in
 `jrunify-ext-geodata/vehicles/`: `vehicle_id`, a source key or identifiers such as
 `licence_plate`, `evn`, `series_number`, and attributes); `duk-register` is a private seed and
-is never committed. The file comes from `--path` or `[reference]` in the config; an unchanged
-version is skipped.
+is never committed; `pid-vehicles` is PID's vehicle models and equipment from Golemio, which
+`obehy ref fetch pid-vehicles` adds to a CSV a few vehicles at a time (it needs the Golemio key;
+`docs/sources/pid.md`). The file comes from `--path` or `[reference]` in the config; an
+unchanged version is skipped.
 
 ```powershell
 uv run obehy ref import vehicles --path D:\src\jrunify-ext-geodata\vehicles\vehicles.csv
 uv run obehy ref import duk-register                # [reference] duk-register in the config
+uv run obehy ref fetch pid-vehicles --path D:\work\pid-vehicles.csv
+uv run obehy ref import pid-vehicles --path D:\work\pid-vehicles.csv
 ```
+
+On the server the `jobs` service does this at start and after each night's jobs
+(`deploy/obehy-nightly`): it imports the DÚK register when `secrets/duk-register.csv` is there,
+and keeps PID's models in the data volume.
 
 `/api/v1/debug/vehicles/registry` shows what each dataset holds and where sources disagree;
 `/api/v1/debug/vehicles/pairings` lists reports seen running side by side, candidates for keys.

@@ -308,6 +308,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-23** — Registry seed `pid-vehicles`: PID's vehicle models and equipment from
+  Golemio's per-vehicle descriptors (`/v2/public/vehiclepositions/{id}?scopes=vehicle_descriptor`;
+  the position feed has no model), fetched slowly into a CSV (`obehy ref fetch`) and imported
+  only for vehicles with a model. The server's jobs service imports it and the DÚK register
+  (`secrets/duk-register.csv`) at start and nightly. Web: a plate links to seznam-autobusu.cz.
+  Validated: unit tests, a live 5-vehicle fetch; not yet imported on the server.
 - **2026-10-23** — The map's open trip is drawn by MapLibre (smooth, wider, with a halo and
   direction arrows; deck.gl's lines were aliased in MapLibre's context), its stops with names
   placed by MapLibre's collision (the board's and next stop first, then the ends; a town with
