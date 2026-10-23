@@ -154,6 +154,8 @@ def fetch(
     delay_s: float,
     refresh_days: int,
     limit: int,
+    checkpoint_every: int = 200,
+    checkpoint: Callable[[], None] = lambda: None,
     log: Callable[[str], None] = print,
     get: Callable[[str, str], dict[str, Any]] = _get,
     sleep: Callable[[float], None] = time.sleep,
@@ -161,7 +163,9 @@ def fetch(
 ) -> int:
     """Ask Golemio for the descriptors of the vehicles running now that `path` does not know
     or knew longer than `refresh_days` ago, at most `limit`, one every `delay_s`. Progress is
-    saved as it goes; a refusal (rate limit) ends the run early. Returns how many it asked."""
+    saved as it goes, and every `checkpoint_every` vehicles `checkpoint` is called with it saved
+    (the command imports there, so a long first run shows models as it goes). A refusal (rate
+    limit) ends the run early. Returns how many it asked."""
 
     known = load_known(path)
     stale = now() - timedelta(days=refresh_days)
@@ -182,7 +186,10 @@ def fetch(
         model, equipment = descriptor_of(answer)
         known[(route_type, number)] = Known(route_type, number, model, equipment, now())
         asked += 1
-        if asked % 50 == 0:
+        if asked % checkpoint_every == 0:
+            write_known(path, known)
+            checkpoint()
+        elif asked % 50 == 0:
             write_known(path, known)
         sleep(delay_s)
     write_known(path, known)

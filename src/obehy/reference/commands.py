@@ -50,6 +50,14 @@ def add_parsers(commands: Any) -> None:
     fetcher.add_argument("--delay", type=float, default=1.5, help="seconds between requests")
     fetcher.add_argument("--refresh-days", type=int, default=30)
     fetcher.add_argument("--limit", type=int, default=3000, help="requests at most")
+    fetcher.add_argument(
+        "--import",
+        dest="load",
+        action="store_true",
+        help="import into ref.* every --import-every vehicles and at the end",
+    )
+    fetcher.add_argument("--import-every", type=int, default=200)
+    fetcher.add_argument("--database-url")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -61,18 +69,21 @@ def run(args: argparse.Namespace) -> int:
         path = cast(Path | None, args.path) or load_reference_path(name, config)
         if path is None:
             raise ConfigurationError(f"no file for {name}: give --path or [reference] {name}")
-        dataset = READERS[name](path)
-        url = cast(str | None, args.database_url) or load_database_url(config)
-        with psycopg.connect(url, autocommit=True) as connection:
-            loaded = load_dataset(connection, dataset)
-            if loaded:  # the realtime worker reloads the registry
-                connection.execute(f"NOTIFY {REGISTRY_CHANNEL}")
+        _import(name, path, cast(str | None, args.database_url) or load_database_url(config))
     except (ConfigurationError, OSError, ValueError, psycopg.Error) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _import(name: str, path: Path, url: str) -> None:
+    dataset = READERS[name](path)
+    with psycopg.connect(url, autocommit=True) as connection:
+        loaded = load_dataset(connection, dataset)
+        if loaded:  # the realtime worker reloads the registry
+            connection.execute(f"NOTIFY {REGISTRY_CHANNEL}")
     state = "loaded" if loaded else "already loaded"
     print(f"{name} {dataset.version[:12]}: {state} ({dataset.rows} rows)")
-    return 0
 
 
 def _fetch(args: argparse.Namespace) -> int:
@@ -85,14 +96,25 @@ def _fetch(args: argparse.Namespace) -> int:
         key = load_secrets(["golemio"], config).get("golemio")
         if key is None:
             raise ConfigurationError("no Golemio key: set OBEHY_SECRET_GOLEMIO")
+        url = None
+        if args.load:
+            url = cast(str | None, args.database_url) or load_database_url(config)
+
+        def checkpoint() -> None:
+            if url is not None:
+                _import(name, path, url)
+
         pid_vehicles.fetch(
             path,
             key,
             delay_s=cast(float, args.delay),
             refresh_days=cast(int, args.refresh_days),
             limit=cast(int, args.limit),
+            checkpoint_every=cast(int, args.import_every),
+            checkpoint=checkpoint,
         )
-    except (ConfigurationError, OSError, ValueError) as error:
+        checkpoint()
+    except (ConfigurationError, OSError, ValueError, psycopg.Error) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     return 0

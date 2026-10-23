@@ -1,27 +1,39 @@
 #!/bin/sh
-# Run `obehy jobs nightly` every day at 03:30 local time (TZ, Europe/Prague in the image),
-# after the last night journeys of the previous service date. After it, and once at start (so a
-# new key counts without waiting for the night), PID's vehicle models are refreshed from Golemio
-# (with OBEHY_SECRET_GOLEMIO): the vehicles running now that are new or a month old are asked
-# about slowly, kept in the data volume, then imported into the registry.
+# The jobs container:
+# - `obehy jobs nightly` every day at 03:30 local time (TZ, Europe/Prague in the image), after
+#   the last night journeys of the previous service date;
+# - PID's vehicle models from Golemio (with OBEHY_SECRET_GOLEMIO), at start and then every hour
+#   from 05:00 to 23:00. Golemio describes only the vehicles running at the moment, so asking
+#   through the day comes to know those of every shift and day. Each run asks only about the
+#   vehicles not known yet (or known a month ago), one every 1.5 s, and imports them into the
+#   registry as it goes; the list is kept in the data volume.
 set -u
 
 PID_VEHICLES=/app/data/reference/pid-vehicles.csv
 
-refresh_registry() {
-    if [ -n "${OBEHY_SECRET_GOLEMIO:-}" ]; then
-        { obehy ref fetch pid-vehicles --path "$PID_VEHICLES" &&
-            obehy ref import pid-vehicles --path "$PID_VEHICLES"; } ||
-            echo "PID vehicle models failed" >&2
-    fi
+pid_vehicles() {
+    [ -n "${OBEHY_SECRET_GOLEMIO:-}" ] || return 0
+    obehy ref fetch pid-vehicles --path "$PID_VEHICLES" --import ||
+        echo "PID vehicle models failed" >&2
 }
 
-refresh_registry
+pid_vehicles_through_the_day() {
+    pid_vehicles
+    while :; do
+        sleep $((3600 - $(date +%s) % 3600))
+        hour=$(date +%-H)
+        if [ "$hour" -ge 5 ] && [ "$hour" -le 23 ]; then
+            pid_vehicles
+        fi
+    done
+}
+
+pid_vehicles_through_the_day &
+
 while :; do
     now=$(date +%s)
     next=$(date -d 'today 03:30' +%s)
     [ "$next" -gt "$now" ] || next=$(date -d 'tomorrow 03:30' +%s)
     sleep $((next - now))
     obehy jobs nightly || echo "nightly jobs failed" >&2
-    refresh_registry
 done

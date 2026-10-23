@@ -311,8 +311,8 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 - **2026-10-23** — Registry seed `pid-vehicles`: PID's vehicle models and equipment from
   Golemio's per-vehicle descriptors (`/v2/public/vehiclepositions/{id}?scopes=vehicle_descriptor`;
   the position feed has no model), fetched slowly into a CSV (`obehy ref fetch`) and imported
-  only for vehicles with a model; the server's jobs service fetches and imports it at start and
-  nightly. The DÚK register is no longer private: normalised into our vehicle list's format as
+  only for vehicles with a model; the server's jobs service fetches it at start and hourly
+  05:00–23:00 (Golemio describes only the vehicles running then), importing every 200 vehicles. The DÚK register is no longer private: normalised into our vehicle list's format as
   `jrunify-ext-geodata/vehicles/duk.csv` (522 vehicles, makers split where the name starts with
   one), imported by hand until vehicle datasets ship with releases. The API's vehicle traits
   carry the manufacturer. Web: a plate links to seznam-autobusu.cz; a vehicle is named by its

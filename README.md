@@ -316,9 +316,10 @@ uv run obehy ref fetch pid-vehicles --path D:\work\pid-vehicles.csv
 uv run obehy ref import pid-vehicles --path D:\work\pid-vehicles.csv
 ```
 
-On the server the `jobs` service fetches and imports PID's models at start and after each
-night's jobs (`deploy/obehy-nightly`), keeping them in the data volume. The curated files are
-imported by hand until they ship with releases.
+On the server the `jobs` service fetches PID's models at start and then hourly from 05:00 to
+23:00 (Golemio describes only the vehicles running at the moment), importing every 200 vehicles
+(`ref fetch --import`) and keeping the list in the data volume (`deploy/obehy-nightly`). The
+curated files are imported by hand until they ship with releases.
 
 `/api/v1/debug/vehicles/registry` shows what each dataset holds and where sources disagree;
 `/api/v1/debug/vehicles/pairings` lists reports seen running side by side, candidates for keys.

@@ -191,3 +191,30 @@ def test_the_pid_seed_asks_only_for_vehicles_it_does_not_know_lately(tmp_path: P
         ("3", "3"): "New",
     }
     assert known[("3", "3")].equipment["wheelchair_accessible"] == "true"
+
+
+def test_the_pid_seed_saves_before_each_checkpoint(tmp_path: Path) -> None:
+    path = tmp_path / "pid-vehicles.csv"
+    ids = [f"service-3-{n}" for n in range(1, 8)]
+
+    def get(url: str, key: str) -> dict[str, Any]:
+        if url == pid_vehicles.API:
+            return {"features": [{"properties": {"vehicle_id": i}} for i in ids]}
+        return _descriptor("Model")
+
+    seen: list[int] = []
+    pid_vehicles.fetch(
+        path,
+        "k",
+        delay_s=0,
+        refresh_days=30,
+        limit=10,
+        checkpoint_every=3,
+        checkpoint=lambda: seen.append(len(pid_vehicles.load_known(path))),
+        log=lambda _: None,
+        get=get,
+        sleep=lambda _: None,
+    )
+    # Every third vehicle, with what was learnt so far on disk: the command imports there.
+    assert seen == [3, 6]
+    assert len(pid_vehicles.load_known(path)) == 7
