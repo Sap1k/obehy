@@ -308,6 +308,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-23** — Map: vehicle pucks drawn as black squares on dots → pucks (Exynos 2400e,
+  Xclipse). Cause: the puck atlas only grew (every puck seen, at every zoom) past the GPU's
+  texture limit (8192 px there), so no texture was made and every icon sampled black. The atlas
+  now holds the pucks shown (street zoom or the selection) and starts over within 4096 px.
+  Reproduced in headless Chromium (limit 8192) and fixed there; new `badges.test.ts`;
+  confirmation on the device is pending.
 - **2026-10-23** — Registry seed `pid-vehicles`: PID's vehicle models and equipment from
   Golemio's per-vehicle descriptors (`/v2/public/vehiclepositions/{id}?scopes=vehicle_descriptor`;
   the position feed has no model), fetched slowly into a CSV (`obehy ref fetch`) and imported

@@ -4,8 +4,9 @@ import { toneOf, type Tone } from "../../lib/punctuality";
 
 // A vehicle at street zoom is a puck in its line's colours with the line's name, ringed by its
 // punctuality; under it, a pointer turns to its bearing. The pucks are drawn into one atlas
-// canvas as their lines first appear (at any zoom), so zooming in to pucks draws nothing new;
-// deck.gl takes the atlas with its mapping instead of packing an image per icon.
+// canvas as they are first shown; deck.gl takes the atlas with its mapping instead of packing an
+// image per icon. The atlas stays within a texture every GPU takes: one larger than the GPU's
+// limit is not made at all, and every icon on it samples black (Xclipse allows 8192 px).
 
 /** The puck's diameter on screen, in CSS pixels. */
 export const PUCK_PX = 26;
@@ -15,7 +16,10 @@ export const ARROW_ICON_PX = PUCK_PX + 16;
 
 const SCALE = 2;
 const CELL = ARROW_ICON_PX * SCALE;
-const COLUMNS = 16;
+/** The atlas's largest side. */
+const MAX_PX = 4096;
+const COLUMNS = Math.floor(MAX_PX / CELL);
+const CAPACITY = COLUMNS * Math.floor(MAX_PX / CELL);
 const FONT = "'Manrope Variable', system-ui, sans-serif";
 
 /** The ring's colours: the board's punctuality bands, made to stand out on a map. */
@@ -113,24 +117,30 @@ function drawPuck(g: CanvasRenderingContext2D, key: string, x: number, y: number
   g.fillText(shown, x + mid, y + mid + 1);
 }
 
-/** The atlas with every key in `keys`: the same object when it already had them all. */
+/** The atlas with every key in `keys`: the same object when it already had them all. A full
+ * atlas starts over with only `keys` (as many as fit). */
 export function atlasWith(keys: Iterable<string>): Atlas {
-  const missing = new Set<string>();
-  for (const k of keys) if (!atlas?.mapping[k]) missing.add(k);
-  if (atlas && missing.size === 0) return atlas;
+  const wanted = new Set(keys);
+  const missing = [...wanted].filter((k) => !atlas?.mapping[k]);
+  if (atlas && missing.length === 0) return atlas;
 
-  const mapping: Record<string, IconFrame> = { ...atlas?.mapping };
-  if (!mapping[ARROW_KEY]) missing.add(ARROW_KEY);
-  const count = Object.keys(mapping).length + missing.size;
+  const kept =
+    atlas && Object.keys(atlas.mapping).length + missing.length <= CAPACITY ? atlas : null;
+  const mapping: Record<string, IconFrame> = { ...kept?.mapping };
+  // The arrow first, so it is never left out.
+  const todo = [...new Set([ARROW_KEY, ...(kept ? missing : wanted)])]
+    .filter((k) => !mapping[k])
+    .slice(0, CAPACITY - Object.keys(mapping).length);
+  const count = Object.keys(mapping).length + todo.length;
   const rows = Math.ceil(count / COLUMNS);
   const canvas = document.createElement("canvas");
   canvas.width = COLUMNS * CELL;
   canvas.height = rows * CELL;
   const g = canvas.getContext("2d")!;
-  if (atlas) g.drawImage(atlas.canvas, 0, 0);
+  if (kept) g.drawImage(kept.canvas, 0, 0);
 
   let slot = Object.keys(mapping).length;
-  for (const key of missing) {
+  for (const key of todo) {
     const x = (slot % COLUMNS) * CELL;
     const y = Math.floor(slot / COLUMNS) * CELL;
     slot += 1;
