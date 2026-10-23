@@ -45,9 +45,9 @@ export function quarters(c: Cell): Cell[] {
   ];
 }
 
-/** The cells covering the part of `bounds` inside AREA; a cell in `split` is replaced by its
- * quarters (and theirs, when also split). */
-export function cellsFor(bounds: Bounds, split: ReadonlySet<string> = new Set()): Cell[] {
+/** The cells covering the part of `bounds` inside AREA; a cell `split` says so of is replaced
+ * by its quarters (and theirs, when also split). */
+export function cellsFor(bounds: Bounds, split: (key: string) => boolean = () => false): Cell[] {
   const west = Math.max(bounds.west, AREA.west);
   const east = Math.min(bounds.east, AREA.east);
   const south = Math.max(bounds.south, AREA.south);
@@ -55,7 +55,7 @@ export function cellsFor(bounds: Bounds, split: ReadonlySet<string> = new Set())
   if (west >= east || south >= north) return [];
   const out: Cell[] = [];
   const add = (c: Cell) => {
-    const parts = split.has(c.key) ? quarters(c) : [];
+    const parts = split(c.key) ? quarters(c) : [];
     if (parts.length === 0) out.push(c);
     else for (const p of parts) if (overlaps(p, west, south, east, north)) add(p);
   };

@@ -1,44 +1,27 @@
-import { useMediaQuery } from "@mantine/hooks";
-import { Outlet, useParams } from "@tanstack/react-router";
-import { useState } from "react";
-import { BottomSheet, type SheetSnap } from "../../components/BottomSheet";
+import { Outlet } from "@tanstack/react-router";
+import { BottomSheet } from "../../components/BottomSheet";
 import { Panel } from "../../components/Panel";
-import { MapContext } from "./context";
-import { MapStage } from "./MapStage";
-import classes from "./MapPage.module.css";
+import { usePhone } from "../../lib/layout";
+import { useOpened } from "./selection";
 
 // The panel and the map load together (one chunk), so a click opens it without another
 // download.
 export { VehiclePanel } from "./VehiclePanel";
-export { MapStage };
+export { MapStage } from "./MapStage";
 
-/** The map tab. On the desktop the map is the shell's base and this shows only the open
- * vehicle's panel; on the phone it is the map, with the vehicle in a bottom sheet. */
+/** The map tab: the map is the shell's; this is the open vehicle's place over it, a panel on
+ * the web, a bottom sheet on the phone. */
 export function MapPage() {
-  const { vehicleId } = useParams({ strict: false }) as { vehicleId?: string };
-  const phone = useMediaQuery("(max-width: 48em)", false, { getInitialValueInEffect: false });
-  const [snap, setSnap] = useState<SheetSnap>("half");
-  const [sheetPx, setSheetPx] = useState(0);
-  const open = Boolean(vehicleId);
-
-  return (
-    <MapContext.Provider value={{ phone, snap, setSnap }}>
-      {phone ? (
-        <div className={classes.root}>
-          <MapStage bottomInset={open ? sheetPx : 0} />
-          {open && (
-            <BottomSheet snap={snap} onSnap={setSnap} onHeight={setSheetPx}>
-              <Outlet />
-            </BottomSheet>
-          )}
-        </div>
-      ) : (
-        open && (
-          <Panel name="vehicle" label="Vozidlo" flush>
-            <Outlet />
-          </Panel>
-        )
-      )}
-    </MapContext.Provider>
+  const phone = usePhone();
+  const opened = useOpened();
+  if (opened.kind !== "vehicle") return null;
+  return phone ? (
+    <BottomSheet>
+      <Outlet />
+    </BottomSheet>
+  ) : (
+    <Panel label="Vozidlo" flush>
+      <Outlet />
+    </Panel>
   );
 }

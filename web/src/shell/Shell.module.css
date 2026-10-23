@@ -177,6 +177,14 @@
 
   .main[data-bleed] .panels {
     height: 100%;
+    pointer-events: none;
+  }
+
+  /* Off the map tab the map stays, idle and out of sight, at the screen's size. */
+  .stage[data-hidden] {
+    position: fixed;
+    z-index: -1;
+    visibility: hidden;
   }
 
   .bottom {

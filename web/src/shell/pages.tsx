@@ -18,7 +18,7 @@ function Placeholder({
   withSearch?: boolean;
 }) {
   return (
-    <Panel name="page" label={title}>
+    <Panel label={title}>
       <section className={classes.placeholder}>
         <span className={classes.icon} aria-hidden>
           <Icon size={28} stroke={2} />

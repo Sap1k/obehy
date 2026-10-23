@@ -12,6 +12,13 @@ export default tseslint.config(
     plugins: { "react-hooks": reactHooks },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Browser globals that read like local names: a missing variable must not resolve to one
+      // (an undestructured `stop` became `window.stop`).
+      "no-restricted-globals": [
+        "error",
+        ...["stop", "name", "close", "open", "status", "event", "top", "parent", "origin"],
+        ...["length", "focus", "blur", "find", "print", "scroll", "self", "external"],
+      ],
     },
   },
 );

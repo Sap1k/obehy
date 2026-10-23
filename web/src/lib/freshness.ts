@@ -1,9 +1,10 @@
-import { useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useSyncExternalStore } from "react";
 
 // How fresh the realtime is (Figma "Data status"): live, delayed, or offline with the last
 // answer kept. The shell asks /status how recently any source's vehicle report came in (the
 // worker writes them every tick): that is whether the data is live. One quiet trip on a board
-// is not; its own row says so. Pages only report that their own requests fail.
+// is not; its own row says so. Failing requests are read from the query cache.
 
 export type Freshness = "live" | "delayed" | "offline";
 
@@ -25,27 +26,14 @@ export function freshnessOf(input: {
   return "live";
 }
 
-// Pages whose requests are failing, by page.
-const failing = new Set<string>();
-let anyFailing = false;
-const listeners = new Set<() => void>();
-
-/** A page's requests fail (true) or work again (false, also when it goes away). */
-export function reportFailing(page: string, isFailing: boolean): void {
-  if (isFailing) failing.add(page);
-  else failing.delete(page);
-  const next = failing.size > 0;
-  if (next === anyFailing) return;
-  anyFailing = next;
-  for (const listener of listeners) listener();
-}
-
-export function useReportedFailing(): boolean {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => anyFailing,
+/** Whether a request the data status counts (queries with `meta.status`: boards, trips, the
+ * map's cells) is failing now; read from the query cache, so pages report nothing. */
+export function useStatusQueriesFailing(): boolean {
+  const cache = useQueryClient().getQueryCache();
+  const subscribe = useCallback((listener: () => void) => cache.subscribe(listener), [cache]);
+  return useSyncExternalStore(subscribe, () =>
+    cache
+      .findAll({ type: "active" })
+      .some((q) => q.meta?.status === true && q.state.status === "error"),
   );
 }

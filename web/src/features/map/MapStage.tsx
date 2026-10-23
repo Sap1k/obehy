@@ -1,293 +1,127 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { MapboxOverlay } from "@deck.gl/mapbox";
 import { useComputedColorScheme } from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
-import * as maplibregl from "maplibre-gl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { reportFailing } from "../../lib/freshness";
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNow } from "../../lib/hooks";
+import { usePhone } from "../../lib/layout";
 import { rememberPosition } from "../../lib/position";
-import { useTrip } from "../trip/queries";
+import { sheetHeights } from "../../lib/sheet";
 import { isPassed } from "../trip/runCalls";
-import { AREA, type Bounds } from "./grid";
-import { GLIDE_MS, drawnPositions, positionsAt, progress, startGlide, type Glide } from "./motion";
-import { mergeVehicles, useVehicle, useVehiclesIn, type Positioned } from "./queries";
-import { atlasWith, hexColour, puckKey } from "./badges";
-import { mapStyle } from "./style";
-import type { Vehicle } from "../../api/client";
-import { setFollowing, setOpenVehicle, useMapStore } from "./store";
-import { PUCK_ZOOM, vehicleLayers, type TripOverlay } from "./VehicleLayers";
+import { hexColour } from "./badges";
+import { focusOf, type LngLat } from "./camera";
+import { MapController, type MapInput } from "./controller";
+import type { Bounds } from "./grid";
+import { mergeVehicles, useVehiclesIn } from "./queries";
+import { useSelection } from "./selection";
+import { unfollow, useMapStore } from "./store";
+import type { TripOverlay } from "./VehicleLayers";
 import classes from "./MapPage.module.css";
 
-const VIEW_KEY = "obehy.map.view";
-const DEFAULT_VIEW = { lng: 15.45, lat: 49.8, zoom: 6.6 };
-/** A vehicle opened from a link, or a board's stop, is shown at least this close. */
-const OPEN_ZOOM = 14;
-/** The map's own controls in Czech. */
-const LOCALE = {
-  "GeolocateControl.FindMyLocation": "Moje poloha",
-  "GeolocateControl.LocationNotAvailable": "Poloha není k dispozici",
-  "NavigationControl.ZoomIn": "Přiblížit",
-  "NavigationControl.ZoomOut": "Oddálit",
-  "AttributionControl.ToggleAttribution": "Zdroje mapy",
-};
-
-/** The tokens' action colour, for the selection halo. */
-const ACCENT = { light: "#246568", dark: "#c5ed62" };
-
-function savedView() {
-  try {
-    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? "null") as typeof DEFAULT_VIEW | null;
-    if (v && [v.lng, v.lat, v.zoom].every(Number.isFinite)) return v;
-  } catch {
-    // Storage blocked or unreadable: the default view.
-  }
-  return DEFAULT_VIEW;
-}
-
-function saveView(map: maplibregl.Map) {
-  try {
-    const c = map.getCenter();
-    localStorage.setItem(VIEW_KEY, JSON.stringify({ lng: c.lng, lat: c.lat, zoom: map.getZoom() }));
-  } catch {
-    // Not remembered.
-  }
-}
-
-function boundsOf(map: maplibregl.Map): Bounds {
-  const b = map.getBounds();
-  return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
-}
-
-/** Whether a point shows in the part of the map no panel covers, with a margin. */
-function inView(
-  map: maplibregl.Map,
-  at: [number, number],
-  pad: { top: number; right: number; bottom: number; left: number },
-  margin = 32,
-): boolean {
-  const p = map.project(at);
-  const { clientWidth: w, clientHeight: h } = map.getContainer();
-  return (
-    p.x >= pad.left + margin &&
-    p.x <= w - pad.right - margin &&
-    p.y >= pad.top + margin &&
-    p.y <= h - pad.bottom - margin
-  );
-}
-
-/** Which layer set a zoom draws, so layers are rebuilt only when it changes. */
-const zoomBand = (z: number) => (z >= PUCK_ZOOM ? 2 : z >= 9 ? 1 : 0);
-
-/** The map: every vehicle in view, drawn by deck.gl into MapLibre's canvas, and what the panels
- * over it focus on (a board's stop, a trip, the open vehicle, followed on request). On the
- * desktop it is the shell's base under every tab; on the phone, the map tab's. `bottomInset`:
- * how much of its bottom the phone's sheet covers. */
-export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
-  const { focus, followedId, insetLeft } = useMapStore();
+/** The map under the app (the shell's, on every tab; on the phone shown on the map tab only):
+ * every vehicle in view, and what is open (a board's stop, a trip, a vehicle) marked, brought
+ * into view and followed on request. What to show comes from the URL and the queries
+ * (selection.ts); the map itself is MapController's. `hidden`: not shown, asks for nothing. */
+export function MapStage({ hidden = false }: { hidden?: boolean }) {
+  const { opened, stop, trip, paths, vehicleId, vehicle, following } = useSelection();
+  const panelsRight = useMapStore((s) => s.panelsRight);
+  const snap = useMapStore((s) => s.snap);
+  const phone = usePhone();
   const navigate = useNavigate();
   const dark = useComputedColorScheme("light") === "dark";
   const now = useNow(5000);
-
-  const container = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const overlayRef = useRef<MapboxOverlay | null>(null);
-  /** The scheme the map's style was made for. */
-  const appliedDark = useRef<boolean | null>(null);
-  /** What the camera leaves out when it centres: the panels (desktop) or the sheet (phone). */
-  const padding = useRef({ top: 0, right: 0, left: 0, bottom: 0 });
-  // What this map has already brought into view (a new map, a new start).
-  const shownFor = useRef<string | null>(null);
-  const stopShown = useRef<string | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
-
-  const cells = useVehiclesIn(bounds);
-  // A trip panel's trip, with its vehicle selected; else the vehicle panel's vehicle.
-  const focusedTrip = useTrip(focus.trip?.tripId, focus.trip?.date, true);
-  const vehicleId = focus.vehicleId ?? focusedTrip.data?.vehicles[0]?.vehicle_id;
-  const detail = useVehicle(vehicleId);
-  // The open vehicle: its own answer once it is in (null when it has no position now), until
-  // then the row it was clicked on, so the panel and its trip start at once.
-  const own = detail.data && detail.data.vehicle_id === vehicleId ? detail.data.vehicle : undefined;
-  const listed = vehicleId ? cells.vehicles.find((v) => v.vehicle_id === vehicleId) : undefined;
-  const selected: Vehicle | null = !vehicleId ? null : own !== undefined ? own : (listed ?? null);
-  const vehicleTrip = useTrip(
-    focus.trip ? undefined : (selected?.trip_id ?? undefined),
-    focus.trip ? undefined : (selected?.service_date ?? undefined),
-    true,
-  );
-  const trip = focus.trip ? focusedTrip : vehicleTrip;
-  // A vehicle that lost its position is not followed.
-  const following = Boolean(vehicleId) && followedId === vehicleId && selected !== null;
-  useEffect(() => setOpenVehicle(selected), [selected]);
-
-  // What the map's own handlers need of the latest render: a click on no vehicle closes the
-  // vehicle panel (not a board or a trip), unless the vehicle is followed.
-  const live = useRef({ following, closable: false });
-  useEffect(() => {
-    live.current = { following, closable: Boolean(focus.vehicleId) };
-  });
+  const cells = useVehiclesIn(hidden ? null : bounds);
 
   // The open vehicle's own answer joins the cells' (the fresher row wins), so it is drawn and
   // followed even outside the cells in view.
   const vehicles = useMemo(
-    () => (own ? mergeVehicles([cells.vehicles, [own]]) : cells.vehicles),
-    [cells.vehicles, own],
+    () => (vehicle ? mergeVehicles([cells, [vehicle]]) : cells),
+    [cells, vehicle],
   );
-  const drawnSelected = vehicleId ? vehicles.find((v) => v.vehicle_id === vehicleId) : undefined;
+  const drawn = vehicleId ? vehicles.find((v) => v.vehicle_id === vehicleId) : undefined;
+  // Undefined while the vehicle is unknown, null when it has no position now.
+  const vehicleAt: LngLat | null | undefined = drawn
+    ? [drawn.longitude, drawn.latitude]
+    : vehicle === undefined
+      ? undefined
+      : null;
+  const stopAt = useMemo<LngLat | null | undefined>(
+    () =>
+      !stop
+        ? undefined
+        : stop.latitude === null || stop.longitude === null
+          ? null
+          : [stop.longitude, stop.latitude],
+    [stop],
+  );
 
+  const tripData = trip.data;
   const tripOverlay = useMemo<TripOverlay | null>(() => {
-    const data = trip.data;
-    if (!data) return null;
-    const g = data.shape as { type?: string; coordinates?: unknown } | null | undefined;
-    const paths =
-      g?.type === "LineString"
-        ? [g.coordinates as [number, number][]]
-        : g?.type === "MultiLineString"
-          ? (g.coordinates as [number, number][][])
-          : [];
-    const stops = data.calls.flatMap((c) =>
+    if (!tripData) return null;
+    const stops = tripData.calls.flatMap((c) =>
       c.latitude !== null && c.longitude !== null && c.boarding !== "none"
         ? [{ position: [c.longitude, c.latitude] as [number, number], passed: isPassed(c, now) }]
         : [],
     );
-    return { paths, stops, colour: hexColour(data.line.color, "#153438") };
-  }, [trip.data, now]);
+    return { paths: paths ?? [], stops, colour: hexColour(tripData.line.color, "#153438") };
+  }, [tripData, paths, now]);
 
-  // Drawing state lives in refs: a glide redraws every frame without React.
-  const draw = useRef({
-    vehicles: [] as Positioned[],
-    keys: [] as string[],
-    glide: null as Glide | null,
-    positions: new Float64Array(0),
-    frame: 0,
-    raf: 0,
-  });
-  const props = useRef({
-    zoom: DEFAULT_VIEW.zoom,
-    selectedId: undefined as string | undefined,
-    trip: null as TripOverlay | null,
-    stop: null as [number, number] | null,
-    accent: ACCENT.light,
-    ready: false,
-  });
-
-  const render = useCallback(() => {
-    const overlay = overlayRef.current;
-    const d = draw.current;
-    const p = props.current;
-    if (!overlay || !p.ready) return;
-    overlay.setProps({
-      layers: vehicleLayers({
-        vehicles: d.vehicles,
-        keys: d.keys,
-        atlas: atlasWith(d.keys),
-        positions: d.positions,
-        frame: d.frame,
-        zoom: p.zoom,
-        selectedId: p.selectedId,
-        trip: p.trip,
-        stop: p.stop,
-        accent: p.accent,
-        onPick: (v) =>
-          void navigate({ to: "/vozidlo/$vehicleId", params: { vehicleId: v.vehicle_id } }),
+  const input: MapInput = {
+    dark,
+    ready: fontsReady,
+    vehicles,
+    selectedId: vehicleId,
+    trip: tripOverlay,
+    stop: opened.kind === "stop" || opened.kind === "trip" ? (stopAt ?? null) : null,
+    camera: {
+      focus: focusOf({
+        key: opened.key,
+        kind: opened.kind,
+        tripLoaded: Boolean(tripData),
+        tripHasVehicle: Boolean(tripData?.vehicles[0]),
+        vehicleAt,
+        stopAt,
       }),
-    });
-  }, [navigate]);
+      selected: vehicleAt ?? null,
+      follow: following ? (vehicleAt ?? null) : null,
+    },
+    panelsRight: phone ? 0 : panelsRight,
+    sheetBottom:
+      phone && opened.kind === "vehicle" ? (mapHeight) => sheetHeights(mapHeight)[snap] : null,
+  };
 
-  // The map, once.
-  useEffect(() => {
-    const el = container.current;
-    if (!el) return;
-    const view = savedView();
-    const map = new maplibregl.Map({
-      container: el,
-      style: mapStyle(dark),
-      center: [view.lng, view.lat],
-      zoom: view.zoom,
-      minZoom: 5,
-      maxBounds: [
-        [AREA.west - 3, AREA.south - 1.5],
-        [AREA.east + 3, AREA.north + 1.5],
-      ],
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-      attributionControl: { compact: true },
-      locale: LOCALE,
-    });
-    appliedDark.current = dark;
-    shownFor.current = null;
-    stopShown.current = null;
-    map.touchZoomRotate.disableRotation();
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    // Where one is: the browser's position (it never leaves the browser), the map kept on it
-    // until one pans. Keeping the map on oneself and on a vehicle exclude each other: our
-    // following moves the camera, which puts the control in the background.
-    const locate = new maplibregl.GeolocateControl({
-      positionOptions: { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 },
-      trackUserLocation: true,
-      showAccuracyCircle: true,
-      fitBoundsOptions: { maxZoom: 15 },
-    });
-    locate.on("trackuserlocationstart", () => setFollowing(false));
-    // The search orders vehicles by distance from here.
-    locate.on("geolocate", (e: GeolocationPosition) =>
-      rememberPosition(e.coords.latitude, e.coords.longitude),
-    );
-    map.addControl(locate, "top-right");
-    const overlay = new MapboxOverlay({
-      interleaved: true,
-      layers: [],
-      pickingRadius: 6,
-      onHover: (info) => {
-        map.getCanvas().style.cursor = info.object ? "pointer" : "";
-      },
-      onClick: (info) => {
-        // A click on no vehicle closes the open one, unless it is followed.
-        if (!info.object && !live.current.following && live.current.closable) {
-          void navigate({ to: "/" });
-        }
-      },
-    });
-    map.addControl(overlay);
-    mapRef.current = map;
-    overlayRef.current = overlay;
+  // The map's own events, with this render's state.
+  const pick = useEffectEvent((vehicleId: string) => {
+    void navigate({ to: "/vozidlo/$vehicleId", params: { vehicleId } });
+  });
+  // A click on no vehicle closes the vehicle panel (not a board or a trip), unless followed.
+  const clickEmpty = useEffectEvent(() => {
+    if (opened.kind === "vehicle" && !following) void navigate({ to: "/" });
+  });
+  const initial = useEffectEvent(() => input);
 
-    const onMoveEnd = () => {
-      setBounds(boundsOf(map));
-      saveView(map);
-    };
-    const onZoom = () => {
-      const z = map.getZoom();
-      const changed = zoomBand(z) !== zoomBand(props.current.zoom);
-      props.current.zoom = z;
-      if (changed) render();
-    };
-    const stopFollowing = (e: { originalEvent?: unknown }) => {
-      if (e.originalEvent) setFollowing(false);
-    };
-    map.on("load", onMoveEnd);
-    map.on("moveend", onMoveEnd);
-    map.on("zoom", onZoom);
-    map.on("dragstart", stopFollowing);
-    props.current.zoom = map.getZoom();
-
-    const resize = new ResizeObserver(() => map.resize());
-    resize.observe(el);
-    const d = draw.current;
+  const container = useRef<HTMLDivElement>(null);
+  const controller = useRef<MapController | null>(null);
+  useLayoutEffect(() => {
+    const map = new MapController(container.current!, initial(), {
+      pick: (v) => pick(v.vehicle_id),
+      clickEmpty: () => clickEmpty(),
+      drag: unfollow,
+      settle: setBounds,
+      locate: rememberPosition,
+      locateStart: unfollow,
+    });
+    controller.current = map;
     return () => {
-      resize.disconnect();
-      cancelAnimationFrame(d.raf);
-      map.remove();
-      mapRef.current = null;
-      overlayRef.current = null;
+      map.destroy();
+      controller.current = null;
     };
-    // The scheme and handlers are applied by their own effects.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useLayoutEffect(() => {
+    controller.current?.update(input);
+  });
 
   // Pucks are drawn in Manrope: wait for it once.
   useEffect(() => {
@@ -300,147 +134,6 @@ export function MapStage({ bottomInset = 0 }: { bottomInset?: number }) {
       live = false;
     };
   }, []);
-
-  // The colour scheme: the base map's palette and the halo.
-  useEffect(() => {
-    props.current.accent = dark ? ACCENT.dark : ACCENT.light;
-    const map = mapRef.current;
-    if (map && appliedDark.current !== dark) {
-      appliedDark.current = dark;
-      map.setStyle(mapStyle(dark));
-    }
-    render();
-  }, [dark, render]);
-
-  const stop = focus.stop;
-  const stopAt = useMemo<[number, number] | null>(
-    () => (stop ? [stop.longitude, stop.latitude] : null),
-    [stop],
-  );
-  useEffect(() => {
-    props.current.ready = fontsReady;
-    props.current.selectedId = vehicleId;
-    props.current.trip = vehicleId || focus.trip ? tripOverlay : null;
-    props.current.stop = stopAt;
-    render();
-  }, [fontsReady, vehicleId, focus.trip, tripOverlay, stopAt, render]);
-
-  // Each new answer glides every vehicle from where it is drawn to where it is reported.
-  useEffect(() => {
-    const d = draw.current;
-    const t0 = performance.now();
-    const drawn = d.glide ? drawnPositions(d.glide, d.positions) : new Map();
-    d.glide = startGlide(
-      drawn,
-      vehicles.map((v) => ({ id: v.vehicle_id, position: [v.longitude, v.latitude] })),
-      t0,
-    );
-    d.vehicles = vehicles;
-    d.keys = vehicles.map(puckKey);
-    d.positions = new Float64Array(vehicles.length * 2);
-    cancelAnimationFrame(d.raf);
-    const step = () => {
-      const glide = d.glide!;
-      const t = progress(glide, performance.now());
-      positionsAt(glide, t, d.positions);
-      d.frame += 1;
-      render();
-      if (t < 1) d.raf = requestAnimationFrame(step);
-    };
-    step();
-  }, [vehicles, render]);
-
-  // Following: the camera moves with the vehicle, over the same second as its glide, and
-  // zooming keeps it in the middle.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const around = following ? { around: "center" as const } : undefined;
-    map.scrollZoom.disable();
-    map.scrollZoom.enable(around);
-    map.touchZoomRotate.disable();
-    map.touchZoomRotate.enable(around);
-    map.touchZoomRotate.disableRotation();
-  }, [following]);
-
-  const lat = drawnSelected?.latitude ?? null;
-  const lon = drawnSelected?.longitude ?? null;
-  // The open vehicle's position, for the camera's own handlers.
-  const selectedAt = useRef<[number, number] | null>(null);
-  useEffect(() => {
-    selectedAt.current = lat === null || lon === null ? null : [lon, lat];
-  }, [lat, lon]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!following || !map || lat === null || lon === null) return;
-    map.easeTo({
-      center: [lon, lat],
-      padding: padding.current,
-      duration: GLIDE_MS,
-      easing: (t: number) => t,
-    });
-  }, [following, lat, lon]);
-
-  // A vehicle opened from a link, or out of view, is brought into view once.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !vehicleId || lat === null || lon === null || shownFor.current === vehicleId) {
-      return;
-    }
-    shownFor.current = vehicleId;
-    if (!inView(map, [lon, lat], padding.current)) {
-      map.flyTo({
-        center: [lon, lat],
-        zoom: Math.max(map.getZoom(), OPEN_ZOOM),
-        padding: padding.current,
-        maxDuration: 1500,
-      });
-    }
-  }, [vehicleId, lat, lon]);
-  useEffect(() => {
-    if (!vehicleId) shownFor.current = null;
-  }, [vehicleId]);
-
-  // A board's stop is brought into view once.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !stop || stopShown.current === stop.id) return;
-    stopShown.current = stop.id;
-    map.easeTo({
-      center: [stop.longitude, stop.latitude],
-      zoom: Math.max(map.getZoom(), OPEN_ZOOM),
-      padding: padding.current,
-    });
-  }, [stop]);
-
-  // The panels over the map (desktop) and the phone's sheet: centring leaves them out. A panel
-  // opening or closing moves nothing on the map (the camera takes the new padding and keeps
-  // what is on screen where it is), unless it would cover the open or followed vehicle: then
-  // the map glides it into the open part.
-  useEffect(() => {
-    const map = mapRef.current;
-    const next = { top: 0, right: 0, left: insetLeft, bottom: bottomInset };
-    padding.current = next;
-    if (!map) return;
-    const at = selectedAt.current;
-    if (at && (live.current.following || !inView(map, at, next))) {
-      map.easeTo({ center: at, padding: next, duration: 450 });
-      return;
-    }
-    const { clientWidth: w, clientHeight: h } = map.getContainer();
-    const middle = map.unproject([
-      next.left + (w - next.left - next.right) / 2,
-      next.top + (h - next.top - next.bottom) / 2,
-    ]);
-    map.jumpTo({ center: middle, padding: next });
-  }, [insetLeft, bottomInset]);
-
-  // The shell's data status: whether the vehicles' requests fail.
-  useEffect(() => {
-    reportFailing("map", cells.failing);
-  }, [cells.failing]);
-  useEffect(() => () => reportFailing("map", false), []);
 
   return <div ref={container} className={classes.map} />;
 }

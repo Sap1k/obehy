@@ -33,54 +33,9 @@
   }
 }
 
-/* Navigations are view transitions (router.tsx). The page itself swaps at once (the map keeps
-   moving underneath); a panel or the sheet that only the old page had slides out, one that only
-   the new page has rises in by its own class above, and one on both keeps its place. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-}
-
-::view-transition-new(*):only-child {
-  animation: none;
-}
-
-::view-transition-old(*):only-child {
-  animation: ob-sink-out 160ms ease-in both;
-}
-
-/* The phone's sheet slides in from the bottom edge and back down. */
-::view-transition-new(sheet):only-child {
-  animation: ob-sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-::view-transition-old(sheet):only-child {
-  animation: ob-sheet-out 200ms ease-in both;
-}
-
-@keyframes ob-sheet-in {
-  from {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes ob-sheet-out {
-  to {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes ob-sink-out {
-  to {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
-  }
+/* A closing panel's copy (lib/ghost.ts) plays no entrance of its own. */
+.ob-ghost,
+.ob-ghost * {
+  animation: none !important;
+  transition: none !important;
 }

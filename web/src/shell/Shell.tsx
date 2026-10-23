@@ -1,5 +1,5 @@
 import { ActionIcon, Modal, Tooltip } from "@mantine/core";
-import { useMediaQuery, useNetwork } from "@mantine/hooks";
+import { useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle,
   IconLayoutSidebarLeftCollapse,
@@ -13,15 +13,17 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { DataStatus } from "../components/DataStatus";
 import { Logo } from "../components/Logo";
-import { setInsetLeft } from "../features/map/store";
+import { setPanelsRight } from "../features/map/store";
 import { Search } from "../features/search/Search";
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap } from "../api/client";
-import { freshnessOf, useReportedFailing } from "../lib/freshness";
+import { freshnessOf, useStatusQueriesFailing } from "../lib/freshness";
 import { useNow } from "../lib/hooks";
+import { usePhone } from "../lib/layout";
+import { usePersistentFlag } from "../lib/storage";
 import classes from "./Shell.module.css";
 
-// The desktop's base: the map, loaded with its own chunk (MapLibre and deck.gl).
+// The map under the app, loaded with its own chunk (MapLibre and deck.gl).
 const MapStage = lazy(() =>
   import("../features/map/MapPage").then((m) => ({ default: m.MapStage })),
 );
@@ -41,7 +43,7 @@ function isMapPath(pathname: string): boolean {
 }
 
 /** The data status: how recently any source's vehicle report came in (`/status`, polled), and
- * whether the page's own requests fail. Nothing until the first answer. */
+ * whether the page's requests fail. Nothing until the first answer. */
 function useFreshness() {
   const status = useQuery({
     queryKey: ["status"],
@@ -49,7 +51,7 @@ function useFreshness() {
     refetchInterval: 30_000,
     staleTime: 20_000,
   });
-  const pageFailing = useReportedFailing();
+  const pageFailing = useStatusQueriesFailing();
   const network = useNetwork();
   const now = useNow(5000);
   if (!status.data && !status.isError) return null;
@@ -64,45 +66,28 @@ function useFreshness() {
   });
 }
 
-function readCollapsed(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 /** The app shell (Figma 11, 13). The web: a dark navbar with the tabs (collapsible to icons),
  * and the map under everything, the tab's panels over it on the left. The phone: a top bar
  * with the data status and search, the tab as a page, and a bottom tab bar. */
 export function Shell() {
   const freshness = useFreshness();
   const [searching, setSearching] = useState(false);
-  const [collapsed, setCollapsed] = useState(readCollapsed);
-  const phone = useMediaQuery("(max-width: 48em)", false, { getInitialValueInEffect: false });
+  const [collapsed, setCollapsed] = usePersistentFlag(COLLAPSED_KEY, "local");
+  const phone = usePhone();
   const onMap = isMapPath(useRouterState({ select: (s) => s.location.pathname }));
   // The Mapa tab is active on a vehicle too (its path is not under "/" for exact matching).
   const tabProps = (to: string) =>
     to === "/" && onMap ? { "data-active": true as const } : undefined;
-
-  const toggleCollapsed = () => {
-    setCollapsed(!collapsed);
-    try {
-      localStorage.setItem(COLLAPSED_KEY, collapsed ? "0" : "1");
-    } catch {
-      // Not remembered.
-    }
-  };
 
   // The map leaves the panels out when it centres: tell it how far they reach.
   const panels = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = panels.current;
     if (!el || phone) {
-      setInsetLeft(0);
+      setPanelsRight(0);
       return;
     }
-    const measure = () => setInsetLeft(el.offsetWidth > 0 ? el.offsetLeft + el.offsetWidth : 0);
+    const measure = () => setPanelsRight(el.offsetWidth > 0 ? el.offsetLeft + el.offsetWidth : 0);
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     measure();
@@ -139,7 +124,7 @@ export function Shell() {
           <ActionIcon
             variant="subtle"
             color="gray"
-            onClick={toggleCollapsed}
+            onClick={() => setCollapsed(!collapsed)}
             aria-label={collapsed ? "Rozbalit nabídku" : "Sbalit nabídku"}
           >
             {collapsed ? (
@@ -170,13 +155,12 @@ export function Shell() {
       </header>
 
       <main className={classes.main} data-bleed={onMap || undefined}>
-        {!phone && (
-          <div className={classes.stage}>
-            <Suspense fallback={null}>
-              <MapStage />
-            </Suspense>
-          </div>
-        )}
+        {/* One map for the app: on the phone shown on the map tab only (kept, idle, elsewhere). */}
+        <div className={classes.stage} data-hidden={(phone && !onMap) || undefined}>
+          <Suspense fallback={null}>
+            <MapStage hidden={phone && !onMap} />
+          </Suspense>
+        </div>
         <div className={classes.toolbar}>
           <Search />
           {freshness && <DataStatus freshness={freshness} />}

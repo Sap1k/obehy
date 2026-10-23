@@ -1,9 +1,3 @@
-/* The phone's map tab: the map, with the sheet over it. */
-.root {
-  position: relative;
-  height: 100%;
-}
-
 .map {
   width: 100%;
   height: 100%;

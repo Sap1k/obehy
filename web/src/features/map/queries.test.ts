@@ -1,5 +1,5 @@
 import type { Vehicle } from "../../api/client";
-import { mergeVehicles } from "./queries";
+import { mergeVehicles, rowAmong } from "./queries";
 
 const vehicle = (id: string, lastSeen: string, lon: number | null = 14.4): Vehicle => ({
   vehicle_id: id,
@@ -32,5 +32,17 @@ describe("mergeVehicles", () => {
 
   it("leaves out vehicles without a position", () => {
     expect(mergeVehicles([[vehicle("x", "2026-10-22T14:00:00Z", null)]])).toEqual([]);
+  });
+});
+
+describe("rowAmong", () => {
+  it("finds a vehicle's freshest row among the cells, or none", () => {
+    const answers = [
+      { generated_at: "", vehicles: [vehicle("a", "2026-10-22T14:00:00Z", 15.0)] },
+      undefined,
+      { generated_at: "", vehicles: [vehicle("a", "2026-10-22T14:00:10Z", 15.001)] },
+    ];
+    expect(rowAmong(answers, "a")?.longitude).toBe(15.001);
+    expect(rowAmong(answers, "b")).toBeUndefined();
   });
 });

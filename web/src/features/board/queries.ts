@@ -13,16 +13,17 @@ export const SHORT_WINDOW_MIN = 90;
  * of it shows. */
 export const WINDOW_MIN = 360;
 
-export function useStopPlace(stopId: string) {
+export function useStopPlace(stopId: string | undefined) {
   return useQuery({
     queryKey: ["stop-place", stopId],
     queryFn: async ({ signal }) =>
       unwrap(
         await api.GET("/api/v1/stop-places/{location_id}", {
-          params: { path: { location_id: stopId } },
+          params: { path: { location_id: stopId! } },
           signal,
         }),
       ),
+    enabled: Boolean(stopId),
     staleTime: 60 * 60_000,
   });
 }
@@ -105,6 +106,7 @@ export function useBoard(scope: BoardScope) {
     ],
     queryFn: ({ signal }) => fetchBoard(scope, signal),
     refetchInterval: POLL_MS,
+    meta: { status: true },
     placeholderData: (previous, previousQuery) => {
       const key = previousQuery?.queryKey;
       const sameScope =

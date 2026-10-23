@@ -1,17 +1,17 @@
 import { ActionIcon, Button, Skeleton } from "@mantine/core";
 import { IconCurrentLocation, IconX } from "@tabler/icons-react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ApiError, type Vehicle, type VehicleDetail } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { VehicleCard } from "../../components/VehicleCard";
 import { ago, useNow } from "../../lib/hooks";
+import { usePhone } from "../../lib/layout";
 import { TripBody, TripHeader } from "../trip/TripDetail";
-import { useFollowingParts, useTrip } from "../trip/queries";
+import { useFollowingParts } from "../trip/queries";
 import { isPassed, runCalls } from "../trip/runCalls";
-import { useMapState } from "./context";
-import { setFollowing, useMapFocus, useMapStore } from "./store";
-import { useVehicle } from "./queries";
+import { useSelection } from "./selection";
+import { follow, setSnap, unfollow } from "./store";
 import tripClasses from "../trip/TripPanel.module.css";
 import classes from "./VehiclePanel.module.css";
 
@@ -28,23 +28,23 @@ const OLD_POSITION_MS = 60_000;
 /** A vehicle opened on the map: its trip (header, alerts, timetable, notes, connections), then
  * the vehicle, with Sledovat to keep the map on it. */
 export function VehiclePanel() {
-  const { vehicleId } = useParams({ from: "/map/vozidlo/$vehicleId" });
+  // The same selection the map shows: the route's vehicle, its answer, its trip.
+  const { opened, vehicle: known, detail: info, vehicleQuery, trip, following } = useSelection();
+  const vehicleId = opened.vehicleId!;
+  const vehicle = known ?? null;
   const navigate = useNavigate();
-  const { phone, setSnap } = useMapState();
-  useMapFocus({ vehicleId });
-  const { vehicle: open, followedId } = useMapStore();
-  const vehicle = open?.vehicle_id === vehicleId ? open : null;
-  const following = followedId === vehicleId && vehicle !== null;
-  const detail = useVehicle(vehicleId);
-  const info = detail.data?.vehicle_id === vehicleId ? detail.data : undefined;
-  const trip = useTrip(vehicle?.trip_id ?? undefined, vehicle?.service_date ?? undefined, true);
-  const following_ = useFollowingParts(trip.data);
+  const phone = usePhone();
+  const later = useFollowingParts(trip.data);
   const now = useNow(15_000);
 
   const close = () => void navigate({ to: "/" });
   const toggleFollow = () => {
-    setFollowing(!following);
-    if (!following && phone) setSnap("peek");
+    if (following) {
+      unfollow();
+      return;
+    }
+    follow(vehicleId);
+    if (phone) setSnap("peek");
   };
 
   const top = (
@@ -69,15 +69,19 @@ export function VehiclePanel() {
     return (
       <div className={tripClasses.root}>
         {top}
-        {detail.isError ? (
+        {vehicleQuery.isError ? (
           <BoardMessage
             title={
-              detail.error instanceof ApiError && detail.error.status === 404
+              vehicleQuery.error instanceof ApiError && vehicleQuery.error.status === 404
                 ? "Vozidlo nenalezeno"
                 : "Vozidlo se nepodařilo načíst"
             }
             text="Zkontrolujte připojení. Zkusíme to znovu automaticky."
-            action={{ label: "Zkusit znovu", onClick: () => void detail.refetch(), primary: true }}
+            action={{
+              label: "Zkusit znovu",
+              onClick: () => void vehicleQuery.refetch(),
+              primary: true,
+            }}
           />
         ) : (
           <Loading />
@@ -138,12 +142,12 @@ export function VehiclePanel() {
 
   const calls = runCalls(
     data,
-    following_.map((q) => q.data),
+    later.map((q) => q.data),
   );
   const stale = Boolean(data.realtime?.stale) || trip.isError;
   const next = calls.find((c) => !isPassed(c.call, now)) ?? calls.at(-1);
   const last = calls[calls.indexOf(next!) - 1];
-  const parts = [data, ...following_.flatMap((q) => (q.data ? [q.data] : []))];
+  const parts = [data, ...later.flatMap((q) => (q.data ? [q.data] : []))];
 
   return (
     <div className={tripClasses.root}>

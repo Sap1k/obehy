@@ -52,7 +52,8 @@ export interface LayerInput {
 const colourOf = (v: Positioned) => rgb(hexColour(v.line?.color, INK));
 
 export function vehicleLayers(input: LayerInput): Layer[] {
-  const { vehicles, keys, atlas, positions, frame, zoom, selectedId, trip, accent, onPick } = input;
+  const { vehicles, keys, atlas, positions, frame, zoom, selectedId, trip, stop, accent, onPick } =
+    input;
   const at = (_: unknown, { index }: { index: number }): [number, number] => [
     positions[index * 2]!,
     positions[index * 2 + 1]!,
@@ -217,6 +218,12 @@ export function vehicleLayers(input: LayerInput): Layer[] {
         getIcon: (i) => keys[i]!,
         getSize: PUCK_ICON_PX * SELECTED_SCALE,
         sizeUnits: "pixels",
+        // Drawn over the plain puck and larger: a click on its rim is still on the vehicle.
+        pickable: true,
+        onClick: (info: PickingInfo<number>) => {
+          if (info.object !== undefined) onPick(vehicleOf(info.object));
+          return true;
+        },
         updateTriggers: { getPosition: frame, getIcon: vehicles },
       }),
     );

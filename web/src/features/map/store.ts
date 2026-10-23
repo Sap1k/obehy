@@ -1,37 +1,27 @@
-import { useEffect, useId, useSyncExternalStore } from "react";
-import type { Vehicle } from "../../api/client";
+import { useSyncExternalStore } from "react";
+import type { SheetSnap } from "../../lib/sheet";
 
-// What the map and the panels over it tell each other. On the desktop the map lives in the
-// shell, under every tab, beside whatever panels the route shows; on the phone it lives in the
-// map route. Panels say what the map should show (a board its stop, a trip panel its trip, the
-// vehicle panel its vehicle); the map says which vehicle is open and whether it is followed.
-
-export interface Focus {
-  /** A board's stop place: marked, and brought into view once. */
-  stop?: { id: string; latitude: number; longitude: number };
-  /** A trip: its path and stops, and its vehicle selected. */
-  trip?: { tripId: string; date: string };
-  /** The vehicle panel's vehicle. */
-  vehicleId?: string;
-}
+// The map's state that is neither in the URL (what is open) nor an API answer (the query
+// cache): which vehicle is followed, how far the desktop's panels reach over the map, and
+// the phone's sheet snap. Written only from event handlers and observers; read with a selector,
+// so a component re-renders for its own slice only.
 
 export interface MapStoreState {
-  /** Every mounted panel's focus, merged in mount order. */
-  focus: Focus;
-  /** The open vehicle: its own answer, else the row it was clicked on; null without one. */
-  vehicle: Vehicle | null;
   /** The vehicle followed, by ID. */
   followedId: string | null;
-  /** How far from the left the panels cover the map, in CSS pixels. */
-  insetLeft: number;
+  /** How far from the left the desktop's panels cover the map, in CSS pixels. */
+  panelsRight: number;
+  /** The phone's sheet. */
+  snap: SheetSnap;
 }
 
-const owners = new Map<string, Focus>();
-let state: MapStoreState = { focus: {}, vehicle: null, followedId: null, insetLeft: 0 };
+let state: MapStoreState = { followedId: null, panelsRight: 0, snap: "half" };
 const listeners = new Set<() => void>();
 
 function update(next: Partial<MapStoreState>): void {
-  state = { ...state, ...next };
+  const merged = { ...state, ...next };
+  if ((Object.keys(next) as (keyof MapStoreState)[]).every((k) => merged[k] === state[k])) return;
+  state = merged;
   for (const listener of listeners) listener();
 }
 
@@ -40,39 +30,28 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-function mergedFocus(): Focus {
-  return Object.assign({}, ...owners.values()) as Focus;
+/** A slice of the store; return a primitive or a stored value, not a new object. */
+export function useMapStore<T>(select: (s: MapStoreState) => T): T {
+  return useSyncExternalStore(subscribe, () => select(state));
 }
 
-export function useMapStore(): MapStoreState {
-  return useSyncExternalStore(subscribe, () => state);
+export function follow(vehicleId: string): void {
+  update({ followedId: vehicleId });
 }
 
-/** A panel's focus while it is mounted; `undefined` fields are left to other panels. */
-export function useMapFocus(focus: Focus): void {
-  const owner = useId();
-  const key = JSON.stringify(focus);
-  useEffect(() => {
-    const parsed = JSON.parse(key) as Focus;
-    owners.set(owner, parsed);
-    update({ focus: mergedFocus() });
-    return () => {
-      owners.delete(owner);
-      update({ focus: mergedFocus() });
-    };
-  }, [owner, key]);
+export function unfollow(): void {
+  update({ followedId: null });
 }
 
-export function setOpenVehicle(vehicle: Vehicle | null): void {
-  if (vehicle !== state.vehicle) update({ vehicle });
+export function setPanelsRight(px: number): void {
+  update({ panelsRight: px });
 }
 
-/** Follow the open vehicle, or stop. */
-export function setFollowing(on: boolean): void {
-  const id = on ? (state.focus.vehicleId ?? state.vehicle?.vehicle_id ?? null) : null;
-  if (id !== state.followedId) update({ followedId: id });
+export function setSnap(snap: SheetSnap): void {
+  update({ snap });
 }
 
-export function setInsetLeft(px: number): void {
-  if (px !== state.insetLeft) update({ insetLeft: px });
+/** For tests: the store as new. */
+export function resetMapStore(): void {
+  state = { followedId: null, panelsRight: 0, snap: "half" };
 }

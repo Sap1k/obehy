@@ -308,6 +308,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-23** — Web state rework: what is open comes from the URL only, server data from one
+  query per resource (a trip's path is its own query, asked once), and the map's own UI state
+  (followed vehicle, panel insets, sheet snap) from one selector store. One `MapController`
+  owns MapLibre, deck.gl and the glide; every camera move is decided by `planCamera`
+  (`web/src/features/map/camera.ts`). Fixed: far shows jumped (MapLibre's `maxDuration` skips
+  the animation), a resize counted as a gesture and dropped a pending show, the stop marker
+  was built from `window.stop`, the selected puck's rim was unclickable. No view transitions;
+  closing panels animate as copies. Validated: Vitest (camera rules, selection, store, sheet),
+  lint, build, and the scenarios in the browser with the camera log; animation smoothness not
+  observed (the pane ran at 1 fps).
 - **2026-10-22** — Vehicle search: `/vehicles?q=` finds vehicles by line, train number,
   headsign, fleet number or plate (folded, every word somewhere), exact line or train number
   first, the nearest first with `near`. The search box lists vehicles beside stops; it uses a

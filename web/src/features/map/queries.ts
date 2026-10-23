@@ -1,6 +1,6 @@
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { api, unwrap, type Vehicle } from "../../api/client";
+import { useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { api, unwrap, type Vehicle, type VehicleDetail } from "../../api/client";
 import { VEHICLES_LIMIT, cellsFor, type Bounds } from "./grid";
 
 /** Vehicles poll at the worker's tick. */
@@ -9,6 +9,11 @@ export const VEHICLES_POLL_MS = 10_000;
 export interface Positioned extends Vehicle {
   latitude: number;
   longitude: number;
+}
+
+interface CellAnswer {
+  vehicles: Vehicle[];
+  generated_at: string;
 }
 
 const placed = (v: Vehicle): v is Positioned => v.latitude !== null && v.longitude !== null;
@@ -24,6 +29,25 @@ export function mergeVehicles(answers: readonly (readonly Vehicle[] | undefined)
     }
   }
   return [...byId.values()];
+}
+
+/** A vehicle's freshest row among the cell answers (the one it was clicked on). */
+export function rowAmong(
+  answers: readonly (CellAnswer | undefined)[],
+  vehicleId: string,
+): Vehicle | undefined {
+  let best: Vehicle | undefined;
+  for (const answer of answers) {
+    for (const v of answer?.vehicles ?? []) {
+      if (v.vehicle_id !== vehicleId) continue;
+      if (!best || Date.parse(v.last_seen) > Date.parse(best.last_seen)) best = v;
+    }
+  }
+  return best;
+}
+
+function cellAnswers(client: QueryClient): (CellAnswer | undefined)[] {
+  return client.getQueriesData<CellAnswer>({ queryKey: ["vehicles"] }).map(([, data]) => data);
 }
 
 /** Every vehicle answer on the map is asked again at the same moment, on the wall clock's 10 s
@@ -51,23 +75,23 @@ function useAlignedRefresh() {
 /** After the 10 s mark, so the worker's tick is in. */
 const TICK_LAG_MS = 1500;
 
-/** The vehicles in view, from the grid cells it covers. */
+/** The vehicles in view (none for `null`), from the grid cells it covers. */
 export function useVehiclesIn(bounds: Bounds | null) {
   useAlignedRefresh();
-  const [split, setSplit] = useState<ReadonlySet<string>>(() => new Set());
-  const cells = useMemo(() => (bounds ? cellsFor(bounds, split) : []), [bounds, split]);
+  const client = useQueryClient();
+  // A cell whose answer is full may be missing vehicles: it is asked as quarters instead.
+  const full = (key: string) =>
+    (client.getQueryData<CellAnswer>(["vehicles", key])?.vehicles.length ?? 0) >= VEHICLES_LIMIT;
+  const cells = bounds ? cellsFor(bounds, full) : [];
   const results = useQueries({
     queries: cells.map((c) => ({
       queryKey: ["vehicles", c.key],
       queryFn: async ({ signal }: { signal: AbortSignal }) =>
         unwrap(await api.GET("/api/v1/vehicles", { params: { query: { bbox: c.key } }, signal })),
       staleTime: VEHICLES_POLL_MS - 1000,
+      meta: { status: true },
     })),
   });
-
-  // A full answer may be missing vehicles: that cell is asked again as quarters.
-  const full = cells.filter((_, i) => (results[i]?.data?.vehicles.length ?? 0) >= VEHICLES_LIMIT);
-  if (full.length > 0) setSplit(new Set([...split, ...full.map((c) => c.key)]));
 
   // One list per round: published once no cell is still fetching, so a round glides once.
   const fetching = results.some((r) => r.isFetching);
@@ -79,21 +103,14 @@ export function useVehiclesIn(bounds: Bounds | null) {
   if (!fetching && merged.key !== key) {
     setMerged({ key, vehicles: mergeVehicles(results.map((r) => r.data?.vehicles)) });
   }
-
-  const generatedAt = results.reduce<string | null>((latest, r) => {
-    const at = r.data?.generated_at ?? null;
-    return at && (!latest || at > latest) ? at : latest;
-  }, null);
-  return {
-    vehicles: merged.vehicles,
-    generatedAt,
-    failing: results.some((r) => r.isError),
-  };
+  return merged.vehicles;
 }
 
-/** A vehicle's detail; polled with the cells (useAlignedRefresh). */
+/** A vehicle's detail; polled with the cells (useAlignedRefresh). Until it is in, its row from
+ * the cells stands in (registry and reports empty), so a clicked vehicle shows at once. */
 export function useVehicle(vehicleId: string | undefined) {
-  return useQuery({
+  const client = useQueryClient();
+  return useQuery<VehicleDetail>({
     queryKey: ["vehicle", vehicleId],
     queryFn: async ({ signal }) =>
       unwrap(
@@ -104,5 +121,22 @@ export function useVehicle(vehicleId: string | undefined) {
       ),
     enabled: Boolean(vehicleId),
     staleTime: VEHICLES_POLL_MS - 1000,
+    placeholderData: () => {
+      const row = vehicleId ? rowAmong(cellAnswers(client), vehicleId) : undefined;
+      return row && standIn(row);
+    },
   });
+}
+
+function standIn(row: Vehicle): VehicleDetail {
+  return {
+    vehicle_id: row.vehicle_id,
+    vehicle: row,
+    registry: null,
+    reports: [],
+    attributes: [],
+    sources: [],
+    generated_at: row.last_seen,
+    release_id: "",
+  };
 }

@@ -23,9 +23,9 @@ describe("cellsFor", () => {
 
   it("replaces a split cell by the quarters inside the view, printed exactly", () => {
     const split = new Set(["14,50,15,51", "14,50,14.5,50.5"]);
-    const keys = cellsFor({ west: 14.1, south: 50.1, east: 14.4, north: 50.4 }, split).map(
-      (c) => c.key,
-    );
+    const keys = cellsFor({ west: 14.1, south: 50.1, east: 14.4, north: 50.4 }, (k) =>
+      split.has(k),
+    ).map((c) => c.key);
     expect(keys).toEqual([
       "14,50,14.25,50.25",
       "14.25,50,14.5,50.25",
@@ -35,9 +35,8 @@ describe("cellsFor", () => {
   });
 
   it("stops splitting at a quarter degree", () => {
-    const [smallest] = cellsFor(
-      { west: 14.1, south: 50.1, east: 14.2, north: 50.2 },
-      new Set(["14,50,15,51", "14,50,14.5,50.5"]),
+    const [smallest] = cellsFor({ west: 14.1, south: 50.1, east: 14.2, north: 50.2 }, (k) =>
+      ["14,50,15,51", "14,50,14.5,50.5"].includes(k),
     );
     expect(quarters(smallest!)).toEqual([]);
   });

@@ -1,5 +1,5 @@
 import { Button, SegmentedControl } from "@mantine/core";
-import { useMediaQuery, useNetwork } from "@mantine/hooks";
+import { useNetwork } from "@mantine/hooks";
 import {
   Link,
   Outlet,
@@ -8,7 +8,7 @@ import {
   useParams,
   useSearch,
 } from "@tanstack/react-router";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useEffectEvent, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { BoardMessage, BoardSkeleton, DayDivider } from "../../components/BoardStates";
@@ -17,12 +17,11 @@ import { Panel } from "../../components/Panel";
 import { TimeSelect } from "../../components/TimeSelect";
 import { stopAlerts } from "../../lib/alerts";
 import { useFlip } from "../../lib/flip";
-import { reportFailing } from "../../lib/freshness";
 import { ago, useNow } from "../../lib/hooks";
+import { usePhone } from "../../lib/layout";
 import { rememberStop } from "../../lib/recent";
 import { platformsText } from "../../lib/stops";
 import { dayDividerLabel, dayKey, formatClock, formatLongDay } from "../../lib/time";
-import { useMapFocus } from "../map/store";
 import { useBoard, useStopPlace } from "./queries";
 import classes from "./BoardPage.module.css";
 
@@ -35,7 +34,7 @@ export function BoardPage() {
   const search = useSearch({ from: "/odjezdy/$stopId" });
   const navigate = useNavigate({ from: "/odjezdy/$stopId" });
   const childMatches = useChildMatches();
-  const phone = useMediaQuery("(max-width: 48em)", false, { getInitialValueInEffect: false });
+  const phone = usePhone();
   const tripOpen = childMatches.length > 0;
 
   const arrivals = search.smer === "prijezdy";
@@ -52,25 +51,13 @@ export function BoardPage() {
   const now = useNow(1000);
 
   const data = board.data;
-  const failing = board.isError;
-  const offline = Boolean(data) && (failing || !network.online);
-  // The shell's data status: whether the board's requests fail.
-  useEffect(() => {
-    reportFailing("board", failing);
-  }, [failing]);
-  useEffect(() => () => reportFailing("board", false), []);
+  const offline = Boolean(data) && (board.isError || !network.online);
 
+  // The search lists recently opened stops.
   const stop = place.data?.stop ?? data?.stop;
   useEffect(() => {
     if (stop) rememberStop(stop);
   }, [stop]);
-  // The map marks the stop and brings it into view.
-  useMapFocus({
-    stop:
-      stop && stop.latitude !== null && stop.longitude !== null
-        ? { id: stop.location_id, latitude: stop.latitude, longitude: stop.longitude }
-        : undefined,
-  });
 
   // The phone shows the trip on its own page.
   if (phone && tripOpen) return <Outlet />;
@@ -88,7 +75,7 @@ export function BoardPage() {
 
   return (
     <>
-      <Panel name="board" label={arrivals ? "Příjezdy" : "Odjezdy"}>
+      <Panel label={arrivals ? "Příjezdy" : "Odjezdy"}>
         <section className={classes.board}>
           <header className={classes.header}>
             <h1 className={classes.title}>{stop?.name ?? (place.isError ? "Zastávka" : " ")}</h1>
@@ -128,7 +115,7 @@ export function BoardPage() {
         </section>
       </Panel>
       {tripOpen && (
-        <Panel name="trip" label="Detail spoje" narrow flush>
+        <Panel label="Detail spoje" narrow flush>
           <Outlet />
         </Panel>
       )}
@@ -182,15 +169,17 @@ function BoardBody({
   };
 
   // The phone loads more by scrolling to the end.
+  const onEnd = useEffectEvent(more);
+  const waiting = phone && hasMore && !board.isFetching;
   useEffect(() => {
     const target = sentinel.current;
-    if (!phone || !target || !hasMore || board.isFetching) return;
+    if (!waiting || !target) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) more();
+      if (entries.some((e) => e.isIntersecting)) onEnd();
     });
     observer.observe(target);
     return () => observer.disconnect();
-  });
+  }, [waiting]);
 
   // Each poll, the rows that stay glide to their new places (a departed one leaves), new ones
   // fade in: the board never jumps.

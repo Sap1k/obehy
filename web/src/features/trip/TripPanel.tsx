@@ -6,7 +6,6 @@ import { BoardMessage } from "../../components/BoardStates";
 import { VehicleCard } from "../../components/VehicleCard";
 import { useNow } from "../../lib/hooks";
 import { TripBody, TripHeader } from "./TripDetail";
-import { useMapFocus } from "../map/store";
 import { useFollowingParts, useTrip } from "./queries";
 import { runCalls } from "./runCalls";
 import classes from "./TripPanel.module.css";
@@ -17,9 +16,8 @@ export function TripPanel() {
   const { stopId, tripId, date } = useParams({ from: "/odjezdy/$stopId/spoj/$tripId/$date" });
   const search = useSearch({ from: "/odjezdy/$stopId/spoj/$tripId/$date" });
   const navigate = useNavigate();
-  const trip = useTrip(tripId, date, false, true);
-  // The map draws the trip and selects its vehicle.
-  useMapFocus({ trip: { tripId, date } });
+  // The map shows the same trip (it reads the route too) and selects its vehicle.
+  const trip = useTrip(tripId, date, true);
   const following = useFollowingParts(trip.data);
   const now = useNow(15_000);
 

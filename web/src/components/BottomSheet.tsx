@@ -1,34 +1,24 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { setSnap, useMapStore } from "../features/map/store";
+import { useGhostExit } from "../lib/ghost";
+import { SNAPS, sheetHeights, type SheetSnap } from "../lib/sheet";
 import classes from "./BottomSheet.module.css";
 
-// A sheet over the map on the phone: peek (the header), half (45 % of the map) or full (70 %, so
-// the map always shows above it). Non-modal, so the map stays usable. Dragged by its handle; a
-// tap on the handle steps it up (and from full back to peek). Its content scrolls inside.
+// A sheet over the map on the phone, at the map store's snap (lib/sheet.ts; the map keeps what it
+// centres clear of the same heights). Non-modal, so the map stays usable. Dragged by its handle;
+// a tap on the handle steps it up (and from full back to peek). Its content scrolls inside.
 
-export type SheetSnap = "peek" | "half" | "full";
-
-const PEEK_PX = 148;
 const HANDLE_PX = 28;
-const HALF = 0.45;
-const FULL = 0.7;
 /** A flick faster than this (px/ms) goes on to the next snap in its direction. */
 const FLICK = 0.5;
-const ORDER: SheetSnap[] = ["peek", "half", "full"];
+const SLIDE_DOWN: Keyframe[] = [{}, { transform: "translateY(100vh)" }];
 
-export function BottomSheet({
-  snap,
-  onSnap,
-  onHeight,
-  children,
-}: {
-  snap: SheetSnap;
-  onSnap: (snap: SheetSnap) => void;
-  /** The visible height once settled, for the map's padding. */
-  onHeight: (px: number) => void;
-  children: ReactNode;
-}) {
+export function BottomSheet({ children }: { children: ReactNode }) {
+  const snap = useMapStore((s) => s.snap);
   const host = useRef<HTMLDivElement>(null);
+  // Closing: a copy slides down off the screen (React removes the sheet at once).
   const sheet = useRef<HTMLDivElement>(null);
+  useGhostExit(sheet, SLIDE_DOWN, 220);
   const [hostHeight, setHostHeight] = useState(0);
   const drag = useRef<{ y: number; visible: number; t: number; moved: boolean } | null>(null);
 
@@ -41,25 +31,17 @@ export function BottomSheet({
     return () => observer.disconnect();
   }, []);
 
-  const full = Math.max(PEEK_PX, Math.round(hostHeight * FULL));
-  const heights: Record<SheetSnap, number> = {
-    peek: Math.min(PEEK_PX, full),
-    half: Math.min(full, Math.max(PEEK_PX, Math.round(hostHeight * HALF))),
-    full,
-  };
+  const heights = sheetHeights(hostHeight);
+  const full = heights.full;
   const visible = heights[snap];
 
-  useEffect(() => {
-    if (hostHeight > 0) onHeight(visible);
-  }, [visible, hostHeight, onHeight]);
-
+  // Dragging moves the sheet directly; the snap's place is set after every render.
   const place = (px: number, animate: boolean) => {
     const el = sheet.current;
     if (!el) return;
     el.style.transition = animate ? "" : "none";
     el.style.transform = `translateY(${full - px}px)`;
   };
-
   useLayoutEffect(() => place(visible, true));
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -77,9 +59,9 @@ export function BottomSheet({
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    const at = ORDER.indexOf(snap);
+    const at = SNAPS.indexOf(snap);
     if (!d.moved) {
-      onSnap(ORDER[(at + 1) % ORDER.length]!);
+      setSnap(SNAPS[(at + 1) % SNAPS.length]!);
       return;
     }
     const dy = e.clientY - d.y;
@@ -87,23 +69,19 @@ export function BottomSheet({
     const speed = -dy / Math.max(1, e.timeStamp - d.t);
     let next: SheetSnap;
     if (Math.abs(speed) > FLICK) {
-      next = ORDER[Math.min(ORDER.length - 1, Math.max(0, at + (speed > 0 ? 1 : -1)))]!;
+      next = SNAPS[Math.min(SNAPS.length - 1, Math.max(0, at + (speed > 0 ? 1 : -1)))]!;
     } else {
-      next = ORDER.reduce((best, s) =>
+      next = SNAPS.reduce((best, s) =>
         Math.abs(heights[s] - now) < Math.abs(heights[best] - now) ? s : best,
       );
     }
     if (next === snap) place(visible, true);
-    else onSnap(next);
+    else setSnap(next);
   };
 
   return (
     <div ref={host} className={classes.host}>
-      <div
-        ref={sheet}
-        className={classes.sheet}
-        style={{ height: full, viewTransitionName: "sheet" }}
-      >
+      <div ref={sheet} className={`${classes.sheet} ${classes.entering}`} style={{ height: full }}>
         <div
           className={classes.handle}
           style={{ height: HANDLE_PX }}

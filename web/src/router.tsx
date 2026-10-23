@@ -91,10 +91,8 @@ const routeTree = rootRoute.addChildren([
   alertsRoute,
 ]);
 
-// Navigations run as view transitions: a panel that closes slides out (theme/motion.css).
 export const router = createRouter({
   routeTree,
-  defaultViewTransition: true,
   defaultPreload: "intent",
   scrollRestoration: true,
 });

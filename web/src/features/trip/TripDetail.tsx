@@ -7,12 +7,12 @@ import {
   IconClock,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
 import type { Alert, Trip } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { tripAlerts } from "../../lib/alerts";
 import { timeState } from "../../lib/punctuality";
+import { usePersistentFlag } from "../../lib/storage";
 import { Timetable } from "./Timetable";
 import { noteGroups } from "./notes";
 import { callTimes, isPassed, type RunCall } from "./runCalls";
@@ -131,28 +131,13 @@ export function TripBody({
 
 const NOTES_OPEN_KEY = "obehy.notes.open";
 
-function readNotesOpen(): boolean {
-  try {
-    return sessionStorage.getItem(NOTES_OPEN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 /** The timetable's notes: when it runs, the train's short notes as chips (the full wording on
  * hover), and the longer texts behind a toggle remembered for the session. */
 function Notes({ trip }: { trip: Trip }) {
   const { operates, short, long } = noteGroups(trip);
-  const [open, setOpen] = useState(readNotesOpen);
+  const [open, setOpen] = usePersistentFlag(NOTES_OPEN_KEY, "session");
   if (operates.length + short.length + long.length === 0) return null;
-  const toggle = () => {
-    setOpen(!open);
-    try {
-      sessionStorage.setItem(NOTES_OPEN_KEY, open ? "0" : "1");
-    } catch {
-      // Not remembered.
-    }
-  };
+  const toggle = () => setOpen(!open);
   return (
     <section className={classes.notes}>
       <h3 className={classes.notesTitle}>Poznámky jízdního řádu</h3>
