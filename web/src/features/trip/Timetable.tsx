@@ -1,5 +1,6 @@
 import { UnstyledButton } from "@mantine/core";
 import { IconBell, IconChevronDown, IconChevronUp, IconCornerDownRight } from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
 import { useLayoutEffect, useRef, useState } from "react";
 import { LineBadge } from "../../components/LineBadge";
 import { PlatformBox } from "../../components/PlatformBox";
@@ -176,7 +177,14 @@ function Stop({
           <span className={classes.dot} />
         </span>
         <span className={classes.name}>
-          {call.name}
+          {/* The stop's own board. */}
+          <Link
+            to="/odjezdy/$stopId"
+            params={{ stopId: call.location_id }}
+            className={classes.nameLink}
+          >
+            {call.name}
+          </Link>
           {requestStop && (
             <IconBell size={14} stroke={2} aria-label="Na znamení" className={classes.flag} />
           )}

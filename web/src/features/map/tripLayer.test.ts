@@ -38,10 +38,10 @@ describe("tripFeatures", () => {
           [14.1, 50.1],
         ],
       ],
-      stops: [{ position: [14, 50], name: "A", passed: true, rank: 1 }],
+      stops: [{ id: "s1", position: [14, 50], name: "A", passed: true, rank: 1 }],
       colour: "#ff0000",
     });
     expect(fc.features.map((f) => f.properties?.kind)).toEqual(["path", "stop"]);
-    expect(fc.features[1]!.properties).toMatchObject({ name: "A", passed: true, rank: 1 });
+    expect(fc.features[1]!.properties).toMatchObject({ id: "s1", name: "A", rank: 1 });
   });
 });

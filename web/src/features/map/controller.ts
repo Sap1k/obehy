@@ -14,7 +14,7 @@ import {
 import { AREA, type Bounds } from "./grid";
 import { drawnPositions, positionsAt, progress, startGlide, type Glide } from "./motion";
 import type { Positioned } from "./queries";
-import { TRIP_ARROW, TRIP_SOURCE, mapStyle } from "./style";
+import { TRIP_ARROW, TRIP_SOURCE, TRIP_STOP_LAYERS, mapStyle } from "./style";
 import { arrowImage, tripFeatures, type TripOverlay } from "./tripLayer";
 import { PUCK_ZOOM, vehicleLayers } from "./VehicleLayers";
 
@@ -59,8 +59,10 @@ export interface MapInput {
 
 export interface MapHandlers {
   pick(vehicle: Positioned): void;
-  /** A click on no vehicle. */
+  /** A click on no vehicle and no stop of the open trip. */
   clickEmpty(): void;
+  /** A click on a stop of the open trip (its dot or its name): the stop place's ID. */
+  openStop(stopId: string): void;
   /** The reader dragged the map (following ends). */
   drag(): void;
   /** The map came to rest showing these bounds. */
@@ -172,10 +174,14 @@ export class MapController {
       layers: [],
       pickingRadius: 6,
       onHover: (info) => {
-        map.getCanvas().style.cursor = info.object ? "pointer" : "";
+        const stop = info.object ? undefined : this.tripStopAt(info.x, info.y);
+        map.getCanvas().style.cursor = info.object || stop ? "pointer" : "";
       },
       onClick: (info) => {
-        if (!info.object) handlers.clickEmpty();
+        if (info.object) return;
+        const stop = this.tripStopAt(info.x, info.y);
+        if (stop) handlers.openStop(stop);
+        else handlers.clickEmpty();
       },
     });
     map.addControl(this.overlay);
@@ -246,6 +252,14 @@ export class MapController {
         onPick: (v) => this.handlers.pick(v),
       }),
     });
+  }
+
+  /** The open trip's stop (its dot or its name) at a point on the map, if any. */
+  private tripStopAt(x: number, y: number): string | undefined {
+    if (!this.input.trip || !this.map.getLayer(TRIP_STOP_LAYERS[0])) return undefined;
+    const hit = this.map.queryRenderedFeatures([x, y], { layers: TRIP_STOP_LAYERS });
+    const id: unknown = hit[0]?.properties.id;
+    return typeof id === "string" ? id : undefined;
   }
 
   /** The open trip into MapLibre's source (absent until the style has loaded). */

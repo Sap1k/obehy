@@ -67,6 +67,7 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
     const names = stopLabels(calls.map((c) => c.name));
     const next = calls.findIndex((c) => !isPassed(c, now));
     const stops = calls.map((c, i) => ({
+      id: c.location_id,
       position: [c.longitude!, c.latitude!] as [number, number],
       name: names[i]!,
       passed: isPassed(c, now),
@@ -112,6 +113,10 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
   const clickEmpty = useEffectEvent(() => {
     if (opened.kind === "vehicle" && !following) void navigate({ to: "/" });
   });
+  // A stop of the open trip: its board.
+  const openStop = useEffectEvent((stopId: string) => {
+    void navigate({ to: "/odjezdy/$stopId", params: { stopId } });
+  });
   const initial = useEffectEvent(() => input);
 
   const container = useRef<HTMLDivElement>(null);
@@ -120,6 +125,7 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
     const map = new MapController(container.current!, initial(), {
       pick: (v) => pick(v.vehicle_id),
       clickEmpty: () => clickEmpty(),
+      openStop: (stopId) => openStop(stopId),
       drag: unfollow,
       settle: setBounds,
       locate: rememberPosition,

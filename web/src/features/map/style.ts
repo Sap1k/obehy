@@ -314,6 +314,8 @@ function layers(p: Palette): LayerSpecification[] {
  * labels, its stops and their names over them. */
 export const TRIP_SOURCE = "trip";
 export const TRIP_ARROW = "trip-arrow";
+/** The layers a click on a stop of the trip hits (its dot, its name). */
+export const TRIP_STOP_LAYERS: [string, ...string[]] = ["trip-stops", "trip-stop-names"];
 
 const IS_PATH: ExpressionSpecification = ["==", ["get", "kind"], "path"];
 const IS_STOP: ExpressionSpecification = ["==", ["get", "kind"], "stop"];

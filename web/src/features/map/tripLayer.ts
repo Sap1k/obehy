@@ -6,6 +6,8 @@ import type { FeatureCollection, Geometry } from "geojson";
 // labels, the more important stops first.
 
 export interface TripStop {
+  /** The stop place, whose board a click opens. */
+  id: string;
   position: [number, number];
   name: string;
   passed: boolean;
@@ -64,6 +66,7 @@ export function tripFeatures(trip: TripOverlay | null): FeatureCollection<Geomet
         geometry: { type: "Point" as const, coordinates: s.position },
         properties: {
           kind: "stop",
+          id: s.id,
           colour: trip.colour,
           name: s.name,
           passed: s.passed,

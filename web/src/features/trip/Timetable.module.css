@@ -121,6 +121,16 @@
   line-height: 20px;
 }
 
+.nameLink {
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.nameLink:hover {
+  text-decoration: underline;
+}
+
 .stop[data-state="next"] .name {
   font-weight: 700;
 }
