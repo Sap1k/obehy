@@ -102,15 +102,18 @@ rt.vehicle_pairing          reports of two sources seen side by side on one jour
 rt.vehicle_profile          per vehicle: the resolved attributes and their statements; UNLOGGED
 
 history.derivation          id, core_version, policy_version, release_id
-history.journey             PK (feed, key_namespace, key, service_date); first_bound_at,
-                            latest_revision; monthly partitions by service_date
+history.journey             PK (feed, key_namespace, key, service_date); journey_id (a
+                            sequence, unique with service_date), first_bound_at,
+                            latest_revision; daily partitions by service_date (every table)
+history.term                term_id, value: the strings below stored once (0020)
 history.journey_schedule    journey, revision; release_id, trip_id, route and headsign text,
                             derivation_id
-history.journey_call        journey, revision, ordinal; location_id, visit_n, passenger_service,
-                            scheduled_arrival, scheduled_departure (ServiceTime seconds), name
-history.actual_stop_event   journey, location_id, visit_n, event_type; revision, event_time,
-                            interval_lo, interval_hi, method, confidence, source_ids, orphaned,
-                            derivation_id
+history.journey_call        journey_id, revision, ordinal; location_term, visit_n,
+                            passenger_service, scheduled_arrival, scheduled_departure
+                            (ServiceTime seconds), name_term; as text: history.named_call
+history.actual_stop_event   journey_id, location_term, visit_n, event_type (enum); revision,
+                            event_time, interval_lo, interval_hi, method_term, source_term,
+                            orphaned, derivation_id; as text: history.named_stop_event
 history.vehicle_assignment  feed, vehicle_key, journey, valid_from, valid_to, method,
                             derivation_id
 history.journey_cancellation  journey, source; first_seen, last_seen, restored_at,
@@ -119,8 +122,9 @@ history.vehicle_day         feed, vehicle_key, service_date, seq; journeys[], to
                             tour_match_share (written by the nightly SQL job)
 ```
 
-- Journey key columns are repeated in every table instead of a surrogate key: partition pruning
-  stays simple and rows read without joins.
+- Journey key columns are repeated in every table except the two large ones, which use
+  `journey_id` and `history.term` (0020: about half the size); `history.named_call` and
+  `history.named_stop_event` read them as before.
 - Replay rewrites a day by deleting and re-inserting `(service_date, derivation_id)`.
 - `tour_id` and `tour_match_share` are reserved now and filled in R5 (`BASE_PLAN.md` section
   22), so the history schema needs no migration then.
@@ -169,7 +173,8 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | `[prediction]` | propagation (BASE_PLAN.md 20.5): dwell recovery, early departure limit, observed dwell credit, early fade; hop running times `runtime_decay_s`, `runtime_prior_weight`, `runtime_ratio_max`, `publish_deadband_s`, `floor_fresh_s` (v11) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
-| `[retention]` | observation_days = 1 (v12; 2 in v8, 30 before), raw_days = 14 (v9; raw archive days), both dropped by `obehy jobs nightly` |
+| `[retention]` | observation_hours = 8 (v13; hourly partitions dropped by `obehy jobs hourly`; 1 day in v12), raw_days = 14 (v9; raw archive days), history_days = 21 (v13), both dropped by `obehy jobs nightly` |
+| `[guard]` | free_gb = 6, min_raw_days = 3, min_history_days = 7 (v13): `obehy jobs hourly` deletes the oldest raw, then history days below the free space; release loads keep it |
 
 The file carries `policy_version`, which goes into `derivation`. Code holds no defaults for
 policy values: a missing key is a load error.

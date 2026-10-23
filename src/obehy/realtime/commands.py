@@ -1,4 +1,5 @@
-"""CLI: `obehy rt record|replay|bench|corpus pin`, `obehy realtime`, `obehy jobs vehicle-day`."""
+"""CLI: `obehy rt record|replay|bench|corpus pin`, `obehy realtime`,
+`obehy jobs vehicle-day|nightly|hourly`."""
 
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from obehy.realtime.archive import prune as prune_archive
 from obehy.realtime.emit.alerts import prune_alerts
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError, active_loads
-from obehy.realtime.jobs import drop_observations, vehicle_day
+from obehy.realtime.jobs import drop_history, hourly, vehicle_day
 from obehy.realtime.manifest import Channel, ManifestError, select_channels
 from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
@@ -153,11 +154,20 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     _database(days)
     nightly = job_commands.add_parser(
         "nightly",
-        help="vehicle days of the last two service dates, then drop expired observations and "
-        "raw archive days",
+        help="vehicle days of the last two service dates, then drop expired history days, "
+        "alerts, lookups and raw archive days",
     )
     nightly.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
     _database(nightly)
+    hourly_jobs = job_commands.add_parser(
+        "hourly",
+        help="drop expired observation hours; keep the data disk's free space above the guard",
+    )
+    hourly_jobs.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
+    hourly_jobs.add_argument(
+        "--data", type=Path, default=Path("data"), help="where to measure the free space"
+    )
+    _database(hourly_jobs)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -354,6 +364,18 @@ def _worker(args: argparse.Namespace) -> int:
 def _jobs(args: argparse.Namespace) -> int:
     policy = load_policy()
     now = instant(datetime.now(UTC))
+    if args.job_command == "hourly":
+        data = cast(Path, args.data)
+        with psycopg.connect(_url(args), autocommit=True) as connection:
+            for line in hourly(
+                connection,
+                cast(Path, args.archive),
+                policy,
+                now,
+                lambda: shutil.disk_usage(data).free,
+            ):
+                print(line, file=sys.stderr if line.startswith("disk guard") else sys.stdout)
+        return 0
     if args.job_command == "nightly":
         # Yesterday's service date may still have had journeys running; redo it tomorrow.
         today = local_date(now)
@@ -367,10 +389,10 @@ def _jobs(args: argparse.Namespace) -> int:
             print(f"{day}: {vehicle_day(connection, day, policy)} vehicle days")
             day += timedelta(days=1)
         if args.job_command == "nightly":
-            cutoff = now.date() - timedelta(days=policy.observation_retention_days)
-            dropped = drop_observations(connection, cutoff)
-            print(f"dropped {len(dropped)} observation partitions before {cutoff}")
-            withdrawn = now - timedelta(days=policy.raw_retention_days)
+            kept = local_date(now) - timedelta(days=policy.retention.history_days)
+            dropped = drop_history(connection, kept)
+            print(f"dropped {len(dropped)} history days before {kept}")
+            withdrawn = now - timedelta(days=policy.retention.raw_days)
             print(
                 f"deleted {prune_alerts(connection, withdrawn)} alerts withdrawn before {withdrawn}"
             )
@@ -378,7 +400,7 @@ def _jobs(args: argparse.Namespace) -> int:
                 f"deleted {prune_lookups(connection, withdrawn)} lookup requests before {withdrawn}"
             )
     if args.job_command == "nightly":
-        cutoff = now.date() - timedelta(days=policy.raw_retention_days)
+        cutoff = now.date() - timedelta(days=policy.retention.raw_days)
         pruned = prune_archive(cast(Path, args.archive), cutoff)
         print(f"deleted {len(pruned)} raw archive days before {cutoff}")
     return 0

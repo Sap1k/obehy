@@ -308,6 +308,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-24** — Disk bounds for the 64 GB server, which filled every few days (measured:
+  `rt.observation` about 10 GB a day held up to 2.5 days, two timetable copies of 7.5 GB plus a
+  third while loading, history about 1.15 GB a day never deleted). Policy v13: observations in
+  hourly partitions dropped after 8 h by the new `obehy jobs hourly`; history slimmed (migration
+  0020: `journey_id`, `history.term`, enum event types; on a synthetic PID day 43% of the
+  bytes, migrated in 46 s, so October takes some minutes) and partitioned per service date, kept
+  21 days (API `history.max_days` 21); releases keep no predecessor and load only with room
+  (`--check-room`); a disk guard deletes the oldest raw then history days below 6 GB free. Unit
+  and DB tests (migration of old-shape rows, writer, API, retention, guard) pass; sizes on the
+  server are to be read after deploy.
 - **2026-10-23** — Map: vehicle pucks drawn as black squares on dots → pucks (Exynos 2400e,
   Xclipse). Cause: the puck atlas only grew (every puck seen, at every zoom) past the GPU's
   texture limit (8192 px there), so no texture was made and every icon sampled black. The atlas

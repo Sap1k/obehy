@@ -2004,8 +2004,8 @@ carriage details are populated only where suitable.
 # 29. History
 
 History must survive JrUtil reruns, timetable versions and release retention. The mirror keeps
-only the active release and one predecessor, so history **never references `static.*`**: it is
-self-describing.
+only the active release (a rollback reloads a fetched one), so history **never references
+`static.*`**: it is self-describing.
 
 **Journey.** The history key of an operating instance is
 
@@ -2049,13 +2049,25 @@ release_id)`. Inside the raw-archive window (section 18.4), history is a rebuild
 `obehy rt replay --write-history --from --to` regenerates days after a fix. Outside the window it
 is frozen and kept as recorded, which is why the snapshot must be complete.
 
-Retention on one machine:
+**Storage.** With PID a day is about 2.9 million stop events and 1.5 million scheduled calls, so
+the two large tables stay narrow. `history.journey` numbers each journey (`journey_id`); its
+natural key stays its primary key and identity. `journey_call` and `actual_stop_event` refer to
+the journey by that number and to stop IDs, names, methods and sources through `history.term`, a
+dictionary of the strings history keeps (still self-describing). `history.named_call` and
+`history.named_stop_event` read them back as text. Every history table is partitioned per
+service date.
 
-- partition high-volume tables by service date;
-- keep high-resolution observations for a limited period;
-- keep journeys, actual events, vehicle days and the circulation model long term;
-- downsample or export old trajectories to Parquet;
-- keep raw payloads for the rolling window, and pinned corpora indefinitely.
+Retention on one machine (64 GB):
+
+- partition high-volume tables by time: `rt.observation` per UTC hour, history per service date;
+- keep high-resolution observations for hours (`[retention] observation_hours`, past the warm
+  replay window);
+- keep history for a window, `[retention] history_days` (21), dropped a day at a time; the API's
+  history spans stay within it. Longer history needs more disk or an export;
+- keep raw payloads for the rolling window, and pinned corpora indefinitely;
+- a disk guard (`obehy jobs hourly`, `[guard]`) keeps free space: below it the oldest raw days
+  go, then the oldest history days, never below their minimums. Release loads wait for room for
+  their copy of the timetables.
 
 ---
 

@@ -4,10 +4,11 @@
 # preference, v8 two days of rt.observation, v9 the raw archive window, v10 trip updates
 # kept after the trip ends, observed dwell credited at stops without a timetabled one, and
 # the distance driven followed where a shape misses the road, v11 hop running times learned
-# live, v12 one day of rt.observation).
+# live, v12 one day of rt.observation, v13 hourly rt.observation, a history window and the disk
+# guard).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "12"
+policy_version = "13"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -158,17 +159,29 @@ keep_index_s = 14400
 compact_index_at_s = 12600
 
 [retention]
-# Daily rt.observation partitions (UTC days) older than this are dropped by `obehy jobs nightly`.
-# Only warm replay reads them (the last `warm_replay.max_hours`); delay history and vehicle
-# tours live in history.*, which is rebuilt from the raw archive, not from here. A day of all
-# sources is about 7 GB with PID, so one day is kept: today's partition and yesterday's, which
-# covers the replay window across midnight.
-observation_days = 1
+# Hourly rt.observation partitions (UTC hours) are dropped by `obehy jobs hourly` once they end
+# more than this long ago. Only warm replay (the last `warm_replay.max_hours`) and the debug
+# endpoints read them; delay history and vehicle tours live in history.*. All sources together
+# are about 10 GB a day with PID, so 8 hours is about 3.5 GB.
+observation_hours = 8
 # Raw archive day directories (data/rt-raw/<source>/<channel>/<UTC day>) older than this are
-# deleted by the same job. Inside the window history can be rebuilt by replay; outside it is
-# kept as recorded. Pinned corpora are copies elsewhere and stay. All sources together are about
-# 1 GB a day with PID (BASE_PLAN.md section 18.4 plans 3 months; the server disk fits 2 weeks).
+# deleted by `obehy jobs nightly`. Inside the window history can be rebuilt by replay; outside it
+# is kept as recorded. Pinned corpora are copies elsewhere and stay. All sources together are
+# about 0.6 GB a day with PID (BASE_PLAN.md section 18.4 plans 3 months; the server disk fits
+# 2 weeks).
 raw_days = 14
+# History service dates older than this many days before today are dropped, every table's daily
+# partition at once, by `obehy jobs nightly`; the API's history spans (`history.max_days`) stay
+# within it. History is about 0.5 GB a day with PID.
+history_days = 21
+
+[guard]
+# `obehy jobs hourly` keeps this much of the data disk free: below it, it deletes the oldest raw
+# archive days, then the oldest history days, one at a time, never going below the minimums.
+# Release loads also leave it free (`obehy release load`).
+free_gb = 6
+min_raw_days = 3
+min_history_days = 7
 
 [egress]
 # Proxy pools of channels that declare an egress (SŽ; docs/R2_SLICE.md section 7).

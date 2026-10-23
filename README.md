@@ -231,8 +231,10 @@ raises the API rate limit but is not needed. DB tests in `tests/db/` run when
 `deploy/obehy-release-update` runs fetch, load, then `activate --if-newer`, which leaves alone
 any release no newer than one activated before (so a rollback sticks until the next build),
 and points `data/releases/active` at what it activated. Activation keeps the data of the active
-release and one predecessor (`--keep`; about 7 GB each in PostgreSQL) and drops older loads and
-what failed loads left behind; `obehy release prune` does the same on demand.
+release only (`--keep 0` by default; about 7.5 GB in PostgreSQL; a rollback reloads one of the
+fetched releases) and drops older loads and what failed loads left behind; `obehy release prune`
+does the same on demand. On the server `release load --check-room` waits (until the next hourly
+run) while the disk lacks room for another copy plus the realtime guard's free space.
 
 ## Running the server
 
@@ -366,9 +368,12 @@ core. SŽ channels poll only with the egress proxy list configured (see
 at most 60 a minute. Rail point events and the SŽ station codes need a release with serving 5.1
 `sr70` keys. `obehy jobs vehicle-day --from DAY` builds the
 vehicles' working days; `obehy jobs nightly` (03:30 Prague in the server stack)
-rebuilds them for the last two service dates and drops `rt.observation` days older than
-`[retention] observation_days` (1; a day of all sources is about 7 GB) and raw archive days older than `raw_days` (14, about
-1 GB a day with PID; pin days to keep with `obehy rt corpus pin` first). The design is in
+rebuilds them for the last two service dates and drops history service dates older than
+`[retention] history_days` (21; about 0.5 GB a day with PID) and raw archive days older than
+`raw_days` (14, about 0.6 GB a day; pin days to keep with `obehy rt corpus pin` first).
+`obehy jobs hourly` (every hour in the server stack) drops `rt.observation` hours older than
+`observation_hours` (8; all sources are about 10 GB a day) and keeps `[guard] free_gb` free on
+the data disk by deleting the oldest raw days, then history days. The design is in
 `docs/R1_SLICE.md` and, for rail, `docs/R2_SLICE.md`.
 
 The worker also answers what the API is asked to look up (`rt.lookup_request`): ČD train

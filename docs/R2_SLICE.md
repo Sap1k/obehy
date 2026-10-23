@@ -272,7 +272,7 @@ simplified from the RÚIAN region boundary.
 
 ```text
 history.journey_link        feed, from journey key, to journey key, kind (continues_as |
-                            splits_from | joins), service_date, derivation_id; monthly partitions
+                            splits_from | joins), service_date, derivation_id; daily partitions
 history.platform_evidence   journey, location_id, visit_n, kind; value, label,
                             boarding_point_id, source, first_seen, last_seen, derivation_id
 history.journey_schedule    + run_key text, tr text (nullable; rail only)

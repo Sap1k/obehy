@@ -60,6 +60,20 @@ def day_directory(root: Path, source: str, channel: str, day: date) -> Path:
     return root / source / channel / day.isoformat()
 
 
+def days(root: Path) -> list[date]:
+    """The UTC days any source or channel has a directory of, oldest first."""
+
+    found: set[date] = set()
+    for directory in root.glob("*/*/*"):
+        try:
+            day = date.fromisoformat(directory.name)
+        except ValueError:
+            continue
+        if directory.is_dir():
+            found.add(day)
+    return sorted(found)
+
+
 def prune(root: Path, before: date) -> list[Path]:
     """Delete the day directories of every source and channel older than `before`; returns them.
 

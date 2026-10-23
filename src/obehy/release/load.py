@@ -336,6 +336,46 @@ def _register(
         )
 
 
+@dataclass(frozen=True, slots=True)
+class Room:
+    """The disk a load needs: `free()` measures the free bytes of the database's disk; a load
+    starts only with room for the package's previous load again (a loaded copy of about the same
+    size, plus a fifth for its indexes being built) on top of `reserve` bytes."""
+
+    free: Callable[[], int]
+    reserve: int
+
+
+def _previous_size(connection: psycopg.Connection, contract: Contract, package: str) -> int:
+    row = connection.execute(
+        "SELECT max(load_id) FROM control.load WHERE package = %s AND status = 'loaded'",
+        (package,),
+    ).fetchone()
+    previous = cast(int | None, row[0] if row else None)
+    if previous is None:
+        return 0
+    total = 0
+    for table in static_tables(contract):
+        size = connection.execute(
+            "SELECT pg_total_relation_size(to_regclass(%s))",
+            (f"static.{table.name}_l{previous}",),
+        ).fetchone()
+        total += cast(int | None, size[0] if size else None) or 0
+    return total
+
+
+def _check_room(
+    connection: psycopg.Connection, contract: Contract, package: str, room: Room
+) -> None:
+    needed = _previous_size(connection, contract, package) * 6 // 5 + room.reserve
+    free = room.free()
+    if free < needed:
+        raise LoadError(
+            f"{package}: not enough free disk for a load: {free / 1024**3:.1f} GB free,"
+            f" {needed / 1024**3:.1f} GB needed (the previous load and the reserve); retried later"
+        )
+
+
 def _load_package(
     connection: psycopg.Connection,
     contract: Contract,
@@ -344,6 +384,7 @@ def _load_package(
     *,
     reload: bool,
     report: Report,
+    room: Room | None,
 ) -> LoadResult:
     started = time.monotonic()
     with connection.transaction():
@@ -357,6 +398,8 @@ def _load_package(
         if existing_id is not None and not reload:
             report(f"{package.package}: already loaded as load {existing_id}; skipped")
             return LoadResult(package.package, existing_id, True, 0.0)
+        if room is not None:
+            _check_room(connection, contract, package.package, room)
         row = connection.execute(
             "INSERT INTO control.load (run_id, package, status) VALUES (%s, %s, 'loading')"
             " RETURNING load_id",
@@ -448,6 +491,7 @@ def load_release(
     packages: Sequence[str] = PACKAGES,
     reload: bool = False,
     report: Report = print,
+    room: Room | None = None,
 ) -> list[LoadResult]:
     """Verify every requested package first, then load them one by one.
 
@@ -467,7 +511,9 @@ def load_release(
                 " WHERE status = 'loading'"
             )
         return [
-            _load_package(connection, contract, release, package, reload=reload, report=report)
+            _load_package(
+                connection, contract, release, package, reload=reload, report=report, room=room
+            )
             for package in verified
         ]
     finally:

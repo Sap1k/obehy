@@ -160,6 +160,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "api_performance",
         "alert_target_lookup",
         "vehicle_represents",
+        "history_slim",
     ]
 
 

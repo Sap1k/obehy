@@ -11,7 +11,7 @@ from psycopg import sql
 
 from obehy.release import activate as activation
 from obehy.release.contract import Contract, load_contract
-from obehy.release.load import LoadError, load_release
+from obehy.release.load import LoadError, Room, load_release
 from tests.db.serving_fixture import Rows, czptt_rows, jdf_rows, write_release
 
 pytestmark = pytest.mark.postgres
@@ -291,7 +291,7 @@ def test_prune_keeps_active_and_predecessors(
     assert _scalar(connection, "SELECT count(*) FROM active.trip") == 2
 
 
-def test_prune_by_default_keeps_one_predecessor_and_clears_failed_leftovers(
+def test_prune_by_default_keeps_no_predecessor_and_clears_failed_leftovers(
     connection: psycopg.Connection, tmp_path: Path
 ) -> None:
     for run_id in ("run-a", "run-b", "run-c"):
@@ -316,6 +316,26 @@ def test_prune_by_default_keeps_one_predecessor_and_clears_failed_leftovers(
             " GROUP BY run_id"
         ).fetchall()
     )
-    assert statuses == {"run-a": ["dropped"], "run-b": ["loaded"], "run-c": ["failed", "loaded"]}
-    assert len(dropped) == 2
+    assert statuses == {
+        "run-a": ["dropped"],
+        "run-b": ["dropped"],
+        "run-c": ["failed", "loaded"],
+    }
+    assert len(dropped) == 4
     assert not [name for name in _leftover_tables(connection) if name.endswith(f"_l{failed}")]
+
+
+def test_a_load_needs_room_for_the_previous_load_and_the_reserve(
+    connection: psycopg.Connection, tmp_path: Path
+) -> None:
+    first = write_release(tmp_path, "run-a")
+    _load(connection, first)
+    second = write_release(tmp_path, "run-b")
+
+    with pytest.raises(LoadError, match="not enough free disk"):
+        _load(connection, second, room=Room(lambda: 10, reserve=0))
+    assert _scalar(connection, "SELECT count(*) FROM control.load WHERE run_id = 'run-b'") == 0
+    # Packages already loaded need no room; with room the next release loads.
+    assert all(r.skipped for r in _load(connection, first, room=Room(lambda: 0, reserve=1)))
+    loaded = _load(connection, second, room=Room(lambda: 10**12, reserve=10**9))
+    assert [r.skipped for r in loaded] == [False, False]

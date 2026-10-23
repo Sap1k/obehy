@@ -100,7 +100,7 @@ def _snapshots(out: Path) -> dict[str, bytes]:
 def _history(connection: psycopg.Connection) -> list[tuple[Any, ...]]:
     return connection.execute(
         "SELECT location_id, visit_n, event_type, revision, interval_lo, interval_hi"
-        " FROM history.actual_stop_event ORDER BY 1, 2, 3"
+        " FROM history.named_stop_event ORDER BY 1, 2, 3"
     ).fetchall()
 
 
@@ -217,7 +217,7 @@ def test_a_mid_day_release_switch_adds_a_revision(
     )
 
     rows = connection.execute(
-        "SELECT location_id, event_type, revision, orphaned FROM history.actual_stop_event"
+        "SELECT location_id, event_type, revision, orphaned FROM history.named_stop_event"
         " ORDER BY 1, 2"
     ).fetchall()
     assert rows == [

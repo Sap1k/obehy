@@ -1,7 +1,10 @@
 #!/bin/sh
 # The jobs container:
+# - `obehy jobs hourly` at start and then at the top of every hour: drops the observation hours
+#   past the retention and keeps the disk's free space above the guard (policy `[guard]`);
 # - `obehy jobs nightly` every day at 03:30 local time (TZ, Europe/Prague in the image), after
-#   the last night journeys of the previous service date;
+#   the last night journeys of the previous service date: vehicle days, the history window and
+#   the raw archive window;
 # - PID's vehicle models from Golemio (with OBEHY_SECRET_GOLEMIO), at start and then every hour
 #   from 05:00 to 23:00. Golemio describes only the vehicles running at the moment, so asking
 #   through the day comes to know those of every shift and day. Each run asks only about the
@@ -28,7 +31,15 @@ pid_vehicles_through_the_day() {
     done
 }
 
+every_hour() {
+    while :; do
+        obehy jobs hourly || echo "hourly jobs failed" >&2
+        sleep $((3600 - $(date +%s) % 3600))
+    done
+}
+
 pid_vehicles_through_the_day &
+every_hour &
 
 while :; do
     now=$(date +%s)

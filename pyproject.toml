@@ -88,6 +88,7 @@ source_modules = [
     "obehy.realtime.quality",
     "obehy.realtime.platforms",
     "obehy.realtime.compositions",
+    "obehy.realtime.disk_guard",
 ]
 forbidden_modules = [
     "psycopg",

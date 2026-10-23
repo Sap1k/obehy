@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any, LiteralString
 
 import psycopg
 import pytest
 
+from obehy.realtime.archive import days as archive_days
 from obehy.realtime.core import CORE_VERSION, Context, snapshot, step
+from obehy.realtime.disk_guard import GB
 from obehy.realtime.emit.db import Writer
-from obehy.realtime.jobs import drop_observations, vehicle_day
+from obehy.realtime.jobs import drop_history, drop_observations, history_days, hourly, vehicle_day
 from obehy.realtime.model import (
     AssignVehicle,
     Derivation,
@@ -21,7 +24,7 @@ from obehy.realtime.model import (
     SnapshotJourney,
     VehicleId,
 )
-from obehy.realtime.policy import load_policy
+from obehy.realtime.policy import GuardPolicy, load_policy
 from tests.realtime.builder import ORIGIN, STEP_LON, timetable
 from tests.realtime.observations import local, observe
 
@@ -72,7 +75,7 @@ def test_effects_become_observations_history_and_state(connection: psycopg.Conne
     assert _scalar(connection, "SELECT latest_revision FROM history.journey") == 1
     calls = connection.execute(
         "SELECT ordinal, location_id, visit_n, scheduled_departure, name"
-        " FROM history.journey_call ORDER BY ordinal"
+        " FROM history.named_call ORDER BY ordinal"
     ).fetchall()
     assert calls == [
         (1, "jdf:A", 1, 8 * 3600, "A"),
@@ -81,7 +84,7 @@ def test_effects_become_observations_history_and_state(connection: psycopg.Conne
     ]
     events = connection.execute(
         "SELECT location_id, event_type, revision, interval_lo, interval_hi"
-        " FROM history.actual_stop_event ORDER BY interval_lo, location_id, event_type"
+        " FROM history.named_stop_event ORDER BY interval_lo, location_id, event_type"
     ).fetchall()
     assert [(e[0], e[1], e[2]) for e in events] == [
         ("jdf:A", "departure", 1),
@@ -116,7 +119,7 @@ def test_a_new_release_adds_a_revision_and_orphans_vanished_calls(
 
     assert _scalar(connection, "SELECT latest_revision FROM history.journey") == 2
     events = connection.execute(
-        "SELECT location_id, event_type, revision, orphaned FROM history.actual_stop_event"
+        "SELECT location_id, event_type, revision, orphaned FROM history.named_stop_event"
         " ORDER BY location_id, event_type"
     ).fetchall()
     assert events == [
@@ -167,19 +170,88 @@ def test_t13_vehicle_day_crosses_midnight_and_splits_at_long_gaps(
     assert vehicle_day(connection, D8, POLICY) == 1  # idempotent
 
 
-def test_retention_drops_only_observation_days_before_the_cutoff(
+def _partitions(connection: psycopg.Connection, parent: str) -> list[str]:
+    rows = connection.execute(
+        "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid"
+        " WHERE i.inhparent = %s::regclass ORDER BY 1",
+        (parent,),
+    ).fetchall()
+    return [r[0] for r in rows]
+
+
+def test_retention_drops_observation_hours_and_older_daily_partitions(
     connection: psycopg.Connection,
 ) -> None:
+    # A daily partition of an older server covers its day's hours.
+    connection.execute(
+        "CREATE TABLE rt.observation_20260908 PARTITION OF rt.observation"
+        " FOR VALUES FROM ('2026-09-08 00:00Z') TO ('2026-09-09 00:00Z')"
+    )
     writer = _writer(connection)
-    for day in (date(2026, 9, 8), date(2026, 9, 9), D9):
-        writer._observation_partition(day)  # pyright: ignore[reportPrivateUsage]
+    for hour in (
+        datetime(2026, 9, 8, 5, tzinfo=UTC),
+        datetime(2026, 9, 9, 10, tzinfo=UTC),
+        datetime(2026, 9, 9, 11, tzinfo=UTC),
+    ):
+        writer._observation_partition(hour)  # pyright: ignore[reportPrivateUsage]
+    assert _partitions(connection, "rt.observation") == [
+        "observation_20260908",
+        "observation_2026090910",
+        "observation_2026090911",
+    ]
 
-    assert drop_observations(connection, date(2026, 9, 9)) == ["observation_20260908"]
-    remaining = connection.execute(
-        "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid"
-        " WHERE i.inhparent = 'rt.observation'::regclass ORDER BY 1"
-    ).fetchall()
-    assert remaining == [("observation_20260909",), ("observation_20261009",)]
+    dropped = drop_observations(connection, datetime(2026, 9, 9, 11, tzinfo=UTC))
+    assert dropped == ["observation_20260908", "observation_2026090910"]
+    assert _partitions(connection, "rt.observation") == ["observation_2026090911"]
+
+
+def test_the_history_window_drops_whole_days(connection: psycopg.Connection) -> None:
+    _, effects, _ = _run()
+    writer = _writer(connection)
+    writer.write(effects)
+    _assign(writer, "582492:2", D9, "2026-10-09 06:00", "2026-10-09 07:00")
+    assert history_days(connection) == [D8, D9]
+
+    assert drop_history(connection, D9) == [D8]
+    assert history_days(connection) == [D9]
+    assert _scalar(connection, "SELECT count(*) FROM history.actual_stop_event") == 0
+    assert _scalar(connection, "SELECT count(*) FROM history.journey") == 1
+    assert "journey_call_20261008" not in _partitions(connection, "history.journey_call")
+
+
+def test_the_disk_guard_deletes_raw_days_then_history_days(
+    connection: psycopg.Connection, tmp_path: Path
+) -> None:
+    _, effects, _ = _run()
+    writer = _writer(connection)
+    writer.write(effects)
+    _assign(writer, "582492:2", D9, "2026-10-09 06:00", "2026-10-09 07:00")
+    archive = tmp_path / "rt-raw"
+    for day in range(4, 9):
+        (archive / "duk" / "vehicles" / f"2026-10-0{day}").mkdir(parents=True)
+    policy = replace(POLICY, guard=GuardPolicy(free_gb=6, min_raw_days=3, min_history_days=1))
+
+    lines = list(
+        hourly(connection, archive, policy, datetime(2026, 10, 9, 12, tzinfo=UTC), lambda: 0)
+    )
+
+    assert archive_days(archive) == [date(2026, 10, 6), date(2026, 10, 7), date(2026, 10, 8)]
+    assert history_days(connection) == [D9]
+    assert [line.split(", ", 1)[1] for line in lines[1:-1]] == [
+        "deleted the raw day 2026-10-04",
+        "deleted the raw day 2026-10-05",
+        "deleted the history day 2026-10-08",
+    ]
+    assert "nothing more may be deleted" in lines[-1]
+    # With room enough nothing goes.
+    assert (
+        list(
+            hourly(
+                connection, archive, policy, datetime(2026, 10, 9, 12, tzinfo=UTC), lambda: 10 * GB
+            )
+        )[1:]
+        == []
+    )
 
 
 def _state_tables(connection: psycopg.Connection) -> tuple[list[Any], list[Any], list[Any]]:

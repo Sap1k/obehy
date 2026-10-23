@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v12.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v13.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v12.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v13.toml"
 
 
 class PolicyError(ValueError):
@@ -97,6 +97,24 @@ class PredictionPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class RetentionPolicy:
+    """How long stored realtime data is kept (`obehy jobs hourly` and `nightly`)."""
+
+    observation_hours: int  # rt.observation hours, past the end of each hour
+    raw_days: int  # raw archive days
+    history_days: int  # history service dates before today
+
+
+@dataclass(frozen=True, slots=True)
+class GuardPolicy:
+    """The free space `obehy jobs hourly` keeps on the data disk, and what it may delete for it."""
+
+    free_gb: int
+    min_raw_days: int
+    min_history_days: int
+
+
+@dataclass(frozen=True, slots=True)
 class EgressPolicy:
     """Proxy pools of egress channels (docs/R2_SLICE.md section 7)."""
 
@@ -173,8 +191,8 @@ class Policy:
     sweep_index_every_s: int
     keep_index_s: int
     compact_index_at_s: int
-    observation_retention_days: int
-    raw_retention_days: int
+    retention: RetentionPolicy
+    guard: GuardPolicy
     egress: EgressPolicy
     rail: RailPolicy
     boards: BoardPolicy
@@ -299,8 +317,8 @@ def parse_policy(document: dict[str, Any]) -> Policy:
         sweep_index_every_s=root.table("emit").integer("sweep_index_every_s"),
         keep_index_s=root.table("emit").integer("keep_index_s"),
         compact_index_at_s=root.table("emit").integer("compact_index_at_s"),
-        observation_retention_days=root.table("retention").integer("observation_days"),
-        raw_retention_days=root.table("retention").integer("raw_days"),
+        retention=root.section("retention", RetentionPolicy),
+        guard=root.section("guard", GuardPolicy),
         egress=root.section("egress", EgressPolicy),
         rail=_rail(root.table("rail")),
         boards=root.section("boards", BoardPolicy),

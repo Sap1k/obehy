@@ -13,7 +13,7 @@ obehy() {
 
 release_dir=$(obehy release fetch)
 run_id=$(basename "$release_dir")
-obehy release load "$release_dir"
+obehy release load --check-room "$release_dir"
 if obehy release activate --if-newer "$run_id" | tee /dev/stderr | grep -q '^activated '; then
     ln -sfn "$run_id" "$(dirname "$release_dir")/active"
 fi

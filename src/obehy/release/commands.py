@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, cast
 
 import psycopg
 
+from obehy.realtime.policy import load_policy
 from obehy.release import activate as activation
 from obehy.release import fetch as fetching
 from obehy.release.contract import load_contract
 from obehy.release.feed_list import write_feed_list
-from obehy.release.load import PACKAGES, LoadError, load_release
+from obehy.release.load import PACKAGES, LoadError, Room, load_release
 from obehy.release.migrate import MigrationError, migrate
 from obehy.runtime_config import ConfigurationError, default_config_path, load_database_url
 
@@ -65,6 +67,12 @@ def add_parsers(commands: Any) -> None:
         help="load only this package (repeatable; default: all)",
     )
     loader.add_argument("--reload", action="store_true", help="load again even if already loaded")
+    loader.add_argument(
+        "--check-room",
+        action="store_true",
+        help="load only with room on the disk for the previous load again plus the realtime "
+        "guard's free space (the server: the release directory and the database share a disk)",
+    )
     _connection_arguments(loader)
 
     activator = release_commands.add_parser("activate", help="activate a loaded release")
@@ -161,13 +169,20 @@ def run(args: argparse.Namespace) -> int:
                 return 0
             contract = load_contract()
             if args.release_command == "load":
+                release_dir = cast(Path, args.release_dir)
                 load_release(
                     connection,
-                    cast(Path, args.release_dir),
+                    release_dir,
                     contract,
                     packages=cast(list[str] | None, args.package) or PACKAGES,
                     reload=cast(bool, args.reload),
                     report=_report,
+                    room=Room(
+                        lambda: shutil.disk_usage(release_dir).free,
+                        load_policy().guard.free_gb * 1024**3,
+                    )
+                    if args.check_room
+                    else None,
                 )
                 return 0
             if args.release_command == "prune":

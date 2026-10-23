@@ -43,7 +43,7 @@ patterns = 20
 
 [history]
 # The longest span of service dates one history or punctuality request covers.
-max_days = 31
+max_days = 21
 default_days = 7
 # A departure counts as on time from on_time_early_s before to on_time_late_s after schedule.
 on_time_early_s = -60

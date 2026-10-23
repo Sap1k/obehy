@@ -15,19 +15,29 @@ latest AS (
     WHERE s.service_date BETWEEN %(since)s AND %(until)s
     ORDER BY s.feed, s.key_namespace, s.key, s.service_date, s.revision DESC
 ),
+numbered AS (
+    SELECT l.*, j.journey_id
+    FROM latest l
+    JOIN history.journey j
+        ON (j.feed, j.key_namespace, j.key, j.service_date)
+            = (l.feed, l.key_namespace, l.key, l.service_date)
+),
 events AS (
-    SELECT l.feed, l.key_namespace, l.key, l.service_date, c.location_id, c.name,
+    SELECT l.feed, l.key_namespace, l.key, l.service_date, loc.value AS location_id,
+           stop.value AS name,
            control.obehy_instant_fast(l.service_date, c.scheduled_departure) AS scheduled,
            e.event_time AS actual
-    FROM latest l
+    FROM numbered l
     JOIN history.journey_call c
-        ON (c.feed, c.key_namespace, c.key, c.service_date, c.revision)
-            = (l.feed, l.key_namespace, l.key, l.service_date, l.revision)
+        ON (c.journey_id, c.service_date, c.revision)
+            = (l.journey_id, l.service_date, l.revision)
         AND c.passenger_service AND c.scheduled_departure IS NOT NULL
     JOIN history.actual_stop_event e
-        ON (e.feed, e.key_namespace, e.key, e.service_date, e.location_id, e.visit_n)
-            = (l.feed, l.key_namespace, l.key, l.service_date, c.location_id, c.visit_n)
+        ON (e.journey_id, e.service_date, e.location_term, e.visit_n)
+            = (l.journey_id, l.service_date, c.location_term, c.visit_n)
         AND e.event_type = 'departure' AND NOT e.orphaned
+    JOIN history.term loc ON loc.term_id = c.location_term
+    JOIN history.term stop ON stop.term_id = c.name_term
 ),
 delays AS (
     SELECT *, extract(epoch FROM actual - scheduled)::float AS delay_s

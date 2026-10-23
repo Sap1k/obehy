@@ -4,6 +4,10 @@
 # OBEHY_API_WORKERS (4), OBEHY_TAG and GITHUB_TOKEN in .env next to this file. SŽ is polled only through a proxy list: save it as secrets/sz-proxies.txt here
 # (gitignored) and set OBEHY_EGRESS_SZ_PROXY_LIST_FILE=/app/secrets/sz-proxies.txt in .env. PID is
 # polled only with a Golemio API key: OBEHY_SECRET_GOLEMIO in .env.
+# Disk (one disk for both volumes; 64 GB fits): PostgreSQL about 25 GB (one timetable copy of
+# 7.5 GB, another while a release loads, 8 hours of observations, 21 days of history), data/
+# about 11 GB (14 days of raw archive, two fetched releases). `jobs` keeps 6 GB free
+# (policy [guard]) and release loads wait for room.
 name: obehy
 
 x-app: &app

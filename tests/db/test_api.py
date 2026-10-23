@@ -395,26 +395,48 @@ def client(
         " (SELECT min(derivation_id) FROM history.derivation))"
     )
     # That run's calls and what it did: left 2 min late, arrived 1 min late.
-    for table in ("journey_call", "actual_stop_event", "journey_link", "journey_cancellation"):
+    for table in (
+        "journey",
+        "journey_call",
+        "actual_stop_event",
+        "journey_link",
+        "journey_cancellation",
+    ):
         connection.execute(
             f"CREATE TABLE history.{table}_test PARTITION OF history.{table}"
             " FOR VALUES FROM ('2026-10-01') TO ('2026-11-01')"
         )
     connection.execute(
-        "INSERT INTO history.journey_call VALUES"
-        " ('jdf', 'cis:line_trip', '000001:1', '2026-10-06', 1, 1, 'jdf:stop:1', 0, true,"
-        "  21600, 21600, 'Česká Lípa,,aut.nádr.'),"
-        " ('jdf', 'cis:line_trip', '000001:1', '2026-10-06', 1, 2, 'jdf:stop:2', 0, true,"
-        "  22500, 22500, 'Nový Bor,,nám.')"
+        "INSERT INTO history.journey (feed, key_namespace, key, service_date, first_bound_at,"
+        " latest_revision) VALUES ('jdf', 'cis:line_trip', '000001:1', '2026-10-06',"
+        " '2026-10-06 05:50+02', 1)"
     )
     connection.execute(
-        "INSERT INTO history.actual_stop_event (feed, key_namespace, key, service_date,"
-        " location_id, visit_n, event_type, revision, event_time, interval_lo, interval_hi,"
-        " method, source, derivation_id)"
-        " SELECT 'jdf', 'cis:line_trip', '000001:1', '2026-10-06', l, 0, e, 1, t, t, t,"
-        " 'gps', 'duk', (SELECT min(derivation_id) FROM history.derivation)"
-        " FROM (VALUES ('jdf:stop:1', 'departure', timestamptz '2026-10-06 06:02+02'),"
-        "  ('jdf:stop:2', 'arrival', timestamptz '2026-10-06 06:16+02')) v (l, e, t)"
+        "INSERT INTO history.term (value) VALUES ('jdf:stop:1'), ('jdf:stop:2'),"
+        " ('Česká Lípa,,aut.nádr.'), ('Nový Bor,,nám.'), ('gps'), ('duk')"
+    )
+    connection.execute(
+        "INSERT INTO history.journey_call (journey_id, service_date, revision, ordinal,"
+        " location_term, visit_n, passenger_service, scheduled_arrival, scheduled_departure,"
+        " name_term)"
+        " SELECT j.journey_id, j.service_date, 1, o, l.term_id, 0, true, s, s, n.term_id"
+        " FROM history.journey j,"
+        " (VALUES (1, 'jdf:stop:1', 21600, 'Česká Lípa,,aut.nádr.'),"
+        "  (2, 'jdf:stop:2', 22500, 'Nový Bor,,nám.')) v (o, location, s, name)"
+        " JOIN history.term l ON l.value = v.location JOIN history.term n ON n.value = v.name"
+    )
+    connection.execute(
+        "INSERT INTO history.actual_stop_event (journey_id, service_date, location_term,"
+        " visit_n, event_type, revision, event_time, interval_lo, interval_hi, method_term,"
+        " source_term, derivation_id)"
+        " SELECT j.journey_id, j.service_date, l.term_id, 0, e::history.event_kind, 1, t, t, t,"
+        " (SELECT term_id FROM history.term WHERE value = 'gps'),"
+        " (SELECT term_id FROM history.term WHERE value = 'duk'),"
+        " (SELECT min(derivation_id) FROM history.derivation)"
+        " FROM history.journey j,"
+        " (VALUES ('jdf:stop:1', 'departure', timestamptz '2026-10-06 06:02+02'),"
+        "  ('jdf:stop:2', 'arrival', timestamptz '2026-10-06 06:16+02')) v (location, e, t)"
+        " JOIN history.term l ON l.value = v.location"
     )
     # It was cancelled on the 6th, then seen running after all.
     connection.execute(

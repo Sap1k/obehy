@@ -15,7 +15,7 @@ from obehy.release.load import partition_name
 
 NOTIFY_CHANNEL = "obehy_publication"
 # Predecessors whose data stays loaded for `--rollback`; each release is about 7 GB.
-DEFAULT_KEEP = 1
+DEFAULT_KEEP = 0
 
 
 class ActivationError(RuntimeError):

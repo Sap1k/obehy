@@ -1,7 +1,7 @@
 """Execute core effects against PostgreSQL: `rt.observation`, history, current state.
 
-Partitions are created on demand: `rt.observation` per UTC day, history per service-date
-month. Each `write` is one transaction. History rows carry the writer's derivation, so
+Partitions are created on demand: `rt.observation` per UTC hour, history per service date
+(`emit/storage.py`). Each `write` is one transaction. History rows carry the writer's derivation, so
 `clear_history` followed by a replay rebuilds days after a fix (BASE_PLAN.md section 29).
 """
 
@@ -10,13 +10,20 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, LiteralString, cast
 
 import psycopg
 from psycopg import sql
 
 from obehy.realtime.emit.represent import representing
+from obehy.realtime.emit.storage import (
+    HISTORY_TABLES,
+    Terms,
+    create_history_partitions,
+    create_observation_partition,
+    hour_of,
+)
 from obehy.realtime.emit.vehicles import VehicleBook
 from obehy.realtime.model import (
     AssignVehicle,
@@ -42,29 +49,9 @@ from obehy.realtime.model_json import facts_to_json
 from obehy.realtime.runs import current_part, published_parts
 from obehy.realtime.times import local_date
 
-HISTORY_TABLES = (
-    "journey",
-    "journey_schedule",
-    "journey_call",
-    "actual_stop_event",
-    "vehicle_assignment",
-    "vehicle_day",
-    "journey_link",
-    "platform_evidence",
-    "journey_cancellation",
-)
-
 
 def _key(journey: JourneyKey) -> tuple[str, str, str, date]:
     return journey.feed, journey.namespace, journey.key, journey.service_date
-
-
-def _month(day: date) -> date:
-    return day.replace(day=1)
-
-
-def _next_month(day: date) -> date:
-    return (day.replace(day=28) + timedelta(days=4)).replace(day=1)
 
 
 @dataclass(slots=True)
@@ -72,8 +59,9 @@ class Writer:
     connection: psycopg.Connection
     derivation: Derivation
     derivation_id: int = 0
-    _observation_days: set[date] = field(default_factory=set[date])
-    _history_months: set[date] = field(default_factory=set[date])
+    _observation_hours: set[datetime] = field(default_factory=set[datetime])
+    _history_days: set[date] = field(default_factory=set[date])
+    terms: Terms = field(init=False)
     # Per feed, the current-state rows last written (a feed not in it is rewritten in full)
     # and each journey's calls JSON with the calls tuple it was made from.
     _state: dict[Feed, _Written] = field(default_factory=dict[Feed, "_Written"])
@@ -94,6 +82,7 @@ class Writer:
         ).fetchone()
         assert row is not None
         self.derivation_id = cast(int, row[0])
+        self.terms = Terms.load(self.connection)
         self.vehicles = VehicleBook.load(self.connection)
 
     def reload_registry(self) -> None:
@@ -103,39 +92,15 @@ class Writer:
 
     # --- partitions ---------------------------------------------------------------------------
 
-    def _observation_partition(self, day: date) -> None:
-        if day in self._observation_days:
-            return
-        start = datetime(day.year, day.month, day.day, tzinfo=UTC)
-        self.connection.execute(
-            sql.SQL(
-                "CREATE TABLE IF NOT EXISTS rt.{} PARTITION OF rt.observation"
-                " FOR VALUES FROM ({}) TO ({})"
-            ).format(
-                sql.Identifier(f"observation_{day:%Y%m%d}"),
-                sql.Literal(start),
-                sql.Literal(start + timedelta(days=1)),
-            )
-        )
-        self._observation_days.add(day)
+    def _observation_partition(self, hour: datetime) -> None:
+        if hour not in self._observation_hours:
+            create_observation_partition(self.connection, hour)
+            self._observation_hours.add(hour)
 
     def _history_partition(self, day: date) -> None:
-        month = _month(day)
-        if month in self._history_months:
-            return
-        for table in HISTORY_TABLES:
-            self.connection.execute(
-                sql.SQL(
-                    "CREATE TABLE IF NOT EXISTS history.{} PARTITION OF history.{}"
-                    " FOR VALUES FROM ({}) TO ({})"
-                ).format(
-                    sql.Identifier(f"{table}_{month:%Y%m}"),
-                    sql.Identifier(table),
-                    sql.Literal(month),
-                    sql.Literal(_next_month(month)),
-                )
-            )
-        self._history_months.add(month)
+        if day not in self._history_days:
+            create_history_partitions(self.connection, day)
+            self._history_days.add(day)
 
     # --- effects -------------------------------------------------------------------------------
 
@@ -147,10 +112,17 @@ class Writer:
         links = [e for e in effects if isinstance(e, LinkJourneys)]
         platforms = [e for e in effects if isinstance(e, RecordPlatform)]
         cancellations = [e for e in effects if isinstance(e, RecordCancellation)]
-        for result in results:
-            self._observation_partition(result.observation.received_at.astimezone(UTC).date())
+        for hour in {hour_of(r.observation.received_at) for r in results}:
+            self._observation_partition(hour)
         for day in {e.journey.service_date for e in (*snapshots, *platforms, *cancellations)}:
             self._history_partition(day)
+        self.terms.add(
+            self.connection,
+            [
+                *(v for s in snapshots for c in s.calls for v in (c.location_id, c.name)),
+                *(v for e in events for v in (e.location_id, e.method, e.source)),
+            ],
+        )
         with self.connection.transaction():
             self._observations(results)
             for snapshot in snapshots:
@@ -207,14 +179,16 @@ class Writer:
             (*key, snapshot.at),
         )
         row = self.connection.execute(
-            "SELECT j.latest_revision, s.release_id, s.trip_id FROM history.journey j"
+            "SELECT j.journey_id, j.latest_revision, s.release_id, s.trip_id"
+            " FROM history.journey j"
             " LEFT JOIN history.journey_schedule s USING (feed, key_namespace, key, service_date)"
             " WHERE (j.feed, j.key_namespace, j.key, j.service_date) = (%s, %s, %s, %s)"
             " AND (s.revision IS NULL OR s.revision = j.latest_revision)",
             key,
         ).fetchone()
         assert row is not None
-        latest, release_id, trip_id = cast(tuple[int, str | None, str | None], row)
+        journey_id, latest, release_id, trip_id = cast(tuple[int, int, str | None, str | None], row)
+        day = snapshot.journey.service_date
         if (release_id, trip_id) == (snapshot.release_id, snapshot.trip_id):
             return
         revision = latest + 1
@@ -235,21 +209,22 @@ class Writer:
         )
         with self.connection.cursor() as cursor:
             cursor.executemany(
-                "INSERT INTO history.journey_call (feed, key_namespace, key, service_date,"
-                " revision, ordinal, location_id, visit_n, passenger_service,"
-                " scheduled_arrival, scheduled_departure, name)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                "INSERT INTO history.journey_call (journey_id, service_date, revision, ordinal,"
+                " location_term, visit_n, passenger_service, scheduled_arrival,"
+                " scheduled_departure, name_term)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 [
                     (
-                        *key,
+                        journey_id,
+                        day,
                         revision,
                         c.ordinal,
-                        c.location_id,
+                        self.terms[c.location_id],
                         c.visit_n,
                         c.passenger_service,
                         c.scheduled_arrival,
                         c.scheduled_departure,
-                        c.name,
+                        self.terms[c.name],
                     )
                     for c in snapshot.calls
                 ],
@@ -264,17 +239,14 @@ class Writer:
             self.connection.execute(
                 "UPDATE history.actual_stop_event e SET"
                 " orphaned = NOT EXISTS (SELECT 1 FROM history.journey_call c"
-                "   WHERE (c.feed, c.key_namespace, c.key, c.service_date, c.revision,"
-                "          c.location_id, c.visit_n)"
-                "       = (e.feed, e.key_namespace, e.key, e.service_date, %s,"
-                "          e.location_id, e.visit_n)),"
+                "   WHERE (c.journey_id, c.service_date, c.revision, c.location_term, c.visit_n)"
+                "       = (e.journey_id, e.service_date, %s, e.location_term, e.visit_n)),"
                 " revision = CASE WHEN EXISTS (SELECT 1 FROM history.journey_call c"
-                "   WHERE (c.feed, c.key_namespace, c.key, c.service_date, c.revision,"
-                "          c.location_id, c.visit_n)"
-                "       = (e.feed, e.key_namespace, e.key, e.service_date, %s,"
-                "          e.location_id, e.visit_n)) THEN %s ELSE e.revision END"
-                " WHERE (e.feed, e.key_namespace, e.key, e.service_date) = (%s, %s, %s, %s)",
-                (revision, revision, revision, *key),
+                "   WHERE (c.journey_id, c.service_date, c.revision, c.location_term, c.visit_n)"
+                "       = (e.journey_id, e.service_date, %s, e.location_term, e.visit_n))"
+                "   THEN %s ELSE e.revision END"
+                " WHERE (e.journey_id, e.service_date) = (%s, %s)",
+                (revision, revision, revision, journey_id, day),
             )
 
     def _events(self, events: Sequence[WriteEvent]) -> None:
@@ -282,29 +254,29 @@ class Writer:
             return
         with self.connection.cursor() as cursor:
             cursor.executemany(
-                "INSERT INTO history.actual_stop_event (feed, key_namespace, key, service_date,"
-                " location_id, visit_n, event_type, revision, event_time, interval_lo,"
-                " interval_hi, method, source, derivation_id)"
-                " SELECT %s, %s, %s, %s, %s, %s, %s, j.latest_revision, %s, %s, %s, %s, %s, %s"
+                "INSERT INTO history.actual_stop_event (journey_id, service_date, location_term,"
+                " visit_n, event_type, revision, event_time, interval_lo, interval_hi,"
+                " method_term, source_term, derivation_id)"
+                " SELECT j.journey_id, j.service_date, %s, %s, %s::history.event_kind,"
+                " j.latest_revision, %s, %s, %s, %s, %s, %s"
                 " FROM history.journey j"
                 " WHERE (j.feed, j.key_namespace, j.key, j.service_date) = (%s, %s, %s, %s)"
-                " ON CONFLICT (feed, key_namespace, key, service_date, location_id, visit_n,"
-                " event_type) DO UPDATE SET revision = excluded.revision,"
+                " ON CONFLICT (journey_id, service_date, location_term, visit_n, event_type)"
+                " DO UPDATE SET revision = excluded.revision,"
                 " event_time = excluded.event_time, interval_lo = excluded.interval_lo,"
-                " interval_hi = excluded.interval_hi, method = excluded.method,"
-                " source = excluded.source, orphaned = false,"
+                " interval_hi = excluded.interval_hi, method_term = excluded.method_term,"
+                " source_term = excluded.source_term, orphaned = false,"
                 " derivation_id = excluded.derivation_id",
                 [
                     (
-                        *_key(e.journey),
-                        e.location_id,
+                        self.terms[e.location_id],
                         e.visit_n,
                         e.kind,
                         e.interval.lo + (e.interval.hi - e.interval.lo) / 2,
                         e.interval.lo,
                         e.interval.hi,
-                        e.method,
-                        e.source,
+                        self.terms[e.method],
+                        self.terms[e.source],
                         self.derivation_id,
                         *_key(e.journey),
                     )
