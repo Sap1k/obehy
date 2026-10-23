@@ -1,0 +1,73 @@
+.content {
+  overflow: hidden;
+  background: var(--ob-surface);
+}
+
+/* The brand band: dark in both schemes, like the navbar (.ob-dark-scope). */
+.band {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 24px 24px;
+  background: var(--ob-surface);
+}
+
+.logo {
+  color: var(--ob-logo);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.title {
+  margin: 0;
+  color: var(--ob-text);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 700;
+}
+
+.text {
+  margin: 0;
+  color: var(--ob-text-secondary);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.text strong {
+  color: var(--ob-text);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ob-text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-selection);
+  color: var(--ob-selection-text);
+}

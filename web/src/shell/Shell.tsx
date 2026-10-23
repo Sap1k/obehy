@@ -14,6 +14,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { DataStatus } from "../components/DataStatus";
 import { Logo } from "../components/Logo";
 import { setPanelsRight } from "../features/map/store";
+import { DukfinderWelcome } from "../features/welcome/DukfinderWelcome";
 import { Search } from "../features/search/Search";
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap } from "../api/client";
@@ -189,6 +190,7 @@ export function Shell() {
       <Modal opened={searching} onClose={() => setSearching(false)} title="Hledat" fullScreen>
         <Search autoFocus onPicked={() => setSearching(false)} />
       </Modal>
+      <DukfinderWelcome />
     </div>
   );
 }

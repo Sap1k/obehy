@@ -1,3 +1,5 @@
+// Before the router reads the address: a referral (?refer=…) is taken out of it.
+import "./lib/referral";
 import "@fontsource-variable/manrope";
 import "@mantine/core/styles.css";
 import "./theme/tokens.css";
