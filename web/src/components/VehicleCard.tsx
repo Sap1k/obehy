@@ -1,5 +1,12 @@
-import { IconBus, IconSnowflake, IconTrain, IconWheelchair } from "@tabler/icons-react";
+import {
+  IconBus,
+  IconExternalLink,
+  IconSnowflake,
+  IconTrain,
+  IconWheelchair,
+} from "@tabler/icons-react";
 import type { TripVehicle } from "../api/client";
+import { plateText, plateUrl } from "../lib/plates";
 import classes from "./VehicleCard.module.css";
 
 const RAIL_MODES = new Set([
@@ -12,11 +19,13 @@ const RAIL_MODES = new Set([
   "monorail",
 ]);
 
-/** The vehicle on a trip (Figma "Vehicle card"): mode tile, number, model · operator, traits. */
+/** The vehicle on a trip (Figma "Vehicle card"): mode tile, number, model · operator, traits.
+ * A plate links to the vehicle on seznam-autobusu.cz. */
 export function VehicleCard({ vehicle, mode }: { vehicle: TripVehicle; mode: string }) {
   const traits = vehicle.traits ?? {};
   const Mode = RAIL_MODES.has(mode) ? IconTrain : IconBus;
-  const number = traits.fleet_number ?? traits.licence_plate ?? vehicle.vehicle_id;
+  const plate = traits.licence_plate ?? null;
+  const number = traits.fleet_number ?? (plate ? plateText(plate) : vehicle.vehicle_id);
   const meta = [traits.model, traits.operator].filter(Boolean).join(" · ");
   const chips = [
     (traits.low_floor || traits.wheelchair_accessible) && {
@@ -34,6 +43,12 @@ export function VehicleCard({ vehicle, mode }: { vehicle: TripVehicle; mode: str
         <span className={classes.texts}>
           <span className={classes.number}>{number}</span>
           {meta && <span className={classes.meta}>{meta}</span>}
+          {plate && (
+            <a className={classes.plate} href={plateUrl(plate)} target="_blank" rel="noreferrer">
+              SPZ {plateText(plate)}
+              <IconExternalLink size={12} stroke={2} aria-label="na seznam-autobusu.cz" />
+            </a>
+          )}
         </span>
       </div>
       {chips.length > 0 && (

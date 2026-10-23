@@ -64,3 +64,19 @@
   line-height: 18px;
   font-weight: 500;
 }
+
+.plate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  color: var(--ob-link);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.plate:hover {
+  text-decoration: underline;
+}
