@@ -14,10 +14,12 @@ import {
 import { AREA, type Bounds } from "./grid";
 import { drawnPositions, positionsAt, progress, startGlide, type Glide } from "./motion";
 import type { Positioned } from "./queries";
-import { mapStyle } from "./style";
-import { PUCK_ZOOM, vehicleLayers, type TripOverlay } from "./VehicleLayers";
+import { TRIP_ARROW, TRIP_SOURCE, mapStyle } from "./style";
+import { arrowImage, tripFeatures, type TripOverlay } from "./tripLayer";
+import { PUCK_ZOOM, vehicleLayers } from "./VehicleLayers";
 
-// The map outside React: MapLibre with deck.gl drawing into its canvas, the vehicles' glide
+// The map outside React: MapLibre (the base map and the open trip) with deck.gl drawing the
+// vehicles into its canvas, the vehicles' glide
 // (every frame, without React), and the camera (camera.ts decides, this applies). React gives
 // it what to show with `update`, every render; it compares and does only what changed.
 
@@ -178,6 +180,11 @@ export class MapController {
     });
     map.addControl(this.overlay);
 
+    // A new style (the colour scheme) starts with an empty trip and no arrow.
+    map.on("style.load", () => this.drawTrip());
+    map.on("styleimagemissing", (e: { id: string }) => {
+      if (e.id === TRIP_ARROW) map.addImage(TRIP_ARROW, arrowImage(), { pixelRatio: 2 });
+    });
     map.on("load", this.onMoveEnd);
     map.on("moveend", this.onMoveEnd);
     map.on("movestart", this.onMoveStart);
@@ -201,12 +208,12 @@ export class MapController {
       this.dark = input.dark;
       this.map.setStyle(mapStyle(input.dark));
     }
+    if (first || input.trip !== was.trip) this.drawTrip();
     if (first || input.vehicles !== was.vehicles) this.startGlide(input.vehicles);
     else if (
       input.ready !== was.ready ||
       input.dark !== was.dark ||
       input.selectedId !== was.selectedId ||
-      input.trip !== was.trip ||
       input.stop !== was.stop
     ) {
       this.render();
@@ -234,12 +241,17 @@ export class MapController {
         frame: this.frame,
         zoom: this.zoom,
         selectedId: input.selectedId,
-        trip: input.trip,
         stop: input.stop as [number, number] | null,
         accent: input.dark ? ACCENT.dark : ACCENT.light,
         onPick: (v) => this.handlers.pick(v),
       }),
     });
+  }
+
+  /** The open trip into MapLibre's source (absent until the style has loaded). */
+  private drawTrip(): void {
+    const source = this.map.getSource<maplibregl.GeoJSONSource>(TRIP_SOURCE);
+    source?.setData(tripFeatures(this.input.trip));
   }
 
   /** Each new answer glides every vehicle from where it is drawn to where it is reported. */

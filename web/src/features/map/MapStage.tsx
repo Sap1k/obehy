@@ -15,7 +15,7 @@ import type { Bounds } from "./grid";
 import { mergeVehicles, useVehiclesIn } from "./queries";
 import { useSelection } from "./selection";
 import { unfollow, useMapStore } from "./store";
-import type { TripOverlay } from "./VehicleLayers";
+import { RANK, stopLabels, type TripOverlay } from "./tripLayer";
 import classes from "./MapPage.module.css";
 
 /** The map under the app (the shell's, on every tab; on the phone shown on the map tab only):
@@ -58,15 +58,27 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
   );
 
   const tripData = trip.data;
+  const boardStop = opened.stopId;
   const tripOverlay = useMemo<TripOverlay | null>(() => {
     if (!tripData) return null;
-    const stops = tripData.calls.flatMap((c) =>
-      c.latitude !== null && c.longitude !== null && c.boarding !== "none"
-        ? [{ position: [c.longitude, c.latitude] as [number, number], passed: isPassed(c, now) }]
-        : [],
+    const calls = tripData.calls.filter(
+      (c) => c.latitude !== null && c.longitude !== null && c.boarding !== "none",
     );
+    const names = stopLabels(calls.map((c) => c.name));
+    const next = calls.findIndex((c) => !isPassed(c, now));
+    const stops = calls.map((c, i) => ({
+      position: [c.longitude!, c.latitude!] as [number, number],
+      name: names[i]!,
+      passed: isPassed(c, now),
+      rank:
+        c.location_id === boardStop || i === next
+          ? RANK.focus
+          : i === 0 || i === calls.length - 1
+            ? RANK.end
+            : RANK.other,
+    }));
     return { paths: paths ?? [], stops, colour: hexColour(tripData.line.color, "#153438") };
-  }, [tripData, paths, now]);
+  }, [tripData, paths, now, boardStop]);
 
   const input: MapInput = {
     dark,

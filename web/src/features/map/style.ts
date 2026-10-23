@@ -310,11 +310,107 @@ function layers(p: Palette): LayerSpecification[] {
   ];
 }
 
+/** The open trip (tripLayer.ts fills the source): its path with arrows under the base map's
+ * labels, its stops and their names over them. */
+export const TRIP_SOURCE = "trip";
+export const TRIP_ARROW = "trip-arrow";
+
+const IS_PATH: ExpressionSpecification = ["==", ["get", "kind"], "path"];
+const IS_STOP: ExpressionSpecification = ["==", ["get", "kind"], "stop"];
+const PASSED: ExpressionSpecification = ["get", "passed"];
+
+function tripPath(p: Palette): LayerSpecification[] {
+  const src = { source: TRIP_SOURCE, filter: IS_PATH };
+  const round = { "line-join": "round", "line-cap": "round" } as const;
+  return [
+    {
+      id: "trip-casing",
+      type: "line",
+      ...src,
+      layout: round,
+      paint: { "line-color": p.halo, "line-width": grow(6, 5, 16, 15) },
+    },
+    {
+      id: "trip-line",
+      type: "line",
+      ...src,
+      layout: round,
+      paint: { "line-color": ["get", "colour"], "line-width": grow(6, 3, 16, 10) },
+    },
+    {
+      id: "trip-arrows",
+      type: "symbol",
+      ...src,
+      minzoom: 9,
+      layout: {
+        "symbol-placement": "line",
+        "symbol-spacing": 90,
+        "icon-image": TRIP_ARROW,
+        "icon-size": grow(9, 0.75, 16, 1.2),
+        "icon-rotation-alignment": "map",
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+    },
+  ];
+}
+
+function tripStops(p: Palette): LayerSpecification[] {
+  const src = { source: TRIP_SOURCE, filter: IS_STOP };
+  return [
+    {
+      id: "trip-stops",
+      type: "circle",
+      ...src,
+      paint: {
+        "circle-radius": grow(6, 2.5, 16, 6),
+        "circle-color": p.road,
+        "circle-stroke-color": ["case", PASSED, p.rail, ["get", "colour"]],
+        "circle-stroke-width": grow(6, 1.5, 16, 3),
+      },
+    },
+    {
+      // Each name beside its stop where it fits, the board's and the next stop's first, then
+      // the ends; a name that fits nowhere is left out until one zooms in.
+      id: "trip-stop-names",
+      type: "symbol",
+      ...src,
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": REGULAR,
+        "text-size": grow(8, 11, 16, 13),
+        "text-variable-anchor": ["left", "right", "top", "bottom"],
+        "text-radial-offset": 0.8,
+        "text-justify": "auto",
+        "text-padding": 3,
+        "symbol-sort-key": ["get", "rank"],
+      },
+      paint: {
+        "text-color": ["case", PASSED, p.labelMinor, p.label],
+        "text-halo-color": p.halo,
+        "text-halo-width": 1.5,
+      },
+    },
+  ];
+}
+
 export function mapStyle(dark: boolean): StyleSpecification {
+  const p = dark ? DARK : LIGHT;
+  const base = layers(p);
+  // The path under the base map's labels (from the road names on).
+  const labelsFrom = base.findIndex((l) => l.id === "road-name");
   return {
     version: 8,
     glyphs: GLYPHS,
-    sources: { osm: { type: "vector", url: TILES, attribution: ATTRIBUTION } },
-    layers: layers(dark ? DARK : LIGHT),
+    sources: {
+      osm: { type: "vector", url: TILES, attribution: ATTRIBUTION },
+      [TRIP_SOURCE]: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    },
+    layers: [
+      ...base.slice(0, labelsFrom),
+      ...tripPath(p),
+      ...base.slice(labelsFrom),
+      ...tripStops(p),
+    ],
   };
 }

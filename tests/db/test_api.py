@@ -47,12 +47,28 @@ def _jdf() -> Rows:
     rows["trip"].append(
         {"trip_id": "jdf:trip:2", "route_id": "jdf:route:000001", "service_id": "jdf:service:1"}
     )
+    # A post whose position is surveyed, at a stop place without one.
+    rows["location"].append(
+        {
+            "location_id": "jdf:stop:2:post:1",
+            "kind": "boarding_point",
+            "domain": "surface",
+            "parent_location_id": "jdf:stop:2",
+            "name": "Nový Bor,,nám.",
+            "public_code": "2",
+            "coordinate_precision": "exact",
+            "coordinate_source": "osm",
+            "longitude": 14.6,
+            "latitude": 50.76,
+        }
+    )
     for sequence, location, seconds in ((1, "jdf:stop:1", 88200), (2, "jdf:stop:2", 89100)):
         rows["trip_call"].append(
             {
                 "trip_id": "jdf:trip:2",
                 "sequence": sequence,
                 "location_id": location,
+                "boarding_point_id": "jdf:stop:2:post:1" if sequence == 2 else None,
                 "passenger_service": True,
                 "scheduled_arrival": seconds,
                 "scheduled_departure": seconds,
@@ -655,6 +671,15 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/debug/lookups",
         "/api/v1/debug/static/trips/{trip_id}",
     }
+
+
+def test_a_call_stands_at_its_post_when_its_position_is_exact(client: TestClient) -> None:
+    # Trip 1 boards at a post placed by JrUtil's estimate: the stop place's position.
+    first = _get(client, "/trips/jdf:trip:1/2026-10-06")["calls"][0]
+    assert (first["latitude"], first["longitude"]) == (50.68, 14.54)
+    # Trip 2 ends at a surveyed post of a stop place without a position: the post's.
+    calls = _get(client, "/trips/jdf:trip:2/2026-10-06")["calls"]
+    assert [(c["latitude"], c["longitude"]) for c in calls] == [(50.68, 14.54), (50.76, 14.6)]
 
 
 def test_fixed_codes_are_readable(client: TestClient) -> None:

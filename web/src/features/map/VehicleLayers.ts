@@ -1,5 +1,5 @@
 import type { Layer, PickingInfo } from "@deck.gl/core";
-import { IconLayer, PathLayer, ScatterplotLayer, type IconLayerProps } from "@deck.gl/layers";
+import { IconLayer, ScatterplotLayer, type IconLayerProps } from "@deck.gl/layers";
 import {
   ARROW_ICON_PX,
   ARROW_KEY,
@@ -11,8 +11,8 @@ import {
 } from "./badges";
 import type { Positioned } from "./queries";
 
-// The deck.gl layers drawn into the map's WebGL canvas: the selected trip's path and stops,
-// then the vehicles: dots when zoomed out, pucks with bearing pointers when zoomed in, and the
+// The deck.gl layers drawn into the map's WebGL canvas (the open trip is MapLibre's own,
+// tripLayer.ts): a board's stop, then the vehicles: dots when zoomed out, pucks with bearing pointers when zoomed in, and the
 // selected vehicle always as a puck with a halo.
 
 /** The selected vehicle's puck is this much larger. */
@@ -22,13 +22,6 @@ const SELECTED_SCALE = 1.15;
 export const PUCK_ZOOM = 11;
 
 const INK = "#153438";
-
-export interface TripOverlay {
-  /** The path's lines, [lon, lat] each. */
-  paths: [number, number][][];
-  stops: { position: [number, number]; passed: boolean }[];
-  colour: string;
-}
 
 export interface LayerInput {
   vehicles: Positioned[];
@@ -41,7 +34,6 @@ export interface LayerInput {
   frame: number;
   zoom: number;
   selectedId: string | undefined;
-  trip: TripOverlay | null;
   /** A board's stop place, [lon, lat]. */
   stop: [number, number] | null;
   /** The halo's colour (the action token of the scheme). */
@@ -52,8 +44,7 @@ export interface LayerInput {
 const colourOf = (v: Positioned) => rgb(hexColour(v.line?.color, INK));
 
 export function vehicleLayers(input: LayerInput): Layer[] {
-  const { vehicles, keys, atlas, positions, frame, zoom, selectedId, trip, stop, accent, onPick } =
-    input;
+  const { vehicles, keys, atlas, positions, frame, zoom, selectedId, stop, accent, onPick } = input;
   const at = (_: unknown, { index }: { index: number }): [number, number] => [
     positions[index * 2]!,
     positions[index * 2 + 1]!,
@@ -70,34 +61,6 @@ export function vehicleLayers(input: LayerInput): Layer[] {
   const selectedIndex = selectedId ? vehicles.findIndex((v) => v.vehicle_id === selectedId) : -1;
   const selected = selectedIndex >= 0 ? [selectedIndex] : [];
   const layers: Layer[] = [];
-
-  if (trip) {
-    const colour = rgb(trip.colour);
-    layers.push(
-      new PathLayer<[number, number][]>({
-        id: "trip-path",
-        data: trip.paths,
-        getPath: (p) => p,
-        getColor: [...colour, 220],
-        getWidth: 4,
-        widthUnits: "pixels",
-        capRounded: true,
-        jointRounded: true,
-      }),
-      new ScatterplotLayer<TripOverlay["stops"][number]>({
-        id: "trip-stops",
-        data: trip.stops,
-        getPosition: (s) => s.position,
-        getRadius: 4,
-        radiusUnits: "pixels",
-        getFillColor: [255, 255, 255],
-        getLineColor: (s) => (s.passed ? [150, 163, 157] : [...colour, 255]),
-        lineWidthUnits: "pixels",
-        getLineWidth: 2,
-        stroked: true,
-      }),
-    );
-  }
 
   if (stop) {
     layers.push(

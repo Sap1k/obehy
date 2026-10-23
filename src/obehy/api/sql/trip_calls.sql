@@ -1,5 +1,7 @@
 -- A trip's passenger calls with their realtime state: the trip's slice of the current journey's
--- calls (a rail run's part), matched by sequence. Railway points are not public stops.
+-- calls (a rail run's part), matched by sequence. Railway points are not public stops. A call is
+-- placed at its post when the post's position is known exactly (not JrUtil's estimate), else at
+-- its stop place.
 WITH state AS (
     SELECT s.calls, p.first_call, p.last_call
     FROM rt.trip_part_current p
@@ -14,7 +16,11 @@ live AS (
     FROM state, jsonb_array_elements(state.calls) WITH ORDINALITY AS e (value, n)
     WHERE e.n - 1 BETWEEN state.first_call AND state.last_call
 )
-SELECT c.sequence, c.location_id, l.name, l.latitude, l.longitude, c.pickup_type,
+SELECT c.sequence, c.location_id, l.name,
+       CASE WHEN bp.coordinate_precision = 'exact' THEN bp.latitude ELSE l.latitude END AS latitude,
+       CASE WHEN bp.coordinate_precision = 'exact' THEN bp.longitude ELSE l.longitude END
+           AS longitude,
+       c.pickup_type,
        c.dropoff_type, bp.public_code AS platform,
        control.obehy_instant_fast(%(service_date)s, c.scheduled_arrival) AS scheduled_arrival,
        control.obehy_instant_fast(%(service_date)s, c.scheduled_departure) AS scheduled_departure,

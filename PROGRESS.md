@@ -308,6 +308,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-23** — The map's open trip is drawn by MapLibre (smooth, wider, with a halo and
+  direction arrows; deck.gl's lines were aliased in MapLibre's context), its stops with names
+  placed by MapLibre's collision (the board's and next stop first, then the ends; a town with
+  most of the trip's stops left out of their names). `/trips` places a call at its post when
+  the post's position is exact, else at the stop place. Validated: DB test, Vitest, style validation,
+  browser (metro B from Národní třída); posts show on the dev map once the API is deployed.
 - **2026-10-23** — Web state rework: what is open comes from the URL only, server data from one
   query per resource (a trip's path is its own query, asked once), and the map's own UI state
   (followed vehicle, panel insets, sheet snap) from one selector store. One `MapController`
