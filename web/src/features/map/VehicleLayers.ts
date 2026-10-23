@@ -23,10 +23,6 @@ export const PUCK_ZOOM = 11;
 
 const INK = "#153438";
 
-/** The atlas is drawn at twice its size on screen: sampled from its full size only. Its mipmaps
- * came out black on some mobile GPUs (Xclipse). */
-const ATLAS_SAMPLER = { minFilter: "linear", magFilter: "linear", mipmapFilter: "none" } as const;
-
 export interface LayerInput {
   vehicles: Positioned[];
   /** Each vehicle's puck in the atlas, in the vehicles' order. */
@@ -57,9 +53,9 @@ export function vehicleLayers(input: LayerInput): Layer[] {
     if (info.object) onPick(info.object);
     return true;
   };
-  // deck.gl makes a texture of any image source, ImageData too; its type names only URLs and
+  // deck.gl makes a texture of any image source, a canvas too; its type names only URLs and
   // textures.
-  const iconAtlas = atlas.image as unknown as IconLayerProps["iconAtlas"];
+  const iconAtlas = atlas.canvas as unknown as IconLayerProps["iconAtlas"];
   const iconMapping = atlas.mapping;
   const pucks = zoom >= PUCK_ZOOM;
   const selectedIndex = selectedId ? vehicles.findIndex((v) => v.vehicle_id === selectedId) : -1;
@@ -109,7 +105,6 @@ export function vehicleLayers(input: LayerInput): Layer[] {
         data: vehicles,
         iconAtlas,
         iconMapping,
-        textureParameters: ATLAS_SAMPLER,
         getPosition: at,
         getIcon: () => ARROW_KEY,
         getSize: ARROW_ICON_PX,
@@ -123,7 +118,6 @@ export function vehicleLayers(input: LayerInput): Layer[] {
         data: vehicles,
         iconAtlas,
         iconMapping,
-        textureParameters: ATLAS_SAMPLER,
         getPosition: at,
         getIcon: (_, { index }) => keys[index]!,
         getSize: PUCK_ICON_PX,
@@ -157,7 +151,6 @@ export function vehicleLayers(input: LayerInput): Layer[] {
         data: selected,
         iconAtlas,
         iconMapping,
-        textureParameters: ATLAS_SAMPLER,
         getPosition: atSelected,
         getIcon: () => ARROW_KEY,
         getSize: 56, // the tip reaches past the ring
@@ -184,7 +177,6 @@ export function vehicleLayers(input: LayerInput): Layer[] {
         data: selected,
         iconAtlas,
         iconMapping,
-        textureParameters: ATLAS_SAMPLER,
         getPosition: atSelected,
         getIcon: (i) => keys[i]!,
         getSize: PUCK_ICON_PX * SELECTED_SCALE,
