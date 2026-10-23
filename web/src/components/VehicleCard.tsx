@@ -28,12 +28,14 @@ export function VehicleCard({ vehicle, mode }: { vehicle: TripVehicle; mode: str
   const Mode = RAIL_MODES.has(mode) ? IconTrain : IconBus;
   const plate = traits.licence_plate ?? null;
   const fleet = traits.fleet_number ?? null;
-  const title = traits.model ?? (plate ? plateText(plate) : (fleet ?? vehicle.vehicle_id));
+  // The model with its maker ("Iveco Crossway LE LINE 13M"); the API gives them apart.
+  const model = traits.model ? [traits.manufacturer, traits.model].filter(Boolean).join(" ") : null;
+  const title = model ?? (plate ? plateText(plate) : (fleet ?? vehicle.vehicle_id));
   // The identifier, unless it is the title already.
   const identifier = fleet ? (title === fleet ? null : `č. ${fleet}`) : null;
   const meta = [identifier, traits.operator].filter(Boolean).join(" · ");
   // A plate in the title links from there; else on its own line.
-  const titleIsPlate = !traits.model && plate !== null;
+  const titleIsPlate = !model && plate !== null;
   const chips = [
     (traits.low_floor || traits.wheelchair_accessible) && {
       label: "Bezbariérový",

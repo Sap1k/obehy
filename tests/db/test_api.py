@@ -287,9 +287,10 @@ def _vehicles(connection: psycopg.Connection) -> None:
     load_dataset(
         connection,
         duk_register.parse(
-            "vhc_id,model,agency,year_of_manufacture,low_floor,contactless_payments,"
-            "air_conditioning,alternate_fuel,USB_chargers\n"
-            "1001,Iveco Crossway LE LINE 13M,AKV bus,2014,1,0,,0,0\n",
+            "vehicle_id,source,source_vehicle_id,manufacturer,model,mode,fleet_number,"
+            "operator,year,low_floor,contactless_payment,alternative_fuel,usb\n"
+            "duk:1001,duk,1001,Iveco,Crossway LE LINE 13M,bus,1001,AKV bus,2014,true,false,"
+            "false,false\n",
             "seed-1",
         ),
     )
@@ -897,7 +898,10 @@ def test_one_registered_vehicle_seen_by_two_sources(client: TestClient) -> None:
         ("mpvnet", "identifier"),
     ]
     assert detail["registry"]["datasets"] == ["vehicles", "duk-register"]
-    assert detail["registry"]["model"] == "Iveco Crossway LE LINE 13M"
+    assert (detail["registry"]["manufacturer"], detail["registry"]["model"]) == (
+        "Iveco",
+        "Crossway LE LINE 13M",
+    )
     found = {a["attribute"]: a for a in detail["attributes"]}
     # Instants stored in jsonb (UTC) are answered in Prague time like every other time.
     stated = [s["observed_at"] for a in found.values() for s in a["statements"]]

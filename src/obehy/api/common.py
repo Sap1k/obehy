@@ -66,6 +66,7 @@ def traits(row: DictRow) -> schema.VehicleTraits:
         low_floor=row["low_floor"],
         air_conditioning=row["air_conditioning"],
         wheelchair_accessible=row["wheelchair_accessible"],
+        manufacturer=row["manufacturer"],
         model=row["model"],
         operator=row["operator"],
         licence_plate=row["licence_plate"],

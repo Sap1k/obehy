@@ -65,8 +65,8 @@ realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
   journey: rail journeys are train number + service date, joined by `journey_link` where the
   number changes.
 - **Core state is partitioned by feed**; nothing in memory crosses `jdf` and `czptt`.
-- **Curated data is git-reviewed files + `obehy ref import`.** `ref.*` is a mirror. Private
-  datasets (the DÚK register) come from a local path and are never committed.
+- **Curated data is git-reviewed files + `obehy ref import`.** `ref.*` is a mirror. The vehicle
+  datasets (our own list, the DÚK register) live in `jrunify-ext-geodata/vehicles/`.
 - **Quirk ledger.** Every source quirk (a catch-22 of Czech data) gets an ID in its dossier's
   **Quirks** section (`DUK-Q3`), is normalized in the connector, and has a scenario test named
   after the ID.

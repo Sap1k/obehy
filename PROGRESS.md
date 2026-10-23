@@ -223,7 +223,7 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   2026-10-20 (phase A): readable static codes, arrivals, nearby stops, multi-stop boards with
   a cursor, the vehicle on boards and trips, lines, connections and journey links, journey
   history and line punctuality, debug endpoints. Phase B (2026-10-21): the vehicle registry
-  (`obehy ref import`: our own list over the private DÚK register seed; keys by source ID,
+  (`obehy ref import`: our own list over the DÚK register and PID model seeds; keys by source ID,
   plate, EVN or series number), live attributes from PID, DÚK, DPMD, MPVnet and Arriva,
   co-located reports of two sources paired into one vehicle, precedence curated > live >
   model with conflicts flagged, all resolved in the worker (`rt.vehicle_profile`); vehicle
@@ -311,9 +311,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 - **2026-10-23** — Registry seed `pid-vehicles`: PID's vehicle models and equipment from
   Golemio's per-vehicle descriptors (`/v2/public/vehiclepositions/{id}?scopes=vehicle_descriptor`;
   the position feed has no model), fetched slowly into a CSV (`obehy ref fetch`) and imported
-  only for vehicles with a model. The server's jobs service imports it and the DÚK register
-  (`secrets/duk-register.csv`) at start and nightly. Web: a plate links to seznam-autobusu.cz.
-  Validated: unit tests, a live 5-vehicle fetch; not yet imported on the server.
+  only for vehicles with a model; the server's jobs service fetches and imports it at start and
+  nightly. The DÚK register is no longer private: normalised into our vehicle list's format as
+  `jrunify-ext-geodata/vehicles/duk.csv` (522 vehicles, makers split where the name starts with
+  one), imported by hand until vehicle datasets ship with releases. The API's vehicle traits
+  carry the manufacturer. Web: a plate links to seznam-autobusu.cz; a vehicle is named by its
+  model or plate. Validated: unit and API DB tests, a live 5-vehicle fetch, the DÚK file read
+  and checked; not yet imported on the server.
 - **2026-10-23** — The map's open trip is drawn by MapLibre (smooth, wider, with a halo and
   direction arrows; deck.gl's lines were aliased in MapLibre's context), its stops with names
   placed by MapLibre's collision (the board's and next stop first, then the ends; a town with

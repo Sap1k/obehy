@@ -17,10 +17,13 @@ VOCABULARY = load_vocabulary()
 
 
 def test_the_duk_seed_keys_each_vehicle_by_its_duk_id() -> None:
+    # jrunify-ext-geodata/vehicles/duk.csv: our own list's format, read as a seed.
     dataset = duk_register.parse(
-        "vhc_id,model,agency,year_of_manufacture,low_floor,contactless_payments,"
-        "air_conditioning,alternate_fuel,USB_chargers\n"
-        "807,Iveco Crossway LE LINE 13M,AKV bus,2014,1,0,1,0,0\n",
+        "vehicle_id,source,source_vehicle_id,valid_from,valid_to,manufacturer,model,mode,"
+        "fleet_number,operator,year,low_floor,contactless_payment,air_conditioning,"
+        "alternative_fuel,usb\n"
+        "duk:807,duk,807,,,Iveco,Crossway LE LINE 13M,bus,807,AKV bus,2014,true,false,true,"
+        "false,false\n",
         "v1",
     )
     dataset.check(VOCABULARY)
@@ -29,8 +32,10 @@ def test_the_duk_seed_keys_each_vehicle_by_its_duk_id() -> None:
     assert dataset.keys == [Key("duk:807", date(2000, 1, 1), source="duk", source_vehicle_id="807")]
     assert ("duk:807", "low_floor", "true") in dataset.attributes
     assert ("duk:807", "usb", "false") in dataset.attributes
-    assert dataset.models[0].manufacturer is None  # never guessed from the model name
-    assert (dataset.priority, dataset.private) == (10, True)
+    (model,) = dataset.models
+    assert (model.manufacturer, model.model, model.mode) == ("Iveco", "Crossway LE LINE 13M", "bus")
+    assert ("duk:807", "operator", "AKV bus") in dataset.attributes
+    assert (dataset.name, dataset.priority, dataset.private) == ("duk-register", 10, False)
 
 
 def test_our_list_adds_a_plate_to_a_seeded_vehicle_and_a_new_one() -> None:

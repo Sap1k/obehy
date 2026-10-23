@@ -22,9 +22,10 @@ from obehy.runtime_config import (
     load_secrets,
 )
 
-# Dataset name -> its reader: our own vehicle list (`vehicles`, in jrunify-ext-geodata) and
-# seeds. A file comes from `--path` or `[reference] <name>` in the config; a private one (the
-# DÚK register) never from a repository; one built from a source (`pid-vehicles`) by `ref fetch`.
+# Dataset name -> its reader: our own vehicle list (`vehicles`) and the DÚK register
+# (`duk-register`), both curated in jrunify-ext-geodata/vehicles/, and PID's models
+# (`pid-vehicles`), built from Golemio by `ref fetch`. A file comes from `--path` or
+# `[reference] <name>` in the config.
 READERS: dict[str, Callable[[Path], Dataset]] = {
     vehicle_list.NAME: vehicle_list.read,
     duk_register.NAME: duk_register.read,

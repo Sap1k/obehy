@@ -16,7 +16,8 @@ const card = (traits: TripVehicle["traits"]) =>
 describe("VehicleCard", () => {
   it("is named by its model, its number and operator below", () => {
     card({
-      model: "Iveco Crossway LE CITY 12M",
+      manufacturer: "Iveco",
+      model: "Crossway LE CITY 12M",
       fleet_number: "7621",
       operator: "ARRIVA",
       licence_plate: "1TD8408",

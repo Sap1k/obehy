@@ -1,20 +1,14 @@
 #!/bin/sh
 # Run `obehy jobs nightly` every day at 03:30 local time (TZ, Europe/Prague in the image),
 # after the last night journeys of the previous service date. After it, and once at start (so a
-# new file or key counts without waiting for the night), the registry's seeds are refreshed:
-# - the private DÚK register, when its file is in secrets/ (`duk-register.csv`; an unchanged
-#   file is skipped);
-# - PID's vehicle models from Golemio (with OBEHY_SECRET_GOLEMIO): the vehicles running now that
-#   are new or a month old are asked about slowly, kept in the data volume, then imported.
+# new key counts without waiting for the night), PID's vehicle models are refreshed from Golemio
+# (with OBEHY_SECRET_GOLEMIO): the vehicles running now that are new or a month old are asked
+# about slowly, kept in the data volume, then imported into the registry.
 set -u
 
-DUK_REGISTER=/app/secrets/duk-register.csv
 PID_VEHICLES=/app/data/reference/pid-vehicles.csv
 
 refresh_registry() {
-    if [ -f "$DUK_REGISTER" ]; then
-        obehy ref import duk-register --path "$DUK_REGISTER" || echo "DÚK register import failed" >&2
-    fi
     if [ -n "${OBEHY_SECRET_GOLEMIO:-}" ]; then
         { obehy ref fetch pid-vehicles --path "$PID_VEHICLES" &&
             obehy ref import pid-vehicles --path "$PID_VEHICLES"; } ||

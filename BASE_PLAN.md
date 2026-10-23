@@ -1874,8 +1874,10 @@ Vehicle data comes from the sources and from curated datasets.
   of truth.
   - Oběhy's own list (`vehicles`, priority 0, public, `jrunify-ext-geodata/vehicles/`) is the
     registry being built up, keyed by plate or by source and ID.
-  - Seeds fill it meanwhile: the DÚK register (`duk-register`, priority 10) is private, read
-    from a path in `obehy.local.toml` and never committed.
+  - Seeds fill it meanwhile: the DÚK register (`duk-register`, priority 10,
+    `jrunify-ext-geodata/vehicles/duk.csv`, in the list's own format) and PID's vehicle models
+    from Golemio (`pid-vehicles`, priority 20, fetched by the server). The curated files are to
+    ship with releases; until then they are imported by hand.
 
 A vehicle is identified at one of three levels:
 

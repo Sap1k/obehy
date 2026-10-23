@@ -76,7 +76,8 @@ remainders collide with unrelated vehicles of other operators.
 
 ## Vehicle register
 
-DÚK's vehicle register (`duk-vhc-data.csv`, received out of band, not public) lists 522 vehicles
+DÚK's vehicle register (received as `duk-vhc-data.csv`; now curated in
+`jrunify-ext-geodata/vehicles/duk.csv` in our vehicle list's format) lists 522 vehicles
 of six operators with model, operator, year of manufacture, low floor, contactless payment, air
 conditioning, alternative fuel and USB chargers, keyed by `ID`. It covers 284 of the 403 DÚK-range
 vehicles seen in the capture; its low-floor flag agrees with `HasLowfloor` for all 284. The 119

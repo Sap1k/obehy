@@ -200,7 +200,8 @@ class VehicleTraits(BaseModel):
     low_floor: bool | None = None
     air_conditioning: bool | None = None
     wheelchair_accessible: bool | None = None
-    model: str | None = None
+    manufacturer: str | None = None
+    model: str | None = Field(default=None, description="Without the manufacturer")
     operator: str | None = None
     licence_plate: str | None = None
     fleet_number: str | None = None

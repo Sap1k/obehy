@@ -223,7 +223,7 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
 
 def load_reference_path(name: str, path: Path | None = None) -> Path | None:
     """A reference dataset's file: ``OBEHY_REFERENCE_<NAME>`` or ``[reference] <name>`` in the
-    config. Private datasets (the DÚK register) live only there, never in the repository."""
+    config (the curated ones are in jrunify-ext-geodata/vehicles/)."""
 
     environment = os.environ.get(f"OBEHY_REFERENCE_{name.upper().replace('-', '_')}", "").strip()
     if environment:

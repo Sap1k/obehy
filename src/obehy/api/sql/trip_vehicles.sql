@@ -8,8 +8,8 @@ FROM (
            v.bearing, bool_or(v.represents) OVER (PARTITION BY v.trip_id, v.vehicle_id)
                AS represents,
            array_agg(v.source) OVER (PARTITION BY v.trip_id, v.vehicle_id) AS sources,
-           p.low_floor, p.air_conditioning, p.wheelchair_accessible, p.model, p.operator,
-           p.licence_plate, p.fleet_number
+           p.low_floor, p.air_conditioning, p.wheelchair_accessible, p.manufacturer, p.model,
+           p.operator, p.licence_plate, p.fleet_number
     FROM rt.vehicle_state_current v
     LEFT JOIN rt.vehicle_profile p USING (vehicle_id)
     WHERE v.trip_id = ANY(%(trip_ids)s::text[]) AND v.service_date = %(service_date)s

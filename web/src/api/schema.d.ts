@@ -2071,7 +2071,12 @@ export interface components {
             licence_plate?: string | null;
             /** Low Floor */
             low_floor?: boolean | null;
-            /** Model */
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /**
+             * Model
+             * @description Without the manufacturer
+             */
             model?: string | null;
             /** Operator */
             operator?: string | null;

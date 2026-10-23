@@ -40,7 +40,7 @@ SELECT b.vehicle_id, b.feed, b.source, b.source_vehicle_id, b.status, f.last_see
        f.longitude, f.bearing, b.trip_id, b.service_date, t.route_id, ro.short_name,
        ro.long_name, ro.mode, ro.color, ro.text_color, t.short_name AS trip_short_name,
        t.headsign, s.delay_s, b.sources, p.low_floor, p.air_conditioning,
-       p.wheelchair_accessible, p.model, p.operator, p.licence_plate, p.fleet_number,
+       p.wheelchair_accessible, p.manufacturer, p.model, p.operator, p.licence_plate, p.fleet_number,
        m.distance_m
 FROM binding b
 JOIN fix f USING (vehicle_id)

@@ -35,7 +35,8 @@ directory = "D:/src/jrutil"
 # golemio = "..."   # PID (Golemio), from https://api.golemio.cz/api-keys
 
 # Curated reference datasets for `obehy ref import <dataset>` (BASE_PLAN.md section 27).
-# Private ones are never committed; OBEHY_REFERENCE_<DATASET> overrides each path.
+# OBEHY_REFERENCE_<DATASET> overrides each path.
 # [reference]
 # vehicles = "D:/src/jrunify-ext-geodata/vehicles/vehicles.csv"   # our own list
-# duk-register = "D:/private/duk-vhc-data.csv"                    # a private seed
+# duk-register = "D:/src/jrunify-ext-geodata/vehicles/duk.csv"     # a seed
+# pid-vehicles = "D:/work/pid-vehicles.csv"                       # built by ref fetch

@@ -1,5 +1,7 @@
 """Oběhy's own vehicle list: the registry's main dataset, built up by hand and reviewed in git
-(`jrunify-ext-geodata/vehicles/vehicles.csv`), winning over seeds such as the DÚK register.
+(`jrunify-ext-geodata/vehicles/vehicles.csv`), winning over seeds such as the DÚK register. The
+curated seeds in the same folder (`duk.csv`) are written the same way; `parse` reads any of
+them under its own name and priority.
 
 One CSV row per key of a vehicle:
 
@@ -46,29 +48,41 @@ _SLUG = re.compile(r"[^0-9a-z]+")
 
 
 def read(path: Path) -> Dataset:
+    return read_as(path, NAME, TITLE, PRIORITY)
+
+
+def read_as(path: Path, name: str, title: str, priority: int) -> Dataset:
+    """A file in this format as the dataset `name` (a curated seed beside our own list)."""
+
     data = path.read_bytes()
-    return parse(data.decode("utf-8-sig"), hashlib.sha256(data).hexdigest())
+    return parse(data.decode("utf-8-sig"), hashlib.sha256(data).hexdigest(), name, title, priority)
 
 
-def _date(value: str, line: int) -> date | None:
+def _date(value: str, line: int, name: str) -> date | None:
     if not value:
         return None
     try:
         return date.fromisoformat(value)
     except ValueError:
-        raise ValueError(f"{NAME} line {line}: bad date {value!r}") from None
+        raise ValueError(f"{name} line {line}: bad date {value!r}") from None
 
 
-def parse(text: str, version: str) -> Dataset:
+def parse(
+    text: str,
+    version: str,
+    name: str = NAME,
+    title: str = TITLE,
+    priority: int = PRIORITY,
+) -> Dataset:
     vocabulary = load_vocabulary()
     reader = csv.DictReader(io.StringIO(text))
     columns = [c for c in reader.fieldnames or [] if c not in STRUCTURE]
     for column in columns:
         if column not in vocabulary.attributes and not column.startswith(RAW_PREFIX):
-            raise ValueError(f"{NAME}: column {column!r} is not a vehicle attribute")
+            raise ValueError(f"{name}: column {column!r} is not a vehicle attribute")
     if "vehicle_id" not in (reader.fieldnames or []):
-        raise ValueError(f"{NAME}: no vehicle_id column")
-    dataset = Dataset(NAME, version, TITLE, private=False, priority=PRIORITY)
+        raise ValueError(f"{name}: no vehicle_id column")
+    dataset = Dataset(name, version, title, private=False, priority=priority)
     models: dict[str, Model] = {}
     vehicles: dict[str, Vehicle] = {}
     attributes: dict[tuple[str, str], str] = {}
@@ -79,12 +93,12 @@ def parse(text: str, version: str) -> Dataset:
 
         vehicle_id = cell("vehicle_id")
         if not vehicle_id:
-            raise ValueError(f"{NAME} line {line}: no vehicle_id")
+            raise ValueError(f"{name} line {line}: no vehicle_id")
         model_id = None
         if cell("model"):
             manufacturer = cell("manufacturer") or None
-            name = f"{manufacturer or ''} {cell('model')}".strip()
-            model_id = _SLUG.sub("-", name.lower()).strip("-")
+            full = f"{manufacturer or ''} {cell('model')}".strip()
+            model_id = _SLUG.sub("-", full.lower()).strip("-")
             models.setdefault(
                 model_id, Model(model_id, cell("model"), manufacturer, cell("mode") or None)
             )
@@ -94,14 +108,14 @@ def parse(text: str, version: str) -> Dataset:
             and model_id is not None
             and known.vehicle_model_id not in (None, model_id)
         ):
-            raise ValueError(f"{NAME} line {line}: {vehicle_id} has two models")
+            raise ValueError(f"{name} line {line}: {vehicle_id} has two models")
         if known is None or known.vehicle_model_id is None:
             vehicles[vehicle_id] = Vehicle(vehicle_id, model_id)
-        since = _date(cell("valid_from"), line) or SINCE
-        until = _date(cell("valid_to"), line)
+        since = _date(cell("valid_from"), line, name) or SINCE
+        until = _date(cell("valid_to"), line, name)
         if cell("source") or cell("source_vehicle_id"):
             if not (cell("source") and cell("source_vehicle_id")):
-                raise ValueError(f"{NAME} line {line}: source and source_vehicle_id go together")
+                raise ValueError(f"{name} line {line}: source and source_vehicle_id go together")
             dataset.keys.append(
                 Key(vehicle_id, since, until, cell("source"), cell("source_vehicle_id"))
             )
@@ -118,7 +132,7 @@ def parse(text: str, version: str) -> Dataset:
             previous = attributes.setdefault((vehicle_id, column), value)
             if previous != value:
                 raise ValueError(
-                    f"{NAME} line {line}: {vehicle_id} {column} {previous!r} vs {value!r}"
+                    f"{name} line {line}: {vehicle_id} {column} {previous!r} vs {value!r}"
                 )
     dataset.models.extend(models[k] for k in sorted(models))
     dataset.vehicles.extend(vehicles[k] for k in sorted(vehicles))

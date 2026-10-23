@@ -105,7 +105,7 @@ SELECT l.trip_id, l.service_date, l.location_id, l.route_id, ro.short_name, ro.l
        v.vehicle_id, v.status AS vehicle_state, v.last_seen AS vehicle_seen,
        v.latitude AS vehicle_latitude, v.longitude AS vehicle_longitude,
        v.bearing AS vehicle_bearing, v.vehicle_sources, vp.low_floor, vp.air_conditioning,
-       vp.wheelchair_accessible, vp.model, vp.operator, vp.licence_plate, vp.fleet_number
+       vp.wheelchair_accessible, vp.manufacturer, vp.model, vp.operator, vp.licence_plate, vp.fleet_number
 FROM rows l
 JOIN active.route ro ON ro.route_id = l.route_id
 LEFT JOIN posts bp ON bp.location_id = l.boarding_point_id

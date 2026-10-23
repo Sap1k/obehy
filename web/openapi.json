@@ -4192,6 +4192,17 @@
             ],
             "title": "Low Floor"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "model": {
             "anyOf": [
               {
@@ -4201,6 +4212,7 @@
                 "type": "null"
               }
             ],
+            "description": "Without the manufacturer",
             "title": "Model"
           },
           "operator": {
