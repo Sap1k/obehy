@@ -195,22 +195,20 @@
   font-weight: 600;
 }
 
-/* Rows revealed by an expander (or a later part of the run) ease in. */
+/* Calls open and close by script (timetableMotion.ts); an expander coming back after its calls
+   folded into it fades in. */
 @media (prefers-reduced-motion: no-preference) {
-  .stop,
-  .continuation {
-    animation: row-in 180ms ease-out both;
+  .expander {
+    animation: expander-in 160ms ease-out both;
   }
 }
 
-@keyframes row-in {
+@keyframes expander-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
   }
 
   to {
     opacity: 1;
-    transform: none;
   }
 }

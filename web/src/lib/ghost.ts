@@ -1,12 +1,9 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
+import { reducedMotion } from "./motion";
 
 // Exits for elements React removes at once (a panel whose route closed, the phone's sheet): a
 // static copy takes the element's place over the page and animates out, then goes. It takes no
 // clicks, so nothing waits for it, unlike a view transition, which holds the page while it runs.
-
-function reducedMotion(): boolean {
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
 
 /** Animate a copy of `el` (still in the page) out with `keyframes`, where it stands. */
 export function ghostOut(el: HTMLElement | null, keyframes: Keyframe[], duration: number): void {

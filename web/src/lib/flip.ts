@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
+import { EASE_OUT, reducedMotion } from "./motion";
 
 // Lists that change under the reader (a board every poll) move instead of jumping: after each
 // change, an item that stayed glides from where it was to where it is (FLIP), and a new one
@@ -7,11 +8,6 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 
 const MOVE_MS = 260;
 const ENTER_MS = 220;
-const EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
-
-function reducedMotion(): boolean {
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
 
 /** Animate the `[data-flip]` items of `container` whenever `version` changes. */
 export function useFlip(container: RefObject<HTMLElement | null>, version: string): void {
@@ -33,7 +29,7 @@ export function useFlip(container: RefObject<HTMLElement | null>, version: strin
       } else if (was !== top) {
         item.animate([{ transform: `translateY(${was - top}px)` }, { transform: "none" }], {
           duration: MOVE_MS,
-          easing: EASE,
+          easing: EASE_OUT,
         });
       }
     }
