@@ -86,6 +86,6 @@ describe("DepartureRow", () => {
     });
     expect(row.getByLabelText("Bezbariérový")).toBeInTheDocument();
     expect(row.getByLabelText("Klimatizace")).toBeInTheDocument();
-    expect(row.getByText("Mimořádnost")).toBeInTheDocument();
+    expect(row.getByLabelText("Mimořádnost")).toBeInTheDocument();
   });
 });

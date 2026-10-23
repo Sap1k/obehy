@@ -60,9 +60,7 @@
 }
 
 .alert {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  flex: none;
   color: var(--ob-info-text);
 }
 
@@ -77,8 +75,7 @@
     padding: 10px 12px;
   }
 
-  .chevron,
-  .alertLabel {
+  .chevron {
     display: none;
   }
 }

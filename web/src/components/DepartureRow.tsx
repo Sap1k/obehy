@@ -53,10 +53,12 @@ export function DepartureRow({
           {stepFree(departure) && <IconWheelchair size={14} stroke={2} aria-label="Bezbariérový" />}
           {airConditioned && <IconSnowflake size={14} stroke={2} aria-label="Klimatizace" />}
           {hasAlert && (
-            <span className={classes.alert}>
-              <IconAlertTriangle size={14} stroke={2} aria-hidden />
-              <span className={classes.alertLabel}>Mimořádnost</span>
-            </span>
+            <IconAlertTriangle
+              size={14}
+              stroke={2}
+              aria-label="Mimořádnost"
+              className={classes.alert}
+            />
           )}
         </span>
       </span>
