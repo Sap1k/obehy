@@ -80,3 +80,16 @@
 .plate:hover {
   text-decoration: underline;
 }
+
+.titleLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--ob-text);
+  text-decoration: none;
+}
+
+.titleLink:hover {
+  text-decoration: underline;
+}
