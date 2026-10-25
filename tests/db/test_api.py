@@ -772,6 +772,34 @@ def test_a_board_of_several_stops_pages_with_a_cursor(client: TestClient) -> Non
     _get(client, "/departures", 422, stops=stops, cursor="bm90IGEgY3Vyc29y")
 
 
+def test_a_trip_calling_twice_at_a_stop_place_has_a_row_for_each_call(
+    connection: psycopg.Connection, database_url: str, tmp_path: Path
+) -> None:
+    # The trip leaves from post 1, then again from the stop place's other post in the same
+    # minute (as PID trips loop through a station's tram and bus stops).
+    rows = jdf_rows()
+    first, last = rows["trip_call"]
+    again = dict(first, sequence=2, boarding_point_id=None, route_stop_id=None)
+    rows["trip_call"] = [first, again, dict(last, sequence=3)]
+    load_release(
+        connection, write_release(tmp_path, "run-loop", jdf=rows), CONTRACT, report=lambda _: None
+    )
+    activation.activate(connection, CONTRACT, "run-loop")
+    with TestClient(create_app(database_url)) as client:
+        board = "/stop-places/jdf:stop:1/departures"
+        start = "2026-10-05T05:50:00+02:00"
+        page = _get(client, board, start=start, limit=1)
+        rows_seen = page["departures"]
+        while page["next"] is not None:
+            page = _get(client, board, start=start, limit=1, cursor=page["next"])
+            rows_seen += page["departures"]
+        whole = _get(client, board, start=start)["departures"]
+    calls = [(d["trip_id"], d["sequence"], d["platform"]) for d in whole]
+    assert calls == [("jdf:trip:1", 1, "1"), ("jdf:trip:1", 2, None)]
+    # A page ending on the first call goes on with the second, though both share every time.
+    assert [(d["trip_id"], d["sequence"], d["platform"]) for d in rows_seen] == calls
+
+
 def test_the_vehicle_on_a_board_row_and_a_trip(client: TestClient) -> None:
     board = "/stop-places/jdf:stop:1/departures"
     (row,) = _get(client, board, start="2026-10-06T06:05:00+02:00")["departures"]

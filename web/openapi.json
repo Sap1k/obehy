@@ -1029,6 +1029,11 @@
             "title": "Scheduled",
             "type": "string"
           },
+          "sequence": {
+            "description": "The call's sequence in the trip: a trip calling at the stop place twice has a row for each call",
+            "title": "Sequence",
+            "type": "integer"
+          },
           "service_date": {
             "format": "date",
             "title": "Service Date",
@@ -1129,6 +1134,7 @@
           "trip_id",
           "service_date",
           "location_id",
+          "sequence",
           "line",
           "trip_short_name",
           "headsign",

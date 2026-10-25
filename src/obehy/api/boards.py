@@ -108,6 +108,7 @@ def _board(
         "after_trip": None if after is None else after.trip_id,
         "after_date": None if after is None else after.service_date,
         "after_location": None if after is None else after.location_id,
+        "after_sequence": None if after is None else after.sequence,
         "limit": rows_wanted,
     }
     rows = snap.all("board", params)
@@ -116,6 +117,7 @@ def _board(
             trip_id=r["trip_id"],
             service_date=r["service_date"],
             location_id=r["location_id"],
+            sequence=r["sequence"],
             line=line(r),
             trip_short_name=r["trip_short_name"],
             headsign=r["headsign"],
@@ -142,6 +144,7 @@ def _board(
                 last["trip_id"],
                 last["service_date"],
                 last["location_id"],
+                last["sequence"],
             )
         )
     return begin.astimezone(PRAGUE), until.astimezone(PRAGUE), board, following

@@ -102,6 +102,7 @@ class Cursor:
     trip_id: str
     service_date: date
     location_id: str
+    sequence: int
 
 
 def encode_cursor(cursor: Cursor) -> str:
@@ -111,6 +112,7 @@ def encode_cursor(cursor: Cursor) -> str:
         "t": cursor.trip_id,
         "d": cursor.service_date.isoformat(),
         "l": cursor.location_id,
+        "q": cursor.sequence,
     }
     raw = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
@@ -126,6 +128,7 @@ def decode_cursor(text: str) -> Cursor:
             str(body["t"]),
             date.fromisoformat(body["d"]),
             str(body["l"]),
+            int(body["q"]),
         )
     except (ValueError, KeyError, TypeError):
         raise ParameterError("cursor is not one this API gave") from None

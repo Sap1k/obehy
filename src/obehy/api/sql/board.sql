@@ -3,12 +3,13 @@
 -- passenger call), of trips running on their service date. `spans` prefilters each service
 -- date's scheduled seconds (with DST slack); the exact window is on instants. A row scheduled
 -- from `since` (a lookback before `start`) stays while its expected time is still at or after
--- `start`. A cursor continues after the row it names. Realtime is found by the feed trip ID
--- through rt.trip_part_current, in the active release; the part's slice of the journey's
--- calls holds the call by its sequence, with the sources it came from. The vehicle is the
--- freshest one on the trip, with its profile's traits. `wheelchair_kinds` are what the
--- timetable states for the whole trip (its, its route's and its service's assignments),
--- evaluated for the page's rows only.
+-- `start`. A trip may call at one stop place twice (at two of its posts): its rows are told
+-- apart by the call's sequence. A cursor continues after the row it names. Realtime is found
+-- by the feed trip ID through rt.trip_part_current, in the active release; the part's slice of
+-- the journey's calls holds the call by its sequence, with the sources it came from. The
+-- vehicle is the freshest one on the trip, with its profile's traits. `wheelchair_kinds` are
+-- what the timetable states for the whole trip (its, its route's and its service's
+-- assignments), evaluated for the page's rows only.
 WITH spans (service_date, lo, hi) AS (
     SELECT * FROM unnest(%(dates)s::date[], %(lo)s::integer[], %(hi)s::integer[])
 ),
@@ -100,8 +101,8 @@ rows AS (
     SELECT l.*, coalesce(l.estimated, l.scheduled) AS expected
     FROM live l
 )
-SELECT l.trip_id, l.service_date, l.location_id, l.route_id, ro.short_name, ro.long_name,
-       ro.mode, ro.color, ro.text_color, l.short_name AS trip_short_name,
+SELECT l.trip_id, l.service_date, l.location_id, l.sequence, l.route_id, ro.short_name,
+       ro.long_name, ro.mode, ro.color, ro.text_color, l.short_name AS trip_short_name,
        coalesce(l.stop_headsign, l.headsign) AS headsign, l.scheduled, l.estimated, l.expected,
        extract(epoch FROM l.estimated - l.scheduled)::integer AS delay_s,
        coalesce(l.call ->> 'status', 'scheduled') AS status,
@@ -127,8 +128,8 @@ LEFT JOIN vehicles v USING (trip_id, service_date)
 LEFT JOIN rt.vehicle_profile vp ON vp.vehicle_id = v.vehicle_id
 WHERE l.expected >= %(start)s AND l.expected < %(until)s
     AND (%(after_expected)s::timestamptz IS NULL
-        OR (l.expected, l.scheduled, l.trip_id, l.service_date, l.location_id)
+        OR (l.expected, l.scheduled, l.trip_id, l.service_date, l.location_id, l.sequence)
             > (%(after_expected)s, %(after_scheduled)s::timestamptz, %(after_trip)s::text,
-               %(after_date)s::date, %(after_location)s::text))
-ORDER BY l.expected, l.scheduled, l.trip_id, l.service_date, l.location_id
+               %(after_date)s::date, %(after_location)s::text, %(after_sequence)s::integer))
+ORDER BY l.expected, l.scheduled, l.trip_id, l.service_date, l.location_id, l.sequence
 LIMIT %(limit)s

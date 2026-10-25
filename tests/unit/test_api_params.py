@@ -94,6 +94,7 @@ def test_a_cursor_round_trips_and_rejects_anything_else() -> None:
         "czptt:trip:Pa%3A1:1",
         date(2026, 10, 5),
         "jdf:stop:1",
+        3,
     )
     assert decode_cursor(encode_cursor(cursor)) == cursor
     for bad in ("", "bm90IGEgY3Vyc29y", "e30"):

@@ -941,6 +941,11 @@ export interface components {
              */
             scheduled: string;
             /**
+             * Sequence
+             * @description The call's sequence in the trip: a trip calling at the stop place twice has a row for each call
+             */
+            sequence: number;
+            /**
              * Service Date
              * Format: date
              */

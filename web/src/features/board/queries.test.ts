@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "../../api/client";
-import { fetchBoard, SHORT_WINDOW_MIN, WINDOW_MIN } from "./queries";
+import { api, type Departure } from "../../api/client";
+import { boardRowKey, fetchBoard, SHORT_WINDOW_MIN, WINDOW_MIN } from "./queries";
 
 const stop = {
   location_id: "jdf:stop:1",
@@ -63,5 +63,21 @@ describe("fetchBoard", () => {
     expect(get).toHaveBeenCalledTimes(2);
     expect(board.rows).toHaveLength(12);
     expect(board.until).toBe(`minutes=${WINDOW_MIN}`);
+  });
+});
+
+describe("boardRowKey", () => {
+  it("tells apart two calls of one trip at the stop place", () => {
+    // Tram 5 at Nádraží Holešovice: post A, then post H a minute later.
+    const call = {
+      trip_id: "overlay:pid-gtfs:trip:ca29d0d32a7f3df4d856",
+      service_date: "2026-10-25",
+      location_id: "jdf:stop:10272",
+    };
+    const rows = [
+      { ...call, sequence: 7, platform: "A" },
+      { ...call, sequence: 8, platform: "H" },
+    ] as Departure[];
+    expect(new Set(rows.map(boardRowKey)).size).toBe(2);
   });
 });

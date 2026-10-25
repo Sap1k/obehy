@@ -22,7 +22,7 @@ import { usePhone } from "../../lib/layout";
 import { rememberStop } from "../../lib/recent";
 import { platformsText } from "../../lib/stops";
 import { dayDividerLabel, dayKey, formatClock, formatLongDay } from "../../lib/time";
-import { useBoard, useStopPlace } from "./queries";
+import { boardRowKey, useBoard, useStopPlace } from "./queries";
 import classes from "./BoardPage.module.css";
 
 const PAGE = 40;
@@ -184,10 +184,7 @@ function BoardBody({
   // Each poll, the rows that stay glide to their new places (a departed one leaves), new ones
   // fade in: the board never jumps.
   const list = useRef<HTMLDivElement>(null);
-  useFlip(
-    list,
-    (data?.rows ?? []).map((r) => `${r.trip_id}/${r.service_date}/${r.location_id}`).join("|"),
-  );
+  useFlip(list, (data?.rows ?? []).map(boardRowKey).join("|"));
 
   if (!data) {
     if (board.isError) {
@@ -233,7 +230,7 @@ function BoardBody({
       <div role="list" ref={list}>
         {rows.map(({ row, divider }) => {
           const selected = openTrip?.tripId === row.trip_id && openTrip?.date === row.service_date;
-          const key = `${row.trip_id}/${row.service_date}/${row.location_id}`;
+          const key = boardRowKey(row);
           return (
             <Fragment key={key}>
               {divider && (

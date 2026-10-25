@@ -230,6 +230,10 @@ class Departure(BaseModel):
     trip_id: str
     service_date: date
     location_id: str = Field(description="The stop place of this row (multi-stop boards)")
+    sequence: int = Field(
+        description="The call's sequence in the trip: a trip calling at the stop place twice "
+        "has a row for each call"
+    )
     line: Line
     trip_short_name: str | None
     headsign: str | None

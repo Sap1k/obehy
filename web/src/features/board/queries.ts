@@ -28,6 +28,12 @@ export function useStopPlace(stopId: string | undefined) {
   });
 }
 
+/** A board row's identity: a trip may call at the stop place twice (at two of its posts), so
+ * the call's sequence tells its rows apart. */
+export function boardRowKey(row: Departure): string {
+  return `${row.trip_id}/${row.service_date}/${row.location_id}/${row.sequence}`;
+}
+
 export interface Board {
   generatedAt: string;
   stop: Stop;

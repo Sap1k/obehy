@@ -3,6 +3,7 @@
     "trip_id": "czptt:trip:Pa%3A0054%3A--KADR370308%3A01%3A2026:1",
     "service_date": "2026-10-22",
     "location_id": "czptt:stop:CZ:55659",
+    "sequence": 1,
     "line": {
       "route_id": "czptt:route:line:4001:3752:106",
       "short_name": "U1",
@@ -28,6 +29,7 @@
     "trip_id": "czptt:trip:Pa%3A0054%3A--KADR367470%3A01%3A2026:1",
     "service_date": "2026-10-22",
     "location_id": "czptt:stop:CZ:55659",
+    "sequence": 1,
     "line": {
       "route_id": "czptt:route:fallback:1154:Os:106:6658",
       "short_name": "Os 6658",
@@ -53,6 +55,7 @@
     "trip_id": "czptt:trip:Pa%3A0054%3A--KADR170544%3A01%3A2026:1",
     "service_date": "2026-10-22",
     "location_id": "czptt:stop:CZ:55659",
+    "sequence": 1,
     "line": {
       "route_id": "czptt:route:line:4028:1154:106",
       "short_name": "U28",
