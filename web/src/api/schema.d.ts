@@ -2035,9 +2035,9 @@ export interface components {
         VehicleSource: {
             /**
              * Bound By
-             * @description What makes this report this vehicle: a registry key (its source's ID, or an identifier it states: plate, EVN, series number), or running one journey side by side with another source's report of it (provisional)
+             * @description What makes this report this vehicle: a registry key (its source's ID, or an identifier it states: plate, EVN, series number), running one journey side by side with another source's report of it (provisional), or the train number of the rail run it is on (`train:<number>`)
              */
-            bound_by: ("source" | "identifier" | "co_located") | null;
+            bound_by: ("source" | "identifier" | "co_located" | "train") | null;
             label: components["schemas"]["Label"] | null;
             /** Last Seen */
             last_seen: string | null;

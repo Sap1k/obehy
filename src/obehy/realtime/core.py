@@ -411,14 +411,14 @@ def _leads(
     instance: Instance, vehicle: VehicleId, observation: Observation, policy: Policy
 ) -> bool:
     """Whether this vehicle drives its source's contribution to the journey: it is that
-    source's lead, there is none, or the lead has gone stale. One source never mixes two
-    vehicles' fixes (DUK-Q11); different sources are fused (`timeline.fusion`)."""
+    source's lead, there is none, or the lead has not been seen for `rail.position_fresh_s`
+    (a fix that old no longer leads a position either). One source never mixes two vehicles'
+    fixes (DUK-Q11); different sources are fused (`timeline.fusion`)."""
 
     lead = lead_of(instance, vehicle.source)
     if lead is None or lead.vehicle == vehicle:
         return True
-    stale_after = timedelta(seconds=policy.lifecycle.stale_after_s(instance.mode))
-    return observation.at - lead.seen > stale_after
+    return observation.at - lead.seen > timedelta(seconds=policy.rail.position_fresh_s)
 
 
 def _continued(

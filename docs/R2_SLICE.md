@@ -47,7 +47,7 @@ it already has (no extra input):
 | Journey (public, history) | `JourneyKey(czptt, czptt:train_number, tn, service_date)` | One per train number over the run's parts. |
 | Number change | `journey_link(kind = continues_as)` | Example: TL 106006 → 6006. Two journeys, one run instance. |
 | Output | GTFS-RT per passenger trip part (`trip_id`, the part's own `stop_sequence`) | Operational points are never exported. |
-| Train vehicle | One VehiclePosition per run: opaque `train-<hash>` ID, train-number label | Coupled DÚK units and the SŽ entry are one train; the position is the lead of the source fusion tracks. |
+| Train vehicle | One vehicle per train number: `train:<number>` in the API and GTFS-RT (an opaque `train-<hash>` for a run without a number), train-number label | Coupled DÚK units, the SŽ entry and PID's train are one train; the ID changes where the run's number does. Drawn as §5 Position. |
 
 - **The run plan** concatenates the parts' calls in `run_part` order: passenger calls and
   operational points, with the junction call shared by consecutive parts merged. CZPTT has no
@@ -142,9 +142,9 @@ The selected values carry provenance: source, channel and reason.
 
 | Capability | Rule |
 |---|---|
-| Position | DÚK GPS while fresh and plausible, else the last changed SŽ position (larger sigma). Contradictory positions are never averaged; the loser is kept as a conflict. |
+| Position | Every source's newer fix feeds the one tracker, weighted by its sigma (`rail.position_sigma_m`: SŽ 150 m). While a better-ranked source is fresh (`rail.position_preference`, `position_fresh_s`), a lower one's fix lying behind the tracker's reading by more than its sigma is dropped and reported (`behind`). The run is drawn from one shown source, kept while its fixes are fresh (`shown_source`): on a real shape at the tracker's reading, on stop-to-stop chords (CZPTT runs today) at that source's fix; never further back than `progress.jitter_m` (`Instance.published`). |
 | Progress and events | An SŽ `PointEvent` commits the call's event with the minute interval and is a floor: hypotheses behind it are pruned. A DÚK GPS crossing inside that minute narrows the interval to the intersection. A GPS crossing outside it by more than `rail.event_tolerance_s` loses to SŽ and is logged as a conflict. |
-| Current delay | GPS lateness while DÚK is fresh, else SŽ `de` at its point. |
+| Current delay | SŽ `de` at its point while it is newer than the last GPS fix, else GPS lateness. |
 | Prediction | Policy `rail.predictor`: `anchor_change`, `sz` or `propagate` (below). |
 | Early running | A train may be shown arriving early, and an observed early departure stays; a predicted departure is never before the timetable (`prediction.max_early_departure_s`, rail 0), so an early train's lead ends at the next station. |
 | Coverage and staleness | A run is stale only when every source is silent past `stale_after_s(rail)`: its freshness is the latest of all sources, so DÚK falling silent when the train leaves Ústecký kraj never makes the run stale while SŽ reports. No coverage polygon is needed for that, and none is kept. |

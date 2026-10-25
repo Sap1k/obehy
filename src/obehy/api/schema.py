@@ -523,10 +523,11 @@ class VehicleSource(BaseModel):
     source_vehicle_id: str
     state: VehicleState | None
     last_seen: Time | None
-    bound_by: Literal["source", "identifier", "co_located"] | None = Field(
+    bound_by: Literal["source", "identifier", "co_located", "train"] | None = Field(
         description="What makes this report this vehicle: a registry key (its source's ID, or "
-        "an identifier it states: plate, EVN, series number), or running one journey side by "
-        "side with another source's report of it (provisional)"
+        "an identifier it states: plate, EVN, series number), running one journey side by "
+        "side with another source's report of it (provisional), or the train number of the rail "
+        "run it is on (`train:<number>`)"
     )
 
 

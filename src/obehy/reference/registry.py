@@ -20,7 +20,7 @@ import psycopg
 
 from obehy.reference.vocabulary import Vocabulary, load_vocabulary
 
-BoundBy = Literal["source", "identifier", "co_located"]
+BoundBy = Literal["source", "identifier", "co_located", "train"]
 # `obehy ref import` notifies the realtime worker here after loading a dataset.
 REGISTRY_CHANNEL = "obehy_registry"
 

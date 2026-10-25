@@ -3,13 +3,14 @@
 No source owns a run; each keeps a `SourceTrack` on the instance, and each capability is
 decided on its own:
 
-- position: the best-ranked source with a fresh fix leads (`rail.position_preference`: DÚK GPS
-  before the SŽ map); a lower one's fixes feed the tracker only while no better one is fresh;
+- position: every source's newer fix feeds the one tracker, weighted by its precision
+  (`rail.position_sigma_m`); while a better-ranked source (`rail.position_preference`: DÚK GPS
+  before the SŽ map) is fresh, a lower one's fix that would take the tracker back is dropped;
 - events: a source's point event (SŽ `cna`) commits the call with its minute and anchors
   progress there; a crossing measured from positions inside that minute (widened by
   `rail.event_tolerance_s`) narrows it, one outside loses to it;
-- current delay: measured lateness while the tracker follows a source without its own point
-  delays, else the point delay (SŽ `de`);
+- current delay: the point delay (SŽ `de`) while it is newer than the last fix of a source
+  without point delays, else the measured lateness;
 - prediction: `rail.predictor` - the source's predicted change applied to the own anchor
   (`anchor_change`), the source's prediction itself (`sz`), or plain propagation.
 
@@ -114,7 +115,8 @@ def note_source(
 
 
 def position_leads(instance: Instance, source: str, at: Instant, policy: Policy) -> bool:
-    """Whether this source's fix may move the tracker: no better-ranked source is fresh."""
+    """Whether no better-ranked source has a fresh fix: then this source's fix moves the
+    tracker even back, else only forward."""
 
     rail = policy.rail
     rank = rail.rank(source)
@@ -298,20 +300,23 @@ def apply_point(
 
 
 def current_lateness(instance: Instance) -> tuple[timedelta | None, SourceClass | None]:
-    """Measured lateness while the tracker follows a source without its own point delays,
-    else the freshest point delay; else R1's rule (tracker, then the source's delay)."""
+    """The freshest point delay while it is newer than the last fix of a source without point
+    delays (a GPS), else the measured lateness; else R1's rule (tracker, then the source's
+    delay)."""
 
     point = max(
         (t for t in instance.sources if t.delay_reference == POINT and t.delay_s is not None),
         key=lambda t: t.delay_at or t.heard_at,
         default=None,
     )
+    gps_at = max(
+        (t.position_at for t in instance.sources if t.delay_reference != POINT and t.position_at),
+        default=None,
+    )
     track = instance.track
     measured = track is not None and track.lateness_s is not None
-    by_point = instance.track_source is not None and any(
-        t.source == instance.track_source and t.delay_reference == POINT for t in instance.sources
-    )
-    if measured and not (by_point and point is not None):
+    by_point = point is not None and (gps_at is None or (point.delay_at or point.heard_at) > gps_at)
+    if measured and not by_point:
         assert track is not None and track.lateness_s is not None
         return timedelta(seconds=round(track.lateness_s)), "gps"
     if point is not None and point.delay_s is not None:

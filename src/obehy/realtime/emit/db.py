@@ -16,7 +16,7 @@ from typing import Any, LiteralString, cast
 import psycopg
 from psycopg import sql
 
-from obehy.realtime.emit.represent import representing
+from obehy.realtime.emit.represent import representing, shown
 from obehy.realtime.emit.storage import (
     HISTORY_TABLES,
     Terms,
@@ -636,11 +636,20 @@ def _vehicle_row(
     represents: bool,
 ) -> tuple[Any, ...]:
     """The vehicle's trip is the feed trip it is on: on a rail run, the part it is driving.
-    `represents`: it stands for its journey on the map (`emit/represent.py`)."""
+    `represents`: it stands for its journey on the map (`emit/represent.py`), drawn where the
+    journey's tracker reads it from every source's fixes."""
 
     b = v.binding
     instance = None if b is None else state.instances.get(b.journey)
     trip_id = None if b is None else b.trip_id if instance is None else current_part(instance)
+    lat, lon, bearing, position_at = (
+        (None, None, None, v.position_at)
+        if v.position is None
+        else (v.position.lat, v.position.lon, v.position.bearing, v.position_at)
+    )
+    drawn = shown(instance, vehicle) if represents else None
+    if drawn is not None:
+        lat, lon, bearing, position_at = drawn.lat, drawn.lon, drawn.bearing, drawn.at
     return (
         feed,
         vehicle.source,
@@ -651,14 +660,14 @@ def _vehicle_row(
         None if b is None else b.journey.key,
         None if b is None else b.journey.service_date,
         trip_id,
-        None if v.position is None else v.position.lat,
-        None if v.position is None else v.position.lon,
-        None if v.position is None else v.position.bearing,
+        lat,
+        lon,
+        bearing,
         None if v.reason is None else v.reason.value,
         release_id,
         *book.identify((vehicle.source, vehicle.source_vehicle_id), local_date(v.last_seen)),
         represents,
-        v.position_at,
+        position_at,
     )
 
 

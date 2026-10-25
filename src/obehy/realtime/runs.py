@@ -27,6 +27,7 @@ from obehy.realtime.times import Instant
 
 RUN_NAMESPACE = "czptt:pa"
 TRAIN_NAMESPACE = "czptt:train_number"
+TRAIN_PREFIX = "train:"  # a train's vehicle ID: the train its number names
 
 
 def run_journey(feed: Feed, run: Trip, day: date) -> JourneyKey:
@@ -76,6 +77,17 @@ def current_part(instance: Instance) -> str:
         if reached < part.last:
             return part.trip_id
     return parts[-1].trip_id
+
+
+def current_train(instance: Instance) -> str | None:
+    """The train number a run carries now: its public journey holding the next call to reach
+    (at the call where the number changes, the next one); None off a run or without a number."""
+
+    if not instance.journeys:
+        return None
+    reached = instance.progress.call_index if instance.progress is not None else -1
+    span = next((s for s in instance.journeys if reached < s.last), instance.journeys[-1])
+    return span.journey.key if span.journey.namespace == TRAIN_NAMESPACE else None
 
 
 def snapshots(

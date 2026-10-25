@@ -1421,7 +1421,7 @@ DÚK area, seen by SŽ nationwide and by DÚK GPS regionally:
 
 | Capability | Preferred | Why |
 |---|---|---|
-| position | DÚK GPS when fresh, else SŽ | denser and more precise; an SŽ entry changes in only ~16% of polls |
+| position | every source's newer fix, weighted by precision; while DÚK GPS is fresh an SŽ fix behind it is dropped; drawn from one source kept while fresh, never back | denser and more precise; an SŽ entry changes in only ~16% of polls |
 | progress, current delay | both, intersected: SŽ actuals at points (minute precision) ∩ GPS progress (sub-minute) | both are true; GPS narrows inside SŽ's minute |
 | actual events | SŽ point events, then GPS-derived crossings | infrastructure truth at points |
 | forward prediction | anchor from the best current estimate, shape from the best predictor | below |
@@ -1904,8 +1904,9 @@ MPVnet plate no key connects). Reports of different sources on the same journey 
 at most `max_fix_gap_s` apart, lie within `distance_m` at least `min_fixes` times over
 `confirm_s` are one vehicle while that holds (`bound_by = co_located`, `[pairing]` in the
 vocabulary). They part when `apart_m` apart, on different journeys, or not seen together for
-`hold_s`. The vehicle is a partner's registered vehicle when one has a key, else the report of
-the best-ranked source. Pairings never write keys: each is kept in `rt.vehicle_pairing` as a
+`hold_s`. Pairs join transitively. The vehicle is a member's registered vehicle when one has a
+key, else the one its reports are already known by, else the report of the best-ranked source.
+A report on a rail run is the train its number names (`train:<number>`), never co-located. Pairings never write keys: each is kept in `rt.vehicle_pairing` as a
 candidate for review (`/debug/vehicles/pairings`).
 
 - `vehicle_id` is opaque, minted in the curated files and never recycled. An operator move

@@ -1,13 +1,14 @@
 """Two sources reporting one vehicle with nothing to bind them: the same journey, side by side
 (BASE_PLAN.md section 27).
 
-A DÚK bus the registry knows by its DÚK ID and the MPVnet report of its plate are one vehicle,
-but until a key says so nothing binds them. When two reports from different sources run the
-same journey with fixes close in time and place (`[pairing]` in the vehicle vocabulary), the
-evidence builds up; once confirmed they are one vehicle (`bound_by = co_located`) while it
-holds. They part when they are apart on that journey, when each runs another journey, or when
-no close fix has come for `hold_s`. Every pairing is also kept for review as a registry key
-candidate (`rt.vehicle_pairing`). Pure; the writer stores it.
+A DÚK bus the registry knows by its DÚK ID and the MPVnet report of its plate are one vehicle, but
+until a key says so nothing binds them. When two reports from different sources run the same journey
+with fixes close in time and place (`[pairing]` in the vehicle vocabulary), the evidence builds up;
+once confirmed they are one vehicle (`bound_by = co_located`) while it holds. Confirmed pairs join
+transitively: a DÚK bus paired with its MPVnet plate and with its city feed's report is one vehicle
+across all three (`cluster`). They part when they are apart on that journey, when each runs another
+journey, or when no close fix has come for `hold_s`. Every pairing is also kept for review as a
+registry key candidate (`rt.vehicle_pairing`). Pure; the writer stores it.
 """
 
 from __future__ import annotations
@@ -110,6 +111,19 @@ class Pairings:
             for (a, b), evidence in self.pairs.items()
             if evidence.confirmed and report in (a, b)
         )
+
+    def cluster(self, report: Report) -> list[Report]:
+        """The reports joined to `report` by confirmed pairs, directly or through others,
+        `report` included; sorted."""
+
+        seen = {report}
+        frontier = [report]
+        while frontier:
+            for partner in self.partners(frontier.pop()):
+                if partner not in seen:
+                    seen.add(partner)
+                    frontier.append(partner)
+        return sorted(seen)
 
     def changes(self) -> dict[Pair, Evidence | None]:
         changed, self.changed = self.changed, {}

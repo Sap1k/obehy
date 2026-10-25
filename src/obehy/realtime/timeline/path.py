@@ -85,6 +85,16 @@ def point_at(path: Path, along_m: float) -> tuple[float, float]:
     return ax + t * (bx - ax), ay + t * (by - ay)
 
 
+def heading_at(path: Path, along_m: float) -> float:
+    """The direction of travel `along_m` metres along the path, clockwise from north."""
+
+    distances = path.distances_m
+    i = min(max(bisect_right(distances, along_m) - 1, 0), len(distances) - 2)
+    (ax, ay), (bx, by) = path.points[i], path.points[i + 1]
+    kx, ky = _plane(ay)
+    return math.degrees(math.atan2((bx - ax) * kx, (by - ay) * ky)) % 360.0
+
+
 def make_path(
     points: tuple[tuple[float, float], ...],
     distances: tuple[float, ...],

@@ -308,6 +308,20 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-25** — Vehicle identity and source fusion (migrations 0021, 0022). The map drew a
+  vehicle back on a refresh: positions carry their own fix time (`position_at`; the SŽ map's
+  document clock moved on unchanged entries, older fixes replaced newer ones), the map keeps a
+  newer fix over an older answer and browsers no longer cache realtime answers (nginx 5 s via
+  X-Accel-Expires). A train is one vehicle, `train:<number>` (API and GTFS-RT), changing where
+  the run's number does; co-located pairs join transitively and keep their ID. Every source's
+  newer fix feeds the tracker (a lagging one is dropped while a better source is fresh), the
+  map draws one source kept while fresh, never back. A 2 h DÚK + SŽ probe (2026-10-06 06-08,
+  1,733 trains, worker path without DB writes): trains under several IDs 149 → 0, shown
+  identity flips 313 → 4, backward moves over 100 m 665 → 1. Unit, DB and web tests pass. Not
+  measured: prediction accuracy (`--quality`; the delay rule now prefers SŽ `de` only while
+  newer than the last GPS fix) and buses with several sources; CZPTT runs have no shape, so
+  trains are drawn at the shown source's fix, not snapped.
+
 - **2026-10-24** — Disk bounds for the 64 GB server, which filled every few days (measured:
   `rt.observation` about 10 GB a day held up to 2.5 days, two timetable copies of 7.5 GB plus a
   third while loading, history about 1.15 GB a day never deleted). Policy v13: observations in

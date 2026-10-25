@@ -3,8 +3,11 @@
 GPS progress (map matching over the trip's path, `progress.py`) drives actual events, committed
 once unambiguous, and the lateness the tracker measures drives predictions (`estimate.py`); the
 source's own delay (a weak constraint with an unknown reference, DUK-Q6) is the fallback.
-Several sources on one rail run (DÚK GPS, the SŽ map) are fused by `fusion.py`: per-source
-tracks, the position lead, SŽ point events as anchors (docs/R2_SLICE.md section 5).
+Several sources on one journey (DÚK GPS, the SŽ map, a city's feed) are fused by `fusion.py`:
+per-source tracks, SŽ point events as anchors (docs/R2_SLICE.md section 5). Every source's newer
+fix feeds the one tracker, weighted by its precision; one that would take the tracker back
+while a better-ranked source is fresh is dropped (`Unresolved` "behind"). The journey is shown
+where the tracker reads it (`Published`).
 """
 
 from __future__ import annotations
@@ -22,8 +25,10 @@ from obehy.realtime.model import (
     Observation,
     PointEvent,
     Position,
+    Published,
     SourceSemantics,
     SourceState,
+    Unresolved,
     WriteEvent,
 )
 from obehy.realtime.policy import Policy, ProgressPolicy
@@ -36,8 +41,10 @@ from obehy.realtime.timeline.fusion import (
     tracks_with,
     with_track,
 )
-from obehy.realtime.timeline.plan import PlanCache
-from obehy.realtime.timeline.progress import update
+from obehy.realtime.timeline.path import heading_at, point_at, project_all
+from obehy.realtime.timeline.plan import Plan, PlanCache
+from obehy.realtime.timeline.progress import Step, update
+from obehy.realtime.times import Instant
 
 
 def advance(
@@ -71,19 +78,22 @@ def advance(
     if instance.lifecycle != "running" or position is None or repeated:
         return with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s), effects
     source = observation.source
-    if not position_leads(instance, source, observation.at, policy):
-        # A better-ranked source has a fresh fix: that source leads the position.
-        return with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s), effects
-    track = track.evolve(position_at=observation.at)
-
     progress_policy = policy.progress
     run = trip.run_key is not None  # a CZPTT run, whatever its mode (rail-replacement bus)
+    sigma_m = policy.rail.position_sigma_m(source)
     if run:
-        progress_policy = _rail_progress(progress_policy, policy.rail.position_sigma_m(source))
+        progress_policy = _rail_progress(progress_policy, sigma_m)
     plan = plans.plan(trip, instance.journey.service_date, index, policy)
+    if _behind(instance, plan, position, sigma_m) and not position_leads(
+        instance, source, observation.at, policy
+    ):
+        # A lagging fix (the SŽ map's, a feed's late copy) while a better source is fresh.
+        instance = with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s)
+        return instance, [*effects, Unresolved(observation, "behind", source)]
     step = update(
         plan, instance.track, position, observation.at, trip.mode, source, progress_policy
     )
+    track = track.evolve(position_at=observation.at)
     calls, crossed = _cross(instance, step.crossed, source, policy, fuse=run)
     finished = any(c.kind == "arrival" and c.call == len(calls) - 1 for c in step.crossed)
     progress = step.progress
@@ -102,7 +112,70 @@ def advance(
         delay_s=delay_s,
         sources=tracks_with(instance.sources, track),
     )
+    shown_source = _shown(instance, source, observation.at, policy)
+    published = instance.published
+    if source == shown_source or published is None:
+        published = _published(plan, step, position, observation.at, published, policy.progress)
+    instance = instance.evolve(shown_source=shown_source, published=published)
     return instance, [*effects, *crossed]
+
+
+def _behind(instance: Instance, plan: Plan, position: Position, sigma_m: float) -> bool:
+    """Whether the fix lies on the path behind the tracker's reading by more than its error."""
+
+    best = instance.track.hypotheses[0] if instance.track and instance.track.hypotheses else None
+    if best is None or len(plan.path.points) < 2:
+        return False
+    nearest = min(project_all(plan.path, position.lon, position.lat), key=lambda p: p.lateral_m)
+    return nearest.along_m < best.along_m - sigma_m
+
+
+def _shown(instance: Instance, source: str, at: Instant, policy: Policy) -> str:
+    """The source whose vehicle stands for the journey: kept while its fixes stay fresh."""
+
+    shown = instance.shown_source
+    held = instance.source_track(shown) if shown is not None else None
+    fresh = policy.rail.position_fresh_s
+    if held is None or held.position_at is None or (at - held.position_at).total_seconds() > fresh:
+        return source
+    return held.source
+
+
+def _published(
+    plan: Plan,
+    step: Step,
+    position: Position,
+    at: Instant,
+    before: Published | None,
+    policy: ProgressPolicy,
+) -> Published:
+    """Where the journey is shown after a fix of the shown source: on a real shape the
+    tracker's reading, never behind the last one shown; else (stop-to-stop chords, off the
+    shape) the fix itself, unless it lies further back than the jitter (a fix drawn back and
+    forward again on every refresh)."""
+
+    path = plan.path
+    best = step.track.hypotheses[0] if step.track.hypotheses else None
+    held = before.along_m if before is not None else None
+    on_shape = path.shaped and step.track.off_path is None
+    if best is not None and on_shape and best.off_path_since is None:
+        along = best.along_m
+        if before is not None and before.snapped and held is not None:
+            along = max(along, held)
+        lon, lat = point_at(path, along)
+        return Published(lon, lat, heading_at(path, along), at, along, snapped=True)
+    along = None
+    if len(path.points) >= 2:
+        nearest = min(project_all(path, position.lon, position.lat), key=lambda p: p.lateral_m)
+        along = nearest.along_m
+    if (
+        before is not None
+        and held is not None
+        and along is not None
+        and along < held - policy.jitter_m
+    ):
+        return before
+    return Published(position.lon, position.lat, position.bearing, at, along)
 
 
 @lru_cache(maxsize=64)

@@ -222,7 +222,7 @@ Each quirk is handled where stated and has a scenario test named after its ID
 | DUK-Q8 | `20xxx` entries are trains: `ID` names a train, `CISLineID = 0`, `RouteID` = train number | `TripKey(czptt:train_number)`; not a vehicle for circulations |
 | DUK-Q9 | `CISLineID` is an integer without leading zeros | connector pads it to 6 digits |
 | DUK-Q10 | lines missing from the national export (`522588`, `599894`, `626`) | unmatched, shown as such; a static data gap, not a matching problem |
-| DUK-Q11 | one trip claimed by two vehicles at once (mostly PID `100xxx` detour trips) | both bind the instance (section 19.5); one position per feed by arbitration |
+| DUK-Q11 | one trip claimed by two vehicles at once (mostly PID `100xxx` detour trips) | both bind the instance (section 19.5); the source's lead drives it until silent for `rail.position_fresh_s`; one position per journey (the shown source's lead) |
 | DUK-Q12 | DPmÚL and Teplice vehicles never send `ArrivalDT` | arrivals come from GPS progress only |
 | DUK-Q13 | `Azimut` is exactly 0 in about 5 % of entries, often while the vehicle moves | 0 is read as no bearing; progress uses bearing only when present |
 | DUK-Q14 | in State 2/3, `Delay` is the time since the trip's scheduled departure, growing while the vehicle stands (vehicle 171, 2026-10-09: `582480:140` of 21:59 in the depot at 23:52, `Delay` 113) | source delay ignored until the trip starts (manifest `pre_trip_delay_is_elapsed`) |

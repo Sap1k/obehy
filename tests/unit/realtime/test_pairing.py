@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from obehy.realtime.emit.pairing import Fix, Pairings
+from obehy.realtime.emit.vehicles import VehicleBook
 from obehy.realtime.model import JourneyKey
+from obehy.reference.registry import Registry
 from obehy.reference.vocabulary import load_vocabulary
 from tests.realtime.observations import local
 
@@ -62,3 +64,39 @@ def test_one_source_is_never_paired_with_itself() -> None:
         t = local(f"2026-10-20 08:0{minute}")
         pairings.observe([Fix(DUK, TRIP, LON, LAT, t), Fix(other_duk, TRIP, LON, LAT, t)], t)
     assert pairings.partners(DUK) == []
+
+
+DPMD = ("dpmd", "301")
+
+
+def _three(pairings: Pairings, minute: int, dpmd: bool = True) -> set[tuple[str, str]]:
+    t = local(f"2026-10-20 08:0{minute}")
+    fixes = [Fix(DUK, TRIP, LON, LAT, t), Fix(MPV, TRIP, LON + STEP, LAT, t)]
+    if dpmd:
+        fixes.append(Fix(DPMD, TRIP, LON + 2 * STEP, LAT, t))
+    return pairings.observe(fixes, t)
+
+
+def test_pairs_join_transitively_into_one_vehicle() -> None:
+    pairings = Pairings(SETTINGS)
+    for minute in range(3):
+        _three(pairings, minute)
+    assert pairings.cluster(MPV) == sorted([DUK, MPV, DPMD])
+
+
+def test_a_co_located_vehicle_keeps_its_id_as_reports_join_and_leave() -> None:
+    book = VehicleBook(Registry(), load_vocabulary())
+    day = date(2026, 10, 20)
+    pairings = book.pairings
+    for minute in range(3):  # MPVnet and DPMD first: DPMD names the vehicle (both unranked)
+        t = local(f"2026-10-20 08:0{minute}")
+        for r in pairings.observe(
+            [Fix(MPV, TRIP, LON, LAT, t), Fix(DPMD, TRIP, LON + STEP, LAT, t)], t
+        ):
+            book.identify(r, day)
+    assert book.identify(MPV, day) == ("dpmd:301", "co_located")
+    for minute in range(3, 6):  # DÚK, ranked first, joins: the vehicle keeps its ID
+        for r in _three(pairings, minute):
+            for m in pairings.cluster(r):
+                book.identify(m, day)
+    assert {book.identify(r, day) for r in (DUK, MPV, DPMD)} == {("dpmd:301", "co_located")}

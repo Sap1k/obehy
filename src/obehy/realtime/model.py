@@ -443,6 +443,20 @@ class SourceTrack:
 
 
 @dataclass(frozen=True, slots=True)
+class Published:
+    """Where a journey's vehicle is shown: on a real shape, the tracker's reading of every
+    source's fixes (`snapped`); else the shown source's own fix. Never further back along the
+    path (`along_m`) than the tracker's jitter; `at` is the time of the fix it comes from."""
+
+    lon: float
+    lat: float
+    bearing: float | None
+    at: Instant
+    along_m: float | None = None
+    snapped: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Instance:
     journey: JourneyKey
     release_id: str
@@ -463,6 +477,10 @@ class Instance:
     parts: tuple[PartSpan, ...] = ()
     sources: tuple[SourceTrack, ...] = ()
     track_source: str | None = None  # the source of the tracker's last fix
+    # The source whose vehicle stands for the journey: kept while its fixes stay fresh, so the
+    # map's vehicle does not change with every source's fix (emit/represent.py).
+    shown_source: str | None = None
+    published: Published | None = None
 
     def evolve(
         self,
@@ -478,6 +496,8 @@ class Instance:
         lead: Lead | None | Keep = KEEP,
         sources: tuple[SourceTrack, ...] | Keep = KEEP,
         track_source: str | None | Keep = KEEP,
+        shown_source: str | None | Keep = KEEP,
+        published: Published | None | Keep = KEEP,
     ) -> Instance:
         """A copy with the fields the timeline changes per fix replaced; `dataclasses.replace`
         is several times slower, and this runs a few times for every observation."""
@@ -500,6 +520,8 @@ class Instance:
             self.parts,
             self.sources if sources is KEEP else sources,
             self.track_source if track_source is KEEP else track_source,
+            self.shown_source if shown_source is KEEP else shown_source,
+            self.published if published is KEEP else published,
         )
 
     def source_track(self, source: str) -> SourceTrack | None:
@@ -666,8 +688,9 @@ class Unresolved:
     board row's call); counted by replay, never stored."""
 
     observation: Observation
-    # point: names no call of the run ahead; inconsistent: contradicts the run's other events
-    kind: Literal["point", "inconsistent", "platform"]
+    # point: names no call of the run ahead; inconsistent: contradicts the run's other events;
+    # behind: a fix that would take the tracker back while a better-ranked source is fresh
+    kind: Literal["point", "inconsistent", "platform", "behind"]
     name: str
 
 

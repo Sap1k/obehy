@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 
 from obehy.realtime.core import Context, estimate_all, refresh, step
-from obehy.realtime.emit.gtfs_rt import feed_message, run_vehicle_id
+from obehy.realtime.emit.gtfs_rt import feed_message
 from obehy.realtime.emit.represent import representing
+from obehy.realtime.emit.vehicles import VehicleBook
 from obehy.realtime.index import Index
 from obehy.realtime.manifest import semantics_by_channel
 from obehy.realtime.model import (
@@ -25,6 +27,8 @@ from obehy.realtime.model import (
     RawRef,
     ServiceDay,
     TripKey,
+    Unresolved,
+    VehicleId,
     VehicleKey,
     WriteEvent,
 )
@@ -32,6 +36,8 @@ from obehy.realtime.policy import load_policy
 from obehy.realtime.record import load_channels
 from obehy.realtime.timeline.fusion import merge
 from obehy.realtime.times import Instant
+from obehy.reference.registry import Registry
+from obehy.reference.vocabulary import load_vocabulary
 from tests.realtime.builder import ORIGIN, STEP_LON, timetable
 from tests.realtime.observations import local
 
@@ -179,14 +185,30 @@ def test_r7_a_point_event_anchors_progress_in_a_gps_gap() -> None:
 
 
 def test_r14_fresh_gps_leads_the_position() -> None:
-    sz_fix = Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.9 * STEP_LON)
-    state, _, _ = _run(
+    """While DÚK is fresh, an SŽ fix behind it is dropped, one ahead is fused; the train stays
+    shown by its DÚK unit either way."""
+
+    lagging = Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.1 * STEP_LON)  # ~300 m behind
+    state, effects, _ = _run(
         _index(),
         _duk("2026-10-08 08:00:30", 0.2),
         _duk("2026-10-08 08:01:30", 0.4),
-        _sz("2026-10-08 08:02:00", sz_fix),
+        _sz("2026-10-08 08:02:00", lagging),
     )
     assert state.instances[PA].track_source == "duk"
+    assert [(e.kind, e.name) for e in effects if isinstance(e, Unresolved)] == [
+        ("behind", "sz-mapa")
+    ]
+    ahead = Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.5 * STEP_LON)
+    fused, _, _ = _run(
+        _index(),
+        _duk("2026-10-08 08:00:30", 0.2),
+        _duk("2026-10-08 08:01:30", 0.4),
+        _sz("2026-10-08 08:02:00", ahead),
+    )
+    instance = fused.instances[PA]
+    assert (instance.track_source, instance.shown_source) == ("sz-mapa", "duk")
+    sz_fix = Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.9 * STEP_LON)
     later, _, _ = _run(
         _index(),
         _duk("2026-10-08 08:00:30", 0.2),
@@ -206,7 +228,7 @@ def test_a_train_is_one_vehicle_however_many_report_it() -> None:
     )
     message = feed_message(state, local("2026-10-08 08:02"), POLICY.lifecycle)
     (entity,) = [e for e in message.entity if e.HasField("vehicle")]
-    assert entity.vehicle.vehicle.id == run_vehicle_id(PA) == entity.id.removeprefix("vehicle:")
+    assert entity.vehicle.vehicle.id == "train:100" == entity.id.removeprefix("vehicle:")
     assert entity.vehicle.vehicle.label == "100"
     assert abs(entity.vehicle.position.longitude - (ORIGIN[0] + 0.4 * STEP_LON)) < 1e-5  # DÚK lead
     later, _, _ = _run(
@@ -219,7 +241,7 @@ def test_a_train_is_one_vehicle_however_many_report_it() -> None:
         for e in feed_message(later, local("2026-10-08 08:05"), POLICY.lifecycle).entity
         if e.HasField("vehicle")
     ]
-    assert entity.vehicle.vehicle.id == run_vehicle_id(PA)
+    assert entity.vehicle.vehicle.id == "train:100"
     assert abs(entity.vehicle.position.longitude - sz_fix.lon) < 1e-5
 
 
@@ -369,3 +391,39 @@ def test_a_train_leaving_a_stop_not_on_request_is_credited_its_unseen_dwell() ->
     regular, request = arrivals
     assert regular is not None and request is not None
     assert (request - regular).total_seconds() > 10
+
+
+def test_a_train_is_one_vehicle_id_however_many_report_it() -> None:
+    """Coupled DÚK units, the SŽ map's entry and PID's train are `train:<number>`; a report
+    leaving the run is its own source form again."""
+
+    pid_train = Observation(
+        "pid",
+        "vehicles",
+        "czptt",
+        local("2026-10-08 08:00:40"),
+        local("2026-10-08 08:00:40"),
+        RawRef("3" * 64, 0),
+        1,
+        (
+            VehicleKey("train:100"),
+            TripKey("czptt:train_number", "100"),
+            Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.22 * STEP_LON),
+        ),
+    )
+    state, _, _ = _run(
+        _index(),
+        _duk("2026-10-08 08:00:30", 0.2),
+        _duk("2026-10-08 08:00:35", 0.21, unit="951"),
+        pid_train,
+        _sz("2026-10-08 08:01:00", Position(lat=ORIGIN[1], lon=ORIGIN[0] + 0.3 * STEP_LON)),
+    )
+    book = VehicleBook(Registry(), load_vocabulary())
+    book.track({"czptt": state})
+    reports = [("duk", "950"), ("duk", "951"), ("pid", "train:100"), ("sz-mapa", "TR/1")]
+    assert {book.identify(r, D8) for r in reports} == {("train:100", "train")}
+    unit = VehicleId("duk", "951")
+    state.vehicles[unit] = replace(state.vehicles[unit], binding=None)
+    book.track({"czptt": state})
+    assert book.identify(("duk", "951"), D8) == ("duk:951", None)
+    assert "train:100" in book.dirty and "duk:951" in book.dirty

@@ -19,11 +19,12 @@ becomes `assigned_stop_id`, even on a call without predicted times; a platform t
 label (a big station's platform number) is not published here.
 
 A bus reported by several sources (DÚK and a city's own feed) is published once, from the
-source the tracker follows. A rail run is one train however many vehicles report it: coupled
-DÚK units each have a GPS, and the SŽ map is a vehicle of its own. It gets one VehiclePosition
-under an opaque vehicle ID that is stable for the run's day, labelled with the current train
-number; the position is the leading vehicle's of the source fusion last tracked
-(`track_source`), else any bound one's.
+source shown (emit/represent.py). A rail run is one train however many vehicles report it:
+coupled DÚK units each have a GPS, and the SŽ map is a vehicle of its own. It gets one
+VehiclePosition under the vehicle ID the API knows it by, `train:<number>` of its current
+train number (an opaque ID of the run's day for a run without one), labelled with that number.
+A vehicle standing for its journey is placed where the tracker reads the journey from every
+source's fixes (`represent.shown`), else at its own fix.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ from typing import Literal
 from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.pipeline.files import atomic_output_path
-from obehy.realtime.emit.represent import one_source, run_position, vehicles_by_journey
+from obehy.realtime.emit.represent import one_source, run_position, shown, vehicles_by_journey
 from obehy.realtime.model import (
     CallState,
     FeedState,
@@ -48,7 +49,7 @@ from obehy.realtime.model import (
     VehicleState,
 )
 from obehy.realtime.policy import LifecyclePolicy
-from obehy.realtime.runs import current_part, published_parts
+from obehy.realtime.runs import TRAIN_PREFIX, current_part, current_train, published_parts
 from obehy.realtime.times import Instant
 
 LIVE = ("pre_trip", "running")
@@ -83,23 +84,18 @@ def _mapped(call: CallState) -> str | None:
     return call.platform.boarding_point_id if call.platform is not None else None
 
 
-@lru_cache(maxsize=8192)  # bounded: the worker runs for weeks
-def run_vehicle_id(journey: JourneyKey) -> str:
-    """A rail run's public vehicle ID: opaque, the same for the whole run whichever unit or
-    source reports it."""
+def run_vehicle_id(instance: Instance) -> str:
+    """A rail run's public vehicle ID, whichever unit or source reports it: the train its
+    current number names (emit/vehicles.py), else an opaque ID of the run's day."""
 
+    number = current_train(instance)
+    return TRAIN_PREFIX + number if number is not None else _opaque(instance.journey)
+
+
+@lru_cache(maxsize=8192)  # bounded: the worker runs for weeks
+def _opaque(journey: JourneyKey) -> str:
     identity = f"{journey.feed}|{journey.namespace}|{journey.key}|{journey.service_date}"
     return "train-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
-
-
-def _train_number(instance: Instance) -> str | None:
-    """The train number at the run's current call (it may change along the run)."""
-
-    reached = instance.progress.call_index if instance.progress is not None else 0
-    for span in instance.journeys:
-        if reached < span.last:
-            return span.journey.key
-    return instance.journeys[-1].journey.key if instance.journeys else None
 
 
 def publication(instance: Instance, now: Instant, policy: LifecyclePolicy) -> Publication | None:
@@ -131,14 +127,21 @@ def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str
     _trip(position.trip, current_part(instance), instance.journey)
     position.vehicle.id = vehicle_id
     if instance.parts:
-        label = _train_number(instance)
+        label = current_train(instance)
         if label is not None:
             position.vehicle.label = label
-    position.position.latitude = current.position.lat
-    position.position.longitude = current.position.lon
-    if current.position.bearing is not None:
-        position.position.bearing = current.position.bearing
-    position.timestamp = _epoch(current.position_at or current.last_seen)
+    drawn = shown(instance, current.vehicle)
+    if drawn is not None:
+        lat, lon, bearing, at = drawn.lat, drawn.lon, drawn.bearing, drawn.at
+    else:
+        place = current.position
+        lat, lon, bearing = place.lat, place.lon, place.bearing
+        at = current.position_at or current.last_seen
+    position.position.latitude = lat
+    position.position.longitude = lon
+    if bearing is not None:
+        position.position.bearing = bearing
+    position.timestamp = _epoch(at)
     return entity.SerializeToString(deterministic=True)
 
 
@@ -252,7 +255,7 @@ class FeedEmitter:
                 continue
             vehicle_id: str | None = None  # not live: the vehicle may be on its next trip
             if published == "live" and instance.parts:
-                vehicle_id = run_vehicle_id(journey)
+                vehicle_id = run_vehicle_id(instance)
             elif published == "live" and vehicles_of.get(journey):
                 vehicle_id = str(vehicles_of[journey][0])
             cached = self.trips.get(journey)
@@ -272,7 +275,7 @@ class FeedEmitter:
             if instance.parts:
                 lead = run_position(instance, bound)
                 if lead is not None:
-                    chosen.append((run_vehicle_id(journey), instance, lead))
+                    chosen.append((run_vehicle_id(instance), instance, lead))
                 continue
             chosen.extend((str(v.vehicle), instance, v) for v in bound if v.position is not None)
         positions: dict[str, tuple[Instance, VehicleState, bytes]] = {}

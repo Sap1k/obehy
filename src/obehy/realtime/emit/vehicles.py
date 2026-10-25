@@ -1,12 +1,15 @@
-"""Vehicles beyond their positions (BASE_PLAN.md section 27), kept by the writer: which vehicle
-each source report is, the attributes sources state live, and each vehicle's profile.
+"""Vehicles beyond their positions (BASE_PLAN.md section 27), kept by the writer: which vehicle each
+source report is, the attributes sources state live, and each vehicle's profile.
 
-A report is a vehicle by, in turn: a registry key (its source's vehicle ID, else an
-identifier it states: plate, EVN, series number); a confirmed co-located partner's vehicle
-(emit/pairing.py); else its own `<source>:<source_vehicle_id>`. Identity and precedence are
-decided here, once, when an input changes (a live attribute, a pairing, the registry), and
-written: `rt.vehicle_state_current.vehicle_id`, `rt.vehicle_profile`, `rt.vehicle_pairing`.
-Readers only read them.
+A report on a rail run is the train its number names, `train:<number>`: the coupled DÚK units, the
+SŽ map's entry and PID's train are one train, which no unit or source names (DUK-Q8). It changes
+where the run's number does. Any other report is a vehicle by, in turn: a registry key (its source's
+vehicle ID, else an identifier it states: plate, EVN, series number); a confirmed co-located
+vehicle, kept as reports join and leave its cluster (emit/pairing.py); else its own
+`<source>:<source_vehicle_id>`. Identity and precedence are decided here, once, when an input
+changes (a live attribute, a pairing, a train number, the registry), and written:
+`rt.vehicle_state_current.vehicle_id`, `rt.vehicle_profile`, `rt.vehicle_pairing`. Readers only read
+them.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from obehy.realtime.model import (
     VehicleAttribute,
     VehicleKey,
 )
+from obehy.realtime.runs import TRAIN_PREFIX, current_train
 from obehy.realtime.times import Instant, local_date
 from obehy.reference.precedence import Profile, Statement, profile
 from obehy.reference.registry import REGISTRY_CHANNEL as REGISTRY_CHANNEL
@@ -57,6 +61,8 @@ class VehicleBook:
         default_factory=dict[Report, tuple[str, BoundBy | None]]
     )
     members: dict[str, set[Report]] = field(default_factory=dict[str, set[Report]])
+    # The train number of each report bound to a rail run.
+    trains: dict[Report, str] = field(default_factory=dict[Report, str])
     pairings: Pairings = field(init=False)
     dirty: set[str] = field(default_factory=set[str])
     rewrite: bool = True  # the first flush rewrites every profile
@@ -116,50 +122,73 @@ class VehicleBook:
         return {a: v for a, (v, _) in self.live.get(report, {}).items() if a in identifiers}
 
     def _resolve(self, report: Report, day: date) -> tuple[str, BoundBy | None]:
+        train = self.trains.get(report)
+        if train is not None:
+            return TRAIN_PREFIX + train, "train"
         bound = self.registry.bound(report[0], report[1], self._stated(report), day)
         if bound is not None:
             return bound
-        partners = self.pairings.partners(report)
-        if not partners:
+        members = self.pairings.cluster(report)
+        if len(members) == 1:
             return f"{report[0]}:{report[1]}", None
-        for partner in partners:
-            found = self.registry.bound(partner[0], partner[1], self._stated(partner), day)
+        for member in members:
+            found = self.registry.bound(member[0], member[1], self._stated(member), day)
             if found is not None:
                 return found[0], "co_located"
-        anchor = min(
-            [report, *partners],
-            key=lambda r: (self.vocabulary.source_rank("position", r[0]), r),
+        # Sticky: the member a report of the cluster is already known by stays the vehicle as
+        # reports join and leave, so a vehicle's ID does not change under the map.
+        names = {f"{s}:{v}" for s, v in members}
+        held = sorted(
+            known[0]
+            for member in members
+            if (known := self.identity.get(member)) is not None and known[0] in names
         )
+        if held:
+            return held[0], "co_located"
+        anchor = min(members, key=lambda r: (self.vocabulary.source_rank("position", r[0]), r))
         return f"{anchor[0]}:{anchor[1]}", "co_located"
 
     def track(self, states: Mapping[Feed, FeedState]) -> None:
-        """This tick's fixes of reports on journeys: pairing evidence, and the identities a
-        confirmed or dropped pairing changes."""
+        """This tick's reports on journeys: the train each one on a rail run is, and pairing
+        evidence from the fixes of the others; the identities a train or a confirmed or dropped
+        pairing changes."""
 
-        fixes = [
-            Fix(
-                (vehicle.source, vehicle.source_vehicle_id),
-                current.binding.journey,
-                current.position.lon,
-                current.position.lat,
-                current.position_at or current.last_seen,
-            )
-            for _, state in sorted(states.items())
-            for vehicle, current in sorted(state.vehicles.items())
-            if current.binding is not None
-            and current.position is not None
-            and current.status == "running"
-        ]
+        trains: dict[Report, str] = {}
+        fixes: list[Fix] = []
+        for _, state in sorted(states.items()):
+            for vehicle, current in sorted(state.vehicles.items()):
+                if current.binding is None:
+                    continue
+                report = (vehicle.source, vehicle.source_vehicle_id)
+                self.clock = max(self.clock or current.last_seen, current.last_seen)
+                instance = state.instances.get(current.binding.journey)
+                if instance is not None and instance.journeys:
+                    train = current_train(instance)
+                    if train is not None:
+                        trains[report] = train
+                    continue  # the train number, not co-location, makes a run's reports one
+                if current.position is not None and current.status == "running":
+                    at = current.position_at or current.last_seen
+                    position = current.position
+                    fixes.append(
+                        Fix(report, current.binding.journey, position.lon, position.lat, at)
+                    )
+        if trains != self.trains:
+            changed = {r for r in {*trains, *self.trains} if trains.get(r) != self.trains.get(r)}
+            self.trains = trains
+            if self.clock is not None:
+                for report in sorted(changed):
+                    self.identify(report, local_date(self.clock))
         if not fixes:
             return
         now = max(f.at for f in fixes)
-        self.clock = now if self.clock is None else max(self.clock, now)
-        for report in sorted(self.pairings.observe(fixes, now)):
+        moved = self.pairings.observe(fixes, now)
+        for report in sorted({m for r in moved for m in self.pairings.cluster(r)}):
             self.identify(report, local_date(now))
 
     def identify(self, report: Report, day: date) -> tuple[str, BoundBy | None]:
-        """Which vehicle a report is on `day`: by a registry key, else a co-located partner,
-        else its own source form."""
+        """Which vehicle a report is on `day`: the train of the rail run it is on, else by a
+        registry key, else a co-located partner, else its own source form."""
 
         found = self._resolve(report, day)
         before = self.identity.get(report)
