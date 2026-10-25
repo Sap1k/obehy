@@ -22,6 +22,11 @@ import { PUCK_ZOOM, vehicleLayers } from "./VehicleLayers";
 // vehicles into its canvas, the vehicles' glide
 // (every frame, without React), and the camera (camera.ts decides, this applies). React gives
 // it what to show with `update`, every render; it compares and does only what changed.
+//
+// A phone's browser drops the WebGL context of a page in the background. MapLibre then destroys
+// its style (`getSource` and the like throw until it is back) and cannot bring back deck.gl's
+// layer, so while the context is lost the controller only takes the input, and once it is back
+// (or the page shows again without it) it asks to be rebuilt.
 
 const VIEW_KEY = "obehy.map.view";
 const DEFAULT_VIEW = { lng: 15.45, lat: 49.8, zoom: 6.6 };
@@ -35,6 +40,9 @@ const LOCALE = {
 };
 /** The tokens' action colour, for the selection ring. */
 const ACCENT = { light: "#246568", dark: "#c5ed62" };
+/** A page shown again with its context still lost waits this long for the browser to restore
+ * it before the map is rebuilt. */
+const RESTORE_WAIT_MS = 1000;
 /** A point this close to a panel's edge counts as covered. */
 const MARGIN_PX = 32;
 /** A show across the map flies this long; one nearby eases this long. */
@@ -71,6 +79,8 @@ export interface MapHandlers {
   locate(latitude: number, longitude: number): void;
   /** The map's "Moje poloha" started keeping the map on the reader. */
   locateStart(): void;
+  /** The map lost its WebGL context and cannot recover in place: build a new one. */
+  rebuild(): void;
 }
 
 interface CameraLogEntry {
@@ -120,6 +130,9 @@ export class MapController {
   private positions = new Float64Array(0);
   private frame = 0;
   private raf = 0;
+  /** The WebGL context is lost: the map has no style and must not be touched. */
+  private lost = false;
+  private restoreTimer = 0;
   // The camera.
   private camera: CameraState = initialCamera();
   private flying = false;
@@ -196,7 +209,14 @@ export class MapController {
     map.on("movestart", this.onMoveStart);
     map.on("dragstart", this.onDragStart);
     map.on("zoom", this.onZoom);
+    map.on("webglcontextlost", () => {
+      this.lost = true;
+      cancelAnimationFrame(this.raf);
+    });
+    map.on("webglcontextrestored", () => handlers.rebuild());
+    document.addEventListener("visibilitychange", this.onVisibility);
     this.resize = new ResizeObserver(() => {
+      if (this.lost) return;
       map.resize();
       this.plan();
     });
@@ -210,6 +230,7 @@ export class MapController {
   update(input: MapInput, first = false): void {
     const was = this.input;
     this.input = input;
+    if (this.lost) return;
     if (input.dark !== this.dark) {
       this.dark = input.dark;
       this.map.setStyle(mapStyle(input.dark));
@@ -230,14 +251,32 @@ export class MapController {
   destroy(): void {
     this.resize.disconnect();
     cancelAnimationFrame(this.raf);
-    this.map.remove();
+    clearTimeout(this.restoreTimer);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    try {
+      this.map.remove();
+    } catch {
+      // A map whose context is gone may fail to tear down: clear its container by hand.
+      const container = this.map.getContainer();
+      container.replaceChildren();
+      container.classList.remove("maplibregl-map");
+    }
   }
+
+  /** Shown again with the context still lost: give the browser a moment, then rebuild. */
+  private onVisibility = () => {
+    clearTimeout(this.restoreTimer);
+    if (!this.lost || document.visibilityState !== "visible") return;
+    this.restoreTimer = window.setTimeout(() => {
+      if (this.lost) this.handlers.rebuild();
+    }, RESTORE_WAIT_MS);
+  };
 
   // Drawing.
 
   private render(): void {
     const input = this.input;
-    if (!input.ready) return;
+    if (!input.ready || this.lost) return;
     // The pucks drawn: all of them at street zoom, otherwise only the selected vehicle's (the
     // country's dots would fill the atlas with pucks no one sees).
     const selected = this.drawn.findIndex((v) => v.vehicle_id === input.selectedId);
@@ -296,6 +335,7 @@ export class MapController {
   }
 
   private onZoom = () => {
+    if (this.lost) return;
     const z = this.map.getZoom();
     const changed = zoomBand(z) !== zoomBand(this.zoom);
     this.zoom = z;
@@ -323,7 +363,7 @@ export class MapController {
 
   /** Decide and apply the camera's next move (camera.ts). */
   private plan(): void {
-    if (this.applying) return;
+    if (this.applying || this.lost) return;
     const following = this.input.camera.follow !== null;
     if (following !== this.followZoom) {
       // Following: zooming keeps the vehicle in the middle.
@@ -416,6 +456,7 @@ export class MapController {
   };
 
   private onMoveEnd = () => {
+    if (this.lost) return;
     saveView(this.map);
     this.handlers.settle(boundsOf(this.map));
     // The end of a move that a new one replaced (apply sets `flying` itself).

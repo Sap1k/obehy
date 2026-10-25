@@ -18,6 +18,9 @@ import { unfollow, useMapStore } from "./store";
 import { RANK, stopLabels, type TripOverlay } from "./tripLayer";
 import classes from "./MapPage.module.css";
 
+/** A failing map is rebuilt at most this often. */
+const REBUILD_GAP_MS = 10_000;
+
 /** The map under the app (the shell's, on every tab; on the phone shown on the map tab only):
  * every vehicle in view, and what is open (a board's stop, a trip, a vehicle) marked, brought
  * into view and followed on request. What to show comes from the URL and the queries
@@ -32,6 +35,8 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
   const now = useNow(5000);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
+  // Bumped to build the map anew (its WebGL context was lost, or it failed).
+  const [generation, setGeneration] = useState(0);
   const cells = useVehiclesIn(hidden ? null : bounds);
 
   // The open vehicle's own answer joins the cells' (the fresher row wins), so it is drawn and
@@ -121,24 +126,44 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
 
   const container = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
+  const rebuild = () => setGeneration((g) => g + 1);
+  const rebuiltAt = useRef(-Infinity);
+  // The map is a part of the app, never the whole of it: a map that fails is left blank (and
+  // rebuilt on its next update), the boards and panels go on.
   useLayoutEffect(() => {
-    const map = new MapController(container.current!, initial(), {
-      pick: (v) => pick(v.vehicle_id),
-      clickEmpty: () => clickEmpty(),
-      openStop: (stopId) => openStop(stopId),
-      drag: unfollow,
-      settle: setBounds,
-      locate: rememberPosition,
-      locateStart: unfollow,
-    });
+    let map: MapController;
+    try {
+      map = new MapController(container.current!, initial(), {
+        pick: (v) => pick(v.vehicle_id),
+        clickEmpty: () => clickEmpty(),
+        openStop: (stopId) => openStop(stopId),
+        drag: unfollow,
+        settle: setBounds,
+        locate: rememberPosition,
+        locateStart: unfollow,
+        rebuild,
+      });
+    } catch (error) {
+      console.error("The map could not be built", error);
+      return;
+    }
     controller.current = map;
     return () => {
       map.destroy();
       controller.current = null;
     };
-  }, []);
+  }, [generation]);
   useLayoutEffect(() => {
-    controller.current?.update(input);
+    try {
+      controller.current?.update(input);
+    } catch (error) {
+      console.error("The map failed; building it anew", error);
+      // Once in a while at most: a map that keeps failing stays blank instead of looping.
+      if (performance.now() - rebuiltAt.current > REBUILD_GAP_MS) {
+        rebuiltAt.current = performance.now();
+        setTimeout(rebuild);
+      }
+    }
   });
 
   // Pucks are drawn in Manrope: wait for it once.
