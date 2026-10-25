@@ -18,20 +18,41 @@ interface CellAnswer {
 
 const placed = (v: Vehicle): v is Positioned => v.latitude !== null && v.longitude !== null;
 
-/** One row per vehicle across cells: one on a cell's edge comes in both, the fresher kept. */
-export function mergeVehicles(answers: readonly (readonly Vehicle[] | undefined)[]): Positioned[] {
+/** When a vehicle's position was fixed (its report's time when the answer gives none). */
+const fixedAt = (v: Vehicle): number => Date.parse(v.position_at ?? v.last_seen);
+
+/** One row per vehicle across cells: one on a cell's edge comes in both, the newer fix kept.
+ * A vehicle `held` (drawn from an earlier answer) at a newer fix keeps that position: an answer
+ * older than one already drawn (a proxy's stale copy, a cell's cached answer after a pan or a
+ * zoom) would draw it back along its way, and the next answer forward again. */
+export function mergeVehicles(
+  answers: readonly (readonly Vehicle[] | undefined)[],
+  held: readonly Positioned[] = [],
+): Positioned[] {
   const byId = new Map<string, Positioned>();
   for (const vehicles of answers) {
     for (const v of vehicles ?? []) {
       if (!placed(v)) continue;
       const had = byId.get(v.vehicle_id);
-      if (!had || Date.parse(v.last_seen) > Date.parse(had.last_seen)) byId.set(v.vehicle_id, v);
+      if (!had || fixedAt(v) > fixedAt(had)) byId.set(v.vehicle_id, v);
+    }
+  }
+  for (const was of held) {
+    const now = byId.get(was.vehicle_id);
+    if (now && fixedAt(was) > fixedAt(now)) {
+      byId.set(was.vehicle_id, {
+        ...now,
+        latitude: was.latitude,
+        longitude: was.longitude,
+        bearing: was.bearing,
+        position_at: was.position_at,
+      });
     }
   }
   return [...byId.values()];
 }
 
-/** A vehicle's freshest row among the cell answers (the one it was clicked on). */
+/** A vehicle's newest fix among the cell answers (the one it was clicked on). */
 export function rowAmong(
   answers: readonly (CellAnswer | undefined)[],
   vehicleId: string,
@@ -40,7 +61,7 @@ export function rowAmong(
   for (const answer of answers) {
     for (const v of answer?.vehicles ?? []) {
       if (v.vehicle_id !== vehicleId) continue;
-      if (!best || Date.parse(v.last_seen) > Date.parse(best.last_seen)) best = v;
+      if (!best || fixedAt(v) > fixedAt(best)) best = v;
     }
   }
   return best;
@@ -101,7 +122,13 @@ export function useVehiclesIn(bounds: Bounds | null) {
     vehicles: [],
   });
   if (!fetching && merged.key !== key) {
-    setMerged({ key, vehicles: mergeVehicles(results.map((r) => r.data?.vehicles)) });
+    setMerged({
+      key,
+      vehicles: mergeVehicles(
+        results.map((r) => r.data?.vehicles),
+        merged.vehicles,
+      ),
+    });
   }
   return merged.vehicles;
 }

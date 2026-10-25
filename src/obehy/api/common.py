@@ -32,7 +32,12 @@ def envelope(snap: Snapshot) -> dict[str, Any]:
 
 
 def realtime_cache(response: Response, limits: Limits) -> None:
-    response.headers["Cache-Control"] = f"public, max-age={limits.cache_realtime_s}"
+    """The reverse proxy keeps a realtime answer for `cache_realtime_s` (X-Accel-Expires, which
+    it does not pass on); a browser asks again every time, so a reload or a cell asked again
+    never draws an answer older than one it has shown."""
+
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Expires"] = str(limits.cache_realtime_s)
 
 
 def static_cache(
@@ -81,6 +86,7 @@ def trip_vehicle(row: DictRow) -> schema.TripVehicle:
         vehicle_id=row["vehicle_id"],
         state=row["state"],
         last_seen=row["last_seen"],
+        position_at=row["position_at"],
         latitude=row["latitude"],
         longitude=row["longitude"],
         bearing=row["bearing"],

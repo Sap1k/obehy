@@ -61,6 +61,7 @@ def _vehicle(r: DictRow) -> schema.TripVehicle | None:
         vehicle_id=r["vehicle_id"],
         state=r["vehicle_state"],
         last_seen=r["vehicle_seen"],
+        position_at=r["vehicle_position_at"],
         latitude=r["vehicle_latitude"],
         longitude=r["vehicle_longitude"],
         bearing=r["vehicle_bearing"],

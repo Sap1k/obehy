@@ -91,10 +91,9 @@ export function VehiclePanel() {
   }
 
   const stateText = vehicle ? STATE_TEXT[vehicle.state] : undefined;
+  const fixedAt = vehicle ? (vehicle.position_at ?? vehicle.last_seen) : null;
   const positionAge =
-    vehicle && now - Date.parse(vehicle.last_seen) > OLD_POSITION_MS
-      ? `Poloha ${ago(vehicle.last_seen, now)}`
-      : null;
+    fixedAt && now - Date.parse(fixedAt) > OLD_POSITION_MS ? `Poloha ${ago(fixedAt, now)}` : null;
   const chips = (
     <>
       {stateText && <span className={classes.chip}>{stateText}</span>}

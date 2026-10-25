@@ -57,6 +57,7 @@ def _vehicle(r: DictRow) -> schema.Vehicle:
         source=r["source"],
         state=r["status"],
         last_seen=r["last_seen"],
+        position_at=r["position_at"],
         latitude=r["latitude"],
         longitude=r["longitude"],
         bearing=r["bearing"],

@@ -74,7 +74,8 @@ realtime AS (
 vehicles AS (
     SELECT DISTINCT ON (r.trip_id, r.service_date) r.*
     FROM (
-        SELECT v.trip_id, v.service_date, v.vehicle_id, v.status, v.last_seen, v.latitude,
+        SELECT v.trip_id, v.service_date, v.vehicle_id, v.status, v.last_seen, v.position_at,
+               v.latitude,
                v.longitude, v.bearing, v.source, v.source_vehicle_id, v.represents,
                array_agg(v.source) OVER (PARTITION BY v.trip_id, v.service_date, v.vehicle_id)
                    AS vehicle_sources
@@ -103,6 +104,7 @@ SELECT l.trip_id, l.service_date, l.location_id, l.route_id, ro.short_name, ro.l
        coalesce(l.call ->> 'status', 'scheduled') AS status,
        l.call ->> 'source_class' AS source_class, l.stale, l.sources, bp.public_code AS platform,
        v.vehicle_id, v.status AS vehicle_state, v.last_seen AS vehicle_seen,
+       v.position_at AS vehicle_position_at,
        v.latitude AS vehicle_latitude, v.longitude AS vehicle_longitude,
        v.bearing AS vehicle_bearing, v.vehicle_sources, vp.low_floor, vp.air_conditioning,
        vp.wheelchair_accessible, vp.manufacturer, vp.model, vp.operator, vp.licence_plate, vp.fleet_number

@@ -583,9 +583,7 @@ def _set_vehicle(
     """Record the vehicle's state after `observation`; returns its `since`."""
 
     previous = state.vehicles.get(vehicle)
-    position = observation.first(Position)
-    if position is None and previous is not None:
-        position = previous.position
+    position, position_at = _fix(previous, observation.first(Position), observation.at)
     since = _since(previous, observation, binding, episode)
     state.vehicles[vehicle] = VehicleState(
         vehicle=vehicle,
@@ -595,12 +593,30 @@ def _set_vehicle(
         trip_key=key,
         binding=binding,
         position=position,
+        position_at=position_at,
         reason=reason,
         episode=episode,
         facts=observation.facts,
         since=since,
     )
     return since
+
+
+def _fix(
+    previous: VehicleState | None, position: Position | None, at: Instant
+) -> tuple[Position | None, Instant | None]:
+    """The vehicle's position and its fix time after a report at `at`: a newer fix replaces
+    it; none, one no newer (channels of one source out of step) or the same place again keep
+    it, so the map never steps back to an older fix."""
+
+    if previous is None or previous.position is None or previous.position_at is None:
+        return position, None if position is None else at
+    held = previous.position
+    if position is None or at <= previous.position_at:
+        return held, previous.position_at
+    if (position.lat, position.lon) == (held.lat, held.lon):
+        return position, previous.position_at
+    return position, at
 
 
 def _since(

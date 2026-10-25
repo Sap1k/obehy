@@ -222,3 +222,21 @@ def test_a_channel_without_semantics_takes_its_facts_at_face_value() -> None:
     }
     state, _ = run(index.index(), {"at": "2026-10-09 22:05", **moved_on}, semantics={})
     assert state.instances[journey].lifecycle == "running"
+
+
+def test_a_vehicle_never_steps_back_to_an_older_fix() -> None:
+    """Channels of one source out of step (MPVnet portals, DPMD's CDN copy) bring an older fix
+    after a newer one; a report without a position or at the same place keeps the fix time."""
+
+    index = timetable().trip("582492:143", days=[D8], calls=[("A", "10:00"), ("B", "10:30")])
+    state, _ = run(
+        index.index(),
+        {"at": "2026-10-08 10:05", "position": (ORIGIN[0] + STEP_LON, ORIGIN[1])},
+        {"at": "2026-10-08 10:04", "position": (ORIGIN[0], ORIGIN[1])},
+        {"at": "2026-10-08 10:06"},
+        {"at": "2026-10-08 10:07", "position": (ORIGIN[0] + STEP_LON, ORIGIN[1])},
+    )
+    current = state.vehicles[VehicleId("duk", "1001")]
+    assert current.position is not None and current.position.lon == ORIGIN[0] + STEP_LON
+    assert current.position_at is not None and current.position_at.minute == 5
+    assert current.last_seen.minute == 7

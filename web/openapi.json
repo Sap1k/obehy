@@ -3559,6 +3559,19 @@
             ],
             "title": "Longitude"
           },
+          "position_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The source time of the position: a client keeps a newer one it already has",
+            "title": "Position At"
+          },
           "sources": {
             "description": "Sources reporting it now",
             "items": {
@@ -3775,6 +3788,19 @@
               }
             ],
             "title": "Longitude"
+          },
+          "position_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The source time of the position: a client keeps a newer one it already has",
+            "title": "Position At"
           },
           "service_date": {
             "anyOf": [

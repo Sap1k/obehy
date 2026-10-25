@@ -574,6 +574,7 @@ _VEHICLES = _Table(
         "vehicle_id",
         "bound_by",
         "represents",
+        "position_at",
     ),
     ("feed", "source", "source_vehicle_id"),
     ("text", "text", "text"),
@@ -657,6 +658,7 @@ def _vehicle_row(
         release_id,
         *book.identify((vehicle.source, vehicle.source_vehicle_id), local_date(v.last_seen)),
         represents,
+        v.position_at,
     )
 
 

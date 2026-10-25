@@ -1856,6 +1856,11 @@ export interface components {
             /** Longitude */
             longitude: number | null;
             /**
+             * Position At
+             * @description The source time of the position: a client keeps a newer one it already has
+             */
+            position_at?: string | null;
+            /**
              * Sources
              * @description Sources reporting it now
              */
@@ -1924,6 +1929,11 @@ export interface components {
             line: components["schemas"]["Line"] | null;
             /** Longitude */
             longitude: number | null;
+            /**
+             * Position At
+             * @description The source time of the position: a client keeps a newer one it already has
+             */
+            position_at?: string | null;
             /** Service Date */
             service_date: string | null;
             /** Source */

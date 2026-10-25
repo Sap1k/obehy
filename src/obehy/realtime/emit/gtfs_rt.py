@@ -138,7 +138,7 @@ def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str
     position.position.longitude = current.position.lon
     if current.position.bearing is not None:
         position.position.bearing = current.position.bearing
-    position.timestamp = _epoch(current.last_seen)
+    position.timestamp = _epoch(current.position_at or current.last_seen)
     return entity.SerializeToString(deterministic=True)
 
 

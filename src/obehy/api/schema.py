@@ -213,6 +213,10 @@ class TripVehicle(BaseModel):
     vehicle_id: str
     state: VehicleState
     last_seen: Time
+    position_at: Time | None = Field(
+        default=None,
+        description="The source time of the position: a client keeps a newer one it already has",
+    )
     latitude: float | None
     longitude: float | None
     bearing: float | None
@@ -465,6 +469,10 @@ class Vehicle(BaseModel):
     source: str
     state: VehicleState
     last_seen: Time
+    position_at: Time | None = Field(
+        default=None,
+        description="The source time of the position: a client keeps a newer one it already has",
+    )
     latitude: float | None
     longitude: float | None
     bearing: float | None

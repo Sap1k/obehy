@@ -65,7 +65,8 @@ window_min = 60
 limit = 50
 
 [cache]
-# Cache-Control max-age: realtime answers follow the worker's 10 s tick, static ones the
-# hourly release update (with the release as ETag).
+# Realtime answers follow the worker's 10 s tick: the reverse proxy keeps them this long
+# (X-Accel-Expires), browsers not at all. Static ones follow the hourly release update
+# (Cache-Control max-age, with the release as ETag).
 realtime_s = 5
 static_s = 3600

@@ -539,6 +539,9 @@ class VehicleState:
     trip_key: TripKey | None = None
     binding: Binding | None = None
     position: Position | None = None
+    # The source time of the fix `position` is: an older fix, a report without a position or
+    # the same place again (an unchanged SŽ entry under a new document clock, SZ-Q6) leave it.
+    position_at: Instant | None = None
     reason: Reason | None = None
     episode: KeylessEpisode | None = None
     # The facts of the last observation: the same fix again (`last_seen` is its own fix time)

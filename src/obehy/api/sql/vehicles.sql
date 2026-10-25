@@ -6,8 +6,10 @@
 -- A vehicle two sources report may be bound differently by each (DÚK and PID disagreeing about
 -- its next trip): its trip, state and delay come from its best-ranked report (one standing for
 -- its journey, then the state, then the source), so they do not flip with whichever report is
--- fresher; its position comes from its freshest report. A viewport lists only vehicles standing
--- for their journey (emit/represent.py): the SŽ map's train and the unit's GPS are one train.
+-- fresher; its position comes from the report standing for its journey, else its newest fix (by
+-- the fix's own time: the SŽ map's report is heard every poll, its position changes seldom). A
+-- viewport lists only vehicles standing for their journey (emit/represent.py): the SŽ map's train
+-- and the unit's GPS are one train.
 --
 -- A search (`text`, its `words`) finds them by line, train number, headsign, fleet number or
 -- plate, regardless of case and diacritics, every word somewhere: an exact line or train number
@@ -32,11 +34,12 @@ binding AS (
 ),
 fix AS (
     SELECT DISTINCT ON (r.vehicle_id)
-           r.vehicle_id, r.last_seen, r.latitude, r.longitude, r.bearing
+           r.vehicle_id, r.last_seen, r.position_at, r.latitude, r.longitude, r.bearing
     FROM reports r
-    ORDER BY r.vehicle_id, r.last_seen DESC, r.source, r.source_vehicle_id, r.feed
+    ORDER BY r.vehicle_id, r.latitude IS NULL, r.represents DESC, r.position_at DESC NULLS LAST,
+        r.last_seen DESC, r.source, r.source_vehicle_id, r.feed
 )
-SELECT b.vehicle_id, b.feed, b.source, b.source_vehicle_id, b.status, f.last_seen, f.latitude,
+SELECT b.vehicle_id, b.feed, b.source, b.source_vehicle_id, b.status, f.last_seen, f.position_at, f.latitude,
        f.longitude, f.bearing, b.trip_id, b.service_date, t.route_id, ro.short_name,
        ro.long_name, ro.mode, ro.color, ro.text_color, t.short_name AS trip_short_name,
        t.headsign, s.delay_s, b.sources, p.low_floor, p.air_conditioning,

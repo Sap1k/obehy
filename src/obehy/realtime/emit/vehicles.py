@@ -142,7 +142,7 @@ class VehicleBook:
                 current.binding.journey,
                 current.position.lon,
                 current.position.lat,
-                current.last_seen,
+                current.position_at or current.last_seen,
             )
             for _, state in sorted(states.items())
             for vehicle, current in sorted(state.vehicles.items())
