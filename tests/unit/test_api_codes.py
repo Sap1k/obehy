@@ -7,7 +7,14 @@ import json
 from typing import Any
 
 from obehy.api import schema
-from obehy.api.codes import amenities, call_flags, features, load_codes, tristate
+from obehy.api.codes import (
+    amenities,
+    call_flags,
+    features,
+    load_codes,
+    tristate,
+    wheelchair_of,
+)
 from obehy.api.schema import Boarding
 from obehy.release.contract import CONTRACT_PATH
 
@@ -131,6 +138,38 @@ def test_a_central_note_reads_its_official_text() -> None:
         "WiFi",
         "ve vlaku je řazen vůz s bezdrátovým připojením k internetu",
     )
+
+
+def test_a_central_note_printed_for_some_categories_reads_without_them() -> None:
+    (feature,) = features(CODES, [_row("note", code="12")])
+    assert feature.label.cs == "ve vlaku řazeny k sezení pouze vozy 2. vozové třídy"
+    assert not feature.official and feature.source_code is not None
+    assert feature.source_code.text is not None
+    assert feature.source_code.text.startswith("u vlaků kategorie R a vyšší")
+    note = CODES.note({"note_kind": "czptt_central_note", "note_code": "44", "note_label": "IDS"})
+    assert note.text == "vlak zařazený v integrovaném dopravním systému"
+
+
+def test_days_of_operation_read_in_week_order() -> None:
+    found = amenities(
+        features(CODES, [_row("calendar_designation", code=c) for c in ("7", "+", "6", "X")])
+    )
+    assert [o.cs for o in found.operates] == [
+        "jede v pracovních dnech",
+        "jede v sobotu",
+        "jede v neděli",
+        "jede v neděli a ve státem uznané svátky",
+    ]
+
+
+def test_a_board_row_reads_the_strongest_wheelchair_statement() -> None:
+    # CZPTT note 34 gives both kinds: the booking is what a passenger has to know.
+    both = ["wheelchair_accessible_vehicle", "wheelchair_booking_required"]
+    assert wheelchair_of(both, True) == "booking_required"
+    assert wheelchair_of(["wheelchair_accessible_vehicle"], None) == "accessible"
+    # No code, but the trip's GTFS flag says so.
+    assert wheelchair_of([], True) == "accessible"
+    assert wheelchair_of([], False) is None and wheelchair_of([], None) is None
 
 
 def test_tristates_and_unknown_kinds() -> None:

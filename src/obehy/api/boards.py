@@ -11,6 +11,7 @@ from psycopg.rows import DictRow
 
 from obehy.api import schema
 from obehy.api.alerts import alert_ids, find_alerts
+from obehy.api.codes import tristate, wheelchair_of
 from obehy.api.common import (
     LimitsDep,
     SnapshotDep,
@@ -127,6 +128,7 @@ def _board(
             platform=r["platform"],
             vehicle=_vehicle(r),
             sources=list(r["sources"] or []),
+            wheelchair=wheelchair_of(r["wheelchair_kinds"] or [], tristate(r["trip_wheelchair"])),
         )
         for r in rows
     ]

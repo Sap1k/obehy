@@ -59,6 +59,18 @@
   font-weight: 500;
 }
 
+/* Step-free: the timetable's sign, in the accent colour so it is found at a glance. */
+.access {
+  display: inline-flex;
+  flex: none;
+}
+
+.access > span {
+  min-width: 18px;
+  height: 18px;
+  color: var(--ob-link);
+}
+
 .alert {
   flex: none;
   color: var(--ob-info-text);

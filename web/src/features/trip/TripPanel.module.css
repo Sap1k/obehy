@@ -147,41 +147,178 @@
   gap: 8px;
 }
 
-.operates {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-}
-
-.noteChips,
+.operates,
+.marked,
 .noteTexts {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.noteChips {
+.operates,
+.marked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.operates {
+  font-weight: 500;
+}
+
+.operates li,
+.marked li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.signs {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.noteChip {
+/* A plain sign alone, its text on hover and in the legend. */
+.signChip {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 8px;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-sm);
   background: var(--ob-surface);
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 600;
   cursor: default;
+}
+
+/* What the toggle opens, set apart from the signs above: the legend, then the other notes. */
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ob-border);
+}
+
+.legendGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.legendTitle {
+  margin: 0;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* One line per note, a hairline apart; a tap opens one in full. */
+.longNotes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.longNotes li + li {
+  border-top: 1px solid var(--ob-border);
+}
+
+.longNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0;
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+  text-align: left;
+}
+
+.longNoteChevron {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ob-text-secondary);
+  transition: transform 120ms ease;
+}
+
+.longNote[data-open] .longNoteChevron {
+  transform: rotate(90deg);
+}
+
+.longNoteText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.longNote[data-open] .longNoteText {
+  white-space: normal;
+  cursor: default;
+}
+
+.longNoteClose {
+  display: inline-flex;
+  flex: none;
+  color: inherit;
+}
+
+.noteLink {
+  color: var(--ob-link);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.noteLink:hover {
+  text-decoration: underline;
+}
+
+/* A web address may be long: it wraps, its arrow marks that it leaves the site. */
+.noteLink[data-kind="web"] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.noteLink svg {
+  margin-left: 2px;
+  vertical-align: -1px;
+}
+
+/* The low-priority signs, muted, at the head of the toggle that explains them. */
+.minorSigns {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 4px;
+  padding-right: 6px;
+  border-right: 1px solid var(--ob-border);
+  opacity: 0.75;
+}
+
+.minorSigns > span {
+  color: var(--ob-text-secondary);
+}
+
+.noteTexts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .noteTexts {

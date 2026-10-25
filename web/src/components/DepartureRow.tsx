@@ -1,23 +1,14 @@
-import {
-  IconAlertTriangle,
-  IconChevronRight,
-  IconSnowflake,
-  IconWheelchair,
-} from "@tabler/icons-react";
+import { IconAlertTriangle, IconChevronRight, IconSnowflake } from "@tabler/icons-react";
 import type { Departure } from "../api/client";
 import { timeState } from "../lib/punctuality";
+import { STEP_FREE_LABEL, STEP_FREE_SIGN, stepFree } from "../lib/wheelchair";
 import { LineBadge } from "./LineBadge";
+import { CodeSign } from "./Pictogram";
 import { PlatformBox } from "./PlatformBox";
 import { TimeBox } from "./TimeBox";
 import classes from "./DepartureRow.module.css";
 
 export const rowClasses = classes;
-
-/** Step-free: a low-floor or wheelchair-accessible vehicle. */
-export function stepFree(departure: Pick<Departure, "vehicle">): boolean {
-  const traits = departure.vehicle?.traits;
-  return Boolean(traits?.low_floor || traits?.wheelchair_accessible);
-}
 
 /** One row of a board (Figma "Departure row"): time, line, destination, platform. Offline, the
  * last answer's times read neutral, as when stale. The parent makes it a link. */
@@ -35,6 +26,7 @@ export function DepartureRow({
     Boolean(departure.stale) || offline,
   );
   const airConditioned = departure.vehicle?.traits?.air_conditioning === true;
+  const access = stepFree(departure.wheelchair, departure.vehicle?.traits);
   const hasAlert = (departure.alert_ids?.length ?? 0) > 0;
   return (
     <>
@@ -50,7 +42,11 @@ export function DepartureRow({
         </span>
         <span className={classes.meta}>
           {departure.trip_short_name && <span>{departure.trip_short_name}</span>}
-          {stepFree(departure) && <IconWheelchair size={14} stroke={2} aria-label="Bezbariérový" />}
+          {access && (
+            <span className={classes.access} role="img" aria-label={STEP_FREE_LABEL[access]}>
+              <CodeSign code={STEP_FREE_SIGN[access]} />
+            </span>
+          )}
           {airConditioned && <IconSnowflake size={14} stroke={2} aria-label="Klimatizace" />}
           {hasAlert && (
             <IconAlertTriangle

@@ -6,7 +6,9 @@
 -- `start`. A cursor continues after the row it names. Realtime is found by the feed trip ID
 -- through rt.trip_part_current, in the active release; the part's slice of the journey's
 -- calls holds the call by its sequence, with the sources it came from. The vehicle is the
--- freshest one on the trip, with its profile's traits.
+-- freshest one on the trip, with its profile's traits. `wheelchair_kinds` are what the
+-- timetable states for the whole trip (its, its route's and its service's assignments),
+-- evaluated for the page's rows only.
 WITH spans (service_date, lo, hi) AS (
     SELECT * FROM unnest(%(dates)s::date[], %(lo)s::integer[], %(hi)s::integer[])
 ),
@@ -42,7 +44,8 @@ posts AS (
     WHERE parent_location_id = ANY(%(locations)s::text[])
 ),
 running AS (
-    SELECT b.*, t.route_id, t.headsign, t.short_name
+    SELECT b.*, t.route_id, t.service_id, t.headsign, t.short_name,
+           t.wheelchair_accessible AS trip_wheelchair
     FROM board b
     JOIN active.trip t ON t.trip_id = b.trip_id
     JOIN active.service_date d
@@ -107,7 +110,16 @@ SELECT l.trip_id, l.service_date, l.location_id, l.route_id, ro.short_name, ro.l
        v.position_at AS vehicle_position_at,
        v.latitude AS vehicle_latitude, v.longitude AS vehicle_longitude,
        v.bearing AS vehicle_bearing, v.vehicle_sources, vp.low_floor, vp.air_conditioning,
-       vp.wheelchair_accessible, vp.manufacturer, vp.model, vp.operator, vp.licence_plate, vp.fleet_number
+       vp.wheelchair_accessible, vp.manufacturer, vp.model, vp.operator, vp.licence_plate, vp.fleet_number,
+       l.trip_wheelchair,
+       ARRAY(
+           SELECT DISTINCT a.kind::text FROM active.assignment a
+           WHERE a.kind IN ('wheelchair_accessible_vehicle', 'partly_wheelchair_accessible_vehicle',
+                            'wheelchair_booking_required', 'wheelchair_booking_recommended')
+               AND ((a.scope = 'trip' AND a.trip_id = l.trip_id)
+                   OR (a.scope = 'route' AND a.route_id = l.route_id)
+                   OR (a.scope = 'service' AND a.service_id = l.service_id))
+       ) AS wheelchair_kinds
 FROM rows l
 JOIN active.route ro ON ro.route_id = l.route_id
 LEFT JOIN posts bp ON bp.location_id = l.boarding_point_id

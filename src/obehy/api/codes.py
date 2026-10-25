@@ -22,7 +22,7 @@ from obehy.api import schema
 CODES = Path(__file__).resolve().parents[1] / "data" / "api" / "codes-v1.toml"
 
 # The strongest wheelchair and bicycle statement wins when a trip has several.
-_WHEELCHAIR = (
+_WHEELCHAIR: tuple[tuple[str, schema.WheelchairAmenity], ...] = (
     ("wheelchair_booking_required", "booking_required"),
     ("wheelchair_booking_recommended", "booking_recommended"),
     ("wheelchair_accessible_vehicle", "accessible"),
@@ -57,6 +57,7 @@ class CodeText:
 
     name: str | None
     texts: Mapping[str, str]  # "trip", "call", "location", or "" for every scope
+    reads: str | None = None  # our wording where the official text says nothing to a passenger
 
     def text(self, scope: str) -> str | None:
         wanted = _SCOPE_TEXT.get(scope, "trip")
@@ -84,26 +85,21 @@ class Codes:
         return self.sources.get(name)
 
     def source_code(
-        self, kinds: Iterable[str], code: str | None, scope: str
-    ) -> schema.SourceCode | None:
-        """The official text of the code a feature comes from: a calendar designation and a
-        fixed code are JDF's, a four-digit activity and a central note number CZPTT's."""
+        self, kinds: Iterable[str], code: str | None
+    ) -> tuple[schema.SourceSystem, CodeText] | None:
+        """The code a feature comes from and its texts: a calendar designation and a fixed
+        code are JDF's, a four-digit activity and a central note number CZPTT's."""
 
         kinds = set(kinds)
         if code is None or kinds == {"integrated_transport"}:
             return None
-        systems = (
+        systems: tuple[schema.SourceSystem, ...] = (
             ("jdf",) if "calendar_designation" in kinds else ("czptt_activity", "czptt_note", "jdf")
         )
         for system in systems:
             found = self.source_codes.get(system, {}).get(code)
             if found is not None:
-                return schema.SourceCode(
-                    system=system,
-                    code=code,
-                    name=found.name,
-                    text=found.text(scope),
-                )
+                return system, found
         return None
 
     def note(self, row: Mapping[str, Any]) -> schema.Note:
@@ -118,7 +114,7 @@ class Codes:
                     kind=row["note_kind"],
                     code=str(code),
                     label=row["note_label"],
-                    text=found.text("trip"),
+                    text=found.reads or found.text("trip"),
                 )
         return schema.Note(kind=row["note_kind"], label=row["note_label"], text=row["note_text"])
 
@@ -136,7 +132,9 @@ def _code_text(entry: Any) -> CodeText:
     fields = cast(dict[str, Any], entry)
     if "text" in fields:
         return CodeText(
-            None if fields.get("name") is None else str(fields["name"]), {"": str(fields["text"])}
+            None if fields.get("name") is None else str(fields["name"]),
+            {"": str(fields["text"])},
+            None if fields.get("reads") is None else str(fields["reads"]),
         )
     return CodeText(None, {scope: str(text) for scope, text in fields.items()})
 
@@ -192,7 +190,15 @@ def _feature(codes: Codes, rows: list[Mapping[str, Any]]) -> schema.Feature:
     kinds = sorted({r["kind"] for r in rows})
     kind = codes.kind(first["kind"] if len(kinds) == 1 else _primary(kinds))
     scope, code = first["scope"], first.get("source_code")
-    source = codes.source_code(kinds, code, scope)
+    found = codes.source_code(kinds, code)
+    source = (
+        None
+        if found is None or code is None
+        else schema.SourceCode(
+            system=found[0], code=code, name=found[1].name, text=found[1].text(scope)
+        )
+    )
+    reads = None if found is None else found[1].reads
     system = (
         codes.system(code)
         if "integrated_transport" in kinds and code is not None and code.isdigit()
@@ -202,7 +208,7 @@ def _feature(codes: Codes, rows: list[Mapping[str, Any]]) -> schema.Feature:
     english = "; ".join(codes.kind(k).en for k in kinds)
     if "calendar_designation" in kinds and code is not None and code in codes.calendar:
         english = codes.calendar[code].en
-    czech = source.text if source is not None and source.text else None
+    czech = reads or (source.text if source is not None and source.text else None)
     if czech is None and note is not None:
         czech = note.text or note.label
     if czech is None and system is not None:
@@ -212,7 +218,7 @@ def _feature(codes: Codes, rows: list[Mapping[str, Any]]) -> schema.Feature:
         group=kind.group,
         icon=kind.icon,
         label=schema.Label(cs=czech or english, en=english),
-        official=source is not None and source.text is not None,
+        official=reads is None and source is not None and source.text is not None,
         scope=scope,
         from_sequence=first.get("call_sequence"),
         to_sequence=first.get("call_sequence_to"),
@@ -237,7 +243,7 @@ def amenities(features: Iterable[schema.Feature]) -> schema.Amenities:
 
     whole = [f for f in features if f.scope in _WHOLE_TRIP]
     kinds = {k for f in whole for k in f.kinds}
-    wheelchair = next((value for kind, value in _WHEELCHAIR if kind in kinds), None)
+    wheelchair = wheelchair_of(kinds, None)
     bicycles = next((value for kind, value in _BICYCLES if kind in kinds), None)
     reservation = (
         "required"
@@ -247,8 +253,9 @@ def amenities(features: Iterable[schema.Feature]) -> schema.Amenities:
         else None
     )
     systems = {f.system.code: f.system for f in whole if f.system is not None}
+    calendar = [f for f in whole if "calendar_designation" in f.kinds]
     return schema.Amenities(
-        wheelchair=cast(schema.WheelchairAmenity | None, wheelchair),
+        wheelchair=wheelchair,
         bicycles=cast(schema.BicycleAmenity | None, bicycles),
         reservation=reservation,
         refreshments="refreshments_on_vehicle" in kinds,
@@ -257,8 +264,30 @@ def amenities(features: Iterable[schema.Feature]) -> schema.Amenities:
         on_request="on_request" in kinds,
         conditional="conditional" in kinds,
         integrated_transport=[systems[code] for code in sorted(systems)],
-        operates=[f.label for f in whole if "calendar_designation" in f.kinds],
+        operates=[f.label for f in sorted(calendar, key=_calendar_order)],
     )
+
+
+def wheelchair_of(kinds: Iterable[str], accessible: bool | None) -> schema.WheelchairAmenity | None:
+    """The strongest wheelchair statement of a trip's whole-trip kinds; without one, the GTFS
+    `wheelchair_accessible` of the trip (JrUtil's projection of the same codes)."""
+
+    kinds = set(kinds)
+    found: schema.WheelchairAmenity | None = next(
+        (value for kind, value in _WHEELCHAIR if kind in kinds), None
+    )
+    if found is None and accessible:
+        found = "accessible"
+    return found
+
+
+def _calendar_order(feature: schema.Feature) -> int:
+    """Working days, the days of the week, then Sundays and holidays (the `[calendar]` order),
+    whatever order the feed states them in."""
+
+    order = list(load_codes().calendar)
+    code = feature.source_code.code if feature.source_code is not None else None
+    return order.index(code) if code in order else len(order)
 
 
 def call_flags(

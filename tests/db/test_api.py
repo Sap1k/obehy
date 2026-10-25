@@ -537,6 +537,8 @@ def test_departures_scheduled_and_late(client: TestClient) -> None:
     monday = _get(client, board, start="2026-10-05T05:50:00+02:00")["departures"]
     assert _times(monday) == [("jdf:trip:1", "2026-10-05T06:00:00+02:00", None, "scheduled")]
     assert monday[0]["platform"] == "1" and monday[0]["line"]["short_name"] == "1"
+    # The timetable's "@": step-free with no vehicle known yet.
+    assert monday[0]["wheelchair"] == "accessible" and monday[0]["vehicle"] is None
     # Scheduled 06:00, five minutes ago, but expected at 06:10: still on the board.
     late = _get(client, board, start="2026-10-06T06:05:00+02:00")["departures"]
     assert _times(late) == [

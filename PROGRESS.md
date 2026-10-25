@@ -308,6 +308,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-25** — Trip notes read from `features` and show the spec signs (JDF 1.11 Tabulka
+  pevných kódů, KADR číselníky 2.16) with their texts in print order (KADR Priorita; days X,
+  1–7, +), JDF fixed codes included; no KADR názvy ("dvojka"). Central notes 10, 12 and 44 read
+  without the train-category prefix (`reads` in `codes-v1.toml`; `source_code.text` stays
+  official). Signs come in tiers: plain ones (wifi, power, bikes, classes, step-free, …) as
+  the sign alone, ones that change the ride with their text, the rest and all texts on
+  request. Board rows carry the timetable's `wheelchair` (board.sql), shown until a known
+  vehicle says otherwise; in a trip it is a notes badge (detail in the legend). Unit, vitest and the board DB tests pass;
+  checked in the browser against prod (board marks need the API deploy: the dev DB lacks
+  migrations 0021/0022, so no local run).
 - **2026-10-25** — Vehicle identity and source fusion (migrations 0021, 0022). The map drew a
   vehicle back on a refresh: positions carry their own fix time (`position_at`; the SŽ map's
   document clock moved on unchanged entries, older fixes replaced newer ones), the map keeps a

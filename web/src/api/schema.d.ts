@@ -964,6 +964,11 @@ export interface components {
             /** Trip Short Name */
             trip_short_name: string | null;
             vehicle?: components["schemas"]["TripVehicle"] | null;
+            /**
+             * Wheelchair
+             * @description What the timetable states for the whole trip; the vehicle's traits, when known, are realtime's
+             */
+            wheelchair?: ("booking_required" | "booking_recommended" | "accessible" | "partly") | null;
         };
         /** Departures */
         Departures: {

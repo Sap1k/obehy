@@ -1105,6 +1105,24 @@
                 "type": "null"
               }
             ]
+          },
+          "wheelchair": {
+            "anyOf": [
+              {
+                "enum": [
+                  "booking_required",
+                  "booking_recommended",
+                  "accessible",
+                  "partly"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the timetable states for the whole trip; the vehicle's traits, when known, are realtime's",
+            "title": "Wheelchair"
           }
         },
         "required": [

@@ -1,20 +1,17 @@
 import { Collapse, Tooltip, UnstyledButton } from "@mantine/core";
-import {
-  IconCalendar,
-  IconChevronDown,
-  IconChevronRight,
-  IconChevronUp,
-  IconClock,
-} from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconChevronUp, IconClock } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import type { Alert, Trip } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
+import { CodeSign } from "../../components/Pictogram";
 import { tripAlerts } from "../../lib/alerts";
 import { timeState } from "../../lib/punctuality";
+import { linkify } from "../../lib/linkify";
 import { usePersistentFlag } from "../../lib/storage";
 import { Timetable } from "./Timetable";
-import { noteGroups } from "./notes";
+import { noteGroups, type MarkedNote } from "./notes";
 import { callTimes, isPassed, type RunCall } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
@@ -131,49 +128,131 @@ export function TripBody({
 
 const NOTES_OPEN_KEY = "obehy.notes.open";
 
-/** The timetable's notes: when it runs, the train's short notes as chips (the full wording on
- * hover), and the longer texts behind a toggle remembered for the session. */
+/** The timetable's notes: when it runs and the marked codes, each with its sign and text in
+ * print order, then the longer texts behind a toggle remembered for the session. */
 function Notes({ trip }: { trip: Trip }) {
-  const { operates, short, long } = noteGroups(trip);
+  const { operates, plain, stated, legend, detail, long } = noteGroups(trip);
   const [open, setOpen] = usePersistentFlag(NOTES_OPEN_KEY, "session");
-  if (operates.length + short.length + long.length === 0) return null;
+  if (operates.length + stated.length + legend.length + long.length === 0) return null;
+  const more = legend.length + long.length;
   const toggle = () => setOpen(!open);
   return (
     <section className={classes.notes}>
       <h3 className={classes.notesTitle}>Poznámky jízdního řádu</h3>
-      {operates.map((text) => (
-        <p key={text} className={classes.operates}>
-          <IconCalendar size={14} stroke={2} aria-hidden />
-          {text}
-        </p>
-      ))}
-      {short.length > 0 && (
-        <ul className={classes.noteChips}>
-          {short.map((n) => (
-            <li key={n.label}>
-              <Tooltip label={n.text} disabled={!n.text} multiline w={260} withArrow>
-                <span className={classes.noteChip}>{n.label}</span>
+      {operates.length > 0 && <SignedNotes notes={operates} className={classes.operates} />}
+      {plain.length > 0 && (
+        <ul className={classes.signs}>
+          {plain.map((n) => (
+            <li key={n.key}>
+              <Tooltip label={n.text} multiline w={260} withArrow>
+                <span className={classes.signChip} role="img" aria-label={n.text}>
+                  <CodeSign code={n.key} />
+                </span>
               </Tooltip>
             </li>
           ))}
         </ul>
       )}
-      {long.length > 0 && (
+      {stated.length > 0 && <SignedNotes notes={stated} className={classes.marked} />}
+      {more > 0 && (
         <Collapse expanded={open} transitionDuration={180}>
-          <ul className={classes.noteTexts}>
-            {long.map((text) => (
-              <li key={text}>{text}</li>
-            ))}
-          </ul>
+          <div className={classes.legend}>
+            {legend.length > 0 && (
+              <div className={classes.legendGroup}>
+                <h4 className={classes.legendTitle}>Vysvětlivky značek</h4>
+                <SignedNotes notes={legend} className={classes.noteTexts} />
+              </div>
+            )}
+            {long.length > 0 && (
+              <div className={classes.legendGroup}>
+                <h4 className={classes.legendTitle}>Další poznámky</h4>
+                <ul className={classes.longNotes}>
+                  {long.map((text) => (
+                    <LongNote key={text} text={text} />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </Collapse>
       )}
-      {long.length > 0 && (
+      {more > 0 && (
         <UnstyledButton className={classes.notesToggle} onClick={toggle} aria-expanded={open}>
-          {open ? "Skrýt poznámky" : `Další poznámky (${long.length})`}
+          {/* The low-priority signs, muted, on the toggle that explains them. */}
+          {!open && detail.length > 0 && (
+            <span className={classes.minorSigns} aria-hidden>
+              {detail.map((n) => (
+                <CodeSign key={n.key} code={n.key} />
+              ))}
+            </span>
+          )}
+          {open ? "Skrýt" : moreLabel(legend.length, long.length)}
           {open ? <IconChevronUp size={14} stroke={2} /> : <IconChevronDown size={14} stroke={2} />}
         </UnstyledButton>
       )}
     </section>
+  );
+}
+
+/** A free-text note on one line; a tap opens it in full. */
+function LongNote({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const chevron = (
+    <IconChevronRight size={14} stroke={2} className={classes.longNoteChevron} aria-hidden />
+  );
+  if (!open) {
+    return (
+      <li>
+        <UnstyledButton
+          className={classes.longNote}
+          onClick={() => setOpen(true)}
+          aria-expanded={false}
+        >
+          {chevron}
+          <span className={classes.longNoteText}>{text}</span>
+        </UnstyledButton>
+      </li>
+    );
+  }
+  // Open, the text carries its contacts as links, so the row is no button: the chevron closes
+  // it, and so does a tap on the text outside a link.
+  const close = (event: React.MouseEvent) => {
+    if (!(event.target as HTMLElement).closest("a")) setOpen(false);
+  };
+  return (
+    <li className={classes.longNote} data-open>
+      <UnstyledButton
+        className={classes.longNoteClose}
+        onClick={() => setOpen(false)}
+        aria-expanded
+        aria-label="Sbalit poznámku"
+      >
+        {chevron}
+      </UnstyledButton>
+      <span className={classes.longNoteText} onClick={close}>
+        {linkify(text, classes.noteLink)}
+      </span>
+    </li>
+  );
+}
+
+/** What the toggle opens: the signs' legend, the other notes (counted), or both. */
+function moreLabel(signs: number, notes: number): string {
+  if (notes === 0) return "Vysvětlivky značek";
+  const counted = `další poznámky (${notes})`;
+  return signs > 0 ? `Vysvětlivky a ${counted}` : counted[0]!.toUpperCase() + counted.slice(1);
+}
+
+function SignedNotes({ notes, className }: { notes: MarkedNote[]; className?: string }) {
+  return (
+    <ul className={className}>
+      {notes.map((n) => (
+        <li key={n.key}>
+          <CodeSign code={n.key} />
+          <span>{n.text}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

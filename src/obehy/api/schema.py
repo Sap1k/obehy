@@ -241,6 +241,11 @@ class Departure(BaseModel):
     stale: bool | None
     platform: str | None = Field(description="The scheduled platform, track or post code.")
     vehicle: TripVehicle | None = None
+    wheelchair: WheelchairAmenity | None = Field(
+        default=None,
+        description="What the timetable states for the whole trip; the vehicle's traits, when "
+        "known, are realtime's",
+    )
     sources: list[str] = Field(default_factory=list, description="Where its realtime came from")
     alert_ids: list[str] = Field(
         default_factory=list, description="The board's `alerts` informing its line, stop or trip"

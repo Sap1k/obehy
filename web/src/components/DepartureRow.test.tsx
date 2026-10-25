@@ -34,6 +34,27 @@ describe("DepartureRow", () => {
     expect(row.getByTitle(`Nástupiště ${first.platform}`)).toBeInTheDocument();
   });
 
+  it("marks a step-free trip from its timetable until a vehicle says otherwise", () => {
+    const first = { ...rows[0]!, vehicle: null };
+    expect(
+      renderRow({ ...first, wheelchair: "accessible" }).getByLabelText("Bezbariérový"),
+    ).toBeInTheDocument();
+    expect(
+      renderRow({ ...first, wheelchair: "booking_required" }).getByLabelText(
+        "Bezbariérový, nutno objednat",
+      ),
+    ).toBeInTheDocument();
+    const vehicle = {
+      vehicle_id: "dpmd:1",
+      state: "running",
+      last_seen: first.scheduled,
+      traits: { low_floor: false, wheelchair_accessible: false },
+      sources: [],
+    } as unknown as Departure["vehicle"];
+    const stepped = renderRow({ ...first, wheelchair: "accessible", vehicle });
+    expect(stepped.queryByLabelText(/Bezbariérový/)).toBeNull();
+  });
+
   it("shows only the category of a train without a line", () => {
     const lineless = rows[1]!;
     expect(lineless.line.short_name).toBe(lineless.trip_short_name);

@@ -51,10 +51,10 @@ airport_nearby = { group = "interchange", icon = "airport", en = "Airport nearby
 park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and ride" }
 
 # JDF calendar designations: the days a trip runs, as printed (JDF 1.11, verbatim). The
-# calendar itself is already compiled into the service dates; these are for display.
+# calendar itself is already compiled into the service dates; these are for display, in the
+# order they are listed: working days, the days of the week, then Sundays and holidays.
 [calendar]
 "X" = { cs = "jede v pracovních dnech", en = "runs on working days" }
-"+" = { cs = "jede v neděli a ve státem uznané svátky", en = "runs on Sundays and public holidays" }
 "1" = { cs = "jede v pondělí", en = "runs on Mondays" }
 "2" = { cs = "jede v úterý", en = "runs on Tuesdays" }
 "3" = { cs = "jede ve středu", en = "runs on Wednesdays" }
@@ -62,6 +62,7 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 "5" = { cs = "jede v pátek", en = "runs on Fridays" }
 "6" = { cs = "jede v sobotu", en = "runs on Saturdays" }
 "7" = { cs = "jede v neděli", en = "runs on Sundays" }
+"+" = { cs = "jede v neděli a ve státem uznané svátky", en = "runs on Sundays and public holidays" }
 
 # Realtime sources by name, for showing where data came from.
 [sources]
@@ -126,7 +127,6 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 # č. 5, příloha 2), verbatim; `trip` is the text for a trip or its calls, `location` for a stop.
 [source_codes.jdf]
 "X" = "jede v pracovních dnech"
-"+" = "jede v neděli a ve státem uznané svátky"
 "1" = "jede v pondělí"
 "2" = "jede v úterý"
 "3" = "jede ve středu"
@@ -134,6 +134,7 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 "5" = "jede v pátek"
 "6" = "jede v sobotu"
 "7" = "jede v neděli"
+"+" = "jede v neděli a ve státem uznané svátky"
 "R" = "k jízdence je možné zakoupit místenku"
 "#" = "spoj je možné použít jen s místenkou"
 "|" = "spoj zastávkou projíždí"
@@ -168,12 +169,14 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 "I" = "spoj je v systému integrované dopravy"
 "s" = "spoj se samoobslužným způsobem odbavování cestujících"
 
-# CZPTT central notes: code -> značka (as the timetable prints it) and the KJŘ text (SŽ, Popis
-# datové komunikace IS KADR, Doplněk číselníky 1.04, 2.16).
+# CZPTT central notes: code -> název (SŽ's name for the značka the timetable prints) and the
+# KJŘ text (SŽ, Popis datové komunikace IS KADR, Doplněk číselníky 1.04, 2.16). `reads` is our
+# wording where the KJŘ text opens with the train categories it is printed for, which says
+# nothing on the train itself; the official text stays the source code's.
 [source_codes.czptt_note]
-"10" = { name = "1+2", text = "u vlaků kategorie Sp a Os – ve vlaku řazeny k sezení i vozy 1. vozové třídy" }
+"10" = { name = "1+2", text = "u vlaků kategorie Sp a Os – ve vlaku řazeny k sezení i vozy 1. vozové třídy", reads = "ve vlaku řazeny k sezení i vozy 1. vozové třídy" }
 "11" = { name = "jednička", text = "ve vlaku řazeny k sezení pouze vozy 1. vozové třídy" }
-"12" = { name = "dvojka", text = "u vlaků kategorie R a vyšší – ve vlaku řazeny k sezení pouze vozy 2. vozové třídy" }
+"12" = { name = "dvojka", text = "u vlaků kategorie R a vyšší – ve vlaku řazeny k sezení pouze vozy 2. vozové třídy", reads = "ve vlaku řazeny k sezení pouze vozy 2. vozové třídy" }
 "13" = { name = "lůžko", text = "lůžkový vůz" }
 "14" = { name = "lehátko", text = "lehátkový vůz" }
 "15" = { name = "vagon", text = "přímý vůz" }
@@ -204,7 +207,7 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 "41" = { name = "palubní portál ČD", text = "palubní portál" }
 "42" = { name = "kino", text = "dětské kino" }
 "43" = { name = "státní sleva neplatí", text = "ve vlaku neplatí zvláštní jízdné pro žáky a studenty 18-26 let a pro cestující 65+" }
-"44" = { name = "IDS", text = "vlak kategorie R a vyšší zařazený v integrovaném dopravním systému" }
+"44" = { name = "IDS", text = "vlak kategorie R a vyšší zařazený v integrovaném dopravním systému", reads = "vlak zařazený v integrovaném dopravním systému" }
 "45" = { name = "Usměrněný nástup", text = "Usměrněný nástup" }
 "46" = { name = "Škrtnuté WC", text = "vlak není vybaven WC" }
 
