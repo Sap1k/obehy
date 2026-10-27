@@ -8,6 +8,8 @@ export interface RecentStop {
   location_id: string;
   name: string;
   municipality: string | null;
+  /** The modes calling (an entry kept before they were remembered has none). */
+  modes?: string[];
 }
 
 export function readRecent(): RecentStop[] {
@@ -27,6 +29,7 @@ export function rememberStop(stop: RecentStop): void {
       location_id: stop.location_id,
       name: stop.name,
       municipality: stop.municipality,
+      modes: stop.modes ?? [],
     };
     window.localStorage.setItem(KEY, JSON.stringify([entry, ...rest].slice(0, KEEP)));
   } catch {

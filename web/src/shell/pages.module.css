@@ -80,21 +80,16 @@
   background: var(--ob-surface-subtle);
 }
 
-.recentItem > span {
-  display: flex;
-  flex-direction: column;
+.recentModes {
+  color: var(--ob-text-secondary);
 }
 
 .recentName {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-}
-
-.recentPlace {
-  color: var(--ob-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 @media (max-width: $mantine-breakpoint-sm) {

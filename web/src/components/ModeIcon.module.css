@@ -1,0 +1,10 @@
+.modes {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode {
+  display: inline-flex;
+}

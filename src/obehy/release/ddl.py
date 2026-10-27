@@ -59,7 +59,7 @@ LOCATION_GEOM = Column(
     ),
 )
 
-DERIVED_TABLES = (
+BASE_DERIVED_TABLES = (
     Table(
         "service_date",
         (
@@ -76,6 +76,20 @@ DERIVED_TABLES = (
             Column("geom", "geometry(LineString, 4326)", not_null=True),
         ),
         primary_key=("shape_id",),
+        derived=True,
+    ),
+)
+DERIVED_TABLES = (
+    *BASE_DERIVED_TABLES,
+    # Migration 0023: the modes of the lines with a passenger call at each location, but a
+    # station's replacement buses where it has trains.
+    Table(
+        "location_mode",
+        (
+            Column("location_id", "text", not_null=True),
+            Column("mode", "text", not_null=True),
+        ),
+        primary_key=("location_id", "mode"),
         derived=True,
     ),
 )
@@ -130,7 +144,8 @@ INDEXES = (
 
 
 def static_tables(contract: Contract, *, base: bool = False) -> tuple[Table, ...]:
-    """The mirror's tables; `base` leaves out the fields later minors added (MINOR_FIELDS)."""
+    """The mirror's tables; `base` leaves out the fields later minors added (MINOR_FIELDS) and
+    the derived tables later migrations added."""
 
     tables: list[Table] = []
     for relation in contract.relations:
@@ -142,7 +157,7 @@ def static_tables(contract: Contract, *, base: bool = False) -> tuple[Table, ...
         if relation.name == "location":
             columns = (*columns, LOCATION_GEOM)
         tables.append(Table(relation.name, columns, relation.primary_key))
-    tables.extend(DERIVED_TABLES)
+    tables.extend(BASE_DERIVED_TABLES if base else DERIVED_TABLES)
     for table in tables:
         for name in (table.name, *table.view_columns):
             if not _IDENTIFIER.match(name):

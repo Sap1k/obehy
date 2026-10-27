@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,9 @@ class Limits:
     near_radius_m: int
     near_radius_max_m: int
     near_limit: int
+    group_radius_m: int
+    group_candidates: int
+    station_words: tuple[str, ...]
     lookback_min: int
     departures_minutes: int
     departures_minutes_max: int
@@ -48,6 +52,13 @@ class Limits:
     cache_static_s: int
 
 
+def station_word(text: str) -> str:
+    """A station word as stop_groups.sql matches it: lower case letters and digits, any other
+    run of characters one space (the words are written without diacritics)."""
+
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
 def load_limits(path: Path = LIMITS) -> Limits:
     with path.open("rb") as stream:
         document = tomllib.load(stream)
@@ -73,6 +84,9 @@ def load_limits(path: Path = LIMITS) -> Limits:
         near_radius_m=int(stops["near_radius_m"]),
         near_radius_max_m=int(stops["near_radius_max_m"]),
         near_limit=int(stops["near_limit"]),
+        group_radius_m=int(stops["group_radius_m"]),
+        group_candidates=int(stops["group_candidates"]),
+        station_words=tuple(station_word(w) for w in stops["station_words"]),
         lookback_min=int(departures["lookback_min"]),
         departures_minutes=int(departures["minutes"]),
         departures_minutes_max=int(departures["minutes_max"]),

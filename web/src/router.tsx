@@ -9,13 +9,15 @@ import { TripPanel } from "./features/trip/TripPanel";
 import { Shell } from "./shell/Shell";
 import { AlertsPage, DeparturesIndex, LinesPage } from "./shell/pages";
 
-// Czech paths match the tabs. A board keeps its scope in the URL (?smer=prijezdy&cas=…), and a
-// trip opened from it is its child, with the stop boarded at (?od=…). The map is a layout that
-// stays mounted while a vehicle opens on it (/vozidlo/…); MapLibre and deck.gl load with it.
+// Czech paths match the tabs. A board keeps its scope in the URL (?smer=prijezdy&cas=…&jen=…),
+// and a trip opened from it is its child, with the stop boarded at (?od=…). The map is a layout
+// that stays mounted while a vehicle opens on it (/vozidlo/…); MapLibre and deck.gl load with it.
 
 export interface BoardSearch {
   smer?: "prijezdy";
   cas?: string;
+  /** One stop of a station's group (`jen=<location_id>`); none: the whole group. */
+  jen?: string;
 }
 
 export interface TripSearch extends BoardSearch {
@@ -57,6 +59,7 @@ const boardRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): BoardSearch => ({
     smer: search.smer === "prijezdy" ? "prijezdy" : undefined,
     cas: text(search.cas),
+    jen: text(search.jen),
   }),
 });
 
@@ -67,6 +70,7 @@ const tripRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): TripSearch => ({
     smer: search.smer === "prijezdy" ? "prijezdy" : undefined,
     cas: text(search.cas),
+    jen: text(search.jen),
     od: text(search.od),
   }),
 });

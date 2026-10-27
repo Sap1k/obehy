@@ -6,6 +6,7 @@ from datetime import date
 
 import pytest
 
+from obehy.api.limits import load_limits, station_word
 from obehy.api.params import (
     Cursor,
     ParameterError,
@@ -114,3 +115,9 @@ def test_near_and_date_spans() -> None:
         date_span(date(2026, 1, 1), None, today, 7, 31)
     with pytest.raises(ParameterError, match="after"):
         date_span(date(2026, 10, 5), date(2026, 10, 4), today, 7, 31)
+
+
+def test_station_words_match_as_stop_groups_sql_splits_names() -> None:
+    assert station_word("hl.nadr.") == "hl nadr"
+    assert station_word(" zel. st. ") == "zel st"
+    assert "zel st" in load_limits().station_words

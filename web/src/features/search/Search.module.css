@@ -34,3 +34,12 @@
   font-size: 12px;
   line-height: 18px;
 }
+
+/* A stop's modes: quiet beside its name, in the text's colour on the highlighted option. */
+.modes {
+  color: var(--ob-text-secondary);
+}
+
+.option[data-combobox-selected] .modes {
+  color: inherit;
+}

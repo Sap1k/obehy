@@ -1,6 +1,7 @@
 import { IconAlertTriangle, IconChevronRight, IconRoute } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { useState, type ComponentType } from "react";
+import { ModeIcons } from "../components/ModeIcon";
 import { Panel } from "../components/Panel";
 import { Search } from "../features/search/Search";
 import { readRecent } from "../lib/recent";
@@ -50,12 +51,8 @@ function RecentStops() {
               params={{ stopId: s.location_id }}
               className={classes.recentItem}
             >
-              <span>
-                <span className={classes.recentName}>{s.name}</span>
-                {s.municipality && s.municipality !== s.name && (
-                  <span className={classes.recentPlace}>{s.municipality}</span>
-                )}
-              </span>
+              <ModeIcons modes={s.modes ?? []} className={classes.recentModes} />
+              <span className={classes.recentName}>{s.name}</span>
               <IconChevronRight size={20} stroke={2} aria-hidden />
             </Link>
           </li>

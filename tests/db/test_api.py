@@ -497,10 +497,11 @@ def test_status_names_the_active_release(client: TestClient) -> None:
 
 
 def test_stop_search_ignores_case_and_diacritics(client: TestClient) -> None:
+    # The station and the bus station in front of it are one result, as the station.
     names = [s["name"] for s in _get(client, "/stops", q="ceska LIPA")["stops"]]
-    assert sorted(names) == ["Česká Lípa hl.n.", "Česká Lípa,,aut.nádr."]
+    assert names == ["Česká Lípa hl.n."]
     assert [s["name"] for s in _get(client, "/stops", q="lipa aut")["stops"]] == [
-        "Česká Lípa,,aut.nádr."
+        "Česká Lípa hl.n."
     ]
     assert [s["name"] for s in _get(client, "/stops", q="zakupy")["stops"]] == ["Zákupy"]
     problem = _get(client, "/stops", 422, q="x")

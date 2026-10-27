@@ -47,6 +47,9 @@ export interface Board {
 
 export interface BoardScope {
   stopId: string;
+  /** One stop of the stop's group; undefined: the whole group (a station with the stop in
+   * front of it), or the stop alone when it has none. */
+  only: string | undefined;
   arrivals: boolean;
   /** The board's start (ISO); undefined: now. */
   from: string | undefined;
@@ -66,8 +69,8 @@ async function fetchWindow(
   signal: AbortSignal,
 ): Promise<Board> {
   const params = {
-    path: { location_id: scope.stopId },
-    query: { from: scope.from, limit: scope.limit, minutes },
+    path: { location_id: scope.only ?? scope.stopId },
+    query: { from: scope.from, limit: scope.limit, minutes, group: scope.only === undefined },
   };
   if (scope.arrivals) {
     const a = unwrap(
@@ -109,6 +112,7 @@ export function useBoard(scope: BoardScope) {
       scope.arrivals ? "arrivals" : "departures",
       scope.from ?? "now",
       scope.limit,
+      scope.only ?? "group",
     ],
     queryFn: ({ signal }) => fetchBoard(scope, signal),
     refetchInterval: POLL_MS,
@@ -118,7 +122,8 @@ export function useBoard(scope: BoardScope) {
       const sameScope =
         key?.[1] === scope.stopId &&
         key?.[2] === (scope.arrivals ? "arrivals" : "departures") &&
-        key?.[3] === (scope.from ?? "now");
+        key?.[3] === (scope.from ?? "now") &&
+        key?.[5] === (scope.only ?? "group");
       return sameScope ? keepPreviousData(previous) : undefined;
     },
   });

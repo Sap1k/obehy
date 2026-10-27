@@ -24,6 +24,16 @@ WheelchairAmenity = Literal["booking_required", "booking_recommended", "accessib
 BicycleAmenity = Literal["prohibited", "reservation_required", "reservation_available", "allowed"]
 ReservationAmenity = Literal["required", "available"]
 SourceSystem = Literal["jdf", "czptt_note", "czptt_activity"]
+# A stop's modes in the order they are shown: rail first, then the city's own.
+MODE_ORDER = ("rail", "metro", "tram", "trolleybus", "bus", "water", "cable", "funicular")
+
+
+def sort_modes(modes: list[str]) -> list[str]:
+    rank = {mode: n for n, mode in enumerate(MODE_ORDER)}
+    return sorted(set(modes), key=lambda mode: (rank.get(mode, len(rank)), mode))
+
+
+Modes = Annotated[list[str], AfterValidator(sort_modes)]
 
 
 class Envelope(BaseModel):
@@ -161,6 +171,19 @@ class Stop(BaseModel):
     longitude: float | None
     coordinate_precision: str
     distance_m: float | None = Field(default=None, description="From the `near` point")
+    modes: Modes = Field(
+        default_factory=list[str],
+        description=(
+            "The modes of the lines calling, rail first; a station's replacement buses are not"
+        ),
+    )
+    group: list[str] | None = Field(
+        default=None,
+        description=(
+            "A railway station and the stop in front of it, stations first: the members' IDs,"
+            " in search, a stop place and its boards; null when it stands alone"
+        ),
+    )
 
 
 class Stops(Envelope):
@@ -186,6 +209,10 @@ class Line(BaseModel):
 
 class StopPlace(Envelope):
     stop: Stop
+    group: list[Stop] = Field(
+        default_factory=list[Stop],
+        description="The stop place's group (`stop.group`) as stops, stations first; empty alone",
+    )
     wheelchair_boarding: bool | None
     facilities: list[Feature]
     boarding_points: list[BoardingPoint]

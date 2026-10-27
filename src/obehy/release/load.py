@@ -297,6 +297,28 @@ def _derive(connection: psycopg.Connection, load_id: int) -> None:
             "ORDER BY sequence) FROM {shape_point} GROUP BY shape_id HAVING count(*) >= 2"
         ).format(shape_line=name("shape_line"), shape_point=name("shape_point"))
     )
+    connection.execute(
+        sql.SQL(
+            "INSERT INTO {location_mode} (location_id, mode) "
+            "SELECT DISTINCT c.location_id, r.mode FROM {trip_call} c "
+            "JOIN {trip} t ON t.trip_id = c.trip_id JOIN {route} r ON r.route_id = t.route_id "
+            "WHERE c.passenger_service"
+        ).format(
+            location_mode=name("location_mode"),
+            trip_call=name("trip_call"),
+            trip=name("trip"),
+            route=name("route"),
+        )
+    )
+    # A railway's buses are replacement buses (NAD): a station with trains is a station.
+    connection.execute(
+        sql.SQL(
+            "DELETE FROM {location_mode} b USING {location} l "
+            "WHERE b.mode = 'bus' AND l.location_id = b.location_id AND l.domain = 'heavy_rail' "
+            "AND EXISTS (SELECT 1 FROM {location_mode} r "
+            "WHERE r.location_id = b.location_id AND r.mode = 'rail')"
+        ).format(location_mode=name("location_mode"), location=name("location"))
+    )
 
 
 def _register(

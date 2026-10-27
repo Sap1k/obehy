@@ -40,7 +40,13 @@ function serve(byWindow: Record<number, ReturnType<typeof answer>>) {
       Promise.resolve(byWindow[init.params.query.minutes])) as never);
 }
 
-const scope = { stopId: "jdf:stop:1", arrivals: false, from: undefined, limit: 40 };
+const scope = {
+  stopId: "jdf:stop:1",
+  only: undefined,
+  arrivals: false,
+  from: undefined,
+  limit: 40,
+};
 
 describe("fetchBoard", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -63,6 +69,18 @@ describe("fetchBoard", () => {
     expect(get).toHaveBeenCalledTimes(2);
     expect(board.rows).toHaveLength(12);
     expect(board.until).toBe(`minutes=${WINDOW_MIN}`);
+  });
+
+  it("asks for the stop's group, or for the one stop of it chosen", async () => {
+    const get = serve({ [SHORT_WINDOW_MIN]: answer(SHORT_WINDOW_MIN, 40, "cursor") });
+    const asked = () =>
+      get.mock.lastCall?.[1] as unknown as { params: { path: unknown; query: unknown } };
+    await fetchBoard(scope, new AbortController().signal);
+    expect(asked().params.path).toEqual({ location_id: "jdf:stop:1" });
+    expect(asked().params.query).toMatchObject({ group: true });
+    await fetchBoard({ ...scope, only: "czptt:location:1" }, new AbortController().signal);
+    expect(asked().params.path).toEqual({ location_id: "czptt:location:1" });
+    expect(asked().params.query).toMatchObject({ group: false });
   });
 });
 

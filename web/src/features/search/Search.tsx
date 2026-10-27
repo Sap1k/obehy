@@ -6,6 +6,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { api, unwrap, type Stop, type Vehicle } from "../../api/client";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
+import { ModeIcons } from "../../components/ModeIcon";
 import { distanceText, metresBetween, roughly, useKnownPosition } from "../../lib/position";
 import classes from "./Search.module.css";
 
@@ -140,11 +141,9 @@ export function Search({
 function StopOption({ stop }: { stop: Stop }) {
   return (
     <Combobox.Option value={`stop:${stop.location_id}`} className={classes.option}>
+      <ModeIcons modes={stop.modes ?? []} className={classes.modes} />
       <span className={classes.texts}>
         <span className={classes.name}>{stop.name}</span>
-        {stop.municipality && stop.municipality !== stop.name && (
-          <span className={classes.place}>{stop.municipality}</span>
-        )}
       </span>
     </Combobox.Option>
   );

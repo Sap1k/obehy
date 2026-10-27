@@ -2763,6 +2763,21 @@
             "title": "Domain",
             "type": "string"
           },
+          "group": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A railway station and the stop in front of it, stations first: the members' IDs, in search, a stop place and its boards; null when it stands alone",
+            "title": "Group"
+          },
           "kind": {
             "title": "Kind",
             "type": "string"
@@ -2792,6 +2807,14 @@
               }
             ],
             "title": "Longitude"
+          },
+          "modes": {
+            "description": "The modes of the lines calling, rail first; a station's replacement buses are not",
+            "items": {
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "array"
           },
           "municipality": {
             "anyOf": [
@@ -2843,6 +2866,14 @@
             "format": "date-time",
             "title": "Generated At",
             "type": "string"
+          },
+          "group": {
+            "description": "The stop place's group (`stop.group`) as stops, stations first; empty alone",
+            "items": {
+              "$ref": "#/components/schemas/Stop"
+            },
+            "title": "Group",
+            "type": "array"
           },
           "lines": {
             "anyOf": [
@@ -5871,6 +5902,18 @@
               "description": "`next` of a previous page",
               "title": "Cursor"
             }
+          },
+          {
+            "description": "With the stop place's group: a station and the stop in front of it",
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "With the stop place's group: a station and the stop in front of it",
+              "title": "Group",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -5993,6 +6036,18 @@
               ],
               "description": "`next` of a previous page",
               "title": "Cursor"
+            }
+          },
+          {
+            "description": "With the stop place's group: a station and the stop in front of it",
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "With the stop place's group: a station and the stop in front of it",
+              "title": "Group",
+              "type": "boolean"
             }
           }
         ],

@@ -1605,6 +1605,11 @@ export interface components {
             district: string | null;
             /** Domain */
             domain: string;
+            /**
+             * Group
+             * @description A railway station and the stop in front of it, stations first: the members' IDs, in search, a stop place and its boards; null when it stands alone
+             */
+            group?: string[] | null;
             /** Kind */
             kind: string;
             /** Latitude */
@@ -1613,6 +1618,11 @@ export interface components {
             location_id: string;
             /** Longitude */
             longitude: number | null;
+            /**
+             * Modes
+             * @description The modes of the lines calling, rail first; a station's replacement buses are not
+             */
+            modes?: string[];
             /** Municipality */
             municipality: string | null;
             /** Name */
@@ -1629,6 +1639,11 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
+            /**
+             * Group
+             * @description The stop place's group (`stop.group`) as stops, stations first; empty alone
+             */
+            group?: components["schemas"]["Stop"][];
             /**
              * Lines
              * @description Every line calling here, with `include=lines`
@@ -2931,6 +2946,8 @@ export interface operations {
                 limit?: number | null;
                 /** @description `next` of a previous page */
                 cursor?: string | null;
+                /** @description With the stop place's group: a station and the stop in front of it */
+                group?: boolean;
             };
             header?: never;
             path: {
@@ -2978,6 +2995,8 @@ export interface operations {
                 limit?: number | null;
                 /** @description `next` of a previous page */
                 cursor?: string | null;
+                /** @description With the stop place's group: a station and the stop in front of it */
+                group?: boolean;
             };
             header?: never;
             path: {

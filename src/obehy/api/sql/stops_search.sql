@@ -9,7 +9,9 @@ WITH q AS (
            control.obehy_fold(%(text)s) AS folded
 )
 SELECT l.location_id, l.name, l.kind, l.domain, l.municipality_name AS municipality,
-       l.district_name AS district, l.latitude, l.longitude, l.coordinate_precision
+       l.district_name AS district, l.latitude, l.longitude, l.coordinate_precision,
+       ARRAY(SELECT m.mode FROM active.location_mode m WHERE m.location_id = l.location_id)
+           AS modes
 FROM active.location l, q
 WHERE l.kind = 'stop_place' AND control.obehy_fold(l.name) LIKE q.pattern
 ORDER BY control.obehy_fold(l.name) LIKE q.prefix DESC,

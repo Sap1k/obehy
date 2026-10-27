@@ -29,6 +29,7 @@ from obehy.api.params import (
     encode_cursor,
     schedule_spans,
 )
+from obehy.api.stops import stop_groups
 from obehy.realtime.times import PRAGUE, TimeError, instant
 
 router = APIRouter(tags=["boards"])
@@ -165,6 +166,7 @@ def _respond(
     minutes: int | None,
     limit: int | None,
     cursor: str | None,
+    group: bool = False,
 ) -> dict[str, Any]:
     realtime_cache(response, limits)
     if not ids:
@@ -172,6 +174,12 @@ def _respond(
     if len(ids) > limits.board_stops_max:
         raise ParameterError(f"at most {limits.board_stops_max} stop places")
     stops = stop_places(snap, ids)
+    head = stops[0]
+    if group:
+        members = stop_groups(snap, limits, [head.location_id]).get(head.location_id)
+        if members:
+            stops = members
+            head = next(m for m in members if m.location_id == head.location_id)
     since, until, rows, following = _board(
         snap,
         limits,
@@ -192,7 +200,7 @@ def _respond(
     for r in rows:
         r.alert_ids = alert_ids(alerts, route=r.line.route_id, stop=r.location_id, trip=r.trip_id)
     return envelope(snap) | {
-        "stop": stops[0],
+        "stop": head,
         "stops": stops,
         "since": since,
         "until": until,
@@ -203,6 +211,10 @@ def _respond(
 
 
 StopsParam = Annotated[str, Query(description="Comma-separated stop place IDs")]
+GroupParam = Annotated[
+    bool,
+    Query(description="With the stop place's group: a station and the stop in front of it"),
+]
 
 
 @router.get(
@@ -220,6 +232,7 @@ def departures(
     minutes: Minutes = None,
     limit: Limit = None,
     cursor: CursorParam = None,
+    group: GroupParam = False,
 ) -> schema.Departures:
     body = _respond(
         response,
@@ -231,6 +244,7 @@ def departures(
         minutes=minutes,
         limit=limit,
         cursor=cursor,
+        group=group,
     )
     return schema.Departures(**body)
 
@@ -280,6 +294,7 @@ def arrivals(
     minutes: Minutes = None,
     limit: Limit = None,
     cursor: CursorParam = None,
+    group: GroupParam = False,
 ) -> schema.Arrivals:
     body = _respond(
         response,
@@ -291,6 +306,7 @@ def arrivals(
         minutes=minutes,
         limit=limit,
         cursor=cursor,
+        group=group,
     )
     return schema.Arrivals(**body)
 

@@ -308,6 +308,14 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-27** — Stop search shows each stop's modes (`static.location_mode`, derived at
+  load; migration 0023 backfills loaded releases, 80 s on the dev DB; a station's NAD buses
+  left out). A railway station and the stop in front of it are one search result and one board
+  (`stop_groups.sql`: of the served stops within 400 m, the nearest of the 3 nearest whose name
+  says station, else the nearest; the same group from either side; `?group=true` on the stop
+  boards, `jen=` on the web filters to one stop). Unit, DB (`test_stop_groups.py`) and vitest
+  pass; real pairs checked on the dev DB (Kolín, Brno hl.n., Smíchov, Olomouc, Ústí) and the
+  board in the browser against the local API. The map does not group.
 - **2026-10-25** — Trip notes read from `features` and show the spec signs (JDF 1.11 Tabulka
   pevných kódů, KADR číselníky 2.16) with their texts in print order (KADR Priorita; days X,
   1–7, +), JDF fixed codes included; no KADR názvy ("dvojka"). Central notes 10, 12 and 44 read

@@ -13,6 +13,7 @@ import { ApiError } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { BoardMessage, BoardSkeleton, DayDivider } from "../../components/BoardStates";
 import { DepartureRow, rowClasses } from "../../components/DepartureRow";
+import { ModeIcons, modesWord } from "../../components/ModeIcon";
 import { Panel } from "../../components/Panel";
 import { TimeSelect } from "../../components/TimeSelect";
 import { stopAlerts } from "../../lib/alerts";
@@ -39,35 +40,52 @@ export function BoardPage() {
 
   const arrivals = search.smer === "prijezdy";
   const from = search.cas;
-  // Showing more applies to one scope; a new stop, direction or time starts from one page.
-  const scopeKey = `${stopId}|${arrivals}|${from ?? ""}`;
+  const only = search.jen;
+  // Showing more applies to one scope; a new stop, direction, time or member starts from one
+  // page.
+  const scopeKey = `${stopId}|${arrivals}|${from ?? ""}|${only ?? ""}`;
   const [shown, setShown] = useState({ scopeKey, limit: PAGE });
   const limit = shown.scopeKey === scopeKey ? shown.limit : PAGE;
   const setLimit = (n: number) => setShown({ scopeKey, limit: n });
 
   const place = useStopPlace(stopId);
-  const board = useBoard({ stopId, arrivals, from, limit });
+  const board = useBoard({ stopId, only, arrivals, from, limit });
   const network = useNetwork();
   const now = useNow(1000);
 
   const data = board.data;
   const offline = Boolean(data) && (board.isError || !network.online);
 
-  // The search lists recently opened stops.
+  // A station with the stop in front of it is one board, named after the station; it may show
+  // either of them alone.
   const stop = place.data?.stop ?? data?.stop;
+  const members = place.data?.group ?? [];
+  const grouped = members.length > 1;
+  const title = grouped ? members[0]!.name : stop?.name;
+
+  // The search lists recently opened stops, a group as its station with all its modes.
+  const group = place.data?.group;
   useEffect(() => {
-    if (stop) rememberStop(stop);
-  }, [stop]);
+    if (!stop) return;
+    if (!group || group.length < 2) return rememberStop(stop);
+    const modes = [...new Set(group.flatMap((m) => m.modes ?? []))];
+    rememberStop({ ...stop, name: group[0]!.name, modes });
+  }, [stop, group]);
 
   // The phone shows the trip on its own page.
   if (phone && tripOpen) return <Outlet />;
 
-  const setScope = (next: { smer?: "prijezdy" | undefined; cas?: string | undefined }) =>
-    void navigate({ search: (prev) => ({ ...prev, ...next }), replace: true });
+  const setScope = (next: {
+    smer?: "prijezdy" | undefined;
+    cas?: string | undefined;
+    jen?: string | undefined;
+  }) => void navigate({ search: (prev) => ({ ...prev, ...next }), replace: true });
 
   const subtitle = [
     formatLongDay(from ?? now),
-    platformsText(place.data?.boarding_points.map((b) => b.public_code) ?? []),
+    // The platforms are the opened stop's: shown while its board is its own.
+    (!grouped || only === stopId) &&
+      platformsText(place.data?.boarding_points.map((b) => b.public_code) ?? []),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -78,7 +96,7 @@ export function BoardPage() {
       <Panel label={arrivals ? "Příjezdy" : "Odjezdy"}>
         <section className={classes.board}>
           <header className={classes.header}>
-            <h1 className={classes.title}>{stop?.name ?? (place.isError ? "Zastávka" : " ")}</h1>
+            <h1 className={classes.title}>{title ?? (place.isError ? "Zastávka" : " ")}</h1>
             <p className={classes.subtitle}>{subtitle}</p>
           </header>
           <div className={classes.controls}>
@@ -92,6 +110,26 @@ export function BoardPage() {
             />
             <TimeSelect value={from} now={now} onChange={(cas) => setScope({ cas })} />
           </div>
+          {grouped && (
+            <SegmentedControl
+              className={classes.members}
+              aria-label="Zastávka"
+              value={only ?? ""}
+              onChange={(v) => setScope({ jen: v || undefined })}
+              data={[
+                { value: "", label: "Vše" },
+                ...members.map((m) => ({
+                  value: m.location_id,
+                  label: (
+                    <span className={classes.member} title={m.name}>
+                      <ModeIcons modes={m.modes ?? []} />
+                      {modesWord(m.modes ?? [])}
+                    </span>
+                  ),
+                })),
+              ]}
+            />
+          )}
 
           {data &&
             stopAlerts(

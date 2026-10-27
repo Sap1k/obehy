@@ -32,6 +32,17 @@
   gap: 12px;
 }
 
+/* The stops of a station's group: all of them, or one. */
+.members {
+  align-self: flex-start;
+}
+
+.member {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .card {
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);
@@ -78,5 +89,9 @@
 
   .controls > :first-child {
     flex: 1;
+  }
+
+  .members {
+    align-self: stretch;
   }
 }
