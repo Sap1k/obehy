@@ -45,6 +45,38 @@ describe("atlasWith", () => {
     );
   });
 
+  it("draws every icon on a grown atlas anew, never copying the old canvas", async () => {
+    const drawImage = vi.fn();
+    const fillText = vi.fn();
+    const spy = new Proxy(
+      {},
+      {
+        get: (_, k) => (k === "drawImage" ? drawImage : k === "fillText" ? fillText : noop),
+        set: () => true,
+      },
+    );
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(
+      spy as CanvasRenderingContext2D,
+    );
+    const { atlasWith } = await fresh();
+    atlasWith(pucks(3));
+    fillText.mockClear();
+    atlasWith(pucks(4));
+    expect(drawImage).not.toHaveBeenCalled();
+    expect(fillText).toHaveBeenCalledTimes(4);
+  });
+
+  it("starts over once its canvas loses its context, or the map is rebuilt", async () => {
+    const { atlasWith, resetAtlas } = await fresh();
+    const atlas = atlasWith(pucks(3));
+    atlas.canvas.dispatchEvent(new Event("contextlost"));
+    const redrawn = atlasWith(pucks(3));
+    expect(redrawn).not.toBe(atlas);
+    expect(redrawn.mapping).toEqual(atlas.mapping);
+    resetAtlas();
+    expect(atlasWith(pucks(3))).not.toBe(redrawn);
+  });
+
   it("keeps the arrow and as many pucks as fit when asked for more", async () => {
     const { atlasWith } = await fresh();
     const atlas = atlasWith(pucks(5000));

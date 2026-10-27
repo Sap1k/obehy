@@ -1,6 +1,6 @@
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import * as maplibregl from "maplibre-gl";
-import { atlasWith, puckKey } from "./badges";
+import { atlasWith, puckKey, resetAtlas } from "./badges";
 import {
   afterGesture,
   initialCamera,
@@ -148,6 +148,8 @@ export class MapController {
   ) {
     this.input = input;
     this.dark = input.dark;
+    // A map built anew after a lost context: the atlas's canvas may have been wiped with it.
+    resetAtlas();
     const view = savedView();
     const map = new maplibregl.Map({
       container,

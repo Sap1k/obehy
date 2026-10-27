@@ -78,7 +78,28 @@ export interface Atlas {
   mapping: Record<string, IconFrame>;
 }
 
+// A phone's browser wipes a canvas kept on the GPU when it drops the GPU's context (a page in
+// the background): the atlas's pixels cannot be trusted past that. So a new atlas draws every
+// icon anew (never copies the old canvas), and one whose canvas lost its context, or was kept
+// past a map rebuilt (resetAtlas), is dropped and drawn again.
 let atlas: Atlas | null = null;
+
+/** Draw the atlas again on its next use (the map was rebuilt after losing its context). */
+export function resetAtlas(): void {
+  atlas = null;
+}
+
+function newCanvas(width: number, height: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const drop = () => {
+    if (atlas?.canvas === canvas) atlas = null;
+  };
+  canvas.addEventListener("contextlost", drop);
+  canvas.addEventListener("contextrestored", drop);
+  return canvas;
+}
 
 function drawArrow(g: CanvasRenderingContext2D, x: number, y: number) {
   const mid = CELL / 2;
@@ -126,21 +147,16 @@ export function atlasWith(keys: Iterable<string>): Atlas {
 
   const kept =
     atlas && Object.keys(atlas.mapping).length + missing.length <= CAPACITY ? atlas : null;
-  const mapping: Record<string, IconFrame> = { ...kept?.mapping };
-  // The arrow first, so it is never left out.
-  const todo = [...new Set([ARROW_KEY, ...(kept ? missing : wanted)])]
-    .filter((k) => !mapping[k])
-    .slice(0, CAPACITY - Object.keys(mapping).length);
-  const count = Object.keys(mapping).length + todo.length;
-  const rows = Math.ceil(count / COLUMNS);
-  const canvas = document.createElement("canvas");
-  canvas.width = COLUMNS * CELL;
-  canvas.height = rows * CELL;
+  // The arrow first, so it is never left out; the icons kept stay where they were.
+  const drawn = [
+    ...new Set([ARROW_KEY, ...(kept ? [...Object.keys(kept.mapping), ...missing] : wanted)]),
+  ].slice(0, CAPACITY);
+  const mapping: Record<string, IconFrame> = {};
+  const canvas = newCanvas(COLUMNS * CELL, Math.ceil(drawn.length / COLUMNS) * CELL);
   const g = canvas.getContext("2d")!;
-  if (kept) g.drawImage(kept.canvas, 0, 0);
 
-  let slot = Object.keys(mapping).length;
-  for (const key of todo) {
+  let slot = 0;
+  for (const key of drawn) {
     const x = (slot % COLUMNS) * CELL;
     const y = Math.floor(slot / COLUMNS) * CELL;
     slot += 1;
