@@ -13,6 +13,7 @@
 }
 
 .shell[data-collapsed] .foot {
+  flex-direction: column;
   justify-content: center;
 }
 
@@ -221,4 +222,20 @@
     background: var(--ob-selection);
     color: var(--ob-selection-text);
   }
+}
+
+/* "O aplikaci" in the navbar's foot. */
+.about {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--ob-radius-sm);
+  color: var(--ob-text-secondary);
+  font: inherit;
+  text-transform: inherit;
+}
+
+.about:hover {
+  color: var(--ob-text);
 }

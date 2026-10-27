@@ -6,6 +6,8 @@ WORKDIR /web
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
+# The commit shown in the app's "O aplikaci" (CI passes it).
+ARG VITE_COMMIT=""
 RUN npm run build
 
 FROM mirror.gcr.io/library/nginx:1.30-alpine

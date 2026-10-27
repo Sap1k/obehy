@@ -1,0 +1,148 @@
+.content {
+  overflow: hidden;
+  background: var(--ob-surface);
+}
+
+/* The brand band: dark in both schemes, like the navbar (.ob-dark-scope). */
+.band {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--ob-surface);
+}
+
+.logo {
+  color: var(--ob-logo);
+}
+
+.close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--ob-text-secondary);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.title {
+  margin: 0;
+  color: var(--ob-text);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 700;
+}
+
+.text {
+  margin: 0;
+  color: var(--ob-text-secondary);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.links {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--ob-radius-sm);
+  color: var(--ob-text);
+  text-decoration: none;
+}
+
+.link:hover {
+  background: var(--ob-surface-subtle);
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-selection);
+  color: var(--ob-selection-text);
+}
+
+.linkText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.linkLabel {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.linkDetail {
+  overflow: hidden;
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.external {
+  flex: none;
+  color: var(--ob-text-secondary);
+}
+
+.heading {
+  margin: 0 0 8px;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.tech {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tech li {
+  padding: 2px 8px;
+  border: 1px solid var(--ob-border);
+  border-radius: 999px;
+  color: var(--ob-text);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.version {
+  margin: 0;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.commit {
+  color: var(--ob-link);
+  font-family: ui-monospace, monospace;
+}

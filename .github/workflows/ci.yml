@@ -110,6 +110,7 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: web
+          build-args: VITE_COMMIT=${{ github.sha }}
           push: true
           tags: ${{ steps.web-meta.outputs.tags }}
           labels: ${{ steps.web-meta.outputs.labels }}

@@ -1,7 +1,8 @@
-import { ActionIcon, Modal, Tooltip } from "@mantine/core";
+import { ActionIcon, Modal, Tooltip, UnstyledButton } from "@mantine/core";
 import { useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle,
+  IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconList,
@@ -22,6 +23,7 @@ import { freshnessOf, useStatusQueriesFailing } from "../lib/freshness";
 import { useNow } from "../lib/hooks";
 import { usePhone } from "../lib/layout";
 import { usePersistentFlag } from "../lib/storage";
+import { About } from "./About";
 import classes from "./Shell.module.css";
 
 // The map under the app, loaded with its own chunk (MapLibre and deck.gl).
@@ -73,6 +75,7 @@ function useFreshness() {
 export function Shell() {
   const freshness = useFreshness();
   const [searching, setSearching] = useState(false);
+  const [about, setAbout] = useState(false);
   const [collapsed, setCollapsed] = usePersistentFlag(COLLAPSED_KEY, "local");
   const phone = usePhone();
   const onMap = isMapPath(useRouterState({ select: (s) => s.location.pathname }));
@@ -121,7 +124,16 @@ export function Shell() {
           ))}
         </ul>
         <div className={classes.foot}>
-          {!collapsed && <span>Oběhy · electric</span>}
+          <Tooltip label="O aplikaci" position="right" disabled={!collapsed} withArrow>
+            <UnstyledButton
+              className={classes.about}
+              onClick={() => setAbout(true)}
+              aria-label={collapsed ? "O aplikaci" : undefined}
+            >
+              <IconInfoCircle size={18} stroke={2} />
+              {!collapsed && "O aplikaci"}
+            </UnstyledButton>
+          </Tooltip>
           <ActionIcon
             variant="subtle"
             color="gray"
@@ -143,6 +155,15 @@ export function Shell() {
         </Link>
         <span className={classes.topbarEnd}>
           {freshness && <DataStatus freshness={freshness} />}
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="lg"
+            onClick={() => setAbout(true)}
+            aria-label="O aplikaci"
+          >
+            <IconInfoCircle size={22} stroke={2} />
+          </ActionIcon>
           <ActionIcon
             variant="subtle"
             color="gray"
@@ -190,6 +211,7 @@ export function Shell() {
       <Modal opened={searching} onClose={() => setSearching(false)} title="Hledat" fullScreen>
         <Search autoFocus onPicked={() => setSearching(false)} />
       </Modal>
+      <About opened={about} onClose={() => setAbout(false)} />
       <DukfinderWelcome />
     </div>
   );
