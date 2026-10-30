@@ -1,0 +1,21 @@
+# Station pairing (BASE_PLAN.md section 7.4): which surface stop a railway station shares its
+# search result and board with. Presentation only; no identity is merged. Decided once per
+# release at activation (release/pairing.py) into control.station_pairing, corrected by the
+# curated overrides (`obehy ref import station-pairs`). A change of meaning is a new file.
+version = "1"
+
+# Candidates: the served surface stop places within this many metres, nearest first, this many.
+radius_m = 400
+candidates = 3
+
+# The candidate whose name says it is the station's stop wins ("Kolín,žel.st.", "Brno,Hlavní
+# nádraží": the third nearest), else the nearest. Two named candidates, or with none named the
+# nearest two, closer to each other's distance than this are a tie: quarantined, not guessed.
+margin_m = 40
+
+# The words, written folded (lower case, no diacritics); dots and spaces between them do not
+# matter ("hl.nadr." is "hl nadr").
+station_words = [
+    "hlavni nadrazi", "hl nadr", "hl n", "nadrazi", "nadr", "zel st", "zel zast", "zst",
+    "bahnhof", "bhf", "hbf",
+]

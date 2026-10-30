@@ -217,7 +217,8 @@ uv run obehy db migrate
 uv run obehy release fetch                 # newest build -> data/releases/<run-id>; prints the dir
 uv run obehy release load <release-dir>
 uv run obehy release activate <run-id>     # or --rollback; --if-newer skips older releases
-uv run obehy release status
+uv run obehy release status                # with the station pairing's outcomes; `stale` when
+                                           # its policy or overrides changed (import them again)
 ```
 
 The database may run on another host (start `compose.yaml` there); instead of the environment
@@ -322,6 +323,20 @@ On the server the `jobs` service fetches PID's models at start and then hourly f
 23:00 (Golemio describes only the vehicles running at the moment), importing every 200 vehicles
 (`ref fetch --import`) and keeping the list in the data volume (`deploy/obehy-nightly`). The
 curated files are imported by hand until they ship with releases.
+
+## Station pairs
+
+Activation pairs each railway station with the stop in front of it (`BASE_PLAN.md` section 7.4);
+ties stay unpaired and are listed, with their candidates, at `/api/v1/debug/station-pairing`.
+Settle them, or correct a pair, in `jrunify-ext-geodata/stops/station-pairs.csv`
+(`station_id,stop_id,decision,note`; `decision` is `pair` or `apart`, an empty `stop_id` with
+`apart` keeps the station alone) and import it: the active release is paired again whenever its
+pairing is not current, so after deploying migration 0024 or a new pairing policy, import the
+file again (unchanged is fine). A newly activated release pairs itself.
+
+```powershell
+uv run obehy ref import station-pairs --path D:\src\jrunify-ext-geodata\stops\station-pairs.csv
+```
 
 `/api/v1/debug/vehicles/registry` shows what each dataset holds and where sources disagree;
 `/api/v1/debug/vehicles/pairings` lists reports seen running side by side, candidates for keys.

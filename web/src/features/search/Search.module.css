@@ -43,3 +43,11 @@
 .option[data-combobox-selected] .modes {
   color: inherit;
 }
+
+/* A stop's line: its modes, then its name; a group's other stops under it. */
+.stopLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}

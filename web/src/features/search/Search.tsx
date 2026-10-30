@@ -138,12 +138,24 @@ export function Search({
   );
 }
 
+/** A stop found, with its own modes; a station's group adds a line for the stop it shares its
+ * board with (or the station, when the stop was found). */
 function StopOption({ stop }: { stop: Stop }) {
+  const own = stop.group?.find((m) => m.location_id === stop.location_id);
+  const others = stop.group?.filter((m) => m.location_id !== stop.location_id) ?? [];
   return (
     <Combobox.Option value={`stop:${stop.location_id}`} className={classes.option}>
-      <ModeIcons modes={stop.modes ?? []} className={classes.modes} />
       <span className={classes.texts}>
-        <span className={classes.name}>{stop.name}</span>
+        <span className={classes.stopLine}>
+          <ModeIcons modes={own?.modes ?? stop.modes ?? []} className={classes.modes} />
+          <span className={classes.name}>{stop.name}</span>
+        </span>
+        {others.map((m) => (
+          <span key={m.location_id} className={classes.stopLine} title="Společná tabule odjezdů">
+            <ModeIcons modes={m.modes ?? []} className={classes.modes} />
+            <span className={classes.place}>{m.name}</span>
+          </span>
+        ))}
       </span>
     </Combobox.Option>
   );

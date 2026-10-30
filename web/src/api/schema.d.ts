@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/debug/station-pairing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How the active release's stations were paired with their stops; what to review */
+        get: operations["station_pairing_api_v1_debug_station_pairing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/debug/vehicles/pairings": {
         parameters: {
             query?: never;
@@ -1085,6 +1102,21 @@ export interface components {
              */
             type: string;
         };
+        /**
+         * GroupMember
+         * @description A stop of a station group (BASE_PLAN.md section 7.4): what it is called, which domain it
+         *     is in, and what calls there.
+         */
+        GroupMember: {
+            /** Domain */
+            domain: string;
+            /** Location Id */
+            location_id: string;
+            /** Modes */
+            modes?: string[];
+            /** Name */
+            name: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1607,9 +1639,9 @@ export interface components {
             domain: string;
             /**
              * Group
-             * @description A railway station and the stop in front of it, stations first: the members' IDs, in search, a stop place and its boards; null when it stands alone
+             * @description A railway station and the stop in front of it, stations first, this stop among them: in search, a stop place and its boards; null when it stands alone
              */
-            group?: string[] | null;
+            group?: components["schemas"]["GroupMember"][] | null;
             /** Kind */
             kind: string;
             /** Latitude */
@@ -1639,11 +1671,6 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
-            /**
-             * Group
-             * @description The stop place's group (`stop.group`) as stops, stations first; empty alone
-             */
-            group?: components["schemas"]["Stop"][];
             /**
              * Lines
              * @description Every line calling here, with `include=lines`
@@ -2488,6 +2515,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    station_pairing_api_v1_debug_station_pairing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

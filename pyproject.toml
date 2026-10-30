@@ -46,6 +46,7 @@ packages = ["src/obehy"]
 "src/obehy/data/regional-gtfs-overlay" = "obehy/data/regional-gtfs-overlay"
 "src/obehy/data/realtime" = "obehy/data/realtime"
 "src/obehy/data/serving" = "obehy/data/serving"
+"src/obehy/data/stops" = "obehy/data/stops"
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

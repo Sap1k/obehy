@@ -59,7 +59,8 @@ flowchart LR
 
 PostgreSQL schemas:
 
-- `control`: releases, loads, publications.
+- `control`: releases, loads, publications, and each published load pair's station pairing
+  (§7.4), read through `active.stop_group`.
 - `static`: the serving relations per load, read through `active.*`.
 - `ref`: curated reference datasets, a mirror of reviewed files.
 - `rt`: observations, assignments, current state, lookups.

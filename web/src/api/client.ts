@@ -12,6 +12,7 @@ export type Vehicle = Schemas["Vehicle"];
 export type VehicleDetail = Schemas["VehicleDetail"];
 export type Line = Schemas["Line"];
 export type Stop = Schemas["Stop"];
+export type GroupMember = Schemas["GroupMember"];
 export type StopPlace = Schemas["StopPlace"];
 export type Alert = Schemas["Alert"];
 export type Problem = Schemas["Problem"];

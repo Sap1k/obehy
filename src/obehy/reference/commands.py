@@ -11,10 +11,11 @@ from typing import Any, cast
 
 import psycopg
 
-from obehy.reference import duk_register, pid_vehicles, vehicle_list
+from obehy.reference import duk_register, pid_vehicles, station_pairs, vehicle_list
 from obehy.reference.dataset import Dataset
 from obehy.reference.load import load_dataset
 from obehy.reference.registry import REGISTRY_CHANNEL
+from obehy.release import activate as activation
 from obehy.runtime_config import (
     ConfigurationError,
     load_database_url,
@@ -25,7 +26,10 @@ from obehy.runtime_config import (
 # Dataset name -> its reader: our own vehicle list (`vehicles`) and the DÚK register
 # (`duk-register`), both curated in jrunify-ext-geodata/vehicles/, and PID's models
 # (`pid-vehicles`), built from Golemio by `ref fetch`. A file comes from `--path` or
-# `[reference] <name>` in the config.
+# `[reference] <name>` in the config. The station pairs (`station-pairs`, curated in
+# jrunify-ext-geodata/stops/) are not a vehicle dataset: they go to `ref.station_pair`, and
+# the active release is paired again whenever its pairing is not current (new overrides, a new
+# pairing policy, a release activated before pairing existed), the file unchanged or not.
 READERS: dict[str, Callable[[Path], Dataset]] = {
     vehicle_list.NAME: vehicle_list.read,
     duk_register.NAME: duk_register.read,
@@ -37,7 +41,7 @@ def add_parsers(commands: Any) -> None:
     reference = commands.add_parser("ref", help="curated reference datasets")
     reference_commands = reference.add_subparsers(dest="ref_command", required=True)
     importer = reference_commands.add_parser("import", help="mirror a dataset into ref.*")
-    importer.add_argument("dataset", choices=sorted(READERS))
+    importer.add_argument("dataset", choices=sorted([*READERS, station_pairs.NAME]))
     importer.add_argument("--path", type=Path, help="default: [reference] <dataset> in config")
     importer.add_argument("--config", type=Path)
     importer.add_argument("--database-url")
@@ -77,6 +81,9 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _import(name: str, path: Path, url: str) -> None:
+    if name == station_pairs.NAME:
+        _import_station_pairs(path, url)
+        return
     dataset = READERS[name](path)
     with psycopg.connect(url, autocommit=True) as connection:
         loaded = load_dataset(connection, dataset)
@@ -84,6 +91,25 @@ def _import(name: str, path: Path, url: str) -> None:
             connection.execute(f"NOTIFY {REGISTRY_CHANNEL}")
     state = "loaded" if loaded else "already loaded"
     print(f"{name} {dataset.version[:12]}: {state} ({dataset.rows} rows)")
+
+
+def _import_station_pairs(path: Path, url: str) -> None:
+    pairs = station_pairs.read(path)
+    with psycopg.connect(url, autocommit=True) as connection:
+        loaded = station_pairs.load(connection, pairs)
+        try:
+            publication = activation.regroup(connection, if_stale=True)
+            regrouped = (
+                f"; release {publication.run_id} paired again"
+                if publication
+                else "; the active release's pairing is current"
+            )
+        except activation.ActivationError:
+            regrouped = "; no release active to pair"
+    state = "loaded" if loaded else "already loaded"
+    print(
+        f"{station_pairs.NAME} {pairs.version[:12]}: {state} ({len(pairs.pairs)} rows){regrouped}"
+    )
 
 
 def _fetch(args: argparse.Namespace) -> int:

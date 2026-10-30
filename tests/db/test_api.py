@@ -497,11 +497,11 @@ def test_status_names_the_active_release(client: TestClient) -> None:
 
 
 def test_stop_search_ignores_case_and_diacritics(client: TestClient) -> None:
-    # The station and the bus station in front of it are one result, as the station.
+    # The station and the bus station in front of it are one result: the one found.
     names = [s["name"] for s in _get(client, "/stops", q="ceska LIPA")["stops"]]
     assert names == ["Česká Lípa hl.n."]
     assert [s["name"] for s in _get(client, "/stops", q="lipa aut")["stops"]] == [
-        "Česká Lípa hl.n."
+        "Česká Lípa,,aut.nádr."
     ]
     assert [s["name"] for s in _get(client, "/stops", q="zakupy")["stops"]] == ["Zákupy"]
     problem = _get(client, "/stops", 422, q="x")
@@ -687,6 +687,7 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/alerts",
         "/api/v1/alerts/{alert_id}",
         "/api/v1/debug/release",
+        "/api/v1/debug/station-pairing",
         "/api/v1/debug/realtime/sources",
         "/api/v1/debug/realtime/unmatched",
         "/api/v1/debug/realtime/instances/{feed}/{namespace}/{key}/{service_date}",

@@ -56,21 +56,19 @@ export function BoardPage() {
   const data = board.data;
   const offline = Boolean(data) && (board.isError || !network.online);
 
-  // A station with the stop in front of it is one board, named after the station; it may show
-  // either of them alone.
+  // A station with the stop in front of it is one board, named after the stop opened, its stops
+  // listed under the name; it may show either of them alone.
   const stop = place.data?.stop ?? data?.stop;
-  const members = place.data?.group ?? [];
+  const members = place.data?.stop.group ?? [];
   const grouped = members.length > 1;
-  const title = grouped ? members[0]!.name : stop?.name;
 
-  // The search lists recently opened stops, a group as its station with all its modes.
-  const group = place.data?.group;
+  // The search lists recently opened stops, a group's with every member's modes.
   useEffect(() => {
     if (!stop) return;
-    if (!group || group.length < 2) return rememberStop(stop);
-    const modes = [...new Set(group.flatMap((m) => m.modes ?? []))];
-    rememberStop({ ...stop, name: group[0]!.name, modes });
-  }, [stop, group]);
+    const group = stop.group ?? [];
+    const modes = group.length > 1 ? [...new Set(group.flatMap((m) => m.modes ?? []))] : undefined;
+    rememberStop(modes ? { ...stop, modes } : stop);
+  }, [stop]);
 
   // The phone shows the trip on its own page.
   if (phone && tripOpen) return <Outlet />;
@@ -96,8 +94,22 @@ export function BoardPage() {
       <Panel label={arrivals ? "Příjezdy" : "Odjezdy"}>
         <section className={classes.board}>
           <header className={classes.header}>
-            <h1 className={classes.title}>{title ?? (place.isError ? "Zastávka" : " ")}</h1>
+            <h1 className={classes.title}>{stop?.name ?? (place.isError ? "Zastávka" : " ")}</h1>
             <p className={classes.subtitle}>{subtitle}</p>
+            {grouped && (
+              <ul className={classes.groupStops} aria-label="Zastávky na tabuli">
+                {members.map((m) => (
+                  <li
+                    key={m.location_id}
+                    className={classes.groupStop}
+                    data-off={(only !== undefined && only !== m.location_id) || undefined}
+                  >
+                    <ModeIcons modes={m.modes ?? []} />
+                    {m.name}
+                  </li>
+                ))}
+              </ul>
+            )}
           </header>
           <div className={classes.controls}>
             <SegmentedControl

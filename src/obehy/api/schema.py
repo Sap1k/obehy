@@ -160,6 +160,16 @@ class Alerts(Envelope):
     alerts: list[Alert]
 
 
+class GroupMember(BaseModel):
+    """A stop of a station group (BASE_PLAN.md section 7.4): what it is called, which domain it
+    is in, and what calls there."""
+
+    location_id: str
+    name: str
+    domain: str
+    modes: Modes = Field(default_factory=list[str])
+
+
 class Stop(BaseModel):
     location_id: str
     name: str
@@ -177,11 +187,11 @@ class Stop(BaseModel):
             "The modes of the lines calling, rail first; a station's replacement buses are not"
         ),
     )
-    group: list[str] | None = Field(
+    group: list[GroupMember] | None = Field(
         default=None,
         description=(
-            "A railway station and the stop in front of it, stations first: the members' IDs,"
-            " in search, a stop place and its boards; null when it stands alone"
+            "A railway station and the stop in front of it, stations first, this stop among"
+            " them: in search, a stop place and its boards; null when it stands alone"
         ),
     )
 
@@ -209,10 +219,6 @@ class Line(BaseModel):
 
 class StopPlace(Envelope):
     stop: Stop
-    group: list[Stop] = Field(
-        default_factory=list[Stop],
-        description="The stop place's group (`stop.group`) as stops, stations first; empty alone",
-    )
     wheelchair_boarding: bool | None
     facilities: list[Feature]
     boarding_points: list[BoardingPoint]

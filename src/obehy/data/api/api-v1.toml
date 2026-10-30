@@ -14,16 +14,6 @@ bbox_limit = 2000
 near_radius_m = 500
 near_radius_max_m = 3000
 near_limit = 50
-# A railway station shares its board and its search result with the stop in front of it: of
-# the served stops within this many metres, the nearest of the first few whose name has one of
-# these words (folded, without diacritics; dots and spaces between them do not matter), else
-# the nearest. Brno hl.n.: its "Hlavní nádraží" is the third nearest.
-group_radius_m = 400
-group_candidates = 3
-station_words = [
-    "hlavni nadrazi", "hl nadr", "hl n", "nadrazi", "nadr", "zel st", "zel zast", "zst",
-    "bahnhof", "bhf", "hbf",
-]
 
 [departures]
 # A departure scheduled up to this long before `from` stays on the board while it is still to

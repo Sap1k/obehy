@@ -308,6 +308,18 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-30** — Station pairing is decided once per release at activation
+  (`release/pairing.py`, policy `data/stops/station-pairing-v1.toml`, migration 0024) into
+  `control.station_pairing`, read through `active.stop_group`; search groups in SQL with exact
+  pages. Ties (two candidates within 40 m) stay ungrouped and are listed at
+  `/debug/station-pairing`; curated overrides (`ref import station-pairs`) force or split pairs,
+  and importing them re-pairs the active release whenever its pairing is not current (after
+  deploying 0024 or a policy change, import again). Dev DB: pairing 7.5 s, 906 named + 950 nearest pairs, 60
+  ambiguous (e.g. Kroměříž: "Nádraží" 135 m vs "aut.nádr." 143 m), 829 with nothing within
+  400 m. Search shows the stop found with its group's other stop under it; the board is named
+  after the stop opened and lists the stops it shows; search's `modes` are the stop's own. Unit,
+  API and stop-group DB tests pass. Next: settle the ambiguous ones in
+  `jrunify-ext-geodata/stops/station-pairs.csv`.
 - **2026-10-27** — Stop search shows each stop's modes (`static.location_mode`, derived at
   load; migration 0023 backfills loaded releases, 80 s on the dev DB; a station's NAD buses
   left out). A railway station and the stop in front of it are one search result and one board

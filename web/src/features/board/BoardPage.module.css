@@ -32,6 +32,30 @@
   gap: 12px;
 }
 
+/* The stops a station's board shows, under its name; one left out by the filter is dimmed. */
+.groupStops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.groupStop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ob-text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.groupStop[data-off] {
+  color: var(--ob-text-disabled);
+}
+
 /* The stops of a station's group: all of them, or one. */
 .members {
   align-self: flex-start;

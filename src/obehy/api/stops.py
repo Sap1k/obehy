@@ -10,65 +10,27 @@ from obehy.api import schema
 from obehy.api.codes import features, load_codes, tristate
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, static_cache
 from obehy.api.db import Snapshot
-from obehy.api.limits import Limits
 from obehy.api.params import ParameterError, parse_bbox, parse_near, search_words
 
 router = APIRouter(tags=["stops"])
 
-# Search asks for this many more rows than it answers: a group's members collapse into one.
-_GROUP_SLACK = 4
 
+def group_members(snap: Snapshot, location_id: str) -> list[schema.Stop]:
+    """The group of a stop place (a railway station and the stop in front of it, decided at
+    activation, release/pairing.py): its members, stations first, each knowing the group;
+    empty when it stands alone."""
 
-def stop_groups(snap: Snapshot, limits: Limits, ids: list[str]) -> dict[str, list[schema.Stop]]:
-    """The group of each stop place named that has one: its members, stations first, each
-    knowing the group (`stop_groups.sql`)."""
-
-    if not ids:
-        return {}
-    radius = limits.group_radius_m
-    rows = snap.all(
-        "stop_groups",
-        {
-            "location_ids": ids,
-            "radius": radius,
-            # A box safely larger than the radius at Czech latitudes (cos 51° ≈ 0.63).
-            "degrees": radius / 111_320 / 0.6,
-            "station_words": list(limits.station_words),
-            "candidates": limits.group_candidates,
-        },
-    )
-    groups: dict[str, list[schema.Stop]] = {}
-    for r in rows:
-        groups.setdefault(r["asked"], []).append(schema.Stop.model_validate(r))
-    for members in groups.values():
-        ids_of = [m.location_id for m in members]
-        for m in members:
-            m.group = ids_of
-    return groups
-
-
-def collapse(stops: list[schema.Stop], groups: dict[str, list[schema.Stop]]) -> list[schema.Stop]:
-    """Search results with each group once, at its best member's place: as its first station,
-    with every member's modes."""
-
-    shown: list[schema.Stop] = []
-    seen: set[str] = set()
-    for stop in stops:
-        if stop.location_id in seen:
-            continue
-        members = groups.get(stop.location_id)
-        if not members:
-            seen.add(stop.location_id)
-            shown.append(stop)
-            continue
-        seen.update(m.location_id for m in members)
-        head = members[0]
-        shown.append(
-            head.model_copy(
-                update={"modes": schema.sort_modes([x for m in members for x in m.modes])}
-            )
-        )
-    return shown
+    members = [
+        schema.Stop.model_validate(r)
+        for r in snap.all("stop_group_members", {"location_id": location_id})
+    ]
+    group = [
+        schema.GroupMember(location_id=m.location_id, name=m.name, domain=m.domain, modes=m.modes)
+        for m in members
+    ]
+    for m in members:
+        m.group = group
+    return members
 
 
 @router.get(
@@ -96,19 +58,15 @@ def stops(
         words = search_words(q)
         if sum(len(w) for w in words) < limits.search_min_chars:
             raise ParameterError(f"q needs at least {limits.search_min_chars} letters or digits")
-        wanted = min(limit or limits.search_limit, limits.search_limit_max)
         rows = snap.all(
             "stops_search",
             {
                 "words": words,
                 "first": words[0],
                 "text": " ".join(words),
-                "limit": wanted + _GROUP_SLACK,
+                "limit": min(limit or limits.search_limit, limits.search_limit_max),
             },
         )
-        found = [schema.Stop.model_validate(r) for r in rows]
-        groups = stop_groups(snap, limits, [s.location_id for s in found])
-        return schema.Stops(**envelope(snap), stops=collapse(found, groups)[:wanted])
     elif near is not None:
         lat, lon = parse_near(near)
         metres = min(radius or limits.near_radius_m, limits.near_radius_max_m)
@@ -163,7 +121,7 @@ def stop_place(
         raise HTTPException(404, f"no stop place {location_id}")
     row = rows[0]
     stop = schema.Stop.model_validate(row)
-    members = stop_groups(snap, limits, [stop.location_id]).get(stop.location_id, [])
+    members = group_members(snap, stop.location_id)
     if members:
         stop.group = members[0].group
     params = {"location_id": stop.location_id}
@@ -171,7 +129,6 @@ def stop_place(
     return schema.StopPlace(
         **envelope(snap),
         stop=stop,
-        group=members,
         wheelchair_boarding=tristate(row["wheelchair_boarding"]),
         facilities=features(codes, snap.all("stop_features", params)),
         boarding_points=[

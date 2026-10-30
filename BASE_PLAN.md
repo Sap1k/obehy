@@ -338,6 +338,19 @@ that contain both domains, such as PID, classify each source object before match
 The API and frontend may show nearby places of both domains together. That is presentation and
 walking-transfer behaviour, not an identity merge.
 
+**Station grouping.** A railway station shares its search result and its board with the surface
+stop in front of it (`Kolín` with `Kolín,nádraží`). The pairing is decided once per release, at
+activation, into `control.station_pairing` (one row per served station: outcome, reason, the
+rule's own choice and the candidates it saw) and read through `active.stop_group`; IDs, boards
+and history stay per stop place. The rule (versioned policy `data/stops/station-pairing-v1.toml`):
+of the served surface stop places within 400 m, the nearest three, the one whose name says it is
+the station's stop (`žel. st.`, `hl. n.`, `Bahnhof`) wins, else the nearest. Two named
+candidates, or with none named the nearest two, within 40 m of each other are a tie and stay
+`ambiguous`, ungrouped, never guessed. Curated overrides reviewed in git
+(`jrunify-ext-geodata/stops/station-pairs.csv`, `ref.station_pair`) force a pair or keep one
+apart; importing them pairs the active release again whenever its pairing is not current. `/debug/station-pairing` lists the
+ambiguous stations with their candidates, and the overrides gone stale or made redundant.
+
 ---
 
 # 8. Stop continuity across national exports
@@ -2169,8 +2182,8 @@ PID, DÚK, SŽ or another provider.
   ID: `rt.trip_part_current` maps each feed trip, a rail run's part included, to its slice of
   the journey's calls in `rt.trip_state_current`. A departure scheduled before the board's
   start stays while its estimate is still to come; each trip's final passenger call is dropped.
-- A board covers one stop place and its boarding points. Boards merging nearby stop places of
-  both feeds (a town's bus station and railway station) wait for a station-grouping rule.
+- A board covers one stop place and its boarding points, or with `group=true` its station
+  group (section 7.4): a railway station and the stop in front of it, as one board.
 
 **Vehicles without an active trip.** Every vehicle has a `state`:
 

@@ -29,7 +29,7 @@ from obehy.api.params import (
     encode_cursor,
     schedule_spans,
 )
-from obehy.api.stops import stop_groups
+from obehy.api.stops import group_members
 from obehy.realtime.times import PRAGUE, TimeError, instant
 
 router = APIRouter(tags=["boards"])
@@ -176,7 +176,7 @@ def _respond(
     stops = stop_places(snap, ids)
     head = stops[0]
     if group:
-        members = stop_groups(snap, limits, [head.location_id]).get(head.location_id)
+        members = group_members(snap, head.location_id)
         if members:
             stops = members
             head = next(m for m in members if m.location_id == head.location_id)

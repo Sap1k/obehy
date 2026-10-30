@@ -164,6 +164,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "vehicle_position_at",
         "train_identity",
         "location_mode",
+        "station_pairing",
     ]
 
 

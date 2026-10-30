@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 from obehy.release.contract import Contract
 from obehy.release.ddl import active_view, static_tables
 from obehy.release.load import partition_name
+from obehy.release.pairing import pair, summary
 
 NOTIFY_CHANNEL = "obehy_publication"
 # Predecessors whose data stays loaded for `--rollback`; each release is about 7 GB.
@@ -89,6 +90,8 @@ def _publish(
     )
     for table in static_tables(contract):
         connection.execute(active_view(table, load_ids).encode("utf-8"))
+    # Which stop each station shares its board with (kept for a rollback to the same loads).
+    pair(connection, load_ids)
     connection.execute("SELECT pg_notify(%s, %s)", (NOTIFY_CHANNEL, run_id))
     return Publication(seq, run_id, *load_ids)
 
@@ -216,6 +219,12 @@ def prune(
             ).fetchall()
             if load_id not in retained
         ]
+        if candidates:
+            connection.execute(
+                "DELETE FROM control.station_pairing_run"
+                " WHERE jdf_load_id = ANY(%s) OR czptt_load_id = ANY(%s)",
+                (candidates, candidates),
+            )
         for load_id in candidates:
             for table in static_tables(contract):
                 connection.execute(
@@ -227,6 +236,19 @@ def prune(
             )
             dropped.append(load_id)
     return dropped
+
+
+def regroup(connection: psycopg.Connection, *, if_stale: bool = False) -> Publication | None:
+    """Pair the active release's stations again (`obehy ref import station-pairs`): its
+    overrides changed, its policy, or it was activated before pairing existed. With `if_stale`,
+    only then (None when the pairing is current)."""
+
+    current = _current(connection)
+    if current is None:
+        raise ActivationError("No release is active")
+    if not pair(connection, current.load_ids, force=not if_stale):
+        return None
+    return current
 
 
 def status(connection: psycopg.Connection) -> dict[str, Any]:
@@ -242,4 +264,14 @@ def status(connection: psycopg.Connection) -> dict[str, Any]:
             "SELECT load_id, run_id, package, status, started_at, finished_at, row_counts,"
             " warnings, error FROM control.load ORDER BY load_id DESC LIMIT 20"
         ).fetchall()
-    return {"publication": publication, "history": history, "loads": loads}
+    pairing = (
+        summary(connection, (publication["jdf_load_id"], publication["czptt_load_id"]))
+        if publication and publication["jdf_load_id"] is not None
+        else None
+    )
+    return {
+        "publication": publication,
+        "station_pairing": pairing,
+        "history": history,
+        "loads": loads,
+    }

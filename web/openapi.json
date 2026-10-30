@@ -1376,6 +1376,37 @@
         "title": "GoneTrip",
         "type": "object"
       },
+      "GroupMember": {
+        "description": "A stop of a station group (BASE_PLAN.md section 7.4): what it is called, which domain it\nis in, and what calls there.",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "domain"
+        ],
+        "title": "GroupMember",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2767,7 +2798,7 @@
             "anyOf": [
               {
                 "items": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/GroupMember"
                 },
                 "type": "array"
               },
@@ -2775,7 +2806,7 @@
                 "type": "null"
               }
             ],
-            "description": "A railway station and the stop in front of it, stations first: the members' IDs, in search, a stop place and its boards; null when it stands alone",
+            "description": "A railway station and the stop in front of it, stations first, this stop among them: in search, a stop place and its boards; null when it stands alone",
             "title": "Group"
           },
           "kind": {
@@ -2866,14 +2897,6 @@
             "format": "date-time",
             "title": "Generated At",
             "type": "string"
-          },
-          "group": {
-            "description": "The stop place's group (`stop.group`) as stops, stations first; empty alone",
-            "items": {
-              "$ref": "#/components/schemas/Stop"
-            },
-            "title": "Group",
-            "type": "array"
           },
           "lines": {
             "anyOf": [
@@ -5007,6 +5030,29 @@
           }
         },
         "summary": "A trip's raw assignment rows",
+        "tags": [
+          "debug"
+        ]
+      }
+    },
+    "/api/v1/debug/station-pairing": {
+      "get": {
+        "operationId": "station_pairing_api_v1_debug_station_pairing_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Station Pairing Api V1 Debug Station Pairing Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "How the active release's stations were paired with their stops; what to review",
         "tags": [
           "debug"
         ]

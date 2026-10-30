@@ -2,8 +2,8 @@
 contributes now; unbound observations; one journey's state, parts, vehicles and evidence; one
 vehicle's identity (reports, keys, pairings, statements, profile); the pairings to review as
 registry keys; the registry's datasets and disagreements; alerts with each entity resolved or
-not; a trip's raw static codes. Not cached; raw rows, whose shapes follow the tables and may
-change."""
+not; a trip's raw static codes; the station pairing and its ambiguous stations. Not cached;
+raw rows, whose shapes follow the tables and may change."""
 
 from __future__ import annotations
 
@@ -27,6 +27,14 @@ def _kinds(rows: list[DictRow], *kinds: str) -> dict[str, list[Any]]:
 @router.get("/release", summary="The active release, its packages, loads and activations")
 def release(snap: SnapshotDep, limits: LimitsDep) -> dict[str, Any]:
     return envelope(snap) | {"release": snap.one("debug_release", {"limit": limits.debug_limit})}
+
+
+@router.get(
+    "/station-pairing",
+    summary="How the active release's stations were paired with their stops; what to review",
+)
+def station_pairing(snap: SnapshotDep) -> dict[str, Any]:
+    return envelope(snap) | dict(snap.one("debug_station_pairing") or {})
 
 
 @router.get("/realtime/sources", summary="Polls per source channel, and what each feeds now")

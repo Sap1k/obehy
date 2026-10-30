@@ -1,5 +1,6 @@
-"""A railway station grouped with the stop in front of it: the pairing rules, search collapsing
-and the grouped board, against a fixture release laid out around a few stations."""
+"""A railway station grouped with the stop in front of it: the pairing decided at activation
+(release/pairing.py) with its quarantine and curated overrides, the diagnostics, search
+collapsing and the grouped board, against a fixture release laid out around a few stations."""
 
 from __future__ import annotations
 
@@ -12,7 +13,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from obehy.api.app import create_app
+from obehy.reference import station_pairs
 from obehy.release import activate as activation
+from obehy.release import pairing
 from obehy.release.contract import load_contract
 from obehy.release.load import load_release
 from tests.db.serving_fixture import Rows, czptt_rows, jdf_rows, write_release
@@ -67,7 +70,8 @@ def _call(trip: str, sequence: int, location: str) -> dict[str, Any]:
 # Ves: a plain stop nearest, the station's stop second, one too far, one never served.
 # Dál: two plain stops; the nearest is the partner. Most: two stations sharing one stop.
 # Pole: a station with nothing near. Lom: the station's stop is the third nearest (Brno hl.n.),
-# Luh's the fourth, past the candidates.
+# Luh's the fourth, past the candidates. Háj: two plain stops 20 m apart, a tie. Brod: two
+# named stops 20 m apart, a tie too.
 STATIONS = [
     _station("CZ1", "Ves", 50.70),
     _station("CZ2", "Dál", 50.80),
@@ -76,6 +80,8 @@ STATIONS = [
     _station("CZ5", "Pole", 50.95),
     _station("CZ6", "Lom", 51.00),
     _station("CZ7", "Luh", 51.05),
+    _station("CZ8", "Háj", 51.10),
+    _station("CZ9", "Brod", 51.15),
 ]
 STOPS = [
     _stop("ves1", "Ves,,náves", 50.70 + M100),
@@ -89,9 +95,13 @@ STOPS = [
     _stop("lom2", "Lom,,most", 51.00 - 1.5 * M100),
     _stop("lom3", "Lom,,hl.nádr.", 51.00 + 2 * M100),
     _stop("luh1", "Luh,,sady", 51.05 + M100),
-    _stop("luh2", "Luh,,most", 51.05 - 1.5 * M100),
-    _stop("luh3", "Luh,,park", 51.05 + 2 * M100),
+    _stop("luh2", "Luh,,most", 51.05 - 2 * M100),
+    _stop("luh3", "Luh,,park", 51.05 + 2.2 * M100),
     _stop("luh4", "Luh,,žel.st.", 51.05 - 2.5 * M100),
+    _stop("haj1", "Háj,,náves", 51.10 + M100),
+    _stop("haj2", "Háj,,obec", 51.10 - 1.2 * M100),
+    _stop("brod1", "Brod,,žel.st.", 51.15 + M100),
+    _stop("brod2", "Brod,,nádraží", 51.15 - 1.2 * M100),
 ]
 
 
@@ -135,16 +145,27 @@ def client(
         yield test_client
 
 
+def _override(connection: psycopg.Connection, *rows: str) -> None:
+    """Import these curated pairs (CSV rows) and pair the active release again, as
+    `obehy ref import station-pairs` does."""
+
+    text = "".join(f"{row}\n" for row in ("station_id,stop_id,decision,note", *rows))
+    station_pairs.load(connection, station_pairs.parse(text, str(hash(text))))
+    activation.regroup(connection)
+
+
 def _get(client: TestClient, path: str, **params: Any) -> Any:
     response = client.get(f"/api/v1{path}", params=params)
     assert response.status_code == 200, response.text
     return response.json()
 
 
+def _ids(group: list[dict[str, Any]] | None) -> list[str] | None:
+    return None if group is None else [m["location_id"] for m in group]
+
+
 def _group(client: TestClient, location_id: str) -> list[str] | None:
-    place = _get(client, f"/stop-places/{location_id}")
-    assert [s["location_id"] for s in place["group"]] == (place["stop"]["group"] or [])
-    return place["stop"]["group"]
+    return _ids(_get(client, f"/stop-places/{location_id}")["stop"]["group"])
 
 
 def test_a_station_takes_its_named_stop_over_a_nearer_plain_one(client: TestClient) -> None:
@@ -181,17 +202,31 @@ def test_stops_carry_their_modes(client: TestClient) -> None:
     assert _get(client, "/stop-places/czptt:location:CZ5")["stop"]["modes"] == ["rail"]
 
 
-def test_search_shows_a_group_once_as_its_station(client: TestClient) -> None:
+def test_search_shows_a_group_once_as_the_stop_found(client: TestClient) -> None:
     stops = _get(client, "/stops", q="ves")["stops"]
     ids = [s["location_id"] for s in stops]
     assert "jdf:stop:ves2" not in ids
     station = next(s for s in stops if s["location_id"] == "czptt:location:CZ1")
     assert station["name"] == "Ves"
-    assert station["modes"] == ["rail", "bus"]
-    assert station["group"] == ["czptt:location:CZ1", "jdf:stop:ves2"]
-    # Found by the stop's name alone, the group still shows as its station.
+    assert station["modes"] == ["rail"]
+    assert station["group"] == [
+        {
+            "location_id": "czptt:location:CZ1",
+            "name": "Ves",
+            "domain": "heavy_rail",
+            "modes": ["rail"],
+        },
+        {
+            "location_id": "jdf:stop:ves2",
+            "name": "Ves,,žel.st.",
+            "domain": "surface",
+            "modes": ["bus"],
+        },
+    ]
+    # Found by the stop's name, the group shows as that stop.
     found = _get(client, "/stops", q="ves zel")["stops"]
-    assert [s["location_id"] for s in found] == ["czptt:location:CZ1"]
+    assert [s["location_id"] for s in found] == ["jdf:stop:ves2"]
+    assert _ids(found[0]["group"]) == ["czptt:location:CZ1", "jdf:stop:ves2"]
 
 
 def test_a_grouped_board_holds_every_member(client: TestClient) -> None:
@@ -200,3 +235,66 @@ def test_a_grouped_board_holds_every_member(client: TestClient) -> None:
     assert [s["location_id"] for s in board["stops"]] == ["czptt:location:CZ1", "jdf:stop:ves2"]
     alone = _get(client, "/stop-places/jdf:stop:ves2/departures")
     assert [s["location_id"] for s in alone["stops"]] == ["jdf:stop:ves2"]
+
+
+def test_ties_are_quarantined_not_guessed(client: TestClient) -> None:
+    assert _group(client, "czptt:location:CZ8") is None
+    assert _group(client, "czptt:location:CZ9") is None
+    debug = _get(client, "/debug/station-pairing")
+    ambiguous = {a["station"]: a for a in debug["ambiguous"]}
+    assert ambiguous["Háj"]["reason"] == "tie"
+    assert ambiguous["Brod"]["reason"] == "two_named"
+    assert [c["stop_id"] for c in ambiguous["Háj"]["candidates"]] == [
+        "jdf:stop:haj1",
+        "jdf:stop:haj2",
+    ]
+    # Named: Ves, Lom and the fixture's Česká Lípa hl.n. (its "aut.nádr."); nearest: Dál, both
+    # Most stations and Luh, whose named stop is the fourth nearest.
+    assert debug["outcomes"]["paired/named"] == 3
+    assert debug["outcomes"]["paired/nearest"] == 4
+    assert debug["outcomes"]["none/nothing_near"] == 1
+
+
+def test_overrides_settle_a_tie_and_split_a_pair(
+    client: TestClient, connection: psycopg.Connection
+) -> None:
+    _override(
+        connection,
+        "czptt:location:CZ8,jdf:stop:haj2,pair,the stop at the station building",
+        "czptt:location:CZ1,jdf:stop:ves2,apart,across the tracks",
+        "czptt:location:CZ2,,apart,",
+        "czptt:location:CZ6,jdf:stop:lom3,pair,the rule agrees",
+        "czptt:location:CZ99,jdf:stop:nowhere,pair,gone",
+    )
+    assert _group(client, "czptt:location:CZ8") == ["czptt:location:CZ8", "jdf:stop:haj2"]
+    # Kept from its named stop, Ves takes the nearest: the plain one.
+    assert _group(client, "czptt:location:CZ1") == ["czptt:location:CZ1", "jdf:stop:ves1"]
+    assert _group(client, "czptt:location:CZ2") is None
+    debug = _get(client, "/debug/station-pairing")
+    assert [o["station_id"] for o in debug["stale_overrides"]] == ["czptt:location:CZ99"]
+    assert [o["station_id"] for o in debug["redundant_overrides"]] == ["czptt:location:CZ6"]
+    assert debug["run"]["overrides_version"]
+
+
+def test_pairing_is_redone_only_once_its_overrides_change(
+    client: TestClient, connection: psycopg.Connection
+) -> None:
+    # What `ref import station-pairs` runs: nothing while the pairing is current.
+    assert activation.regroup(connection, if_stale=True) is None
+    publication = activation.regroup(connection)
+    assert publication is not None
+    status = pairing.summary(connection, publication.load_ids)
+    assert status["stale"] is False and status["outcomes"]["ambiguous/tie"] == 1
+    # New overrides make it stale until they are paired.
+    text = "station_id,stop_id,decision,note\nczptt:location:CZ8,jdf:stop:haj1,pair,\n"
+    station_pairs.load(connection, station_pairs.parse(text, "v2"))
+    assert pairing.summary(connection, publication.load_ids)["stale"] is True
+    assert activation.regroup(connection, if_stale=True) is not None
+    status = pairing.summary(connection, publication.load_ids)
+    assert status["stale"] is False and status["outcomes"]["paired/override"] == 1
+
+
+def test_search_pages_count_groups_not_members(client: TestClient) -> None:
+    page = _get(client, "/stops", q="ves", limit=2)["stops"]
+    assert len(page) == 2
+    assert len({s["location_id"] for s in page}) == 2
