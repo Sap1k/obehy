@@ -21,6 +21,14 @@
   padding: 0;
 }
 
+.panel[data-wide] {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* The phone shows a tab's content as a page. */
 @media (max-width: $mantine-breakpoint-sm) {
   .panel {
@@ -36,5 +44,10 @@
 
   .panel[data-narrow] {
     width: auto;
+  }
+
+  .panel[data-wide] {
+    height: auto;
+    overflow: visible;
   }
 }

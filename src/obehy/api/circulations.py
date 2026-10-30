@@ -1,7 +1,9 @@
 """Observed circulations (oběhy, BASE_PLAN.md section 22): the journeys each vehicle worked in a
 row, cut by the nightly job's rule (`history.vehicle_chains`) and read live from the vehicle
 assignments, so today's are there too. A vehicle's days; a trip's oběh on a date, with the
-feed's own block where it has one. Learned and roster tours are not served yet.
+feed's own block where it has one; a source's oběhy on a date, scoped by company and mode or by
+route (a journey's company and mode are those of the active release's trip its key names).
+Learned and roster tours are not served yet.
 
 History knows a vehicle by its source's ID; which registry vehicle that was on a date is
 `history.vehicle_of` (by the registry's source-ID keys).
@@ -9,17 +11,18 @@ History knows a vehicle by its source's ID; which registry vehicle that was on a
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import date, timedelta
 from functools import cache
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from psycopg.rows import DictRow
 
 from obehy.api import schema
+from obehy.api.codes import load_codes
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
 from obehy.api.db import Snapshot
-from obehy.api.params import date_span
+from obehy.api.params import ParameterError, date_span
 from obehy.realtime.policy import load_policy
 from obehy.realtime.times import local_date
 
@@ -33,7 +36,7 @@ def _gap_s() -> int:
 
 def _chains(
     snap: Snapshot,
-    sources: list[DictRow],
+    sources: Sequence[Mapping[str, Any]],
     since: date,
     until: date,
     vehicle_id: str | None = None,
@@ -61,6 +64,10 @@ def _chains(
                     vehicle_id=r["vehicle_id"],
                     source=r["source"],
                     source_vehicle_id=r["source_vehicle_id"],
+                    fleet_number=r["fleet_number"],
+                    public_label=r["public_label"],
+                    manufacturer=r["manufacturer"],
+                    model=r["vehicle_model"],
                     first_seen=r["chain_first_seen"],
                     last_seen=r["chain_last_seen"],
                     journeys=[],
@@ -196,4 +203,111 @@ def trip_circulation(
         service_date=service_date,
         observed=observed,
         planned=planned,
+    )
+
+
+@router.get(
+    "/circulations/scopes",
+    tags=["circulations"],
+    response_model=schema.CirculationScopes,
+    summary="What oběhy on a date can be scoped by: sources, a source's companies, modes, lines",
+)
+def circulation_scopes(
+    response: Response,
+    snap: SnapshotDep,
+    limits: LimitsDep,
+    source: Annotated[str | None, Query(description="Its companies, modes and lines")] = None,
+    service_date: Annotated[date | None, Query(alias="date", description="Default today")] = None,
+) -> schema.CirculationScopes:
+    realtime_cache(response, limits)
+    day = service_date or local_date(snap.now)
+    agencies: dict[str, schema.ScopeAgency] = {}
+    asked = {"source": source, "service_date": day}
+    rows = snap.all("circulation_scopes", asked) if source else []
+    routes = snap.all("circulation_routes", asked) if source else []
+    for r in rows:
+        if r["mode"] is None:
+            agencies[r["agency_id"]] = schema.ScopeAgency(
+                agency_id=r["agency_id"], name=r["name"], vehicles=r["vehicles"], modes=[]
+            )
+        else:
+            agencies[r["agency_id"]].modes.append(
+                schema.ScopeMode(mode=r["mode"], vehicles=r["vehicles"])
+            )
+    for agency in agencies.values():
+        agency.modes.sort(key=lambda m: (-m.vehicles, m.mode))
+    return schema.CirculationScopes(
+        **envelope(snap),
+        source=source,
+        service_date=day,
+        sources=[
+            schema.ScopeSource(
+                source=r["source"], label=load_codes().source(r["source"]), vehicles=r["vehicles"]
+            )
+            for r in snap.all("circulation_sources", {"service_date": day})
+        ],
+        agencies=sorted(agencies.values(), key=lambda a: (-a.vehicles, a.name)),
+        routes=[
+            schema.ScopeRoute(line=line(r), agency=r["agency"], vehicles=r["vehicles"])
+            for r in routes
+        ],
+    )
+
+
+@router.get(
+    "/circulations",
+    tags=["circulations"],
+    response_model=schema.Circulations,
+    summary="A source's oběhy on a date, of some companies (and modes) or of one route",
+)
+def circulations(
+    response: Response,
+    snap: SnapshotDep,
+    limits: LimitsDep,
+    source: str,
+    service_date: Annotated[date | None, Query(alias="date", description="Default today")] = None,
+    agency_id: Annotated[list[str] | None, Query(description="Companies; or `route_id`")] = None,
+    mode: Annotated[list[str] | None, Query(description="With `agency_id`: these modes")] = None,
+    route_id: Annotated[str | None, Query(description="One route; or `agency_id`")] = None,
+) -> schema.Circulations:
+    if bool(agency_id) == (route_id is not None):
+        raise ParameterError("scope by agency_id or by route_id")
+    if mode and not agency_id:
+        raise ParameterError("mode narrows agency_id")
+    realtime_cache(response, limits)
+    day = service_date or local_date(snap.now)
+    matched: dict[str, set[tuple[str, str]]] = {}
+    for r in snap.all(
+        "circulation_journeys",
+        {
+            "source": source,
+            "service_date": day,
+            "route_id": route_id,
+            "agency_ids": agency_id or [],
+            "modes": mode or None,
+        },
+    ):
+        matched.setdefault(r["source_vehicle_id"], set()).add((r["key_namespace"], r["key"]))
+    sources: list[dict[str, Any]] = [
+        {"source": source, "source_vehicle_id": v} for v in sorted(matched)
+    ]
+    vehicles: list[schema.ScopedChain] = []
+    for _, chain in _chains(snap, sources, day, day):
+        wanted = matched[chain.source_vehicle_id]
+        places = [
+            n
+            for n, j in enumerate(chain.journeys)
+            if j.service_date == day and (j.journey.namespace, j.journey.key) in wanted
+        ]
+        if places:
+            vehicles.append(schema.ScopedChain(**chain.model_dump(), matched=places))
+    vehicles.sort(key=lambda c: (c.first_seen, c.source_vehicle_id))
+    return schema.Circulations(
+        **envelope(snap),
+        source=source,
+        service_date=day,
+        agency_ids=sorted(agency_id or []),
+        modes=sorted(mode or []),
+        route_id=route_id,
+        vehicles=vehicles,
     )

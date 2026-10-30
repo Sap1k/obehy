@@ -1,0 +1,344 @@
+/* The page fills the panel: the filters on top, the timeline scrolling in both directions
+   under them with its hours and vehicles held in view. */
+.page {
+  --label-w: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+}
+
+.day,
+.count {
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The line chosen: its badge and name, as the search shows it. */
+.chosenLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 428px;
+  padding: 6px 4px 6px 10px;
+  border: 1px solid var(--ob-border-control);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface);
+}
+
+.chosenClear {
+  margin-left: auto;
+}
+
+/* A journey opened: a popover on its bar. */
+.popover {
+  padding: 10px 12px;
+  border-color: var(--ob-border);
+  background: var(--ob-surface);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cardRoute {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.cardFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cardTitle {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cardModel {
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cardLines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cardList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cardList > div {
+  display: contents;
+}
+
+.cardList dt {
+  color: var(--ob-text-secondary);
+}
+
+.cardList dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cardNote {
+  margin: 0;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cardLink {
+  color: var(--ob-link);
+  font-weight: 600;
+}
+
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+}
+
+.canvas {
+  position: relative;
+}
+
+.axisRow,
+.row {
+  display: grid;
+  grid-template-columns: var(--label-w) 1fr;
+}
+
+.axisRow {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 24px;
+  border-bottom: 1px solid var(--ob-border);
+  background: var(--ob-surface);
+}
+
+.corner,
+.label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--ob-surface);
+  border-right: 1px solid var(--ob-border);
+}
+
+.ticks {
+  position: relative;
+}
+
+.hour {
+  position: absolute;
+  top: 3px;
+  padding-left: 4px;
+  color: var(--ob-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 44px a row (ROW_PX): Timeline draws only those near the view. */
+.row {
+  height: 44px;
+  border-bottom: 1px solid var(--ob-border);
+}
+
+/* The vehicle: its fleet number, its model under it. */
+.label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 8px;
+  border-top: 0;
+  border-bottom: 0;
+  border-left: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.label:hover,
+.label[data-selected] {
+  background: var(--ob-surface-subtle);
+}
+
+.labelName,
+.labelModel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labelName {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+.labelModel {
+  color: var(--ob-text-secondary);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+/* An hour's line every --hour of the lane. */
+.lane {
+  position: relative;
+  background: linear-gradient(to right, var(--ob-border) 1px, transparent 1px) 0 0 / var(--hour)
+    100%;
+}
+
+/* A journey: its line, and under it where it runs from and to. */
+.bar {
+  position: absolute;
+  top: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 36px;
+  overflow: hidden;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--ob-route-fill);
+  color: var(--ob-route-text);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.barLine,
+.barRoute {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.barLine {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.barRoute {
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.9;
+}
+
+/* The route's own colour is pale on a light line (white with black text): keep it drawn. */
+.bar {
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 15%);
+}
+
+.bar[data-out] {
+  opacity: 0.3;
+}
+
+.bar[data-highlighted] {
+  outline: 2px solid var(--ob-text);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.bar[data-selected] {
+  outline: 2px solid var(--ob-focus);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.bar:focus-visible {
+  z-index: 1;
+}
+
+/* Now, across every row; --at is its place in the lanes, in % (a number). */
+.now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--label-w) + (100% - var(--label-w)) * var(--at) / 100);
+  z-index: 1;
+  width: 2px;
+  background: var(--ob-disruption-text);
+  pointer-events: none;
+}
+
+@media (max-width: $mantine-breakpoint-sm) {
+  .page {
+    --label-w: 96px;
+    height: auto;
+  }
+
+  .scroller {
+    flex: none;
+    height: 70dvh;
+  }
+}

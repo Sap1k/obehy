@@ -6,15 +6,18 @@ const SINK_OUT: Keyframe[] = [{ opacity: 1 }, { opacity: 0, transform: "translat
 
 /** A panel over the desktop's map, of a fixed width so opening another beside it moves
  * nothing; on the phone, plain page content. It rises into place when it opens and slides out
- * when it closes. `flush`: its content brings its own padding. */
+ * when it closes. `flush`: its content brings its own padding. `wide`: as wide as there is room. */
 export function Panel({
   label,
   narrow = false,
+  wide = false,
   flush = false,
   children,
 }: {
   label: string;
   narrow?: boolean;
+  /** As wide and tall as the panels' area (a timeline): its content scrolls itself. */
+  wide?: boolean;
   flush?: boolean;
   children: ReactNode;
 }) {
@@ -27,6 +30,7 @@ export function Panel({
       className={`${classes.panel} ob-rise-in`}
       aria-label={label}
       data-narrow={narrow || undefined}
+      data-wide={wide || undefined}
       data-flush={flush || undefined}
     >
       {children}

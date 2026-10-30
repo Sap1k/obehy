@@ -777,6 +777,141 @@
         "title": "Circulation",
         "type": "object"
       },
+      "CirculationScopes": {
+        "description": "What oběhy on a date can be scoped by: the sources that saw vehicles work, and a\nsource's vehicles' companies and modes, and lines.",
+        "properties": {
+          "agencies": {
+            "description": "The source's; most vehicles first",
+            "items": {
+              "$ref": "#/components/schemas/ScopeAgency"
+            },
+            "title": "Agencies",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "routes": {
+            "description": "The source's, in the lines' order",
+            "items": {
+              "$ref": "#/components/schemas/ScopeRoute"
+            },
+            "title": "Routes",
+            "type": "array"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "sources": {
+            "description": "Most vehicles first",
+            "items": {
+              "$ref": "#/components/schemas/ScopeSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "source",
+          "service_date",
+          "sources",
+          "agencies",
+          "routes"
+        ],
+        "title": "CirculationScopes",
+        "type": "object"
+      },
+      "Circulations": {
+        "description": "A source's oběhy on a date: the chains of its vehicles that worked a journey in the\nscope (of the companies and modes, or of the route), each with its whole day.",
+        "properties": {
+          "agency_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agency Ids",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "array"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Id"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "vehicles": {
+            "description": "By first sighting",
+            "items": {
+              "$ref": "#/components/schemas/ScopedChain"
+            },
+            "title": "Vehicles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "source",
+          "service_date",
+          "agency_ids",
+          "modes",
+          "route_id",
+          "vehicles"
+        ],
+        "title": "Circulations",
+        "type": "object"
+      },
       "Composition": {
         "description": "A trip's formation (BASE_PLAN.md section 28), asked for lazily: never polled, the API\nnever calls upstream. A missing or older answer is asked of the worker's lookup broker:\n`pending` (HTTP 202, `Retry-After`) until a first answer, then `fresh`; an older answer is\nserved as `stale` while a newer one is asked. `not_available`: no source answers for this\ntrip (another operator's train, a date ČD does not answer for, …), see `sources`.",
         "properties": {
@@ -2597,6 +2732,18 @@
             "title": "First Seen",
             "type": "string"
           },
+          "fleet_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the registry, when it knows the vehicle",
+            "title": "Fleet Number"
+          },
           "journeys": {
             "items": {
               "$ref": "#/components/schemas/ChainJourney"
@@ -2609,10 +2756,43 @@
             "title": "Last Seen",
             "type": "string"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "position": {
             "description": "This trip's place in `journeys`, from 0",
             "title": "Position",
             "type": "integer"
+          },
+          "public_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Label"
           },
           "source": {
             "title": "Source",
@@ -2631,6 +2811,10 @@
           "vehicle_id",
           "source",
           "source_vehicle_id",
+          "fleet_number",
+          "public_label",
+          "manufacturer",
+          "model",
           "first_seen",
           "last_seen",
           "journeys",
@@ -2985,6 +3169,216 @@
           "datasets"
         ],
         "title": "RegistryEntry",
+        "type": "object"
+      },
+      "ScopeAgency": {
+        "description": "A company whose lines a source's vehicles worked, and in which modes.",
+        "properties": {
+          "agency_id": {
+            "title": "Agency Id",
+            "type": "string"
+          },
+          "modes": {
+            "items": {
+              "$ref": "#/components/schemas/ScopeMode"
+            },
+            "title": "Modes",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "vehicles": {
+            "title": "Vehicles",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agency_id",
+          "name",
+          "vehicles",
+          "modes"
+        ],
+        "title": "ScopeAgency",
+        "type": "object"
+      },
+      "ScopeMode": {
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "vehicles": {
+            "title": "Vehicles",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "vehicles"
+        ],
+        "title": "ScopeMode",
+        "type": "object"
+      },
+      "ScopeRoute": {
+        "description": "A line a source's vehicles worked.",
+        "properties": {
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "vehicles": {
+            "title": "Vehicles",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line",
+          "agency",
+          "vehicles"
+        ],
+        "title": "ScopeRoute",
+        "type": "object"
+      },
+      "ScopeSource": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Label"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "vehicles": {
+            "title": "Vehicles",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "vehicles"
+        ],
+        "title": "ScopeSource",
+        "type": "object"
+      },
+      "ScopedChain": {
+        "properties": {
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "fleet_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the registry, when it knows the vehicle",
+            "title": "Fleet Number"
+          },
+          "journeys": {
+            "items": {
+              "$ref": "#/components/schemas/ChainJourney"
+            },
+            "title": "Journeys",
+            "type": "array"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "matched": {
+            "description": "The places in `journeys` in the scope, from 0",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Matched",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "public_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Label"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_vehicle_id": {
+            "title": "Source Vehicle Id",
+            "type": "string"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "source",
+          "source_vehicle_id",
+          "fleet_number",
+          "public_label",
+          "manufacturer",
+          "model",
+          "first_seen",
+          "last_seen",
+          "journeys",
+          "matched"
+        ],
+        "title": "ScopedChain",
         "type": "object"
       },
       "SourceCode": {
@@ -4673,6 +5067,18 @@
             "title": "First Seen",
             "type": "string"
           },
+          "fleet_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the registry, when it knows the vehicle",
+            "title": "Fleet Number"
+          },
           "journeys": {
             "items": {
               "$ref": "#/components/schemas/ChainJourney"
@@ -4684,6 +5090,39 @@
             "format": "date-time",
             "title": "Last Seen",
             "type": "string"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "public_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Label"
           },
           "source": {
             "title": "Source",
@@ -4702,6 +5141,10 @@
           "vehicle_id",
           "source",
           "source_vehicle_id",
+          "fleet_number",
+          "public_label",
+          "manufacturer",
+          "model",
           "first_seen",
           "last_seen",
           "journeys"
@@ -5389,6 +5832,197 @@
         "summary": "One board of arrivals at several stop places",
         "tags": [
           "boards"
+        ]
+      }
+    },
+    "/api/v1/circulations": {
+      "get": {
+        "operationId": "circulations_api_v1_circulations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Default today",
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Default today",
+              "title": "Date"
+            }
+          },
+          {
+            "description": "Companies; or `route_id`",
+            "in": "query",
+            "name": "agency_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Companies; or `route_id`",
+              "title": "Agency Id"
+            }
+          },
+          {
+            "description": "With `agency_id`: these modes",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "With `agency_id`: these modes",
+              "title": "Mode"
+            }
+          },
+          {
+            "description": "One route; or `agency_id`",
+            "in": "query",
+            "name": "route_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One route; or `agency_id`",
+              "title": "Route Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Circulations"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A source's oběhy on a date, of some companies (and modes) or of one route",
+        "tags": [
+          "circulations"
+        ]
+      }
+    },
+    "/api/v1/circulations/scopes": {
+      "get": {
+        "operationId": "circulation_scopes_api_v1_circulations_scopes_get",
+        "parameters": [
+          {
+            "description": "Its companies, modes and lines",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Its companies, modes and lines",
+              "title": "Source"
+            }
+          },
+          {
+            "description": "Default today",
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Default today",
+              "title": "Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CirculationScopes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "What oběhy on a date can be scoped by: sources, a source's companies, modes, lines",
+        "tags": [
+          "circulations"
         ]
       }
     },

@@ -10,6 +10,7 @@ import { tripAlerts } from "../../lib/alerts";
 import { timeState } from "../../lib/punctuality";
 import { linkify } from "../../lib/linkify";
 import { usePersistentFlag } from "../../lib/storage";
+import { HistoryLink } from "./History";
 import { Timetable } from "./Timetable";
 import { noteGroups, type MarkedNote } from "./notes";
 import { callTimes, isPassed, type RunCall } from "./runCalls";
@@ -116,13 +117,38 @@ export function TripBody({
       ))}
 
       <section className={classes.section}>
-        <h3 className={classes.sectionTitle}>Jízdní řád</h3>
+        <div className={classes.sectionHead}>
+          <h3 className={classes.sectionTitle}>Jízdní řád</h3>
+          <CirculationLink trip={trip} />
+          <HistoryLink tripId={trip.trip_id} />
+        </div>
         <Timetable calls={calls} boardedAt={boardedAt} now={now} stale={stale} />
       </section>
 
       <Notes trip={trip} />
       <Connections trip={trip} stopId={stopId} />
     </>
+  );
+}
+
+/** The oběhy of the trip's line that day, by the source of the vehicle on it now. */
+function CirculationLink({ trip }: { trip: Trip }) {
+  const source = trip.vehicles.find((v) => v.sources?.length)?.sources?.[0];
+  if (!source) return null;
+  return (
+    <Link
+      className={classes.headLink}
+      to="/obehy"
+      search={{
+        zdroj: source,
+        datum: trip.service_date,
+        linka: trip.line.route_id,
+        spoj: trip.trip_id,
+      }}
+    >
+      Oběhy linky
+      <IconChevronRight size={14} stroke={2} aria-hidden />
+    </Link>
   );
 }
 

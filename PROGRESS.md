@@ -309,6 +309,18 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-30** — Web: a trip's *Jak jezdí* dialog (per-stop range bars: median, 9 in 10,
+  worst, over the on-time band) and an *Oběhy* page (`/obehy`): a source's vehicles on a date
+  as a day timeline, a row per chain (each journey its line and its ends, shortened as a
+  headsign; rows by fleet number and model where the registry profile knows the vehicle, else
+  its source ID; a journey's details in a popover), scoped by companies (grouped
+  by name) and modes or by a
+  line, with a vehicle filter; linked from the trip (*Oběhy linky*) and vehicle (*Oběhy dne*)
+  panels. API: `circulations` and `circulations/scopes` (sources, companies, modes, the day's
+  lines; the line picker offers only those). Dev DB:
+  DPP's whole PID day (1566 vehicles) 1.7 s, 1.7 MB raw; DÚK's largest company 0.5 s. Checked
+  in the browser at desktop and 375 px, dark and light; the dialog's bars with stubbed data
+  (dev has no recorded stop times).
 - **2026-10-30** — API made coherent before the GUI grows. History moved under the trip
   (`trips/<id>/history`, the journey key history recorded it under, every trip ID it had),
   with per-stop on-time share, median, p90 and worst delay in place of the line's mean

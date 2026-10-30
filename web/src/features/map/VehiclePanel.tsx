@@ -1,6 +1,6 @@
 import { ActionIcon, Button, Skeleton } from "@mantine/core";
-import { IconCurrentLocation, IconX } from "@tabler/icons-react";
-import { useNavigate } from "@tanstack/react-router";
+import { IconChevronRight, IconCurrentLocation, IconX } from "@tabler/icons-react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ApiError, type Vehicle, type VehicleDetail } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
@@ -191,6 +191,8 @@ function VehicleSection({
   mode: string | undefined;
 }) {
   const registry = detail?.registry;
+  // Its oběhy are under a source's own ID: the first report's.
+  const source = detail?.reports[0];
   const model = [registry?.manufacturer, registry?.model].filter(Boolean).join(" ");
   const sources = [
     ...new Set((detail?.reports ?? []).map((r) => r.label?.cs ?? r.source).filter(Boolean)),
@@ -211,6 +213,16 @@ function VehicleSection({
         }
         mode={mode ?? vehicle?.line?.mode ?? "bus"}
       />
+      {source && (
+        <Link
+          className={tripClasses.headLink}
+          to="/obehy"
+          search={{ zdroj: source.source, vuz: source.source_vehicle_id }}
+        >
+          Oběhy dne
+          <IconChevronRight size={14} stroke={2} aria-hidden />
+        </Link>
+      )}
       {(model || sources) && (
         <dl className={classes.facts}>
           {model && (

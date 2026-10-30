@@ -2,7 +2,8 @@
 -- rule (history.vehicle_chains), with the registry vehicle each was (only %(vehicle_id)s's, when
 -- given). Each journey as history recorded it (its latest schedule revision: trip ID, line
 -- name, headsign, first and last passenger call), with the line of the active release when
--- the trip is in it. One row per journey, chains in order.
+-- the trip is in it, and what the registry knows of the vehicle (its profile, as the worker
+-- resolves it). One row per journey, chains in order.
 WITH chains AS (
     SELECT c.*, history.vehicle_of(c.source, c.source_vehicle_id, c.service_date) AS vehicle_id
     FROM generate_series(%(since)s::date, %(until)s::date, interval '1 day') AS d (day),
@@ -26,7 +27,8 @@ SELECT j.vehicle_id, j.feed, j.source, j.source_vehicle_id, j.day, j.seq, j.chai
        s.trip_id, s.route_name, s.headsign,
        ends.origin_id, ends.origin, ends.departure, ends.destination_id, ends.destination,
        ends.arrival,
-       t.route_id, r.short_name, r.long_name, r.mode, r.color, r.text_color
+       t.route_id, r.short_name, r.long_name, r.mode, r.color, r.text_color,
+       vp.fleet_number, vp.public_label, vp.manufacturer, vp.model AS vehicle_model
 FROM journeys j
 LEFT JOIN LATERAL (
     SELECT x.trip_id, x.route_name, x.headsign, x.revision
@@ -58,4 +60,5 @@ LEFT JOIN LATERAL (
 ) ends ON true
 LEFT JOIN active.trip t ON t.trip_id = s.trip_id
 LEFT JOIN active.route r ON r.route_id = t.route_id
+LEFT JOIN rt.vehicle_profile vp ON vp.vehicle_id = j.vehicle_id AND vp.registered
 ORDER BY j.day DESC, j.chain_first_seen, j.vehicle_id, j.source, j.source_vehicle_id, j.ord

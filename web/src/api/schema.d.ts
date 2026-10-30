@@ -55,6 +55,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/circulations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A source's oběhy on a date, of some companies (and modes) or of one route */
+        get: operations["circulations_api_v1_circulations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/circulations/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What oběhy on a date can be scoped by: sources, a source's companies, modes, lines */
+        get: operations["circulation_scopes_api_v1_circulations_scopes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/debug/alerts": {
         parameters: {
             query?: never;
@@ -865,6 +899,80 @@ export interface components {
             trip_id: string;
         };
         /**
+         * CirculationScopes
+         * @description What oběhy on a date can be scoped by: the sources that saw vehicles work, and a
+         *     source's vehicles' companies and modes, and lines.
+         */
+        CirculationScopes: {
+            /**
+             * Agencies
+             * @description The source's; most vehicles first
+             */
+            agencies: components["schemas"]["ScopeAgency"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Release Id
+             * @description The active release the answer was read from.
+             */
+            release_id: string;
+            /**
+             * Routes
+             * @description The source's, in the lines' order
+             */
+            routes: components["schemas"]["ScopeRoute"][];
+            /**
+             * Service Date
+             * Format: date
+             */
+            service_date: string;
+            /** Source */
+            source: string | null;
+            /**
+             * Sources
+             * @description Most vehicles first
+             */
+            sources: components["schemas"]["ScopeSource"][];
+        };
+        /**
+         * Circulations
+         * @description A source's oběhy on a date: the chains of its vehicles that worked a journey in the
+         *     scope (of the companies and modes, or of the route), each with its whole day.
+         */
+        Circulations: {
+            /** Agency Ids */
+            agency_ids: string[];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Modes */
+            modes: string[];
+            /**
+             * Release Id
+             * @description The active release the answer was read from.
+             */
+            release_id: string;
+            /** Route Id */
+            route_id: string | null;
+            /**
+             * Service Date
+             * Format: date
+             */
+            service_date: string;
+            /** Source */
+            source: string;
+            /**
+             * Vehicles
+             * @description By first sighting
+             */
+            vehicles: components["schemas"]["ScopedChain"][];
+        };
+        /**
          * Composition
          * @description A trip's formation (BASE_PLAN.md section 28), asked for lazily: never polled, the API
          *     never calls upstream. A missing or older answer is asked of the worker's lookup broker:
@@ -1560,6 +1668,11 @@ export interface components {
              * Format: date-time
              */
             first_seen: string;
+            /**
+             * Fleet Number
+             * @description From the registry, when it knows the vehicle
+             */
+            fleet_number: string | null;
             /** Journeys */
             journeys: components["schemas"]["ChainJourney"][];
             /**
@@ -1567,11 +1680,17 @@ export interface components {
              * Format: date-time
              */
             last_seen: string;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /** Model */
+            model: string | null;
             /**
              * Position
              * @description This trip's place in `journeys`, from 0
              */
             position: number;
+            /** Public Label */
+            public_label: string | null;
             /** Source */
             source: string;
             /** Source Vehicle Id */
@@ -1705,6 +1824,83 @@ export interface components {
             model: string | null;
             /** Public Label */
             public_label: string | null;
+            /** Vehicle Id */
+            vehicle_id: string;
+        };
+        /**
+         * ScopeAgency
+         * @description A company whose lines a source's vehicles worked, and in which modes.
+         */
+        ScopeAgency: {
+            /** Agency Id */
+            agency_id: string;
+            /** Modes */
+            modes: components["schemas"]["ScopeMode"][];
+            /** Name */
+            name: string;
+            /** Vehicles */
+            vehicles: number;
+        };
+        /** ScopeMode */
+        ScopeMode: {
+            /** Mode */
+            mode: string;
+            /** Vehicles */
+            vehicles: number;
+        };
+        /**
+         * ScopeRoute
+         * @description A line a source's vehicles worked.
+         */
+        ScopeRoute: {
+            /** Agency */
+            agency: string | null;
+            line: components["schemas"]["Line"];
+            /** Vehicles */
+            vehicles: number;
+        };
+        /** ScopeSource */
+        ScopeSource: {
+            label: components["schemas"]["Label"] | null;
+            /** Source */
+            source: string;
+            /** Vehicles */
+            vehicles: number;
+        };
+        /** ScopedChain */
+        ScopedChain: {
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Fleet Number
+             * @description From the registry, when it knows the vehicle
+             */
+            fleet_number: string | null;
+            /** Journeys */
+            journeys: components["schemas"]["ChainJourney"][];
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /**
+             * Matched
+             * @description The places in `journeys` in the scope, from 0
+             */
+            matched: number[];
+            /** Model */
+            model: string | null;
+            /** Public Label */
+            public_label: string | null;
+            /** Source */
+            source: string;
+            /** Source Vehicle Id */
+            source_vehicle_id: string;
             /** Vehicle Id */
             vehicle_id: string;
         };
@@ -2350,6 +2546,11 @@ export interface components {
              * Format: date-time
              */
             first_seen: string;
+            /**
+             * Fleet Number
+             * @description From the registry, when it knows the vehicle
+             */
+            fleet_number: string | null;
             /** Journeys */
             journeys: components["schemas"]["ChainJourney"][];
             /**
@@ -2357,6 +2558,12 @@ export interface components {
              * Format: date-time
              */
             last_seen: string;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /** Model */
+            model: string | null;
+            /** Public Label */
+            public_label: string | null;
             /** Source */
             source: string;
             /** Source Vehicle Id */
@@ -2636,6 +2843,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    circulations_api_v1_circulations_get: {
+        parameters: {
+            query: {
+                source: string;
+                /** @description Default today */
+                date?: string | null;
+                /** @description Companies; or `route_id` */
+                agency_id?: string[] | null;
+                /** @description With `agency_id`: these modes */
+                mode?: string[] | null;
+                /** @description One route; or `agency_id` */
+                route_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Circulations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    circulation_scopes_api_v1_circulations_scopes_get: {
+        parameters: {
+            query?: {
+                /** @description Its companies, modes and lines */
+                source?: string | null;
+                /** @description Default today */
+                date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CirculationScopes"];
                 };
             };
             /** @description Validation Error */

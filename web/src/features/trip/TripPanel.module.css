@@ -126,6 +126,27 @@
   gap: 8px;
 }
 
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.sectionHead > :first-child {
+  flex: 1;
+}
+
+.headLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--ob-link);
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .sectionTitle,
 .notesTitle {
   margin: 0;

@@ -24,6 +24,18 @@ export interface TripSearch extends BoardSearch {
   od?: string;
 }
 
+/** The oběhy page's scope: a source on a date, and companies (comma-separated agency IDs) with
+ * modes, or one line; then a vehicle filter and a trip to mark. */
+export interface CirculationsSearch {
+  zdroj?: string;
+  datum?: string;
+  dopravce?: string;
+  druh?: string;
+  linka?: string;
+  vuz?: string;
+  spoj?: string;
+}
+
 const text = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
 const rootRoute = createRootRoute({ component: Shell });
@@ -81,6 +93,24 @@ const linesRoute = createRoute({
   component: LinesPage,
 });
 
+const circulationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/obehy",
+  component: lazyRouteComponent(
+    () => import("./features/circulations/CirculationsPage"),
+    "CirculationsPage",
+  ),
+  validateSearch: (search: Record<string, unknown>): CirculationsSearch => ({
+    zdroj: text(search.zdroj),
+    datum: /^\d{4}-\d{2}-\d{2}$/.test(text(search.datum) ?? "") ? text(search.datum) : undefined,
+    dopravce: text(search.dopravce),
+    druh: text(search.druh),
+    linka: text(search.linka),
+    vuz: text(search.vuz),
+    spoj: text(search.spoj),
+  }),
+});
+
 const alertsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/mimoradnosti",
@@ -92,6 +122,7 @@ const routeTree = rootRoute.addChildren([
   departuresRoute,
   boardRoute.addChildren([tripRoute]),
   linesRoute,
+  circulationsRoute,
   alertsRoute,
 ]);
 

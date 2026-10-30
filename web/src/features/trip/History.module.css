@@ -1,0 +1,228 @@
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--ob-link);
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 600;
+}
+
+.dialog {
+  background: var(--ob-surface);
+}
+
+.dialogTitle {
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.loading,
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary {
+  margin: 0;
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+/* The minute marks over the bars; the stops' names sit above each bar, so the axis spans the
+   whole width as the bars do. */
+.axis {
+  position: relative;
+  height: 16px;
+  margin-top: 4px;
+  color: var(--ob-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.tick {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.stops {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 1px solid var(--ob-border);
+}
+
+.stopHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stopName {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.share {
+  flex: none;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.track {
+  --tone-text: var(--ob-unknown-text);
+  --tone-fill: var(--ob-unknown-fill);
+  position: relative;
+  height: 14px;
+}
+
+.track[data-tone="onTime"] {
+  --tone-text: var(--ob-on-time-text);
+  --tone-fill: var(--ob-on-time-fill);
+}
+
+.track[data-tone="early"] {
+  --tone-text: var(--ob-early-text);
+  --tone-fill: var(--ob-early-fill);
+}
+
+.track[data-tone="late"] {
+  --tone-text: var(--ob-late-text);
+  --tone-fill: var(--ob-late-fill);
+}
+
+.track[data-tone="veryLate"] {
+  --tone-text: var(--ob-very-late-text);
+  --tone-fill: var(--ob-very-late-fill);
+}
+
+.track > span {
+  position: absolute;
+}
+
+/* On time: a minute early to two late, as the boards colour it. */
+.band {
+  top: 0;
+  bottom: 0;
+  border-radius: var(--ob-radius-sm);
+  background: color-mix(in srgb, var(--ob-on-time-text) 18%, transparent);
+}
+
+.zero {
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--ob-border-control);
+}
+
+.whisker {
+  top: 6px;
+  height: 2px;
+  background: var(--tone-text);
+  opacity: 0.6;
+}
+
+.median {
+  top: 3px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--tone-text);
+}
+
+.worst {
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border: 1.5px solid var(--tone-text);
+  border-radius: 50%;
+  background: var(--ob-surface);
+}
+
+/* Later than the scale reaches: an arrow at its end. */
+.worst[data-beyond] {
+  width: 0;
+  height: 0;
+  margin-left: -6px;
+  border: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--tone-text);
+  border-radius: 0;
+  background: none;
+}
+
+.figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.runs {
+  margin-left: auto;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.legend > span {
+  display: inline-block;
+  margin-left: 6px;
+}
+
+.legend > span:first-child {
+  margin-left: 0;
+}
+
+.legendMedian {
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--ob-text-secondary);
+}
+
+.legendWhisker {
+  width: 14px;
+  height: 2px;
+  background: var(--ob-text-secondary);
+}
+
+.legendWorst {
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid var(--ob-text-secondary);
+  border-radius: 50%;
+}
+
+.legendBand {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ob-on-time-text) 18%, transparent);
+}

@@ -800,6 +800,10 @@ class VehicleChain(BaseModel):
     vehicle_id: str
     source: str
     source_vehicle_id: str
+    fleet_number: str | None = Field(description="From the registry, when it knows the vehicle")
+    public_label: str | None
+    manufacturer: str | None
+    model: str | None
     first_seen: Time
     last_seen: Time
     journeys: list[ChainJourney]
@@ -846,6 +850,61 @@ class Circulation(Envelope):
     service_date: date
     observed: list[ObservedCirculation]
     planned: PlannedCirculation | None
+
+
+class ScopeMode(BaseModel):
+    mode: str
+    vehicles: int
+
+
+class ScopeAgency(BaseModel):
+    """A company whose lines a source's vehicles worked, and in which modes."""
+
+    agency_id: str
+    name: str
+    vehicles: int
+    modes: list[ScopeMode]
+
+
+class ScopeRoute(BaseModel):
+    """A line a source's vehicles worked."""
+
+    line: Line
+    agency: str | None
+    vehicles: int
+
+
+class ScopeSource(BaseModel):
+    source: str
+    label: Label | None
+    vehicles: int
+
+
+class CirculationScopes(Envelope):
+    """What oběhy on a date can be scoped by: the sources that saw vehicles work, and a
+    source's vehicles' companies and modes, and lines."""
+
+    source: str | None
+    service_date: date
+    sources: list[ScopeSource] = Field(description="Most vehicles first")
+    agencies: list[ScopeAgency] = Field(description="The source's; most vehicles first")
+    routes: list[ScopeRoute] = Field(description="The source's, in the lines' order")
+
+
+class ScopedChain(VehicleChain):
+    matched: list[int] = Field(description="The places in `journeys` in the scope, from 0")
+
+
+class Circulations(Envelope):
+    """A source's oběhy on a date: the chains of its vehicles that worked a journey in the
+    scope (of the companies and modes, or of the route), each with its whole day."""
+
+    source: str
+    service_date: date
+    agency_ids: list[str]
+    modes: list[str]
+    route_id: str | None
+    vehicles: list[ScopedChain] = Field(description="By first sighting")
 
 
 class SourceHealth(BaseModel):

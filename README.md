@@ -277,6 +277,7 @@ It answers under `/api/v1`: `status`; `stops?q=|bbox=|near=`; `stop-places/<id>`
 redirects) with its `composition?from=` (asked of the worker: 202 until answered) and
 `circulation`, and `trips/<trip_id>/history`; `lines?q=`, `lines/<route_id>` with its
 `timetable[?date=]` and `trips`; `vehicles?bbox=`, `vehicles/<vehicle_id>` and its `days`;
+`circulations` (a source's oběhy on a date, by company and mode or by route) and its `scopes`;
 `alerts?line=|stop=|trip=` and `alerts/<id>`; and
 `debug/…` (raw rows, uncached, shapes may change). The interactive docs are
 `/api/v1/docs`; the OpenAPI document is

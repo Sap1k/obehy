@@ -9,6 +9,7 @@ import {
   IconMap,
   IconRoute,
   IconSearch,
+  IconTimeline,
 } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
@@ -35,6 +36,7 @@ const TABS = [
   { to: "/", label: "Mapa", Icon: IconMap, exact: true },
   { to: "/odjezdy", label: "Odjezdy", Icon: IconList, exact: false },
   { to: "/linky", label: "Linky", Icon: IconRoute, exact: false },
+  { to: "/obehy", label: "Oběhy", Icon: IconTimeline, exact: false },
   { to: "/mimoradnosti", label: "Mimořádnosti", Icon: IconAlertTriangle, exact: false },
 ] as const;
 

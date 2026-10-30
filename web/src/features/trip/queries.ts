@@ -1,5 +1,5 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
-import { api, unwrap, type Trip } from "../../api/client";
+import { ApiError, api, unwrap, type Trip } from "../../api/client";
 import { POLL_MS } from "../board/queries";
 
 // One query per trip, polled, shared by everything that shows it (a board's trip panel, the
@@ -70,5 +70,23 @@ export function useFollowingParts(trip: Trip | undefined) {
   const following = at >= 0 ? parts.slice(at + 1) : [];
   return useQueries({
     queries: following.map((p) => tripQuery(p.trip_id, trip?.service_date ?? "")),
+  });
+}
+
+/** A trip's journey as it ran on the recorded days, asked for while `enabled` (the history
+ * dialog is open); not polled: a day's runs only change once it is over. */
+export function useTripHistory(tripId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["trip-history", tripId],
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET("/api/v1/trips/{trip_id}/history", {
+          params: { path: { trip_id: tripId } },
+          signal,
+        }),
+      ),
+    enabled,
+    staleTime: 10 * 60_000,
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
 }

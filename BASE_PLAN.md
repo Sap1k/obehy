@@ -1639,8 +1639,9 @@ circulation_edge
   - Each activation runs this check as one SQL statement.
 - CZPTT and GTFS `block_key` are used directly where present; they are static, not learned.
   CZPTT's names the train path (its run's parts), not a circulation.
-- **Served** (section 30): the observed layer as `vehicles/<id>/days` and
-  `trips/…/circulation`, cut live from `history.vehicle_assignment` by the nightly job's own
+- **Served** (section 30): the observed layer as `vehicles/<id>/days`,
+  `trips/…/circulation` and `circulations` (a source's day, by company and mode or by route:
+  a journey's company and mode are those of the active release's trip its key names), cut live from `history.vehicle_assignment` by the nightly job's own
   rule (`history.vehicle_chains`), so today is there too. History knows a vehicle by its
   source's ID; `history.vehicle_of` maps it to the registry by source-ID keys only, so a
   vehicle recognised only by plate, co-location or train has no history under its registry ID
@@ -2134,6 +2135,13 @@ PID, DÚK, SŽ or another provider.
 /api/v1/vehicles/<vehicle_id>               state, registry entry, source reports and how each
                                             was bound, attributes with every statement
 /api/v1/vehicles/<vehicle_id>/days          its oběhy: the journeys it worked, day by day
+/api/v1/circulations?source=&date=&agency_id=…[&mode=…] | &route_id=
+                                            a source's oběhy on a date: the chains of its
+                                            vehicles that worked a journey of the companies
+                                            (and modes) or of the route, each whole, the
+                                            matching journeys marked; /circulations/scopes the
+                                            date's sources, a source's companies, modes and
+                                            the lines its vehicles worked
 /api/v1/alerts?line=…|stop=…|trip=…[&at=…]  current alerts by scope; /alerts/<id> any
 
 /api/v1/debug/release                       the active release, packages, loads, activations

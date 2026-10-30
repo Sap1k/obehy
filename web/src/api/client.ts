@@ -10,12 +10,19 @@ export type TripCall = Schemas["TripCall"];
 export type TripVehicle = Schemas["TripVehicle"];
 export type Vehicle = Schemas["Vehicle"];
 export type VehicleDetail = Schemas["VehicleDetail"];
+export type VehicleAttributeValue = Schemas["VehicleAttributeValue"];
 export type Line = Schemas["Line"];
 export type Stop = Schemas["Stop"];
 export type GroupMember = Schemas["GroupMember"];
 export type StopPlace = Schemas["StopPlace"];
 export type Alert = Schemas["Alert"];
 export type Problem = Schemas["Problem"];
+export type TripHistory = Schemas["TripHistory"];
+export type Circulations = Schemas["Circulations"];
+export type CirculationScopes = Schemas["CirculationScopes"];
+export type ScopedChain = Schemas["ScopedChain"];
+export type ScopeRoute = Schemas["ScopeRoute"];
+export type ChainJourney = Schemas["ChainJourney"];
 
 /** Same origin: nginx in production, Vite's proxy in development. */
 export const api = createClient<paths>({ baseUrl: "" });

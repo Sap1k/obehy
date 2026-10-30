@@ -700,6 +700,8 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/vehicles",
         "/api/v1/vehicles/{vehicle_id}",
         "/api/v1/vehicles/{vehicle_id}/days",
+        "/api/v1/circulations",
+        "/api/v1/circulations/scopes",
         "/api/v1/alerts",
         "/api/v1/alerts/{alert_id}",
         "/api/v1/debug/release",
@@ -939,6 +941,13 @@ def test_a_trips_circulation_and_a_vehicles_days(client: TestClient) -> None:
     assert sorted(observed) == ["duk:1001", "mpvnet:4U1 2345"]
     bus = observed["duk:1001"]
     assert bus["position"] == 0
+    # What the registry knows of it; the plate MPVnet reported is no registry key of its own.
+    assert (bus["fleet_number"], bus["manufacturer"], bus["model"]) == (
+        "1001",
+        "Iveco",
+        "Crossway LE LINE 13M",
+    )
+    assert observed["mpvnet:4U1 2345"]["fleet_number"] is None
     assert [
         (j["journey"]["key"], j["trip_id"], j["origin"], j["destination"], j["layover_s"])
         for j in bus["journeys"]
@@ -957,6 +966,45 @@ def test_a_trips_circulation_and_a_vehicles_days(client: TestClient) -> None:
     assert nothing["days"] == []
     assert _get(client, "/trips/jdf:trip:1/2026-10-05/circulation")["observed"] == []
     _get(client, "/trips/jdf:trip:1/2026-10-12/circulation", 404)
+
+
+def test_a_sources_oběhy_scoped_by_company_and_mode_or_by_route(client: TestClient) -> None:
+    day: dict[str, Any] = {"date": "2026-10-06"}
+    scopes = _get(client, "/circulations/scopes", source="duk", **day)
+    assert [(s["source"], s["vehicles"]) for s in scopes["sources"]] == [
+        ("duk", 1),
+        ("mpvnet", 1),
+    ]
+    assert _get(client, "/circulations/scopes", **day)["agencies"] == []
+    # The lines it worked that day, and only those: the release's other routes are not there.
+    assert [(r["line"]["route_id"], r["agency"], r["vehicles"]) for r in scopes["routes"]] == [
+        ("jdf:route:000001", "Dopravce", 1)
+    ]
+    assert scopes["agencies"] == [
+        {
+            "agency_id": "jdf:agency:1",
+            "name": "Dopravce",
+            "vehicles": 1,
+            "modes": [{"mode": "bus", "vehicles": 1}],
+        }
+    ]
+    by_agency = _get(client, "/circulations", source="duk", agency_id="jdf:agency:1", **day)
+    (bus,) = by_agency["vehicles"]
+    # The whole day, the journey outside the release (no company) included but not matched.
+    assert (bus["vehicle_id"], len(bus["journeys"]), bus["matched"]) == ("duk:1001", 2, [0])
+    by_route = _get(client, "/circulations", source="duk", route_id="jdf:route:000001", **day)
+    assert by_route["vehicles"] == by_agency["vehicles"]
+    plates = _get(client, "/circulations", source="mpvnet", route_id="jdf:route:000001", **day)
+    assert [c["source_vehicle_id"] for c in plates["vehicles"]] == ["4U1 2345"]
+    trams = _get(
+        client, "/circulations", source="duk", agency_id="jdf:agency:1", mode="tram", **day
+    )
+    assert trams["vehicles"] == []
+    elsewhen = _get(client, "/circulations/scopes", source="duk", date="2026-10-05")
+    assert (elsewhen["agencies"], elsewhen["routes"]) == ([], [])
+    _get(client, "/circulations", 422, source="duk", **day)
+    _get(client, "/circulations", 422, source="duk", agency_id="x", route_id="y", **day)
+    _get(client, "/circulations", 422, source="duk", route_id="y", mode="bus", **day)
 
 
 def test_debug_shows_a_journey_and_its_parts(client: TestClient) -> None:
