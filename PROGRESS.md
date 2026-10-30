@@ -222,7 +222,8 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   feed trip's slice of its journey's calls) and a vehicle's current part. Expanded
   2026-10-20 (phase A): readable static codes, arrivals, nearby stops, multi-stop boards with
   a cursor, the vehicle on boards and trips, lines, connections and journey links, journey
-  history and line punctuality, debug endpoints. Phase B (2026-10-21): the vehicle registry
+  history and line punctuality (2026-10-30: per journey, under the trip; with the printed
+  timetable and observed oběhy), debug endpoints. Phase B (2026-10-21): the vehicle registry
   (`obehy ref import`: our own list over the DÚK register and PID model seeds; keys by source ID,
   plate, EVN or series number), live attributes from PID, DÚK, DPMD, MPVnet and Arriva,
   co-located reports of two sources paired into one vehicle, precedence curated > live >
@@ -308,6 +309,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-30** — API made coherent before the GUI grows. History moved under the trip
+  (`trips/<id>/history`, the journey key history recorded it under, every trip ID it had),
+  with per-stop on-time share, median, p90 and worst delay in place of the line's mean
+  (`lines/…/punctuality` and `journeys/…` removed). `lines/<id>/timetable[?date=]` is the
+  printed JŘ: per direction one merged stop order (no trip dropped), each trip a column with its
+  codes, notes, calendar text and `service_id` (dates in `calendars`), arrival/departure,
+  boarding, flags and passes. Oběhy served as observed: `vehicles/<id>/days` and
+  `trips/…/circulation` (plus the feed's block, PID's only), cut live by the nightly job's own
+  rule, now `history.vehicle_chains` (migration 0025; job output identical on both dev dates).
+  Dev DB: S9 timetable 1.0 s, 795 KiB raw (nginx gzips); circulation 1 s. Not yet: learned
+  tours, history under plate-bound registry IDs.
 - **2026-10-30** — Station pairing is decided once per release at activation
   (`release/pairing.py`, policy `data/stops/station-pairing-v1.toml`, migration 0024) into
   `control.station_pairing`, read through `active.stop_group`; search groups in SQL with exact

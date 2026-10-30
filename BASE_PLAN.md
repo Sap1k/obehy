@@ -1638,6 +1638,13 @@ circulation_edge
     returns (seasonal and holiday versions).
   - Each activation runs this check as one SQL statement.
 - CZPTT and GTFS `block_key` are used directly where present; they are static, not learned.
+  CZPTT's names the train path (its run's parts), not a circulation.
+- **Served** (section 30): the observed layer as `vehicles/<id>/days` and
+  `trips/…/circulation`, cut live from `history.vehicle_assignment` by the nightly job's own
+  rule (`history.vehicle_chains`), so today is there too. History knows a vehicle by its
+  source's ID; `history.vehicle_of` maps it to the registry by source-ID keys only, so a
+  vehicle recognised only by plate, co-location or train has no history under its registry ID
+  yet.
 
 Uses:
 
@@ -2108,17 +2115,25 @@ PID, DÚK, SŽ or another provider.
                                             308 to the trip a source key names
 /api/v1/trips/…/composition?from=<location> pending | fresh | stale | not_available:
                                             units with spans, segments (section 28)
-/api/v1/journeys/<namespace>/<key>/history  recorded runs: actual times and delays
+/api/v1/trips/<trip_id>/<service_date>/circulation
+                                            its oběh that day: the vehicles that worked it,
+                                            each with its chain; the feed's block (section 22)
+/api/v1/trips/<trip_id>/history             its journey's recorded runs under every trip ID
+                                            it had: actual times, delays, vehicles; per stop
+                                            the on-time share, median and 90th percentile
 /api/v1/lines?q=…                           search
 /api/v1/lines/<route_id>                    validity, integrated systems, features and notes;
                                             the date's trips, first and last departure, and
                                             stop patterns
-/api/v1/lines/<route_id>/timetable          per stop pattern, each trip's times at its stops
+/api/v1/lines/<route_id>/timetable[?date=]  the printed timetable: per direction one stop
+                                            order, every trip a column with its codes,
+                                            notes and calendar text, arrival and departure,
+                                            boarding and passing per stop
 /api/v1/lines/<route_id>/trips              the date's trips, realtime state and vehicles
-/api/v1/lines/<route_id>/punctuality        from history, per hour and per stop
 /api/v1/vehicles?bbox=…[&include=unmatched,not_in_service]
 /api/v1/vehicles/<vehicle_id>               state, registry entry, source reports and how each
                                             was bound, attributes with every statement
+/api/v1/vehicles/<vehicle_id>/days          its oběhy: the journeys it worked, day by day
 /api/v1/alerts?line=…|stop=…|trip=…[&at=…]  current alerts by scope; /alerts/<id> any
 
 /api/v1/debug/release                       the active release, packages, loads, activations
@@ -2132,6 +2147,9 @@ PID, DÚK, SŽ or another provider.
 /api/v1/debug/static/trips/<trip_id>        the raw static codes behind the readable features
 ```
 
+- **Punctuality is a journey's,** never a line's or a stop's: a line's journeys differ too
+  much to share one figure. A trip's history gives, per stop, how its journey ran over the
+  days as a distribution (on-time share, median, 90th percentile, worst).
 - **Trips are identified by the feed's `trip_id` and the service date;** vehicles by their
   vehicle ID. Source keys (`cis:line_trip`, `pid:gtfs_trip_id`, `czptt:train_number`, …) are
   lookup aliases only, answered with a redirect, and a trip's preferred journey key is an

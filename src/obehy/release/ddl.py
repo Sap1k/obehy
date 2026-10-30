@@ -140,6 +140,8 @@ INDEXES = (
     Index(
         "trip_call_location_arrival", "trip_call", ("load_id", "location_id", "scheduled_arrival")
     ),
+    # Migration 0025: a trip's static block, for its circulation.
+    Index("trip_block", "trip", ("load_id", "block_key")),
 )
 
 

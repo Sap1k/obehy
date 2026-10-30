@@ -16,6 +16,7 @@ from starlette.exceptions import HTTPException
 from obehy.api import (
     alerts,
     boards,
+    circulations,
     compositions,
     debug,
     lines,
@@ -96,6 +97,17 @@ def create_app(
     app.add_exception_handler(ParameterError, _parameter_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(NoActiveRelease, _no_release)
-    for module in (status, stops, boards, trips, compositions, lines, vehicles, alerts, debug):
+    for module in (
+        status,
+        stops,
+        boards,
+        trips,
+        compositions,
+        circulations,
+        lines,
+        vehicles,
+        alerts,
+        debug,
+    ):
         app.include_router(module.router, prefix=PREFIX)
     return app

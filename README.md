@@ -274,8 +274,9 @@ uv run obehy api serve --port 8000          # http://127.0.0.1:8000/api/v1/docs
 It answers under `/api/v1`: `status`; `stops?q=|bbox=|near=`; `stop-places/<id>` with its
 `departures` and `arrivals` (and `departures|arrivals?stops=a,b` for several, paged by `next`);
 `trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/<key>/<service_date>`, which
-redirects) with its `composition?from=` (asked of the worker: 202 until answered); `journeys/<namespace>/<key>/history`; `lines?q=`, `lines/<route_id>` with its
-`timetable`, `trips` and `punctuality`; `vehicles?bbox=` and `vehicles/<vehicle_id>`;
+redirects) with its `composition?from=` (asked of the worker: 202 until answered) and
+`circulation`, and `trips/<trip_id>/history`; `lines?q=`, `lines/<route_id>` with its
+`timetable[?date=]` and `trips`; `vehicles?bbox=`, `vehicles/<vehicle_id>` and its `days`;
 `alerts?line=|stop=|trip=` and `alerts/<id>`; and
 `debug/…` (raw rows, uncached, shapes may change). The interactive docs are
 `/api/v1/docs`; the OpenAPI document is

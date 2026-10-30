@@ -644,30 +644,73 @@ class LineDetail(Envelope):
     patterns: list[Pattern]
 
 
+class TimetableStop(BaseModel):
+    """A row of a direction's timetable: a stop the direction's trips call at or pass."""
+
+    location_id: str
+    name: str
+    occurrence: int = Field(description="1, or 2 and on for a loop's later visit of the stop")
+    features: list[Feature] = Field(description="The stop's own codes (facilities, interchanges)")
+
+
+class TimetableCell(BaseModel):
+    """A trip at one row of the timetable."""
+
+    passes: bool = Field(description="It runs through without stopping (the printed `|`)")
+    arrival_s: int | None = Field(
+        description="Scheduled arrival in seconds of the service day, as GTFS counts (24:30 is"
+        " 88 200)"
+    )
+    departure_s: int | None = Field(description="Scheduled departure, as `arrival_s`")
+    arrival: Time | None = Field(description="The arrival on the requested date only")
+    departure: Time | None = Field(description="The departure on the requested date only")
+    boarding: Boarding
+    alighting: Boarding
+    flags: list[str] = Field(description="Request stop, on request, boarding or exit only, …")
+    platform: str | None
+
+
 class TimetableTrip(BaseModel):
+    """A column of the timetable."""
+
     trip_id: str
-    trip_short_name: str | None
+    trip_short_name: str | None = Field(description="The spoj or train number")
     headsign: str | None
-    wheelchair_accessible: bool | None
-    bikes_allowed: bool | None
-    times: list[Time | None] = Field(
-        description="Scheduled departure at each of the pattern's stops (arrival at the last)"
+    service_id: str = Field(description="Its calendar: its dates are the timetable's `calendars`")
+    operates: list[Label] = Field(description="The calendar designations, as printed")
+    wheelchair: WheelchairAmenity | None
+    bicycles: BicycleAmenity | None
+    features: list[Feature] = Field(
+        description="The trip's codes and notes, of the whole trip, its calls and its service"
+    )
+    notes: list[Note]
+    cells: list[TimetableCell | None] = Field(
+        description="At each of the direction's stops in order; null: not on its way"
     )
 
 
-class TimetablePattern(BaseModel):
-    headsign: str | None
-    direction: int | None
-    stops: list[PatternStop]
-    trips: list[TimetableTrip]
+class TimetableDirection(BaseModel):
+    direction: int | None = Field(description="The feed's direction (0 or 1), when it has one")
+    headsign: str | None = Field(description="The most common headsign of its trips")
+    stops: list[TimetableStop]
+    trips: list[TimetableTrip] = Field(description="By first departure")
 
 
 class LineTimetable(Envelope):
+    """A printed timetable (JŘ): every trip of the line running on the date, or with no date on
+    any date from today on, read with its calendar designations."""
+
     line: Line
-    service_date: date
-    patterns: list[TimetablePattern] = Field(
-        description="Per stop sequence, its trips by first departure: a timetable's columns"
+    runs_from: date | None
+    runs_until: date | None
+    service_date: date | None = Field(description="The date asked for; null: every date")
+    features: list[Feature] = Field(description="What the timetable states for the whole line")
+    notes: list[Note]
+    calendars: dict[str, list[date]] = Field(
+        description="Per `service_id`, the dates it runs that the timetable covers: what a"
+        " calendar designation says, for trips (CZPTT's) that print none"
     )
+    directions: list[TimetableDirection]
 
 
 class LineTrip(BaseModel):
@@ -703,31 +746,106 @@ class HistoryDay(BaseModel):
     service_date: date
     trip_id: str
     cancelled: bool = Field(description="A source cancelled it and no vehicle was seen running it")
+    vehicles: list[str] = Field(description="The vehicles that worked it (`vehicle_id`)")
     calls: list[HistoryCall]
 
 
+class HistoryStop(BaseModel):
+    """How late the journey was at one stop over the recorded days: its departure, at the
+    terminus its arrival."""
+
+    location_id: str
+    name: str
+    runs: int = Field(description="Days with an actual time here")
+    on_time_share: float | None = Field(description="Share within the on-time band of the limits")
+    median_delay_s: int | None
+    p90_delay_s: int | None = Field(description="Nine runs in ten were no later than this")
+    max_delay_s: int | None
+
+
 class TripHistory(Envelope):
+    """A trip's journey (its timetable-stable key) as it ran: under this trip ID and the IDs of
+    earlier timetable versions alike."""
+
+    trip_id: str
     journey: JourneyKey
-    days: list[HistoryDay]
-
-
-class PunctualityBucket(BaseModel):
-    key: str = Field(description="The hour (00 to 23) or the stop's location_id")
-    name: str | None
-    events: int
-    on_time_share: float = Field(description="Share within the on-time band of the limits")
-    mean_delay_s: float
-
-
-class LinePunctuality(Envelope):
-    line: Line
     since: date
     until: date
-    journeys: int
-    events: int
-    on_time_share: float | None
-    by_hour: list[PunctualityBucket]
-    by_stop: list[PunctualityBucket]
+    days: list[HistoryDay] = Field(description="Latest first")
+    cancelled: int = Field(description="Days it was cancelled")
+    stops: list[HistoryStop] = Field(description="Per stop, in call order")
+
+
+class ChainJourney(BaseModel):
+    """One journey of a vehicle's working day, as history recorded it."""
+
+    journey: JourneyKey
+    service_date: date
+    trip_id: str | None = Field(description="Its trip ID then; may be of an earlier release")
+    line: Line | None = Field(description="Its line, when the trip is in the active release")
+    route_name: str | None
+    headsign: str | None
+    origin: str | None
+    departure: Time | None = Field(description="Scheduled, at the first passenger call")
+    destination: str | None
+    arrival: Time | None = Field(description="Scheduled, at the last passenger call")
+    first_seen: Time = Field(description="When the vehicle was first seen on it")
+    last_seen: Time
+    layover_s: int | None = Field(description="From the previous journey's last sighting")
+
+
+class VehicleChain(BaseModel):
+    """An oběh as observed: the journeys one vehicle worked in a row, split at long gaps."""
+
+    vehicle_id: str
+    source: str
+    source_vehicle_id: str
+    first_seen: Time
+    last_seen: Time
+    journeys: list[ChainJourney]
+
+
+class VehicleDay(BaseModel):
+    service_date: date = Field(description="A chain's date is its first journey's")
+    chains: list[VehicleChain]
+
+
+class VehicleDays(Envelope):
+    vehicle_id: str
+    since: date
+    until: date
+    days: list[VehicleDay] = Field(description="Latest first; only days it worked")
+
+
+class BlockTrip(BaseModel):
+    trip_id: str
+    service_date: date
+    line: Line
+    trip_short_name: str | None
+    headsign: str | None
+    origin: str
+    departure: Time | None
+    destination: str
+    arrival: Time | None
+
+
+class PlannedCirculation(BaseModel):
+    source: Literal["block"] = Field(description="Where the plan comes from: the feed's block")
+    trips: list[BlockTrip] = Field(description="In order, this trip among them")
+
+
+class ObservedCirculation(VehicleChain):
+    position: int = Field(description="This trip's place in `journeys`, from 0")
+
+
+class Circulation(Envelope):
+    """A trip's oběh on a date: the vehicles that worked it, each with its whole chain that
+    day, and the feed's own plan where it has one."""
+
+    trip_id: str
+    service_date: date
+    observed: list[ObservedCirculation]
+    planned: PlannedCirculation | None
 
 
 class SourceHealth(BaseModel):

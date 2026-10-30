@@ -401,6 +401,7 @@ def client(
         "actual_stop_event",
         "journey_link",
         "journey_cancellation",
+        "vehicle_assignment",
     ):
         connection.execute(
             f"CREATE TABLE history.{table}_test PARTITION OF history.{table}"
@@ -443,6 +444,20 @@ def client(
         "INSERT INTO history.journey_cancellation VALUES ('jdf', 'cis:line_trip', '000001:1',"
         " '2026-10-06', 'pid', '2026-10-06 05:55+02', '2026-10-06 05:55+02',"
         " '2026-10-06 06:01+02', (SELECT min(derivation_id) FROM history.derivation))"
+    )
+    # Bus 1001 ran that journey and then one not in the release; MPVnet saw the bus on it by
+    # its plate, a binding history does not keep.
+    connection.execute(
+        "INSERT INTO history.vehicle_assignment VALUES"
+        " ('jdf', 'duk', '1001', 'cis:line_trip', '000001:1', '2026-10-06',"
+        "  '2026-10-06 05:58+02', '2026-10-06 06:16+02', 'keyed',"
+        "  (SELECT min(derivation_id) FROM history.derivation)),"
+        " ('jdf', 'duk', '1001', 'cis:line_trip', '000009:9', '2026-10-06',"
+        "  '2026-10-06 06:30+02', '2026-10-06 07:00+02', 'keyed',"
+        "  (SELECT min(derivation_id) FROM history.derivation)),"
+        " ('jdf', 'mpvnet', '4U1 2345', 'cis:line_trip', '000001:1', '2026-10-06',"
+        "  '2026-10-06 05:59+02', '2026-10-06 06:15+02', 'keyed',"
+        "  (SELECT min(derivation_id) FROM history.derivation))"
     )
     # Train 6600 continues as 6601 and continued from 6599 (neither in the release).
     connection.execute(
@@ -676,14 +691,15 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/trips/by-key/{namespace}/{key}/{service_date}",
         "/api/v1/trips/{trip_id}/{service_date}",
         "/api/v1/trips/{trip_id}/{service_date}/composition",
-        "/api/v1/journeys/{namespace}/{key}/history",
+        "/api/v1/trips/{trip_id}/{service_date}/circulation",
+        "/api/v1/trips/{trip_id}/history",
         "/api/v1/lines",
         "/api/v1/lines/{route_id}",
         "/api/v1/lines/{route_id}/timetable",
         "/api/v1/lines/{route_id}/trips",
-        "/api/v1/lines/{route_id}/punctuality",
         "/api/v1/vehicles",
         "/api/v1/vehicles/{vehicle_id}",
+        "/api/v1/vehicles/{vehicle_id}/days",
         "/api/v1/alerts",
         "/api/v1/alerts/{alert_id}",
         "/api/v1/debug/release",
@@ -832,11 +848,37 @@ def test_a_line_overview_timetable_and_live_trips(client: TestClient) -> None:
         "2026-10-06T00:30:00+02:00",
     )
     assert [s["location_id"] for s in pattern["stops"]] == ["jdf:stop:1", "jdf:stop:2"]
-    (columns,) = _get(client, "/lines/jdf:route:000001/timetable", date="2026-10-05")["patterns"]
-    assert [(t["trip_id"], t["times"]) for t in columns["trips"]] == [
-        ("jdf:trip:1", ["2026-10-05T06:00:00+02:00", "2026-10-05T06:15:00+02:00"]),
-        ("jdf:trip:2", ["2026-10-06T00:30:00+02:00", "2026-10-06T00:45:00+02:00"]),
+    timetable = _get(client, "/lines/jdf:route:000001/timetable", date="2026-10-05")
+    assert [f["kinds"] for f in timetable["features"]] == [["integrated_transport"]]
+    (direction,) = timetable["directions"]
+    assert [s["location_id"] for s in direction["stops"]] == ["jdf:stop:1", "jdf:stop:2"]
+    assert [f["kinds"] for f in direction["stops"][0]["features"]] == [
+        ["toilet"],
+        ["wheelchair_accessible"],
     ]
+    first, last = direction["trips"]
+    assert (first["trip_id"], last["trip_id"]) == ("jdf:trip:1", "jdf:trip:2")
+    assert timetable["calendars"] == {first["service_id"]: ["2026-10-05"]}
+    # Trip 1's codes: X (working days), @, O, and T on request at Nový Bor.
+    assert [o["cs"] for o in first["operates"]] == ["jede v pracovních dnech"]
+    assert (first["wheelchair"], first["bicycles"]) == ("accessible", "allowed")
+    assert [(c["departure_s"], c["departure"], c["flags"]) for c in first["cells"]] == [
+        (21600, "2026-10-05T06:00:00+02:00", []),
+        (22500, "2026-10-05T06:15:00+02:00", ["on_request"]),
+    ]
+    assert [(c["departure_s"], c["departure"]) for c in last["cells"]] == [
+        (88200, "2026-10-06T00:30:00+02:00"),
+        (89100, "2026-10-06T00:45:00+02:00"),
+    ]
+    # With no date, every date from today on: times of day only.
+    undated = _get(client, "/lines/jdf:route:000001/timetable")
+    assert undated["service_date"] is None
+    assert all(
+        c is None or c["departure"] is None
+        for d in undated["directions"]
+        for t in d["trips"]
+        for c in t["cells"]
+    )
     trips = _get(client, "/lines/jdf:route:000001/trips", date="2026-10-06")["trips"]
     assert [
         (t["trip_id"], t["lifecycle"], t["delay_s"], [v["vehicle_id"] for v in t["vehicles"]])
@@ -863,24 +905,58 @@ def test_connections_and_journey_links_of_a_trip(client: TestClient) -> None:
     ]
 
 
-def test_history_and_punctuality_from_recorded_runs(client: TestClient) -> None:
-    history = _get(
-        client, "/journeys/cis:line_trip/000001:1/history", since="2026-10-01", until="2026-10-07"
-    )
+def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> None:
+    span: dict[str, Any] = {"since": "2026-10-01", "until": "2026-10-07"}
+    history = _get(client, "/trips/jdf:trip:1/history", **span)
+    assert history["journey"] == {"namespace": "cis:line_trip", "key": "000001:1"}
     (day,) = history["days"]
+    # Run under the trip ID of an earlier timetable version: the same journey.
     assert (day["service_date"], day["trip_id"]) == ("2026-10-06", "jdf:trip:old")
     assert day["cancelled"] is False  # cancelled, then seen running
+    assert day["vehicles"] == ["duk:1001", "mpvnet:4U1 2345"]
     assert [(c["departure_delay_s"], c["arrival_delay_s"]) for c in day["calls"]] == [
         (120, None),
         (None, 60),
     ]
-    punctuality = _get(
-        client, "/lines/jdf:route:000001/punctuality", since="2026-10-01", until="2026-10-07"
-    )
-    assert (punctuality["journeys"], punctuality["events"]) == (1, 1)
-    assert punctuality["on_time_share"] == 1.0
-    assert [(b["key"], b["mean_delay_s"]) for b in punctuality["by_hour"]] == [("06", 120.0)]
-    _get(client, "/lines/jdf:route:000001/punctuality", 422, since="2026-01-01")
+    # Departure delays, at the terminus the arrival's.
+    assert [
+        (s["location_id"], s["runs"], s["on_time_share"], s["median_delay_s"], s["p90_delay_s"])
+        for s in history["stops"]
+    ] == [("jdf:stop:1", 1, 1.0, 120, 120), ("jdf:stop:2", 1, 1.0, 60, 60)]
+    assert history["cancelled"] == 0
+    old = _get(client, "/trips/jdf:trip:old/history", **span)
+    assert old["journey"] == history["journey"] and old["days"] == history["days"]
+    _get(client, "/trips/jdf:trip:nope/history", 404, **span)
+    _get(client, "/trips/jdf:trip:1/history", 422, since="2026-01-01")
+    _get(client, "/journeys/cis:line_trip/000001:1/history", 404)
+    _get(client, "/lines/jdf:route:000001/punctuality", 404)
+
+
+def test_a_trips_circulation_and_a_vehicles_days(client: TestClient) -> None:
+    circulation = _get(client, "/trips/jdf:trip:1/2026-10-06/circulation")
+    assert circulation["planned"] is None
+    observed = {c["vehicle_id"]: c for c in circulation["observed"]}
+    assert sorted(observed) == ["duk:1001", "mpvnet:4U1 2345"]
+    bus = observed["duk:1001"]
+    assert bus["position"] == 0
+    assert [
+        (j["journey"]["key"], j["trip_id"], j["origin"], j["destination"], j["layover_s"])
+        for j in bus["journeys"]
+    ] == [
+        ("000001:1", "jdf:trip:old", "Česká Lípa,,aut.nádr.", "Nový Bor,,nám.", None),
+        ("000009:9", None, None, None, 840),
+    ]
+    assert bus["journeys"][0]["departure"] == "2026-10-06T06:00:00+02:00"
+    assert bus["journeys"][0]["line"] is None  # its trip is of an earlier release
+    days = _get(client, "/vehicles/duk:1001/days", since="2026-10-01", until="2026-10-07")
+    (day,) = days["days"]
+    (chain,) = day["chains"]
+    assert day["service_date"] == "2026-10-06"
+    assert chain["journeys"] == bus["journeys"]
+    nothing = _get(client, "/vehicles/duk:1002/days", since="2026-10-01", until="2026-10-07")
+    assert nothing["days"] == []
+    assert _get(client, "/trips/jdf:trip:1/2026-10-05/circulation")["observed"] == []
+    _get(client, "/trips/jdf:trip:1/2026-10-12/circulation", 404)
 
 
 def test_debug_shows_a_journey_and_its_parts(client: TestClient) -> None:

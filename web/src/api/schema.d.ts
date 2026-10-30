@@ -259,23 +259,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/journeys/{namespace}/{key}/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A journey's recorded runs: actual times and delays per service date */
-        get: operations["journey_history_api_v1_journeys__namespace___key__history_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/lines": {
         parameters: {
             query?: never;
@@ -310,23 +293,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/lines/{route_id}/punctuality": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** How punctual a line's departures were, from history */
-        get: operations["line_punctuality_api_v1_lines__route_id__punctuality_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/lines/{route_id}/timetable": {
         parameters: {
             query?: never;
@@ -334,7 +300,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A line's timetable on a date: per stop sequence, each trip's times at its stops */
+        /** A line's printed timetable: per direction, every trip with its codes and calls */
         get: operations["line_timetable_api_v1_lines__route_id__timetable_get"];
         put?: never;
         post?: never;
@@ -463,6 +429,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/trips/{trip_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A trip's journey as it ran: actual times and delays per date, and per stop */
+        get: operations["trip_history_api_v1_trips__trip_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/trips/{trip_id}/{service_date}": {
         parameters: {
             query?: never;
@@ -472,6 +455,23 @@ export interface paths {
         };
         /** A trip on a service date: calls, realtime, amenities, connections */
         get: operations["trip_api_v1_trips__trip_id___service_date__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/trips/{trip_id}/{service_date}/circulation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A trip's oběh on a date: the vehicles that worked it and their day, and the plan */
+        get: operations["trip_circulation_api_v1_trips__trip_id___service_date__circulation_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -523,6 +523,23 @@ export interface paths {
         };
         /** A vehicle: its current state, registry entry, source reports and attributes */
         get: operations["vehicle_api_v1_vehicles__vehicle_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vehicles/{vehicle_id}/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A vehicle's oběhy: the journeys it worked, day by day */
+        get: operations["vehicle_days_api_v1_vehicles__vehicle_id__days_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -731,6 +748,29 @@ export interface components {
              */
             until: string;
         };
+        /** BlockTrip */
+        BlockTrip: {
+            /** Arrival */
+            arrival: string | null;
+            /** Departure */
+            departure: string | null;
+            /** Destination */
+            destination: string;
+            /** Headsign */
+            headsign: string | null;
+            line: components["schemas"]["Line"];
+            /** Origin */
+            origin: string;
+            /**
+             * Service Date
+             * Format: date
+             */
+            service_date: string;
+            /** Trip Id */
+            trip_id: string;
+            /** Trip Short Name */
+            trip_short_name: string | null;
+        };
         /** BoardingPoint */
         BoardingPoint: {
             /** Latitude */
@@ -743,6 +783,86 @@ export interface components {
             name: string;
             /** Public Code */
             public_code: string | null;
+        };
+        /**
+         * ChainJourney
+         * @description One journey of a vehicle's working day, as history recorded it.
+         */
+        ChainJourney: {
+            /**
+             * Arrival
+             * @description Scheduled, at the last passenger call
+             */
+            arrival: string | null;
+            /**
+             * Departure
+             * @description Scheduled, at the first passenger call
+             */
+            departure: string | null;
+            /** Destination */
+            destination: string | null;
+            /**
+             * First Seen
+             * Format: date-time
+             * @description When the vehicle was first seen on it
+             */
+            first_seen: string;
+            /** Headsign */
+            headsign: string | null;
+            journey: components["schemas"]["JourneyKey"];
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /**
+             * Layover S
+             * @description From the previous journey's last sighting
+             */
+            layover_s: number | null;
+            /** @description Its line, when the trip is in the active release */
+            line: components["schemas"]["Line"] | null;
+            /** Origin */
+            origin: string | null;
+            /** Route Name */
+            route_name: string | null;
+            /**
+             * Service Date
+             * Format: date
+             */
+            service_date: string;
+            /**
+             * Trip Id
+             * @description Its trip ID then; may be of an earlier release
+             */
+            trip_id: string | null;
+        };
+        /**
+         * Circulation
+         * @description A trip's oběh on a date: the vehicles that worked it, each with its whole chain that
+         *     day, and the feed's own plan where it has one.
+         */
+        Circulation: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Observed */
+            observed: components["schemas"]["ObservedCirculation"][];
+            planned: components["schemas"]["PlannedCirculation"] | null;
+            /**
+             * Release Id
+             * @description The active release the answer was read from.
+             */
+            release_id: string;
+            /**
+             * Service Date
+             * Format: date
+             */
+            service_date: string;
+            /** Trip Id */
+            trip_id: string;
         };
         /**
          * Composition
@@ -1157,6 +1277,41 @@ export interface components {
             service_date: string;
             /** Trip Id */
             trip_id: string;
+            /**
+             * Vehicles
+             * @description The vehicles that worked it (`vehicle_id`)
+             */
+            vehicles: string[];
+        };
+        /**
+         * HistoryStop
+         * @description How late the journey was at one stop over the recorded days: its departure, at the
+         *     terminus its arrival.
+         */
+        HistoryStop: {
+            /** Location Id */
+            location_id: string;
+            /** Max Delay S */
+            max_delay_s: number | null;
+            /** Median Delay S */
+            median_delay_s: number | null;
+            /** Name */
+            name: string;
+            /**
+             * On Time Share
+             * @description Share within the on-time band of the limits
+             */
+            on_time_share: number | null;
+            /**
+             * P90 Delay S
+             * @description Nine runs in ten were no later than this
+             */
+            p90_delay_s: number | null;
+            /**
+             * Runs
+             * @description Days with an actual time here
+             */
+            runs: number;
         };
         /**
          * IntegratedSystem
@@ -1269,69 +1424,54 @@ export interface components {
              */
             service_date: string;
         };
-        /** LinePunctuality */
-        LinePunctuality: {
-            /** By Hour */
-            by_hour: components["schemas"]["PunctualityBucket"][];
-            /** By Stop */
-            by_stop: components["schemas"]["PunctualityBucket"][];
-            /** Events */
-            events: number;
-            /**
-             * Generated At
-             * Format: date-time
-             */
-            generated_at: string;
-            /** Journeys */
-            journeys: number;
-            line: components["schemas"]["Line"];
-            /** On Time Share */
-            on_time_share: number | null;
-            /**
-             * Release Id
-             * @description The active release the answer was read from.
-             */
-            release_id: string;
-            /**
-             * Since
-             * Format: date
-             */
-            since: string;
-            /**
-             * Until
-             * Format: date
-             */
-            until: string;
-        };
         /** LineSummary */
         LineSummary: {
             /** Agency */
             agency: string | null;
             line: components["schemas"]["Line"];
         };
-        /** LineTimetable */
+        /**
+         * LineTimetable
+         * @description A printed timetable (JŘ): every trip of the line running on the date, or with no date on
+         *     any date from today on, read with its calendar designations.
+         */
         LineTimetable: {
+            /**
+             * Calendars
+             * @description Per `service_id`, the dates it runs that the timetable covers: what a calendar designation says, for trips (CZPTT's) that print none
+             */
+            calendars: {
+                [key: string]: string[];
+            };
+            /** Directions */
+            directions: components["schemas"]["TimetableDirection"][];
+            /**
+             * Features
+             * @description What the timetable states for the whole line
+             */
+            features: components["schemas"]["Feature"][];
             /**
              * Generated At
              * Format: date-time
              */
             generated_at: string;
             line: components["schemas"]["Line"];
-            /**
-             * Patterns
-             * @description Per stop sequence, its trips by first departure: a timetable's columns
-             */
-            patterns: components["schemas"]["TimetablePattern"][];
+            /** Notes */
+            notes: components["schemas"]["Note"][];
             /**
              * Release Id
              * @description The active release the answer was read from.
              */
             release_id: string;
+            /** Runs From */
+            runs_from: string | null;
+            /** Runs Until */
+            runs_until: string | null;
             /**
              * Service Date
-             * Format: date
+             * @description The date asked for; null: every date
              */
-            service_date: string;
+            service_date: string | null;
         };
         /** LineTrip */
         LineTrip: {
@@ -1413,6 +1553,32 @@ export interface components {
              */
             text: string | null;
         };
+        /** ObservedCirculation */
+        ObservedCirculation: {
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /** Journeys */
+            journeys: components["schemas"]["ChainJourney"][];
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /**
+             * Position
+             * @description This trip's place in `journeys`, from 0
+             */
+            position: number;
+            /** Source */
+            source: string;
+            /** Source Vehicle Id */
+            source_vehicle_id: string;
+            /** Vehicle Id */
+            vehicle_id: string;
+        };
         /**
          * Pattern
          * @description One stop sequence the line runs (passenger calls), with the trips of the date on it.
@@ -1458,6 +1624,20 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** PlannedCirculation */
+        PlannedCirculation: {
+            /**
+             * Source
+             * @description Where the plan comes from: the feed's block
+             * @constant
+             */
+            source: "block";
+            /**
+             * Trips
+             * @description In order, this trip among them
+             */
+            trips: components["schemas"]["BlockTrip"][];
+        };
         /**
          * Problem
          * @description An error (RFC 9457 problem details).
@@ -1474,25 +1654,6 @@ export interface components {
              * @default about:blank
              */
             type: string;
-        };
-        /** PunctualityBucket */
-        PunctualityBucket: {
-            /** Events */
-            events: number;
-            /**
-             * Key
-             * @description The hour (00 to 23) or the stop's location_id
-             */
-            key: string;
-            /** Mean Delay S */
-            mean_delay_s: number;
-            /** Name */
-            name: string | null;
-            /**
-             * On Time Share
-             * @description Share within the on-time band of the limits
-             */
-            on_time_share: number;
         };
         /**
          * RealtimeFreshness
@@ -1700,34 +1861,134 @@ export interface components {
             /** Stops */
             stops: components["schemas"]["Stop"][];
         };
-        /** TimetablePattern */
-        TimetablePattern: {
-            /** Direction */
+        /**
+         * TimetableCell
+         * @description A trip at one row of the timetable.
+         */
+        TimetableCell: {
+            /**
+             * Alighting
+             * @enum {string}
+             */
+            alighting: "regular" | "none" | "phone" | "ask_driver";
+            /**
+             * Arrival
+             * @description The arrival on the requested date only
+             */
+            arrival: string | null;
+            /**
+             * Arrival S
+             * @description Scheduled arrival in seconds of the service day, as GTFS counts (24:30 is 88 200)
+             */
+            arrival_s: number | null;
+            /**
+             * Boarding
+             * @enum {string}
+             */
+            boarding: "regular" | "none" | "phone" | "ask_driver";
+            /**
+             * Departure
+             * @description The departure on the requested date only
+             */
+            departure: string | null;
+            /**
+             * Departure S
+             * @description Scheduled departure, as `arrival_s`
+             */
+            departure_s: number | null;
+            /**
+             * Flags
+             * @description Request stop, on request, boarding or exit only, …
+             */
+            flags: string[];
+            /**
+             * Passes
+             * @description It runs through without stopping (the printed `|`)
+             */
+            passes: boolean;
+            /** Platform */
+            platform: string | null;
+        };
+        /** TimetableDirection */
+        TimetableDirection: {
+            /**
+             * Direction
+             * @description The feed's direction (0 or 1), when it has one
+             */
             direction: number | null;
-            /** Headsign */
+            /**
+             * Headsign
+             * @description The most common headsign of its trips
+             */
             headsign: string | null;
             /** Stops */
-            stops: components["schemas"]["PatternStop"][];
-            /** Trips */
+            stops: components["schemas"]["TimetableStop"][];
+            /**
+             * Trips
+             * @description By first departure
+             */
             trips: components["schemas"]["TimetableTrip"][];
         };
-        /** TimetableTrip */
+        /**
+         * TimetableStop
+         * @description A row of a direction's timetable: a stop the direction's trips call at or pass.
+         */
+        TimetableStop: {
+            /**
+             * Features
+             * @description The stop's own codes (facilities, interchanges)
+             */
+            features: components["schemas"]["Feature"][];
+            /** Location Id */
+            location_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Occurrence
+             * @description 1, or 2 and on for a loop's later visit of the stop
+             */
+            occurrence: number;
+        };
+        /**
+         * TimetableTrip
+         * @description A column of the timetable.
+         */
         TimetableTrip: {
-            /** Bikes Allowed */
-            bikes_allowed: boolean | null;
+            /** Bicycles */
+            bicycles: ("prohibited" | "reservation_required" | "reservation_available" | "allowed") | null;
+            /**
+             * Cells
+             * @description At each of the direction's stops in order; null: not on its way
+             */
+            cells: (components["schemas"]["TimetableCell"] | null)[];
+            /**
+             * Features
+             * @description The trip's codes and notes, of the whole trip, its calls and its service
+             */
+            features: components["schemas"]["Feature"][];
             /** Headsign */
             headsign: string | null;
+            /** Notes */
+            notes: components["schemas"]["Note"][];
             /**
-             * Times
-             * @description Scheduled departure at each of the pattern's stops (arrival at the last)
+             * Operates
+             * @description The calendar designations, as printed
              */
-            times: (string | null)[];
+            operates: components["schemas"]["Label"][];
+            /**
+             * Service Id
+             * @description Its calendar: its dates are the timetable's `calendars`
+             */
+            service_id: string;
             /** Trip Id */
             trip_id: string;
-            /** Trip Short Name */
+            /**
+             * Trip Short Name
+             * @description The spoj or train number
+             */
             trip_short_name: string | null;
-            /** Wheelchair Accessible */
-            wheelchair_accessible: boolean | null;
+            /** Wheelchair */
+            wheelchair: ("booking_required" | "booking_recommended" | "accessible" | "partly") | null;
         };
         /** Trip */
         Trip: {
@@ -1837,9 +2098,21 @@ export interface components {
              */
             status: "scheduled" | "predicted" | "actual" | "inferred" | "no_realtime" | "cancelled";
         };
-        /** TripHistory */
+        /**
+         * TripHistory
+         * @description A trip's journey (its timetable-stable key) as it ran: under this trip ID and the IDs of
+         *     earlier timetable versions alike.
+         */
         TripHistory: {
-            /** Days */
+            /**
+             * Cancelled
+             * @description Days it was cancelled
+             */
+            cancelled: number;
+            /**
+             * Days
+             * @description Latest first
+             */
             days: components["schemas"]["HistoryDay"][];
             /**
              * Generated At
@@ -1852,6 +2125,23 @@ export interface components {
              * @description The active release the answer was read from.
              */
             release_id: string;
+            /**
+             * Since
+             * Format: date
+             */
+            since: string;
+            /**
+             * Stops
+             * @description Per stop, in call order
+             */
+            stops: components["schemas"]["HistoryStop"][];
+            /** Trip Id */
+            trip_id: string;
+            /**
+             * Until
+             * Format: date
+             */
+            until: string;
         };
         /** TripPart */
         TripPart: {
@@ -2049,6 +2339,71 @@ export interface components {
              * @description true/false, digits or text, by the attribute's type
              */
             value: string;
+        };
+        /**
+         * VehicleChain
+         * @description An oběh as observed: the journeys one vehicle worked in a row, split at long gaps.
+         */
+        VehicleChain: {
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /** Journeys */
+            journeys: components["schemas"]["ChainJourney"][];
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Source */
+            source: string;
+            /** Source Vehicle Id */
+            source_vehicle_id: string;
+            /** Vehicle Id */
+            vehicle_id: string;
+        };
+        /** VehicleDay */
+        VehicleDay: {
+            /** Chains */
+            chains: components["schemas"]["VehicleChain"][];
+            /**
+             * Service Date
+             * Format: date
+             * @description A chain's date is its first journey's
+             */
+            service_date: string;
+        };
+        /** VehicleDays */
+        VehicleDays: {
+            /**
+             * Days
+             * @description Latest first; only days it worked
+             */
+            days: components["schemas"]["VehicleDay"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Release Id
+             * @description The active release the answer was read from.
+             */
+            release_id: string;
+            /**
+             * Since
+             * Format: date
+             */
+            since: string;
+            /**
+             * Until
+             * Format: date
+             */
+            until: string;
+            /** Vehicle Id */
+            vehicle_id: string;
         };
         /** VehicleDetail */
         VehicleDetail: {
@@ -2677,43 +3032,6 @@ export interface operations {
             };
         };
     };
-    journey_history_api_v1_journeys__namespace___key__history_get: {
-        parameters: {
-            query?: {
-                /** @description First service date */
-                since?: string | null;
-                /** @description Last service date; default today */
-                until?: string | null;
-            };
-            header?: never;
-            path: {
-                namespace: string;
-                key: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TripHistory"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     lines_api_v1_lines_get: {
         parameters: {
             query: {
@@ -2792,55 +3110,10 @@ export interface operations {
             };
         };
     };
-    line_punctuality_api_v1_lines__route_id__punctuality_get: {
-        parameters: {
-            query?: {
-                /** @description First service date */
-                since?: string | null;
-                /** @description Last service date; default today */
-                until?: string | null;
-            };
-            header?: never;
-            path: {
-                route_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LinePunctuality"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     line_timetable_api_v1_lines__route_id__timetable_get: {
         parameters: {
             query?: {
-                /** @description Service date; default today */
+                /** @description Only the trips of this date; default all */
                 date?: string | null;
             };
             header?: never;
@@ -3172,6 +3445,51 @@ export interface operations {
             };
         };
     };
+    trip_history_api_v1_trips__trip_id__history_get: {
+        parameters: {
+            query?: {
+                /** @description First service date */
+                since?: string | null;
+                /** @description Last service date; default today */
+                until?: string | null;
+            };
+            header?: never;
+            path: {
+                trip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TripHistory"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     trip_api_v1_trips__trip_id___service_date__get: {
         parameters: {
             query?: {
@@ -3212,6 +3530,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoneTrip"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trip_circulation_api_v1_trips__trip_id___service_date__circulation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trip_id: string;
+                service_date: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Circulation"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description Validation Error */
@@ -3345,6 +3704,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    vehicle_days_api_v1_vehicles__vehicle_id__days_get: {
+        parameters: {
+            query?: {
+                /** @description First service date */
+                since?: string | null;
+                /** @description Last service date; default today */
+                until?: string | null;
+            };
+            header?: never;
+            path: {
+                vehicle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VehicleDays"];
                 };
             };
             /** @description Validation Error */

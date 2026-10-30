@@ -2,11 +2,13 @@
 
 A trip ID lasts one timetable version of its line (BASE_PLAN.md section 6). One from an older
 version answers 410 with the journey it ran as (from history), whose key `by-key` resolves
-against the active release. A journey's recorded runs are under `journeys/…/history`.
+against the active release. A trip's `history` is its journey's recorded runs, under every trip
+ID that journey had; its `circulation` the oběh it was part of (`circulations.py`).
 """
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Annotated
@@ -27,6 +29,7 @@ from obehy.api.common import (
     realtime_cache,
     trip_vehicle,
 )
+from obehy.api.limits import Limits
 from obehy.api.params import date_span
 from obehy.realtime.times import local_date
 
@@ -109,6 +112,120 @@ def _realtime(row: DictRow) -> schema.TripRealtime:
             schema.RealtimeSource.model_validate(s | {"label": codes.source(s["source"])})
             for s in row["sources"]
         ],
+    )
+
+
+def _delay(actual: datetime | None, scheduled: datetime | None) -> int | None:
+    if actual is None or scheduled is None:
+        return None
+    return round((actual - scheduled).total_seconds())
+
+
+def _percentile(ordered: list[int], share: float) -> int:
+    """The nearest-rank percentile of sorted values: the least value at least `share` of them
+    are no later than."""
+
+    return ordered[max(0, math.ceil(share * len(ordered)) - 1)]
+
+
+def _stops(days: list[schema.HistoryDay], limits: Limits) -> list[schema.HistoryStop]:
+    """Per stop, how late the journey was over the days: its departure, at its last call its
+    arrival. Stops in the call order of the latest day that calls there."""
+
+    names: dict[str, str] = {}
+    delays: defaultdict[str, list[int]] = defaultdict(list)
+    for day in days:
+        for n, call in enumerate(day.calls):
+            names.setdefault(call.location_id, call.name)
+            last = n == len(day.calls) - 1
+            delay = call.arrival_delay_s if last else call.departure_delay_s
+            if delay is not None:
+                delays[call.location_id].append(delay)
+    stops: list[schema.HistoryStop] = []
+    for location_id, name in names.items():
+        found = sorted(delays[location_id])
+        on_time = [d for d in found if limits.on_time_early_s <= d <= limits.on_time_late_s]
+        stops.append(
+            schema.HistoryStop(
+                location_id=location_id,
+                name=name,
+                runs=len(found),
+                on_time_share=len(on_time) / len(found) if found else None,
+                median_delay_s=_percentile(found, 0.5) if found else None,
+                p90_delay_s=_percentile(found, 0.9) if found else None,
+                max_delay_s=found[-1] if found else None,
+            )
+        )
+    return stops
+
+
+# Before the trip itself: `/trips/{trip_id}/{service_date}` would read `history` as a date.
+@router.get(
+    "/trips/{trip_id}/history",
+    response_model=schema.TripHistory,
+    responses={404: {"model": schema.Problem}},
+    summary="A trip's journey as it ran: actual times and delays per date, and per stop",
+)
+def trip_history(
+    response: Response,
+    snap: SnapshotDep,
+    limits: LimitsDep,
+    trip_id: str,
+    since: Annotated[date | None, Query(description="First service date")] = None,
+    until: Annotated[date | None, Query(description="Last service date; default today")] = None,
+) -> schema.TripHistory:
+    realtime_cache(response, limits)
+    start, end = date_span(
+        since,
+        until,
+        local_date(snap.now),
+        limits.history_default_days,
+        limits.history_max_days,
+    )
+    span = {"since": start, "until": end}
+    found = snap.one(
+        "trip_journey_key", span | {"trip_id": trip_id, "namespaces": JOURNEY_NAMESPACES}
+    )
+    if found is None:
+        raise HTTPException(404, f"no journey of {trip_id} is known")
+    journey = schema.JourneyKey(namespace=found["namespace"], key=found["key"])
+    keyed = span | {"namespace": journey.namespace, "key": journey.key}
+    vehicles = {r["service_date"]: r["vehicles"] for r in snap.all("journey_vehicles", keyed)}
+    seen: dict[date, tuple[str, bool]] = {}  # per service date: its trip, whether cancelled
+    calls: defaultdict[date, list[schema.HistoryCall]] = defaultdict(list)
+    for r in snap.all("trip_history", keyed):
+        seen.setdefault(r["service_date"], (r["trip_id"], r["cancelled"]))
+        calls[r["service_date"]].append(
+            schema.HistoryCall(
+                location_id=r["location_id"],
+                name=r["name"],
+                scheduled_arrival=r["scheduled_arrival"],
+                scheduled_departure=r["scheduled_departure"],
+                actual_arrival=r["actual_arrival"],
+                actual_departure=r["actual_departure"],
+                arrival_delay_s=_delay(r["actual_arrival"], r["scheduled_arrival"]),
+                departure_delay_s=_delay(r["actual_departure"], r["scheduled_departure"]),
+            )
+        )
+    days = [
+        schema.HistoryDay(
+            service_date=day,
+            trip_id=trip,
+            cancelled=cancelled,
+            vehicles=vehicles.get(day, []),
+            calls=calls[day],
+        )
+        for day, (trip, cancelled) in seen.items()
+    ]
+    return schema.TripHistory(
+        **envelope(snap),
+        trip_id=trip_id,
+        journey=journey,
+        since=start,
+        until=end,
+        days=days,
+        cancelled=sum(d.cancelled for d in days),
+        stops=_stops(days, limits),
     )
 
 
@@ -234,63 +351,4 @@ def trip(
             trip=trip_id,
         ),
         shape=shape,
-    )
-
-
-def _delay(actual: datetime | None, scheduled: datetime | None) -> int | None:
-    if actual is None or scheduled is None:
-        return None
-    return round((actual - scheduled).total_seconds())
-
-
-@router.get(
-    "/journeys/{namespace}/{key}/history",
-    response_model=schema.TripHistory,
-    summary="A journey's recorded runs: actual times and delays per service date",
-)
-def journey_history(
-    response: Response,
-    snap: SnapshotDep,
-    limits: LimitsDep,
-    namespace: str,
-    key: str,
-    since: Annotated[date | None, Query(description="First service date")] = None,
-    until: Annotated[date | None, Query(description="Last service date; default today")] = None,
-) -> schema.TripHistory:
-    realtime_cache(response, limits)
-    start, end = date_span(
-        since,
-        until,
-        local_date(snap.now),
-        limits.history_default_days,
-        limits.history_max_days,
-    )
-    rows = snap.all(
-        "trip_history", {"namespace": namespace, "key": key, "since": start, "until": end}
-    )
-    days: dict[date, tuple[str, bool]] = {}  # per service date: its trip, whether cancelled
-    calls: defaultdict[date, list[schema.HistoryCall]] = defaultdict(list)
-    for r in rows:
-        days.setdefault(r["service_date"], (r["trip_id"], r["cancelled"]))
-        calls[r["service_date"]].append(
-            schema.HistoryCall(
-                location_id=r["location_id"],
-                name=r["name"],
-                scheduled_arrival=r["scheduled_arrival"],
-                scheduled_departure=r["scheduled_departure"],
-                actual_arrival=r["actual_arrival"],
-                actual_departure=r["actual_departure"],
-                arrival_delay_s=_delay(r["actual_arrival"], r["scheduled_arrival"]),
-                departure_delay_s=_delay(r["actual_departure"], r["scheduled_departure"]),
-            )
-        )
-    return schema.TripHistory(
-        **envelope(snap),
-        journey=schema.JourneyKey(namespace=namespace, key=key),
-        days=[
-            schema.HistoryDay(
-                service_date=day, trip_id=trip_id, cancelled=cancelled, calls=calls[day]
-            )
-            for day, (trip_id, cancelled) in days.items()
-        ],
     )

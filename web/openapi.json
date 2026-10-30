@@ -443,6 +443,89 @@
         "title": "Arrivals",
         "type": "object"
       },
+      "BlockTrip": {
+        "properties": {
+          "arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival"
+          },
+          "departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departure"
+          },
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Short Name"
+          }
+        },
+        "required": [
+          "trip_id",
+          "service_date",
+          "line",
+          "trip_short_name",
+          "headsign",
+          "origin",
+          "departure",
+          "destination",
+          "arrival"
+        ],
+        "title": "BlockTrip",
+        "type": "object"
+      },
       "BoardingPoint": {
         "properties": {
           "latitude": {
@@ -495,6 +578,203 @@
           "longitude"
         ],
         "title": "BoardingPoint",
+        "type": "object"
+      },
+      "ChainJourney": {
+        "description": "One journey of a vehicle's working day, as history recorded it.",
+        "properties": {
+          "arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled, at the last passenger call",
+            "title": "Arrival"
+          },
+          "departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled, at the first passenger call",
+            "title": "Departure"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "first_seen": {
+            "description": "When the vehicle was first seen on it",
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "journey": {
+            "$ref": "#/components/schemas/JourneyKey"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "layover_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the previous journey's last sighting",
+            "title": "Layover S"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Line"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its line, when the trip is in the active release"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "route_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Name"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "trip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its trip ID then; may be of an earlier release",
+            "title": "Trip Id"
+          }
+        },
+        "required": [
+          "journey",
+          "service_date",
+          "trip_id",
+          "line",
+          "route_name",
+          "headsign",
+          "origin",
+          "departure",
+          "destination",
+          "arrival",
+          "first_seen",
+          "last_seen",
+          "layover_s"
+        ],
+        "title": "ChainJourney",
+        "type": "object"
+      },
+      "Circulation": {
+        "description": "A trip's oběh on a date: the vehicles that worked it, each with its whole chain that\nday, and the feed's own plan where it has one.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "observed": {
+            "items": {
+              "$ref": "#/components/schemas/ObservedCirculation"
+            },
+            "title": "Observed",
+            "type": "array"
+          },
+          "planned": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlannedCirculation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "service_date": {
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "trip_id",
+          "service_date",
+          "observed",
+          "planned"
+        ],
+        "title": "Circulation",
         "type": "object"
       },
       "Composition": {
@@ -1536,15 +1816,99 @@
           "trip_id": {
             "title": "Trip Id",
             "type": "string"
+          },
+          "vehicles": {
+            "description": "The vehicles that worked it (`vehicle_id`)",
+            "items": {
+              "type": "string"
+            },
+            "title": "Vehicles",
+            "type": "array"
           }
         },
         "required": [
           "service_date",
           "trip_id",
           "cancelled",
+          "vehicles",
           "calls"
         ],
         "title": "HistoryDay",
+        "type": "object"
+      },
+      "HistoryStop": {
+        "description": "How late the journey was at one stop over the recorded days: its departure, at the\nterminus its arrival.",
+        "properties": {
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "max_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Delay S"
+          },
+          "median_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Delay S"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "on_time_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Share within the on-time band of the limits",
+            "title": "On Time Share"
+          },
+          "p90_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nine runs in ten were no later than this",
+            "title": "P90 Delay S"
+          },
+          "runs": {
+            "description": "Days with an actual time here",
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "runs",
+          "on_time_share",
+          "median_delay_s",
+          "p90_delay_s",
+          "max_delay_s"
+        ],
+        "title": "HistoryStop",
         "type": "object"
       },
       "IntegratedSystem": {
@@ -1881,80 +2245,6 @@
         "title": "LineDetail",
         "type": "object"
       },
-      "LinePunctuality": {
-        "properties": {
-          "by_hour": {
-            "items": {
-              "$ref": "#/components/schemas/PunctualityBucket"
-            },
-            "title": "By Hour",
-            "type": "array"
-          },
-          "by_stop": {
-            "items": {
-              "$ref": "#/components/schemas/PunctualityBucket"
-            },
-            "title": "By Stop",
-            "type": "array"
-          },
-          "events": {
-            "title": "Events",
-            "type": "integer"
-          },
-          "generated_at": {
-            "format": "date-time",
-            "title": "Generated At",
-            "type": "string"
-          },
-          "journeys": {
-            "title": "Journeys",
-            "type": "integer"
-          },
-          "line": {
-            "$ref": "#/components/schemas/Line"
-          },
-          "on_time_share": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "On Time Share"
-          },
-          "release_id": {
-            "description": "The active release the answer was read from.",
-            "title": "Release Id",
-            "type": "string"
-          },
-          "since": {
-            "format": "date",
-            "title": "Since",
-            "type": "string"
-          },
-          "until": {
-            "format": "date",
-            "title": "Until",
-            "type": "string"
-          }
-        },
-        "required": [
-          "release_id",
-          "generated_at",
-          "line",
-          "since",
-          "until",
-          "journeys",
-          "events",
-          "on_time_share",
-          "by_hour",
-          "by_stop"
-        ],
-        "title": "LinePunctuality",
-        "type": "object"
-      },
       "LineSummary": {
         "properties": {
           "agency": {
@@ -1980,7 +2270,35 @@
         "type": "object"
       },
       "LineTimetable": {
+        "description": "A printed timetable (JŘ): every trip of the line running on the date, or with no date on\nany date from today on, read with its calendar designations.",
         "properties": {
+          "calendars": {
+            "additionalProperties": {
+              "items": {
+                "format": "date",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Per `service_id`, the dates it runs that the timetable covers: what a calendar designation says, for trips (CZPTT's) that print none",
+            "title": "Calendars",
+            "type": "object"
+          },
+          "directions": {
+            "items": {
+              "$ref": "#/components/schemas/TimetableDirection"
+            },
+            "title": "Directions",
+            "type": "array"
+          },
+          "features": {
+            "description": "What the timetable states for the whole line",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
           "generated_at": {
             "format": "date-time",
             "title": "Generated At",
@@ -1989,12 +2307,11 @@
           "line": {
             "$ref": "#/components/schemas/Line"
           },
-          "patterns": {
-            "description": "Per stop sequence, its trips by first departure: a timetable's columns",
+          "notes": {
             "items": {
-              "$ref": "#/components/schemas/TimetablePattern"
+              "$ref": "#/components/schemas/Note"
             },
-            "title": "Patterns",
+            "title": "Notes",
             "type": "array"
           },
           "release_id": {
@@ -2002,18 +2319,55 @@
             "title": "Release Id",
             "type": "string"
           },
+          "runs_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runs From"
+          },
+          "runs_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runs Until"
+          },
           "service_date": {
-            "format": "date",
-            "title": "Service Date",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The date asked for; null: every date",
+            "title": "Service Date"
           }
         },
         "required": [
           "release_id",
           "generated_at",
           "line",
+          "runs_from",
+          "runs_until",
           "service_date",
-          "patterns"
+          "features",
+          "notes",
+          "calendars",
+          "directions"
         ],
         "title": "LineTimetable",
         "type": "object"
@@ -2236,6 +2590,55 @@
         "title": "Note",
         "type": "object"
       },
+      "ObservedCirculation": {
+        "properties": {
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "journeys": {
+            "items": {
+              "$ref": "#/components/schemas/ChainJourney"
+            },
+            "title": "Journeys",
+            "type": "array"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "position": {
+            "description": "This trip's place in `journeys`, from 0",
+            "title": "Position",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_vehicle_id": {
+            "title": "Source Vehicle Id",
+            "type": "string"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "source",
+          "source_vehicle_id",
+          "first_seen",
+          "last_seen",
+          "journeys",
+          "position"
+        ],
+        "title": "ObservedCirculation",
+        "type": "object"
+      },
       "Pattern": {
         "description": "One stop sequence the line runs (passenger calls), with the trips of the date on it.",
         "properties": {
@@ -2366,6 +2769,30 @@
         "title": "PatternStop",
         "type": "object"
       },
+      "PlannedCirculation": {
+        "properties": {
+          "source": {
+            "const": "block",
+            "description": "Where the plan comes from: the feed's block",
+            "title": "Source",
+            "type": "string"
+          },
+          "trips": {
+            "description": "In order, this trip among them",
+            "items": {
+              "$ref": "#/components/schemas/BlockTrip"
+            },
+            "title": "Trips",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source",
+          "trips"
+        ],
+        "title": "PlannedCirculation",
+        "type": "object"
+      },
       "Problem": {
         "description": "An error (RFC 9457 problem details).",
         "properties": {
@@ -2399,48 +2826,6 @@
           "status"
         ],
         "title": "Problem",
-        "type": "object"
-      },
-      "PunctualityBucket": {
-        "properties": {
-          "events": {
-            "title": "Events",
-            "type": "integer"
-          },
-          "key": {
-            "description": "The hour (00 to 23) or the stop's location_id",
-            "title": "Key",
-            "type": "string"
-          },
-          "mean_delay_s": {
-            "title": "Mean Delay S",
-            "type": "number"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "on_time_share": {
-            "description": "Share within the on-time band of the limits",
-            "title": "On Time Share",
-            "type": "number"
-          }
-        },
-        "required": [
-          "key",
-          "name",
-          "events",
-          "on_time_share",
-          "mean_delay_s"
-        ],
-        "title": "PunctualityBucket",
         "type": "object"
       },
       "RealtimeFreshness": {
@@ -2972,7 +3357,119 @@
         "title": "Stops",
         "type": "object"
       },
-      "TimetablePattern": {
+      "TimetableCell": {
+        "description": "A trip at one row of the timetable.",
+        "properties": {
+          "alighting": {
+            "enum": [
+              "regular",
+              "none",
+              "phone",
+              "ask_driver"
+            ],
+            "title": "Alighting",
+            "type": "string"
+          },
+          "arrival": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The arrival on the requested date only",
+            "title": "Arrival"
+          },
+          "arrival_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled arrival in seconds of the service day, as GTFS counts (24:30 is 88 200)",
+            "title": "Arrival S"
+          },
+          "boarding": {
+            "enum": [
+              "regular",
+              "none",
+              "phone",
+              "ask_driver"
+            ],
+            "title": "Boarding",
+            "type": "string"
+          },
+          "departure": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The departure on the requested date only",
+            "title": "Departure"
+          },
+          "departure_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scheduled departure, as `arrival_s`",
+            "title": "Departure S"
+          },
+          "flags": {
+            "description": "Request stop, on request, boarding or exit only, …",
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "passes": {
+            "description": "It runs through without stopping (the printed `|`)",
+            "title": "Passes",
+            "type": "boolean"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          }
+        },
+        "required": [
+          "passes",
+          "arrival_s",
+          "departure_s",
+          "arrival",
+          "departure",
+          "boarding",
+          "alighting",
+          "flags",
+          "platform"
+        ],
+        "title": "TimetableCell",
+        "type": "object"
+      },
+      "TimetableDirection": {
         "properties": {
           "direction": {
             "anyOf": [
@@ -2983,6 +3480,7 @@
                 "type": "null"
               }
             ],
+            "description": "The feed's direction (0 or 1), when it has one",
             "title": "Direction"
           },
           "headsign": {
@@ -2994,16 +3492,18 @@
                 "type": "null"
               }
             ],
+            "description": "The most common headsign of its trips",
             "title": "Headsign"
           },
           "stops": {
             "items": {
-              "$ref": "#/components/schemas/PatternStop"
+              "$ref": "#/components/schemas/TimetableStop"
             },
             "title": "Stops",
             "type": "array"
           },
           "trips": {
+            "description": "By first departure",
             "items": {
               "$ref": "#/components/schemas/TimetableTrip"
             },
@@ -3012,26 +3512,90 @@
           }
         },
         "required": [
-          "headsign",
           "direction",
+          "headsign",
           "stops",
           "trips"
         ],
-        "title": "TimetablePattern",
+        "title": "TimetableDirection",
+        "type": "object"
+      },
+      "TimetableStop": {
+        "description": "A row of a direction's timetable: a stop the direction's trips call at or pass.",
+        "properties": {
+          "features": {
+            "description": "The stop's own codes (facilities, interchanges)",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "location_id": {
+            "title": "Location Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "occurrence": {
+            "description": "1, or 2 and on for a loop's later visit of the stop",
+            "title": "Occurrence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location_id",
+          "name",
+          "occurrence",
+          "features"
+        ],
+        "title": "TimetableStop",
         "type": "object"
       },
       "TimetableTrip": {
+        "description": "A column of the timetable.",
         "properties": {
-          "bikes_allowed": {
+          "bicycles": {
             "anyOf": [
               {
-                "type": "boolean"
+                "enum": [
+                  "prohibited",
+                  "reservation_required",
+                  "reservation_available",
+                  "allowed"
+                ],
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Bikes Allowed"
+            "title": "Bicycles"
+          },
+          "cells": {
+            "description": "At each of the direction's stops in order; null: not on its way",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TimetableCell"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "features": {
+            "description": "The trip's codes and notes, of the whole trip, its calls and its service",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            },
+            "title": "Features",
+            "type": "array"
           },
           "headsign": {
             "anyOf": [
@@ -3044,21 +3608,25 @@
             ],
             "title": "Headsign"
           },
-          "times": {
-            "description": "Scheduled departure at each of the pattern's stops (arrival at the last)",
+          "notes": {
             "items": {
-              "anyOf": [
-                {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/Note"
             },
-            "title": "Times",
+            "title": "Notes",
             "type": "array"
+          },
+          "operates": {
+            "description": "The calendar designations, as printed",
+            "items": {
+              "$ref": "#/components/schemas/Label"
+            },
+            "title": "Operates",
+            "type": "array"
+          },
+          "service_id": {
+            "description": "Its calendar: its dates are the timetable's `calendars`",
+            "title": "Service Id",
+            "type": "string"
           },
           "trip_id": {
             "title": "Trip Id",
@@ -3073,27 +3641,38 @@
                 "type": "null"
               }
             ],
+            "description": "The spoj or train number",
             "title": "Trip Short Name"
           },
-          "wheelchair_accessible": {
+          "wheelchair": {
             "anyOf": [
               {
-                "type": "boolean"
+                "enum": [
+                  "booking_required",
+                  "booking_recommended",
+                  "accessible",
+                  "partly"
+                ],
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Wheelchair Accessible"
+            "title": "Wheelchair"
           }
         },
         "required": [
           "trip_id",
           "trip_short_name",
           "headsign",
-          "wheelchair_accessible",
-          "bikes_allowed",
-          "times"
+          "service_id",
+          "operates",
+          "wheelchair",
+          "bicycles",
+          "features",
+          "notes",
+          "cells"
         ],
         "title": "TimetableTrip",
         "type": "object"
@@ -3471,8 +4050,15 @@
         "type": "object"
       },
       "TripHistory": {
+        "description": "A trip's journey (its timetable-stable key) as it ran: under this trip ID and the IDs of\nearlier timetable versions alike.",
         "properties": {
+          "cancelled": {
+            "description": "Days it was cancelled",
+            "title": "Cancelled",
+            "type": "integer"
+          },
           "days": {
+            "description": "Latest first",
             "items": {
               "$ref": "#/components/schemas/HistoryDay"
             },
@@ -3491,13 +4077,40 @@
             "description": "The active release the answer was read from.",
             "title": "Release Id",
             "type": "string"
+          },
+          "since": {
+            "format": "date",
+            "title": "Since",
+            "type": "string"
+          },
+          "stops": {
+            "description": "Per stop, in call order",
+            "items": {
+              "$ref": "#/components/schemas/HistoryStop"
+            },
+            "title": "Stops",
+            "type": "array"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          },
+          "until": {
+            "format": "date",
+            "title": "Until",
+            "type": "string"
           }
         },
         "required": [
           "release_id",
           "generated_at",
+          "trip_id",
           "journey",
-          "days"
+          "since",
+          "until",
+          "days",
+          "cancelled",
+          "stops"
         ],
         "title": "TripHistory",
         "type": "object"
@@ -4050,6 +4663,119 @@
           "statements"
         ],
         "title": "VehicleAttributeValue",
+        "type": "object"
+      },
+      "VehicleChain": {
+        "description": "An oběh as observed: the journeys one vehicle worked in a row, split at long gaps.",
+        "properties": {
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "journeys": {
+            "items": {
+              "$ref": "#/components/schemas/ChainJourney"
+            },
+            "title": "Journeys",
+            "type": "array"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_vehicle_id": {
+            "title": "Source Vehicle Id",
+            "type": "string"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "source",
+          "source_vehicle_id",
+          "first_seen",
+          "last_seen",
+          "journeys"
+        ],
+        "title": "VehicleChain",
+        "type": "object"
+      },
+      "VehicleDay": {
+        "properties": {
+          "chains": {
+            "items": {
+              "$ref": "#/components/schemas/VehicleChain"
+            },
+            "title": "Chains",
+            "type": "array"
+          },
+          "service_date": {
+            "description": "A chain's date is its first journey's",
+            "format": "date",
+            "title": "Service Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_date",
+          "chains"
+        ],
+        "title": "VehicleDay",
+        "type": "object"
+      },
+      "VehicleDays": {
+        "properties": {
+          "days": {
+            "description": "Latest first; only days it worked",
+            "items": {
+              "$ref": "#/components/schemas/VehicleDay"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          },
+          "since": {
+            "format": "date",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date",
+            "title": "Until",
+            "type": "string"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "vehicle_id",
+          "since",
+          "until",
+          "days"
+        ],
+        "title": "VehicleDays",
         "type": "object"
       },
       "VehicleDetail": {
@@ -5303,95 +6029,6 @@
         ]
       }
     },
-    "/api/v1/journeys/{namespace}/{key}/history": {
-      "get": {
-        "operationId": "journey_history_api_v1_journeys__namespace___key__history_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "namespace",
-            "required": true,
-            "schema": {
-              "title": "Namespace",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "key",
-            "required": true,
-            "schema": {
-              "title": "Key",
-              "type": "string"
-            }
-          },
-          {
-            "description": "First service date",
-            "in": "query",
-            "name": "since",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "First service date",
-              "title": "Since"
-            }
-          },
-          {
-            "description": "Last service date; default today",
-            "in": "query",
-            "name": "until",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Last service date; default today",
-              "title": "Until"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TripHistory"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "A journey's recorded runs: actual times and delays per service date",
-        "tags": [
-          "trips"
-        ]
-      }
-    },
     "/api/v1/lines": {
       "get": {
         "operationId": "lines_api_v1_lines_get",
@@ -5542,96 +6179,6 @@
         ]
       }
     },
-    "/api/v1/lines/{route_id}/punctuality": {
-      "get": {
-        "operationId": "line_punctuality_api_v1_lines__route_id__punctuality_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "route_id",
-            "required": true,
-            "schema": {
-              "title": "Route Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "First service date",
-            "in": "query",
-            "name": "since",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "First service date",
-              "title": "Since"
-            }
-          },
-          {
-            "description": "Last service date; default today",
-            "in": "query",
-            "name": "until",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Last service date; default today",
-              "title": "Until"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LinePunctuality"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "How punctual a line's departures were, from history",
-        "tags": [
-          "lines"
-        ]
-      }
-    },
     "/api/v1/lines/{route_id}/timetable": {
       "get": {
         "operationId": "line_timetable_api_v1_lines__route_id__timetable_get",
@@ -5646,7 +6193,7 @@
             }
           },
           {
-            "description": "Service date; default today",
+            "description": "Only the trips of this date; default all",
             "in": "query",
             "name": "date",
             "required": false,
@@ -5660,7 +6207,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Service date; default today",
+              "description": "Only the trips of this date; default all",
               "title": "Date"
             }
           }
@@ -5697,7 +6244,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "A line's timetable on a date: per stop sequence, each trip's times at its stops",
+        "summary": "A line's printed timetable: per direction, every trip with its codes and calls",
         "tags": [
           "lines"
         ]
@@ -6332,6 +6879,96 @@
         ]
       }
     },
+    "/api/v1/trips/{trip_id}/history": {
+      "get": {
+        "operationId": "trip_history_api_v1_trips__trip_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First service date",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First service date",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "Last service date; default today",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last service date; default today",
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A trip's journey as it ran: actual times and delays per date, and per stop",
+        "tags": [
+          "trips"
+        ]
+      }
+    },
     "/api/v1/trips/{trip_id}/{service_date}": {
       "get": {
         "operationId": "trip_api_v1_trips__trip_id___service_date__get",
@@ -6417,6 +7054,68 @@
           }
         },
         "summary": "A trip on a service date: calls, realtime, amenities, connections",
+        "tags": [
+          "trips"
+        ]
+      }
+    },
+    "/api/v1/trips/{trip_id}/{service_date}/circulation": {
+      "get": {
+        "operationId": "trip_circulation_api_v1_trips__trip_id___service_date__circulation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "service_date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Service Date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Circulation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A trip's oběh on a date: the vehicles that worked it and their day, and the plan",
         "tags": [
           "trips"
         ]
@@ -6683,6 +7382,86 @@
           }
         },
         "summary": "A vehicle: its current state, registry entry, source reports and attributes",
+        "tags": [
+          "vehicles"
+        ]
+      }
+    },
+    "/api/v1/vehicles/{vehicle_id}/days": {
+      "get": {
+        "operationId": "vehicle_days_api_v1_vehicles__vehicle_id__days_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vehicle_id",
+            "required": true,
+            "schema": {
+              "title": "Vehicle Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First service date",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First service date",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "Last service date; default today",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last service date; default today",
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehicleDays"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "A vehicle's oběhy: the journeys it worked, day by day",
         "tags": [
           "vehicles"
         ]

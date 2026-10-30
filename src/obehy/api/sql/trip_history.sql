@@ -4,7 +4,7 @@
 WITH latest AS (
     SELECT DISTINCT ON (s.service_date) s.feed, s.service_date, s.revision, s.trip_id
     FROM history.journey_schedule s
-    WHERE s.key_namespace = %(namespace)s AND s.key = %(key)s
+    WHERE s.feed IN ('jdf', 'czptt') AND s.key_namespace = %(namespace)s AND s.key = %(key)s
         AND s.service_date BETWEEN %(since)s AND %(until)s
     ORDER BY s.service_date, s.revision DESC
 ),
