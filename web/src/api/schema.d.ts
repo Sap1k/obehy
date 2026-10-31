@@ -62,7 +62,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A source's oběhy on a date, of some companies (and modes) or of one route */
+        /** A source's oběhy on a date, of some companies (and modes), one route or vehicle */
         get: operations["circulations_api_v1_circulations_get"];
         put?: never;
         post?: never;
@@ -966,6 +966,8 @@ export interface components {
             service_date: string;
             /** Source */
             source: string;
+            /** Source Vehicle Id */
+            source_vehicle_id: string | null;
             /**
              * Vehicles
              * @description By first sighting
@@ -1390,6 +1392,11 @@ export interface components {
              * @description The vehicles that worked it (`vehicle_id`)
              */
             vehicles: string[];
+            /**
+             * Worked By
+             * @description The same, per source report, with what follows it to its oběh
+             */
+            worked_by: components["schemas"]["HistoryVehicle"][];
         };
         /**
          * HistoryStop
@@ -1420,6 +1427,27 @@ export interface components {
              * @description Days with an actual time here
              */
             runs: number;
+        };
+        /**
+         * HistoryVehicle
+         * @description A source's report of a vehicle that worked the journey that day.
+         */
+        HistoryVehicle: {
+            /** Fleet Number */
+            fleet_number: string | null;
+            /**
+             * Physical
+             * @description The source's ID names a physical vehicle on the journey's mode: its oběh that day can be followed (`/circulations?source_vehicle_id=`)
+             */
+            physical: boolean;
+            /** Public Label */
+            public_label: string | null;
+            /** Source */
+            source: string;
+            /** Source Vehicle Id */
+            source_vehicle_id: string;
+            /** Vehicle Id */
+            vehicle_id: string;
         };
         /**
          * IntegratedSystem
@@ -1946,6 +1974,16 @@ export interface components {
             /** Source */
             source: string;
         };
+        /**
+         * SourceVehicleRef
+         * @description A vehicle as one source names it.
+         */
+        SourceVehicleRef: {
+            /** Source */
+            source: string;
+            /** Source Vehicle Id */
+            source_vehicle_id: string;
+        };
         /** Status */
         Status: {
             /**
@@ -2384,6 +2422,8 @@ export interface components {
         TripVehicle: {
             /** Bearing */
             bearing: number | null;
+            /** @description The source report its oběh is under (`/circulations?source_vehicle_id=`), when it is physical */
+            followed_as?: components["schemas"]["SourceVehicleRef"] | null;
             /**
              * Last Seen
              * Format: date-time
@@ -2393,6 +2433,12 @@ export interface components {
             latitude: number | null;
             /** Longitude */
             longitude: number | null;
+            /**
+             * Physical
+             * @description Whether a source names it as a physical vehicle on this trip's mode (its oběh can be followed), not a run keyed by its trip or train number
+             * @default true
+             */
+            physical: boolean;
             /**
              * Position At
              * @description The source time of the position: a client keeps a newer one it already has
@@ -2655,6 +2701,12 @@ export interface components {
             label: components["schemas"]["Label"] | null;
             /** Last Seen */
             last_seen: string | null;
+            /**
+             * Physical
+             * @description Whether the source's ID names a physical vehicle on its current mode (its oběh can be followed), not a run keyed by its trip or train number
+             * @default true
+             */
+            physical: boolean;
             /** Source */
             source: string;
             /** Source Vehicle Id */
@@ -2868,6 +2920,8 @@ export interface operations {
                 mode?: string[] | null;
                 /** @description One route; or `agency_id` */
                 route_id?: string | null;
+                /** @description One of the source's vehicles; or a company or route */
+                source_vehicle_id?: string | null;
             };
             header?: never;
             path?: never;

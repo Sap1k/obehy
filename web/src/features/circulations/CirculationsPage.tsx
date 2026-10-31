@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Chip,
+  CloseButton,
   Group,
   MultiSelect,
   SegmentedControl,
@@ -20,12 +21,15 @@ import { addDays, dayKey, formatLongDay } from "../../lib/time";
 import type { CirculationsSearch } from "../../router";
 import { Timeline } from "./Timeline";
 import { LinePicker } from "./LinePicker";
-import { useCirculations, useScopes } from "./queries";
+import { scopeComplete, useCirculations, useScopes, type Scope } from "./queries";
 import { rowsOf, secondsOfDay, spanOf } from "./layout";
 import classes from "./CirculationsPage.module.css";
 
-// Oběhy: a source's vehicles on a date, each a row of the journeys it worked in a row, scoped
-// by company (one or more, then modes) or by route. The scope is the URL's, so a view links.
+// Oběhy: a source's vehicles on a date, each a row of the journeys it worked, scoped by company
+// (one or more, then modes), by route or by one vehicle. The scope is the URL's, so a view
+// links.
+
+type By = "dopravce" | "linka" | "vozidlo";
 
 const list = (text: string | undefined): string[] => (text ? text.split(",") : []);
 const joined = (values: string[]): string | undefined =>
@@ -72,24 +76,41 @@ export function CirculationsPage() {
   const sourceName =
     day.data?.sources.find((s) => s.source === source)?.label?.cs ?? source ?? "Zdroj";
   const byName = useMemo(() => companies(scopes.data), [scopes.data]);
-  const [by, setBy] = useState<"dopravce" | "linka">(search.linka ? "linka" : "dopravce");
+  // What the URL scopes by; with nothing chosen yet, the viewer's pick.
+  const [picked, setPicked] = useState<By>("dopravce");
+  const by: By = search.vozidlo
+    ? "vozidlo"
+    : search.linka
+      ? "linka"
+      : search.dopravce
+        ? "dopravce"
+        : picked;
+  // Choices of another date or source stand in while the day's load: they decide nothing.
+  const settled = scopes.data && !scopes.isPlaceholderData;
 
   // The URL's companies that the source has that day: others drop out of the scope.
   const known = new Set([...byName.values()].flatMap((c) => c.ids));
-  const agencyIds = list(search.dopravce).filter((id) => !scopes.data || known.has(id));
+  const agencyIds = list(search.dopravce).filter((id) => !settled || known.has(id));
   const chosen = [...byName].filter(([, c]) => c.ids.some((id) => agencyIds.includes(id)));
   const modesOffered = new Map<string, number>();
   for (const [, c] of chosen) {
     for (const [m, n] of c.modes) modesOffered.set(m, (modesOffered.get(m) ?? 0) + n);
   }
-  const modes = list(search.druh).filter((m) => modesOffered.has(m));
+  const modes = list(search.druh).filter((m) => !settled || modesOffered.has(m));
 
-  const scope = {
+  const scope: Scope = {
     source,
     date,
     agencyIds: by === "dopravce" ? agencyIds : [],
     modes: by === "dopravce" ? modes : [],
     routeId: by === "linka" ? search.linka : undefined,
+    vehicle: by === "vozidlo" ? search.vozidlo : undefined,
+  };
+  const scopeBy = (next: By) => {
+    setPicked(next);
+    if (next !== by) {
+      set({ dopravce: undefined, druh: undefined, linka: undefined, vozidlo: undefined });
+    }
   };
   const circulations = useCirculations(scope, date === today);
   const rows = useMemo(
@@ -104,11 +125,18 @@ export function CirculationsPage() {
   );
   const span = spanOf(rows);
   const [selected, setSelected] = useState<string | null>(null);
-  const complete = Boolean(source && (scope.routeId || scope.agencyIds.length > 0));
+  const complete = scopeComplete(scope);
+  // Asking for another scope or day (not today's refresh): the old answer is dimmed meanwhile.
+  const loading =
+    complete && (circulations.isPlaceholderData || (circulations.isPending && !circulations.data));
+  const company = chosen.map(([name]) => name).join(", ");
 
   return (
     <Panel label="Oběhy" wide>
       <div className={classes.page}>
+        {(loading || scopes.isPlaceholderData) && (
+          <div className={classes.progress} role="progressbar" aria-label="Načítání" />
+        )}
         <header className={classes.head}>
           <h1 className={classes.title}>Oběhy</h1>
           <span className={classes.day}>{formatLongDay(`${date}T12:00:00Z`)}</span>
@@ -154,15 +182,27 @@ export function CirculationsPage() {
             </Group>
             <SegmentedControl
               value={by}
-              onChange={(v) => setBy(v as "dopravce" | "linka")}
+              onChange={(v) => scopeBy(v as By)}
               data={[
                 { value: "dopravce", label: "Dopravce" },
                 { value: "linka", label: "Linka" },
+                ...(by === "vozidlo" ? [{ value: "vozidlo", label: "Vozidlo" }] : []),
               ]}
             />
           </Group>
 
-          {by === "dopravce" ? (
+          {by === "vozidlo" ? (
+            <div className={classes.chosenLine}>
+              <span className={classes.chosenVehicle}>
+                {sourceName} {search.vozidlo}
+              </span>
+              <CloseButton
+                className={classes.chosenClear}
+                onClick={() => scopeBy("dopravce")}
+                aria-label="Zrušit výběr vozidla"
+              />
+            </div>
+          ) : by === "dopravce" ? (
             <>
               <MultiSelect
                 aria-label="Dopravci"
@@ -181,7 +221,7 @@ export function CirculationsPage() {
                 searchable
                 clearable
                 nothingFoundMessage="Žádný dopravce"
-                disabled={!scopes.data}
+                disabled={!settled}
               />
               {modesOffered.size > 1 && (
                 <Chip.Group multiple value={modes} onChange={(v) => set({ druh: joined(v) })}>
@@ -204,16 +244,22 @@ export function CirculationsPage() {
           )}
 
           <Group gap="sm" justify="space-between">
-            <TextInput
-              aria-label="Vozidlo"
-              placeholder="Hledat vozidlo"
-              leftSection={<IconSearch size={16} stroke={2} />}
-              value={search.vuz ?? ""}
-              onChange={(e) => set({ vuz: e.currentTarget.value || undefined })}
-              w={220}
-            />
-            {circulations.data && complete && (
-              <span className={classes.count}>{vehiclesWord(rows.length)}</span>
+            {by === "vozidlo" ? (
+              <span />
+            ) : (
+              <TextInput
+                aria-label="Vozidlo"
+                placeholder="Hledat vozidlo"
+                leftSection={<IconSearch size={16} stroke={2} />}
+                value={search.vuz ?? ""}
+                onChange={(e) => set({ vuz: e.currentTarget.value || undefined })}
+                w={220}
+              />
+            )}
+            {complete && (circulations.data || loading) && (
+              <span className={classes.count}>
+                {loading ? "Načítám…" : vehiclesWord(rows.length)}
+              </span>
             )}
           </Group>
         </div>
@@ -223,6 +269,15 @@ export function CirculationsPage() {
             title="Vyberte, co zobrazit"
             text="Zvolte zdroj a dopravce (případně druhy dopravy), nebo zdroj a linku."
           />
+        ) : !circulations.data && loading ? (
+          <div className={classes.loading} aria-busy="true" aria-label="Načítání">
+            <p className={classes.loadingText}>
+              Načítám oběhy{company ? ` – ${company}` : ""}… U velkých dopravců to chvíli trvá.
+            </p>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} height={22} />
+            ))}
+          </div>
         ) : circulations.isError && !circulations.data ? (
           <BoardMessage
             title="Oběhy se nepodařilo načíst"
@@ -246,6 +301,7 @@ export function CirculationsPage() {
           />
         ) : (
           <Timeline
+            busy={loading}
             rows={rows}
             span={span}
             now={date === today ? secondsOfDay(date, now) : null}

@@ -97,6 +97,7 @@ describe("DepartureRow", () => {
       vehicle: {
         vehicle_id: "pid:1",
         state: "running",
+        physical: true,
         last_seen: first.scheduled,
         latitude: null,
         longitude: null,

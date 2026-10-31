@@ -1,62 +1,70 @@
-import { Modal, Skeleton, UnstyledButton } from "@mantine/core";
-import { IconChevronRight } from "@tabler/icons-react";
-import { useState } from "react";
-import { ApiError, type TripHistory } from "../../api/client";
+import { Modal, Select, Skeleton, UnstyledButton } from "@mantine/core";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { ApiError } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import {
-  delayScale,
+  delayTone,
   delayWords,
-  minuteTicks,
-  place,
-  rangeBar,
-  type HistoryStop,
-  type Scale,
+  segmentDays,
+  segmentSummary,
+  type HistoryCall,
+  type SegmentDay,
+  type TripHistory,
 } from "../../lib/history";
 import { usePhone } from "../../lib/layout";
 import { useTripHistory } from "./queries";
 import classes from "./History.module.css";
 
-// "Jak jezdí": how late the trip's journey was at each stop over the recorded days, in a
-// dialog, so the trip's own view stays as it is.
+// "Historie zpoždění": how late the trip's journey ran on each recorded day, between the stop
+// the rider boards at and the one they get off at, in a dialog, so the trip's own view stays as
+// it is.
 
+const weekdayDate = new Intl.DateTimeFormat("cs-CZ", {
+  weekday: "short",
+  day: "numeric",
+  month: "numeric",
+});
 const dayMonth = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric" });
 
-function shortDay(key: string): string {
-  return dayMonth.format(new Date(`${key}T12:00:00Z`));
-}
+const asDate = (key: string) => new Date(`${key}T12:00:00Z`);
 
-/** The link that opens the dialog; the history is asked for only once it is open. */
-export function HistoryLink({ tripId }: { tripId: string }) {
+/** The link that opens the dialog; the history is asked for only once it is open. `stopId` is
+ * where the trip was opened from (a board's stop): the segment starts there when it is one of
+ * the journey's stops. */
+export function HistoryLink({ tripId, stopId }: { tripId: string; stopId?: string }) {
   const [opened, setOpened] = useState(false);
   const phone = usePhone();
   return (
     <>
       <UnstyledButton className={classes.link} onClick={() => setOpened(true)}>
-        Jak jezdí
+        Historie zpoždění
         <IconChevronRight size={14} stroke={2} aria-hidden />
       </UnstyledButton>
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}
-        title="Jak jezdí"
+        title="Historie zpoždění"
         fullScreen={phone}
         size="lg"
         classNames={{ content: classes.dialog, header: classes.dialog, title: classes.dialogTitle }}
       >
-        {opened && <HistoryBody tripId={tripId} />}
+        {opened && <HistoryBody tripId={tripId} stopId={stopId} />}
       </Modal>
     </>
   );
 }
 
-function HistoryBody({ tripId }: { tripId: string }) {
+function HistoryBody({ tripId, stopId }: { tripId: string; stopId?: string }) {
   const query = useTripHistory(tripId, true);
   if (query.isPending) {
     return (
       <div className={classes.loading} aria-busy="true" aria-label="Načítání">
+        <Skeleton height={36} />
         <Skeleton height={18} width="60%" />
         {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} height={40} />
+          <Skeleton key={i} height={44} />
         ))}
       </div>
     );
@@ -75,115 +83,157 @@ function HistoryBody({ tripId }: { tripId: string }) {
       />
     );
   }
-  return <Stops history={query.data} />;
+  return <Days history={query.data} stopId={stopId} />;
 }
 
-function Stops({ history }: { history: TripHistory }) {
-  const span = `${shortDay(history.since)} – ${shortDay(history.until)}`;
-  const timed = history.stops.filter((s) => s.runs > 0);
-  const runs = history.days.length - history.cancelled;
-  const summary = [
-    span,
-    `${runs} ${runs === 1 ? "jízda" : runs >= 2 && runs <= 4 ? "jízdy" : "jízd"}`,
-    history.cancelled > 0 ? `${history.cancelled}× zrušeno` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  if (timed.length === 0) {
-    return (
-      <div className={classes.body}>
-        <p className={classes.summary}>{summary}</p>
-        <BoardMessage
-          title="Zatím žádné záznamy"
-          text="Za toto období nemáme skutečné časy průjezdu zastávkami."
-        />
-      </div>
-    );
-  }
-  const scale = delayScale(timed);
+function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
+  const last = history.stops.length - 1;
+  const boarded = history.stops.findIndex((s) => s.location_id === stopId);
+  const [from, setFrom] = useState(boarded >= 0 && boarded < last ? boarded : 0);
+  const [to, setTo] = useState(last);
+  const [open, setOpen] = useState<string | null>(null);
+  const days = useMemo(() => segmentDays(history, from, to), [history, from, to]);
+  const summary = segmentSummary(days);
+  const stops = history.stops.map((s, i) => ({ value: String(i), label: s.name }));
+  const span = `${dayMonth.format(asDate(history.since))} – ${dayMonth.format(asDate(history.until))}`;
+
   return (
     <div className={classes.body}>
-      <p className={classes.summary}>{summary}</p>
-      <Axis scale={scale} />
-      <ol className={classes.stops}>
-        {history.stops.map((s, i) => (
-          <StopRow key={`${s.location_id}:${i}`} stop={s} scale={scale} />
-        ))}
-      </ol>
-      <p className={classes.legend}>
-        <span className={classes.legendMedian} aria-hidden /> obvykle (medián)
-        <span className={classes.legendWhisker} aria-hidden /> 9 jízd z 10
-        <span className={classes.legendWorst} aria-hidden /> nejhorší
-        <span className={classes.legendBand} aria-hidden /> včas
-      </p>
-    </div>
-  );
-}
-
-function Axis({ scale }: { scale: Scale }) {
-  return (
-    <div className={classes.axis} aria-hidden>
-      {minuteTicks(scale).map((m) => (
-        <span key={m} className={classes.tick} style={{ left: `${place(m * 60, scale)}%` }}>
-          {m > 0 ? `+${m}` : m < 0 ? `−${-m}` : "0"}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function StopRow({ stop, scale }: { stop: HistoryStop; scale: Scale }) {
-  const bar = rangeBar(stop, scale);
-  const share =
-    stop.on_time_share === null ? null : `včas ${Math.round(stop.on_time_share * 100)} %`;
-  return (
-    <li className={classes.stop}>
-      <div className={classes.stopHead}>
-        <span className={classes.stopName}>{stop.name}</span>
-        {share && <span className={classes.share}>{share}</span>}
+      <div className={classes.segment}>
+        <Select
+          label="Odkud"
+          data={stops.slice(0, last)}
+          value={String(from)}
+          onChange={(v) => {
+            if (v === null) return;
+            setFrom(Number(v));
+            if (Number(v) >= to) setTo(last);
+          }}
+          allowDeselect={false}
+          searchable
+          comboboxProps={{ withinPortal: false }}
+        />
+        <Select
+          label="Kam"
+          data={stops.slice(from + 1)}
+          value={String(to)}
+          onChange={(v) => v !== null && setTo(Number(v))}
+          allowDeselect={false}
+          searchable
+          comboboxProps={{ withinPortal: false }}
+        />
       </div>
-      {bar ? (
-        <>
-          <div className={classes.track} data-tone={bar.tone}>
-            <span
-              className={classes.band}
-              style={{ left: `${place(-60, scale)}%`, right: `${100 - place(120, scale)}%` }}
-            />
-            <span className={classes.zero} style={{ left: `${bar.zero}%` }} />
-            {bar.p90 !== null && (
-              <span
-                className={classes.whisker}
-                style={{
-                  left: `${Math.min(bar.median, bar.p90)}%`,
-                  width: `${Math.abs(bar.p90 - bar.median)}%`,
-                }}
-              />
-            )}
-            <span
-              className={classes.median}
-              style={{
-                left: `${Math.min(bar.zero, bar.median)}%`,
-                width: `${Math.max(Math.abs(bar.median - bar.zero), 0.8)}%`,
-              }}
-            />
-            {bar.worst !== null && (
-              <span
-                className={classes.worst}
-                style={{ left: `${bar.worst}%` }}
-                data-beyond={bar.beyond || undefined}
-              />
-            )}
-          </div>
-          <div className={classes.figures}>
-            <span>obvykle {delayWords(stop.median_delay_s!)}</span>
-            {stop.p90_delay_s !== null && <span>9 z 10 do {delayWords(stop.p90_delay_s)}</span>}
-            {stop.max_delay_s !== null && <span>nejhůř {delayWords(stop.max_delay_s)}</span>}
-            <span className={classes.runs}>{stop.runs}× změřeno</span>
-          </div>
-        </>
+      <p className={classes.summary}>
+        {span}
+        {summary
+          ? ` · v cíli včas ${Math.round(summary.onTime * 100)} % jízd · obvykle ${delayWords(summary.median)}`
+          : ""}
+        {history.cancelled > 0 ? ` · ${history.cancelled}× zrušeno` : ""}
+      </p>
+      {days.length === 0 ? (
+        <BoardMessage
+          title="Zatím žádné záznamy"
+          text="Za toto období nemáme o jízdách tohoto spoje záznam."
+        />
       ) : (
-        <div className={classes.figures}>Bez záznamu</div>
+        <ol className={classes.days} aria-label="Jízdy po dnech">
+          <li className={classes.dayHead} aria-hidden>
+            <span>Den</span>
+            <span>Odjezd</span>
+            <span>Příjezd</span>
+            <span>Nejvíc</span>
+            <span>Vůz</span>
+          </li>
+          {days.map((d) => (
+            <DayRow
+              key={d.day.service_date}
+              row={d}
+              open={open === d.day.service_date}
+              onToggle={() => setOpen(open === d.day.service_date ? null : d.day.service_date)}
+            />
+          ))}
+        </ol>
       )}
+    </div>
+  );
+}
+
+function Delay({ delayS }: { delayS: number | null }) {
+  return (
+    <span className={classes.delay} data-tone={delayTone(delayS)}>
+      {delayS === null ? "–" : delayWords(delayS)}
+    </span>
+  );
+}
+
+function DayRow({ row, open, onToggle }: { row: SegmentDay; open: boolean; onToggle: () => void }) {
+  const { day } = row;
+  const vehicle = day.worked_by.find((v) => v.physical) ?? day.worked_by[0];
+  const name =
+    vehicle && (vehicle.fleet_number ?? vehicle.public_label ?? vehicle.source_vehicle_id);
+  return (
+    <li className={classes.day} data-open={open || undefined}>
+      <UnstyledButton
+        className={classes.dayLine}
+        onClick={onToggle}
+        disabled={row.calls.length === 0}
+        aria-expanded={open}
+      >
+        <span className={classes.date}>
+          {row.calls.length > 0 && (
+            <IconChevronDown size={14} stroke={2} className={classes.chevron} aria-hidden />
+          )}
+          {weekdayDate.format(asDate(day.service_date))}
+        </span>
+        {day.cancelled ? (
+          <span className={classes.cancelled}>zrušeno</span>
+        ) : (
+          <>
+            <Delay delayS={row.from} />
+            <Delay delayS={row.to} />
+            <Delay delayS={row.worst} />
+          </>
+        )}
+      </UnstyledButton>
+      <span className={classes.vehicle}>
+        {vehicle?.physical ? (
+          <Link
+            to="/obehy"
+            search={{
+              zdroj: vehicle.source,
+              datum: day.service_date,
+              vozidlo: vehicle.source_vehicle_id,
+              spoj: day.trip_id,
+            }}
+            className={classes.vehicleLink}
+            title="Oběh vozu ten den"
+          >
+            {name}
+          </Link>
+        ) : (
+          (name ?? "")
+        )}
+      </span>
+      {open && <Calls calls={row.calls} />}
     </li>
+  );
+}
+
+function Calls({ calls }: { calls: HistoryCall[] }) {
+  return (
+    <ol className={classes.calls}>
+      {calls.map((c, i) => {
+        const end = i === calls.length - 1;
+        const delay = end
+          ? (c.arrival_delay_s ?? c.departure_delay_s)
+          : (c.departure_delay_s ?? c.arrival_delay_s);
+        return (
+          <li key={`${c.location_id}:${i}`} className={classes.call}>
+            <span className={classes.callName}>{c.name}</span>
+            <Delay delayS={delay} />
+          </li>
+        );
+      })}
+    </ol>
   );
 }

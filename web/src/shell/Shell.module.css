@@ -49,6 +49,7 @@
 
 .tab {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -201,7 +202,7 @@
     left: 0;
     z-index: 10;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 2px;
     padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--ob-border);
@@ -217,7 +218,7 @@
     height: 52px;
     border-radius: var(--ob-radius-sm);
     color: var(--ob-text-secondary);
-    /* Five tabs on a 375px phone: "Mimořádnosti" still fits. */
+    /* Four tabs on a 375px phone. */
     font-size: 11px;
     line-height: 18px;
     font-weight: 500;
@@ -244,4 +245,49 @@
 
 .about:hover {
   color: var(--ob-text);
+}
+
+/* "Další" in the navbar: rows as tall as the tabs. */
+.moreItem {
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* "Další" on the phone: a sheet from the bottom, rows to tap. */
+.sheet {
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  border-radius: var(--ob-radius-md) var(--ob-radius-md) 0 0;
+  background: var(--ob-surface);
+}
+
+.sheetHeader {
+  background: var(--ob-surface);
+  font-weight: 700;
+}
+
+.sheetBody {
+  padding: 0 12px calc(16px + env(safe-area-inset-bottom));
+}
+
+.sheetItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 8px;
+  border-radius: var(--ob-radius-sm);
+  color: var(--ob-text);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sheetItem:active,
+.sheetItem[data-active] {
+  background: var(--ob-selection);
+  color: var(--ob-selection-text);
 }

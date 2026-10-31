@@ -32,6 +32,8 @@ export interface CirculationsSearch {
   dopravce?: string;
   druh?: string;
   linka?: string;
+  /** A source vehicle ID: its oběh (the scope). */
+  vozidlo?: string;
   vuz?: string;
   spoj?: string;
 }
@@ -106,6 +108,7 @@ const circulationsRoute = createRoute({
     dopravce: text(search.dopravce),
     druh: text(search.druh),
     linka: text(search.linka),
+    vozidlo: text(search.vozidlo),
     vuz: text(search.vuz),
     spoj: text(search.spoj),
   }),

@@ -25,6 +25,13 @@
   gap: 12px;
 }
 
+/* Where the rider boards and gets off: the days are measured between. */
+.segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .summary {
   margin: 0;
   color: var(--ob-text-secondary);
@@ -32,197 +39,127 @@
   line-height: 19px;
 }
 
-/* The minute marks over the bars; the stops' names sit above each bar, so the axis spans the
-   whole width as the bars do. */
-.axis {
-  position: relative;
-  height: 16px;
-  margin-top: 4px;
-  color: var(--ob-text-secondary);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.tick {
-  position: absolute;
-  transform: translateX(-50%);
-}
-
-.stops {
-  display: flex;
-  flex-direction: column;
+/* A day a row: its date, the delay boarding, getting off and the most between, the vehicle. */
+.days {
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) repeat(3, 64px) minmax(56px, auto);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.stop {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 0;
+.dayHead,
+.day,
+.dayLine {
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.dayHead,
+.day {
+  grid-column: 1 / -1;
+}
+
+.dayHead {
+  padding-bottom: 4px;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.day {
   border-top: 1px solid var(--ob-border);
 }
 
-.stopHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.stopName {
+.dayLine {
+  grid-column: 1 / 5;
+  min-height: 44px;
   font-size: 14px;
   line-height: 20px;
+}
+
+.dayLine:not(:disabled):hover {
+  background: var(--ob-surface-subtle);
+}
+
+.date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--ob-text-secondary);
+  transition: transform 150ms;
+}
+
+.day:not([data-open]) .chevron {
+  transform: rotate(-90deg);
+}
+
+.cancelled {
+  grid-column: 2 / -1;
+  color: var(--ob-cancelled-text, var(--ob-text-secondary));
   font-weight: 600;
 }
 
-.share {
-  flex: none;
-  color: var(--ob-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.track {
+.delay {
   --tone-text: var(--ob-unknown-text);
-  --tone-fill: var(--ob-unknown-fill);
-  position: relative;
-  height: 14px;
+  color: var(--tone-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
-.track[data-tone="onTime"] {
+.delay[data-tone="onTime"] {
   --tone-text: var(--ob-on-time-text);
-  --tone-fill: var(--ob-on-time-fill);
 }
 
-.track[data-tone="early"] {
+.delay[data-tone="early"] {
   --tone-text: var(--ob-early-text);
-  --tone-fill: var(--ob-early-fill);
 }
 
-.track[data-tone="late"] {
+.delay[data-tone="late"] {
   --tone-text: var(--ob-late-text);
-  --tone-fill: var(--ob-late-fill);
 }
 
-.track[data-tone="veryLate"] {
+.delay[data-tone="veryLate"] {
   --tone-text: var(--ob-very-late-text);
-  --tone-fill: var(--ob-very-late-fill);
 }
 
-.track > span {
-  position: absolute;
+.vehicle {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* On time: a minute early to two late, as the boards colour it. */
-.band {
-  top: 0;
-  bottom: 0;
-  border-radius: var(--ob-radius-sm);
-  background: color-mix(in srgb, var(--ob-on-time-text) 18%, transparent);
+.vehicleLink {
+  color: var(--ob-link);
+  font-weight: 600;
 }
 
-.zero {
-  top: -2px;
-  bottom: -2px;
-  width: 1px;
-  background: var(--ob-border-control);
+/* The day's stops within the segment, under its row. */
+.calls {
+  grid-column: 1 / -1;
+  margin: 0 0 8px;
+  padding: 0 0 0 18px;
+  list-style: none;
 }
 
-.whisker {
-  top: 6px;
-  height: 2px;
-  background: var(--tone-text);
-  opacity: 0.6;
-}
-
-.median {
-  top: 3px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--tone-text);
-}
-
-.worst {
-  top: 4px;
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
-  border: 1.5px solid var(--tone-text);
-  border-radius: 50%;
-  background: var(--ob-surface);
-}
-
-/* Later than the scale reaches: an arrow at its end. */
-.worst[data-beyond] {
-  width: 0;
-  height: 0;
-  margin-left: -6px;
-  border: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 6px solid var(--tone-text);
-  border-radius: 0;
-  background: none;
-}
-
-.figures {
+.call {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  color: var(--ob-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 19px;
 }
 
-.runs {
-  margin-left: auto;
-}
-
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  margin: 0;
-  color: var(--ob-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.legend > span {
-  display: inline-block;
-  margin-left: 6px;
-}
-
-.legend > span:first-child {
-  margin-left: 0;
-}
-
-.legendMedian {
-  width: 14px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--ob-text-secondary);
-}
-
-.legendWhisker {
-  width: 14px;
-  height: 2px;
-  background: var(--ob-text-secondary);
-}
-
-.legendWorst {
-  width: 6px;
-  height: 6px;
-  border: 1.5px solid var(--ob-text-secondary);
-  border-radius: 50%;
-}
-
-.legendBand {
-  width: 14px;
-  height: 10px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--ob-on-time-text) 18%, transparent);
+.callName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

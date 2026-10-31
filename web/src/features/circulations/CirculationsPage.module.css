@@ -147,6 +147,61 @@
   font-weight: 600;
 }
 
+/* Another scope or day loading: the old answer stays, faded, under a running bar. */
+.scroller[data-busy] {
+  opacity: 0.5;
+  transition: opacity 150ms;
+}
+
+.progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 300;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: var(--ob-focus);
+  animation: progress 1.2s ease-in-out infinite;
+}
+
+@keyframes progress {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress::after {
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+.loadingText {
+  margin: 0 0 4px;
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+}
+
+.chosenVehicle {
+  flex: 1;
+  font-weight: 700;
+}
+
 .scroller {
   flex: 1;
   min-height: 0;
@@ -182,6 +237,13 @@
   z-index: 2;
   background: var(--ob-surface);
   border-right: 1px solid var(--ob-border);
+}
+
+.corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 
 .ticks {
@@ -254,6 +316,16 @@
   position: relative;
   background: linear-gradient(to right, var(--ob-border) 1px, transparent 1px) 0 0 / var(--hour)
     100%;
+}
+
+/* Where the vehicle stood between two parts of its day. */
+.break {
+  position: absolute;
+  top: 21px;
+  height: 0;
+  border-top: 2px dashed var(--ob-text-secondary);
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 /* A journey: its line, and under it where it runs from and to. */

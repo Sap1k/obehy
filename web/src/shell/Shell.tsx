@@ -1,7 +1,10 @@
-import { ActionIcon, Modal, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Drawer, Menu, Modal, Tooltip, UnstyledButton } from "@mantine/core";
 import { useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle,
+  IconDirections,
+  IconDots,
+  IconExternalLink,
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
@@ -10,6 +13,7 @@ import {
   IconRoute,
   IconSearch,
   IconTimeline,
+  type Icon,
 } from "@tabler/icons-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
@@ -35,16 +39,106 @@ const MapStage = lazy(() =>
 const TABS = [
   { to: "/", label: "Mapa", Icon: IconMap, exact: true },
   { to: "/odjezdy", label: "Odjezdy", Icon: IconList, exact: false },
-  { to: "/linky", label: "Linky", Icon: IconRoute, exact: false },
-  { to: "/obehy", label: "Oběhy", Icon: IconTimeline, exact: false },
-  { to: "/mimoradnosti", label: "Mimořádnosti", Icon: IconAlertTriangle, exact: false },
 ] as const;
+
+/** The journey planner, an app of its own. */
+const MOTIS = { href: "https://motis.obehy.cz/", label: "MOTIS", Icon: IconDirections };
+
+/** The rest of the app, under "Další". */
+const MORE: readonly { to: string; label: string; Icon: Icon }[] = [
+  { to: "/linky", label: "Linky", Icon: IconRoute },
+  { to: "/obehy", label: "Oběhy", Icon: IconTimeline },
+  { to: "/mimoradnosti", label: "Mimořádnosti", Icon: IconAlertTriangle },
+];
 
 const COLLAPSED_KEY = "obehy.nav.collapsed";
 
 /** The map's paths: on the phone the map fills the main area there. */
 function isMapPath(pathname: string): boolean {
   return pathname === "/" || pathname.startsWith("/vozidlo/");
+}
+
+/** Whether one of "Další"'s pages is shown. */
+function useMoreActive() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return MORE.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`));
+}
+
+/** "Další" in the navbar: a menu of the rest of the app. */
+function MoreMenu({ collapsed }: { collapsed: boolean }) {
+  const active = useMoreActive();
+  return (
+    <Menu position="right-start" offset={12} width={220} withinPortal>
+      <Menu.Target>
+        <UnstyledButton
+          className={classes.tab}
+          data-active={active || undefined}
+          aria-label={collapsed ? "Další" : undefined}
+        >
+          <IconDots size={20} stroke={2} />
+          {!collapsed && "Další"}
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        {MORE.map(({ to, label, Icon }) => (
+          <Menu.Item
+            key={to}
+            component={Link}
+            to={to}
+            className={classes.moreItem}
+            leftSection={<Icon size={20} stroke={2} />}
+          >
+            {label}
+          </Menu.Item>
+        ))}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
+/** "Další" in the phone's tab bar: a sheet from the bottom with the rest of the app. */
+function MoreSheet() {
+  const active = useMoreActive();
+  const [opened, setOpened] = useState(false);
+  return (
+    <>
+      <UnstyledButton
+        className={classes.bottomTab}
+        data-active={active || undefined}
+        onClick={() => setOpened(true)}
+      >
+        <IconDots size={22} stroke={2} />
+        Další
+      </UnstyledButton>
+      <Drawer
+        opened={opened}
+        onClose={() => setOpened(false)}
+        position="bottom"
+        size="auto"
+        title="Další"
+        classNames={{
+          content: classes.sheet,
+          header: classes.sheetHeader,
+          body: classes.sheetBody,
+        }}
+      >
+        <nav aria-label="Další">
+          {MORE.map(({ to, label, Icon }) => (
+            <Link
+              key={to}
+              to={to}
+              className={classes.sheetItem}
+              activeProps={{ "data-active": true }}
+              onClick={() => setOpened(false)}
+            >
+              <Icon size={22} stroke={2} />
+              {label}
+            </Link>
+          ))}
+        </nav>
+      </Drawer>
+    </>
+  );
 }
 
 /** The data status: how recently any source's vehicle report came in (`/status`, polled), and
@@ -124,6 +218,28 @@ export function Shell() {
               </Tooltip>
             </li>
           ))}
+          <li>
+            <Tooltip label={MOTIS.label} position="right" disabled={!collapsed} withArrow>
+              <a
+                href={MOTIS.href}
+                target="_blank"
+                rel="noreferrer"
+                className={classes.tab}
+                aria-label={collapsed ? `${MOTIS.label} (nové okno)` : undefined}
+              >
+                <MOTIS.Icon size={20} stroke={2} />
+                {!collapsed && (
+                  <>
+                    {MOTIS.label}
+                    <IconExternalLink size={14} stroke={2} aria-label="nové okno" />
+                  </>
+                )}
+              </a>
+            </Tooltip>
+          </li>
+          <li>
+            <MoreMenu collapsed={collapsed} />
+          </li>
         </ul>
         <div className={classes.foot}>
           <Tooltip label="O aplikaci" position="right" disabled={!collapsed} withArrow>
@@ -208,6 +324,11 @@ export function Shell() {
             {label}
           </Link>
         ))}
+        <a href={MOTIS.href} target="_blank" rel="noreferrer" className={classes.bottomTab}>
+          <MOTIS.Icon size={22} stroke={2} />
+          {MOTIS.label}
+        </a>
+        <MoreSheet />
       </nav>
 
       <Modal opened={searching} onClose={() => setSearching(false)} title="Hledat" fullScreen>

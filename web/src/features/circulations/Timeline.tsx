@@ -1,12 +1,19 @@
 import { ActionIcon, Popover, Skeleton } from "@mantine/core";
-import { IconX } from "@tabler/icons-react";
+import { IconArrowsHorizontal, IconMinus, IconPlus, IconX } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   ApiError,
   type ChainJourney,
   type Line,
-  type ScopedChain,
   type VehicleAttributeValue,
 } from "../../api/client";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
@@ -22,14 +29,20 @@ import {
   type TimelineBar,
   type TimelineRow,
   shortRoute,
+  tickStep,
   vehicleModel,
   vehicleName,
   windowOf,
+  ZOOM_PX,
+  zoomAround,
+  zoomed,
 } from "./layout";
 import classes from "./CirculationsPage.module.css";
 
-/** Width of an hour on the axis, room for a short journey's ends; the day scrolls sideways. */
+/** Width of an hour on the axis at first, room for a short journey's ends; the day scrolls
+ * sideways and zooms (the viewer's last zoom is kept). */
 const HOUR_PX = 160;
+const ZOOM_KEY = "obehy.hourPx";
 /** A row's and the axis's height, as the stylesheet sets them: rows are drawn only near the
  * view, a big operator's day being thousands of them. */
 const ROW_PX = 44;
@@ -51,10 +64,11 @@ export function journeyTitle(j: ChainJourney): string {
   return [line, route, times].filter(Boolean).join(" · ");
 }
 
-/** The scroller's offset and height, for drawing only the rows in view. */
+/** The scroller's offset and size, for drawing only the rows in view, and the vehicle
+ * column's width, for fitting the day. */
 function useView() {
   const ref = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState({ top: 0, height: 800 });
+  const [view, setView] = useState({ top: 0, height: 800, width: 1000, label: 0 });
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -62,11 +76,15 @@ function useView() {
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() =>
-        setView((v) =>
-          v.top === el.scrollTop && v.height === el.clientHeight
+        setView((v) => {
+          const label = labelWidth(el);
+          return v.top === el.scrollTop &&
+            v.height === el.clientHeight &&
+            v.width === el.clientWidth &&
+            v.label === label
             ? v
-            : { top: el.scrollTop, height: el.clientHeight },
-        ),
+            : { top: el.scrollTop, height: el.clientHeight, width: el.clientWidth, label };
+        }),
       );
     };
     measure();
@@ -82,8 +100,106 @@ function useView() {
   return [ref, view] as const;
 }
 
-/** The day: the hours across the top, a row per chain, a bar per journey. */
+function storedHourPx(): number {
+  try {
+    const px = Number(localStorage.getItem(ZOOM_KEY));
+    return px >= ZOOM_PX.min && px <= ZOOM_PX.max ? px : HOUR_PX;
+  } catch {
+    return HOUR_PX;
+  }
+}
+
+/** The vehicle column's width, as the stylesheet sets it (narrower on a phone). */
+function labelWidth(scroller: HTMLElement): number {
+  return scroller.querySelector<HTMLElement>(`.${classes.corner}`)?.offsetWidth ?? 0;
+}
+
+/** An hour's width: the buttons halve and double it, ctrl+wheel (a trackpad's pinch) and a
+ * two-finger pinch scale it, about the time under the pointer; never narrower than the whole
+ * day fits. */
+function useZoom(
+  ref: RefObject<HTMLDivElement | null>,
+  hours: number,
+  { width, label }: { width: number; label: number },
+) {
+  const [hourPx, setHourPx] = useState(storedHourPx);
+  const anchor = useRef<{ from: number; left: number; pointerX: number } | null>(null);
+  const fitPx = Math.max(1, (width - label) / hours);
+  const shown = Math.max(hourPx, fitPx);
+  // For the listeners: the zoom as last drawn.
+  const current = useRef({ shown, fitPx });
+  useLayoutEffect(() => {
+    current.current = { shown, fitPx };
+  }, [shown, fitPx]);
+
+  const zoomTo = useCallback(
+    (factor: number | "fit", pointerX?: number) => {
+      const el = ref.current;
+      if (!el) return;
+      const { shown: from, fitPx: fit } = current.current;
+      const next = factor === "fit" ? fit : zoomed(from, factor, fit);
+      const lane = labelWidth(el);
+      anchor.current = {
+        from,
+        left: factor === "fit" ? 0 : el.scrollLeft,
+        pointerX: pointerX ?? lane + (el.clientWidth - lane) / 2,
+      };
+      setHourPx(next);
+    },
+    [ref],
+  );
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const a = anchor.current;
+    if (!el || !a) return;
+    anchor.current = null;
+    el.scrollLeft = zoomAround(a.left, a.pointerX, labelWidth(el), a.from, Math.max(hourPx, fitPx));
+    try {
+      localStorage.setItem(ZOOM_KEY, String(Math.round(hourPx)));
+    } catch {
+      // Not kept: the next visit starts at the default.
+    }
+  }, [ref, hourPx, fitPx]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const x = (clientX: number) => clientX - el.getBoundingClientRect().left;
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      zoomTo(Math.exp(-e.deltaY * 0.01), x(e.clientX));
+    };
+    let pinch: { distance: number; px: number } | null = null;
+    const spread = (t: TouchList) =>
+      Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY);
+    const start = (e: TouchEvent) => {
+      pinch =
+        e.touches.length === 2 ? { distance: spread(e.touches), px: current.current.shown } : null;
+    };
+    const move = (e: TouchEvent) => {
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      const factor = (spread(e.touches) / pinch.distance) * (pinch.px / current.current.shown);
+      zoomTo(factor, x((e.touches[0]!.clientX + e.touches[1]!.clientX) / 2));
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", wheel);
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+    };
+  }, [ref, zoomTo]);
+
+  return { hourPx: shown, fitted: shown <= fitPx + 0.5, zoomTo };
+}
+
+/** The day: the hours across the top, a row per vehicle, a bar per journey. */
 export function Timeline({
+  busy,
   rows,
   span,
   now,
@@ -92,6 +208,8 @@ export function Timeline({
   selected,
   onSelect,
 }: {
+  /** Another scope or day is on its way: these rows are the last answer's. */
+  busy: boolean;
   rows: TimelineRow[];
   span: Span;
   /** Seconds of the service day now, when the date is today. */
@@ -105,27 +223,64 @@ export function Timeline({
   const hours = (span.end - span.start) / 3600;
   const nowAt = now !== null && now >= span.start && now <= span.end ? percent(now, span) : null;
   const [scroller, view] = useView();
+  const zoom = useZoom(scroller, hours, view);
   const { first, last } = windowOf(view.top, view.height, rows.length, {
     rowPx: ROW_PX,
     headPx: AXIS_PX,
     spare: SPARE_ROWS,
   });
   return (
-    <div ref={scroller} className={classes.scroller}>
+    <div
+      ref={scroller}
+      className={classes.scroller}
+      data-busy={busy || undefined}
+      aria-busy={busy || undefined}
+    >
       <div
         className={classes.canvas}
         style={{
-          minWidth: `calc(var(--label-w) + ${hours * HOUR_PX}px)`,
+          width: `calc(var(--label-w) + ${hours * zoom.hourPx}px)`,
           ["--hour" as string]: `${100 / hours}%`,
         }}
       >
         {nowAt !== null && (
           <span className={classes.now} style={{ ["--at" as string]: String(nowAt) }} aria-hidden />
         )}
-        <div className={classes.axisRow} aria-hidden>
-          <div className={classes.corner} />
+        <div className={classes.axisRow}>
+          <div className={classes.corner}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="xs"
+              aria-label="Oddálit"
+              disabled={zoom.fitted}
+              onClick={() => zoom.zoomTo(0.5)}
+            >
+              <IconMinus size={14} stroke={2} />
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="xs"
+              aria-label="Celý den"
+              disabled={zoom.fitted}
+              onClick={() => zoom.zoomTo("fit")}
+            >
+              <IconArrowsHorizontal size={14} stroke={2} />
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="xs"
+              aria-label="Přiblížit"
+              disabled={zoom.hourPx >= ZOOM_PX.max}
+              onClick={() => zoom.zoomTo(2)}
+            >
+              <IconPlus size={14} stroke={2} />
+            </ActionIcon>
+          </div>
           <div className={classes.ticks}>
-            {hourTicks(span).map((h) => (
+            {hourTicks(span, tickStep(zoom.hourPx)).map((h) => (
               <span
                 key={h}
                 className={classes.hour}
@@ -146,13 +301,24 @@ export function Timeline({
           {rows.slice(first, last).map((row) => (
             <li key={row.key} className={classes.row}>
               <VehicleLabel
-                chain={row.chain}
+                row={row}
                 opened={selected === `${row.key}#vozidlo`}
                 onOpen={(opened) => onSelect(opened ? `${row.key}#vozidlo` : null)}
                 today={today}
                 sourceLabel={sourceLabel}
               />
               <div className={classes.lane}>
+                {row.breaks.map((b) => (
+                  <span
+                    key={b.start}
+                    className={classes.break}
+                    style={{
+                      left: `${percent(b.start, span)}%`,
+                      width: `${percent(b.end, span) - percent(b.start, span)}%`,
+                    }}
+                    aria-hidden
+                  />
+                ))}
                 {row.bars.map((bar, i) => {
                   const left = percent(bar.start, span);
                   const width = percent(bar.end, span) - left;
@@ -264,18 +430,19 @@ function JourneyCard({
 /** The row's vehicle: its fleet number, and under it its model, when the registry knows it;
  * else the source's ID. Opens what we know of it. */
 function VehicleLabel({
-  chain,
+  row,
   opened,
   onOpen,
   today,
   sourceLabel,
 }: {
-  chain: ScopedChain;
+  row: TimelineRow;
   opened: boolean;
   onOpen: (opened: boolean) => void;
   today: boolean;
   sourceLabel: string;
 }) {
+  const { chain } = row;
   const name = vehicleName(chain);
   const model = vehicleModel(chain);
   const label = (
@@ -295,7 +462,7 @@ function VehicleLabel({
   return (
     <VehiclePopover label={label} onClose={() => onOpen(false)}>
       <VehicleCard
-        chain={chain}
+        row={row}
         today={today}
         sourceLabel={sourceLabel}
         onClose={() => onOpen(false)}
@@ -347,25 +514,29 @@ function attributeValue(a: VehicleAttributeValue): string {
 /** A vehicle opened on the timeline: what the row says of its day, then what the registry and
  * the sources say of it; on today's page, the vehicle on the map while it reports. */
 function VehicleCard({
-  chain,
+  row,
   today,
   sourceLabel,
   onClose,
 }: {
-  chain: ScopedChain;
+  row: TimelineRow;
   today: boolean;
   sourceLabel: string;
   onClose: () => void;
 }) {
+  const { chain, chains } = row;
   const detail = useVehicleDetail(chain.vehicle_id, true);
   const model = vehicleModel(chain);
   const lines = new Map<string, Line>();
-  for (const j of chain.journeys) if (j.line) lines.set(j.line.route_id, j.line);
+  for (const j of row.bars) if (j.journey.line) lines.set(j.journey.line.route_id, j.journey.line);
   const unknown = detail.error instanceof ApiError && detail.error.status === 404;
+  const times = chains.map((c) => `${formatClock(c.first_seen)}–${formatClock(c.last_seen)}`);
   const facts: [string, ReactNode][] = [
     [
       "Oběh",
-      `${journeysWord(chain.journeys.length)}, ${formatClock(chain.first_seen)}–${formatClock(chain.last_seen)}`,
+      chains.length > 1
+        ? `${journeysWord(row.bars.length)} ve ${chains.length} částech: ${times.join(", ")}`
+        : `${journeysWord(row.bars.length)}, ${times[0]}`,
     ],
     [sourceLabel, chain.source_vehicle_id],
   ];

@@ -136,6 +136,24 @@
   flex: 1;
 }
 
+/* Under the trip's vehicle: its oběh, then the line's, quieter. */
+.circulationLinks {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.quietLink {
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.quietLink:hover {
+  color: var(--ob-link);
+}
+
 .headLink {
   display: inline-flex;
   align-items: center;

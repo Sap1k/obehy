@@ -8,9 +8,12 @@ import {
   rowsOf,
   shortRoute,
   spanOf,
+  tickStep,
   vehicleModel,
   vehicleName,
   windowOf,
+  zoomAround,
+  zoomed,
 } from "./layout";
 
 function journey(
@@ -93,6 +96,29 @@ describe("rowsOf", () => {
     expect(rowsOf([late, early], "2026-10-06", { vehicle: "DUK:1001" })).toHaveLength(1);
   });
 
+  it("puts a vehicle's chains in one row, the break between them kept", () => {
+    const evening = {
+      ...early,
+      journeys: [
+        journey("t3", "2026-10-06T15:00:00+02:00", "2026-10-06T15:40:00+02:00", [
+          "2026-10-06T14:58:00+02:00",
+          "2026-10-06T15:41:00+02:00",
+        ]),
+      ],
+      first_seen: "2026-10-06T14:58:00+02:00",
+      last_seen: "2026-10-06T15:41:00+02:00",
+    };
+    const [row, ...others] = rowsOf([evening, early], "2026-10-06", {});
+    expect(others).toEqual([]);
+    expect(row!.key).toBe("duk:1002@2026-10-06");
+    expect(row!.chains).toEqual([early, evening]);
+    expect(row!.bars.map((b) => [b.start, b.part])).toEqual([
+      [5 * 3600, 0],
+      [15 * 3600, 1],
+    ]);
+    expect(row!.breaks).toEqual([{ start: 5 * 3600 + 1200, end: 15 * 3600 }]);
+  });
+
   it("marks the trip the page was opened from", () => {
     const [row] = rowsOf([late], "2026-10-06", { tripId: "t1" });
     expect(row!.bars.map((b) => b.highlighted)).toEqual([true, false]);
@@ -105,6 +131,12 @@ describe("the axis", () => {
     expect(span).toEqual({ start: 5 * 3600, end: 25 * 3600 });
     expect(hourTicks(span).slice(-3).map(hourLabel)).toEqual(["23", "0", "1"]);
     expect(percent(15 * 3600, span)).toBe(50);
+  });
+
+  it("labels fewer hours when they are narrow", () => {
+    const span = { start: 4 * 3600, end: 26 * 3600 };
+    expect(tickStep(160)).toBe(1);
+    expect(hourTicks(span, tickStep(20))).toEqual([4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]);
   });
 
   it("has none without bars", () => {
@@ -125,6 +157,22 @@ describe("the vehicle column", () => {
     expect([vehicleName(known), vehicleModel(known)]).toEqual(["9753", "Škoda 15T"]);
     expect([vehicleName(early), vehicleModel(early)]).toEqual(["1002", null]);
     expect(rowsOf([known, early], "2026-10-06", { vehicle: "9753" })).toHaveLength(1);
+  });
+});
+
+describe("zoom", () => {
+  it("doubles and halves within bounds, never narrower than the fit", () => {
+    expect(zoomed(160, 2, 40)).toBe(320);
+    expect(zoomed(640, 2, 40)).toBe(640);
+    expect(zoomed(80, 0.25, 40)).toBe(40);
+    expect(zoomed(80, 0.01, 1)).toBe(6);
+  });
+
+  it("keeps the time under the pointer where it was", () => {
+    // 3 h into the lane at 160 px is 480 px: scrolled 300, the pointer 132 + 180 px in.
+    const left = zoomAround(300, 312, 132, 160, 320);
+    expect(left + 180).toBe(3 * 320);
+    expect(zoomAround(0, 140, 132, 160, 80)).toBe(0);
   });
 });
 

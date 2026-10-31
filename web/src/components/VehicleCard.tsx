@@ -23,7 +23,13 @@ const RAIL_MODES = new Set([
  * and its traits. Named by what a rider recognises: its model, else its plate, else its fleet
  * number; the fleet number (or our ID) and the operator come below, smaller. A plate links to
  * the vehicle on seznam-autobusu.cz. */
-export function VehicleCard({ vehicle, mode }: { vehicle: TripVehicle; mode: string }) {
+export function VehicleCard({
+  vehicle,
+  mode,
+}: {
+  vehicle: Omit<TripVehicle, "physical">;
+  mode: string;
+}) {
   const traits = vehicle.traits ?? {};
   const Mode = RAIL_MODES.has(mode) ? IconTrain : IconBus;
   const plate = traits.licence_plate ?? null;

@@ -5,7 +5,7 @@ import { ApiError } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import { VehicleCard } from "../../components/VehicleCard";
 import { useNow } from "../../lib/hooks";
-import { TripBody, TripHeader } from "./TripDetail";
+import { CirculationLinks, TripBody, TripHeader } from "./TripDetail";
 import { useFollowingParts, useTrip } from "./queries";
 import { runCalls } from "./runCalls";
 import classes from "./TripPanel.module.css";
@@ -107,6 +107,7 @@ export function TripPanel() {
         <section className={classes.section}>
           <h3 className={classes.sectionTitle}>Vozidlo</h3>
           <VehicleCard vehicle={vehicle} mode={data.line.mode} />
+          <CirculationLinks trip={data} vehicle={vehicle} />
         </section>
       )}
     </div>

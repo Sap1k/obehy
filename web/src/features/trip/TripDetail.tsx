@@ -2,7 +2,7 @@ import { Collapse, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronRight, IconChevronUp, IconClock } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import type { Alert, Trip } from "../../api/client";
+import type { Alert, Trip, TripVehicle } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { CodeSign } from "../../components/Pictogram";
@@ -119,8 +119,7 @@ export function TripBody({
       <section className={classes.section}>
         <div className={classes.sectionHead}>
           <h3 className={classes.sectionTitle}>Jízdní řád</h3>
-          <CirculationLink trip={trip} />
-          <HistoryLink tripId={trip.trip_id} />
+          <HistoryLink tripId={trip.trip_id} stopId={stopId} />
         </div>
         <Timetable calls={calls} boardedAt={boardedAt} now={now} stale={stale} />
       </section>
@@ -131,24 +130,40 @@ export function TripBody({
   );
 }
 
-/** The oběhy of the trip's line that day, by the source of the vehicle on it now. */
-function CirculationLink({ trip }: { trip: Trip }) {
-  const source = trip.vehicles.find((v) => v.sources?.length)?.sources?.[0];
-  if (!source) return null;
+/** Under the trip's vehicle: its oběh that day (the trip marked in it), and, quieter, the
+ * line's; only for a vehicle a source names as one (not a metro run or a train keyed by its
+ * number). */
+export function CirculationLinks({ trip, vehicle }: { trip: Trip; vehicle: TripVehicle }) {
+  const followed = vehicle.followed_as;
+  if (!followed) return null;
   return (
-    <Link
-      className={classes.headLink}
-      to="/obehy"
-      search={{
-        zdroj: source,
-        datum: trip.service_date,
-        linka: trip.line.route_id,
-        spoj: trip.trip_id,
-      }}
-    >
-      Oběhy linky
-      <IconChevronRight size={14} stroke={2} aria-hidden />
-    </Link>
+    <div className={classes.circulationLinks}>
+      <Link
+        className={classes.headLink}
+        to="/obehy"
+        search={{
+          zdroj: followed.source,
+          datum: trip.service_date,
+          vozidlo: followed.source_vehicle_id,
+          spoj: trip.trip_id,
+        }}
+      >
+        Oběh vozu
+        <IconChevronRight size={14} stroke={2} aria-hidden />
+      </Link>
+      <Link
+        className={classes.quietLink}
+        to="/obehy"
+        search={{
+          zdroj: followed.source,
+          datum: trip.service_date,
+          linka: trip.line.route_id,
+          spoj: trip.trip_id,
+        }}
+      >
+        Oběhy linky
+      </Link>
+    </div>
   );
 }
 

@@ -16,6 +16,8 @@ export function useScopes(source: string | undefined, date: string) {
         }),
       ),
     staleTime: 60_000,
+    // Another date's or source's choices stay up until the new ones are in.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -25,31 +27,39 @@ export interface Scope {
   agencyIds: string[];
   modes: string[];
   routeId: string | undefined;
+  /** One of the source's vehicles. */
+  vehicle: string | undefined;
 }
 
-/** The scope's chains; none is asked for until it has a source and companies or a route. */
+/** Whether `scope` names what to show: a source and a vehicle, a route or companies. */
+export function scopeComplete(scope: Scope): boolean {
+  return Boolean(scope.source && (scope.vehicle || scope.routeId || scope.agencyIds.length > 0));
+}
+
+/** The scope's chains; none is asked for until the scope is complete. */
 export function useCirculations(scope: Scope, today: boolean) {
-  const { source, date, agencyIds, modes, routeId } = scope;
-  const complete = Boolean(source && (routeId || agencyIds.length > 0));
+  const { source, date, agencyIds, modes, routeId, vehicle } = scope;
   return useQuery({
-    queryKey: ["circulations", source, date, routeId ?? null, agencyIds, modes],
+    queryKey: ["circulations", source, date, vehicle ?? null, routeId ?? null, agencyIds, modes],
     queryFn: async ({ signal }) =>
       unwrap(
         await api.GET("/api/v1/circulations", {
           params: {
-            query: routeId
-              ? { source: source!, date, route_id: routeId }
-              : {
-                  source: source!,
-                  date,
-                  agency_id: agencyIds,
-                  mode: modes.length ? modes : undefined,
-                },
+            query: vehicle
+              ? { source: source!, date, source_vehicle_id: vehicle }
+              : routeId
+                ? { source: source!, date, route_id: routeId }
+                : {
+                    source: source!,
+                    date,
+                    agency_id: agencyIds,
+                    mode: modes.length ? modes : undefined,
+                  },
           },
           signal,
         }),
       ),
-    enabled: complete,
+    enabled: scopeComplete(scope),
     refetchInterval: today ? POLL_MS : false,
     // A past day's oběhy are done.
     staleTime: today ? 0 : 5 * 60_000,

@@ -191,8 +191,9 @@ function VehicleSection({
   mode: string | undefined;
 }) {
   const registry = detail?.registry;
-  // Its oběhy are under a source's own ID: the first report's.
-  const source = detail?.reports[0];
+  // Its oběh is under a source's own ID: the first report's that names a physical vehicle (a
+  // metro run or a train keyed by its number has none to follow).
+  const source = detail?.reports.find((r) => r.physical);
   const model = [registry?.manufacturer, registry?.model].filter(Boolean).join(" ");
   const sources = [
     ...new Set((detail?.reports ?? []).map((r) => r.label?.cs ?? r.source).filter(Boolean)),
@@ -217,9 +218,9 @@ function VehicleSection({
         <Link
           className={tripClasses.headLink}
           to="/obehy"
-          search={{ zdroj: source.source, vuz: source.source_vehicle_id }}
+          search={{ zdroj: source.source, vozidlo: source.source_vehicle_id }}
         >
-          Oběhy dne
+          Oběh vozu
           <IconChevronRight size={14} stroke={2} aria-hidden />
         </Link>
       )}

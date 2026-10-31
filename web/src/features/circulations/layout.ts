@@ -1,8 +1,8 @@
 import type { ChainJourney, ScopedChain, ScopeRoute } from "../../api/client";
 import { pragueInstant } from "../../lib/time";
 
-// The oběhy page's day timeline laid out: one row per chain (a vehicle's journeys in a row),
-// each journey a bar from its scheduled departure to its arrival (where the vehicle was seen
+// The oběhy page's day timeline laid out: one row per vehicle, its chains (its journeys in a
+// row, split where it stood for hours) one after another, each journey a bar from its scheduled departure to its arrival (where the vehicle was seen
 // when history has no schedule), in seconds from the service date's midnight in Prague, so a
 // chain past midnight runs on past 24:00. Pure.
 
@@ -14,12 +14,18 @@ export interface TimelineBar {
   inScope: boolean;
   /** The trip the page was opened from. */
   highlighted: boolean;
+  /** Which of the row's chains it is of. */
+  part: number;
 }
 
 export interface TimelineRow {
   key: string;
+  /** The vehicle's first chain of the day, for what the row says of the vehicle. */
   chain: ScopedChain;
+  chains: ScopedChain[];
   bars: TimelineBar[];
+  /** Where the vehicle stood between its chains, in seconds as the bars. */
+  breaks: Span[];
 }
 
 export interface Span {
@@ -45,8 +51,8 @@ function secondsFrom(origin: number, iso: string): number {
   return Math.round((Date.parse(iso) - origin) / 1000);
 }
 
-/** The rows of the chains whose vehicle matches `vehicle` (its IDs or fleet number, any part,
- * any case), by the vehicle's name (numbers as numbers), a vehicle's chains by when they
+/** A row per vehicle of the chains whose vehicle matches `vehicle` (its IDs or fleet number,
+ * any part, any case), by the vehicle's name (numbers as numbers), its chains in the order they
  * start. */
 export function rowsOf(
   chains: ScopedChain[],
@@ -55,17 +61,20 @@ export function rowsOf(
 ): TimelineRow[] {
   const origin = pragueInstant(serviceDate, "00:00").getTime();
   const wanted = vehicle?.trim().toLocaleLowerCase("cs-CZ");
-  const rows = chains
-    .filter(
-      (c) =>
-        !wanted ||
-        [c.source_vehicle_id, c.vehicle_id, c.fleet_number, c.public_label].some((id) =>
-          id?.toLocaleLowerCase("cs-CZ").includes(wanted),
-        ),
-    )
-    .map((chain) => {
+  const byVehicle = new Map<string, ScopedChain[]>();
+  for (const c of chains) {
+    const matches =
+      !wanted ||
+      [c.source_vehicle_id, c.vehicle_id, c.fleet_number, c.public_label].some((id) =>
+        id?.toLocaleLowerCase("cs-CZ").includes(wanted),
+      );
+    if (matches) byVehicle.set(c.vehicle_id, [...(byVehicle.get(c.vehicle_id) ?? []), c]);
+  }
+  const rows = [...byVehicle].map(([vehicleId, theirs]): TimelineRow => {
+    const ordered = [...theirs].sort((a, b) => Date.parse(a.first_seen) - Date.parse(b.first_seen));
+    const bars = ordered.flatMap((chain, part) => {
       const matched = new Set(chain.matched);
-      const bars = chain.journeys.map((journey, i) => {
+      return chain.journeys.map((journey, i) => {
         const start = secondsFrom(origin, journey.departure ?? journey.first_seen);
         const end = secondsFrom(origin, journey.arrival ?? journey.last_seen);
         return {
@@ -74,14 +83,26 @@ export function rowsOf(
           end: Math.max(end, start + 60),
           inScope: matched.has(i),
           highlighted: tripId !== undefined && journey.trip_id === tripId,
+          part,
         };
       });
-      return { key: `${chain.vehicle_id}@${chain.first_seen}`, chain, bars };
     });
-  const first = (r: TimelineRow) => r.bars[0]?.start ?? 0;
-  return rows.sort(
-    (a, b) => BY_ID.compare(vehicleName(a.chain), vehicleName(b.chain)) || first(a) - first(b),
-  );
+    const breaks: Span[] = [];
+    for (let i = 1; i < bars.length; i++) {
+      const [before, after] = [bars[i - 1]!, bars[i]!];
+      if (after.part !== before.part && after.start > before.end) {
+        breaks.push({ start: before.end, end: after.start });
+      }
+    }
+    return {
+      key: `${vehicleId}@${serviceDate}`,
+      chain: ordered[0]!,
+      chains: ordered,
+      bars,
+      breaks,
+    };
+  });
+  return rows.sort((a, b) => BY_ID.compare(vehicleName(a.chain), vehicleName(b.chain)));
 }
 
 /** Whole hours from the earliest bar's start to the latest bar's end. */
@@ -96,11 +117,41 @@ export function spanOf(rows: TimelineRow[]): Span | null {
   };
 }
 
-/** The span's whole hours, as hours from the service date's midnight (25 is 1:00 next day). */
-export function hourTicks(span: Span): number[] {
+/** The span's whole hours, as hours from the service date's midnight (25 is 1:00 next day);
+ * every `step`th of the day's hours when an hour is too narrow for its label. */
+export function hourTicks(span: Span, step = 1): number[] {
   const ticks: number[] = [];
-  for (let h = span.start / HOUR; h <= span.end / HOUR; h++) ticks.push(h);
+  for (let h = span.start / HOUR; h <= span.end / HOUR; h++) if (h % step === 0) ticks.push(h);
   return ticks;
+}
+
+/** Every how many hours a label fits at `hourPx` an hour. */
+export function tickStep(hourPx: number): number {
+  return hourPx >= 32 ? 1 : hourPx >= 16 ? 2 : hourPx >= 8 ? 3 : 6;
+}
+
+/** The narrowest and widest hour the timeline zooms to; the narrowest is the whole day's fit
+ * when that is wider. */
+export const ZOOM_PX = { min: 6, max: 640 };
+
+/** The hour width `factor` times `hourPx`, within the zoom's bounds (`fitPx` the least). */
+export function zoomed(hourPx: number, factor: number, fitPx: number): number {
+  const least = Math.min(Math.max(ZOOM_PX.min, fitPx), ZOOM_PX.max);
+  return Math.min(ZOOM_PX.max, Math.max(least, hourPx * factor));
+}
+
+/** Where to scroll so the time under `pointerX` (px from the scroller's left edge, past a
+ * `labelPx` column) stays under it when an hour goes from `fromPx` to `toPx` wide. */
+export function zoomAround(
+  scrollLeft: number,
+  pointerX: number,
+  labelPx: number,
+  fromPx: number,
+  toPx: number,
+): number {
+  const lane = Math.max(0, pointerX - labelPx);
+  const hours = (scrollLeft + lane) / fromPx;
+  return Math.max(0, hours * toPx - lane);
 }
 
 /** "5", "23", "0" (the next day's midnight), "1". */
