@@ -5,13 +5,14 @@ import { ApiError } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import { VehicleCard } from "../../components/VehicleCard";
 import { useNow } from "../../lib/hooks";
+import { CompositionStrip } from "./CompositionStrip";
 import { CirculationLinks, TripBody, TripHeader } from "./TripDetail";
 import { useFollowingParts, useTrip } from "./queries";
 import { runCalls } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
 /** A trip opened from a board (Figma 11 panel, 15 phone): header, alerts, the run's timetable,
- * notes, connections, then the vehicle. */
+ * notes, connections, then the vehicle and the train's composition. */
 export function TripPanel() {
   const { stopId, tripId, date } = useParams({ from: "/odjezdy/$stopId/spoj/$tripId/$date" });
   const search = useSearch({ from: "/odjezdy/$stopId/spoj/$tripId/$date" });
@@ -103,12 +104,15 @@ export function TripPanel() {
         stale={stale}
         stopId={stopId}
       />
-      {vehicle && (
+      {vehicle ? (
         <section className={classes.section}>
           <h3 className={classes.sectionTitle}>Vozidlo</h3>
           <VehicleCard vehicle={vehicle} mode={data.line.mode} />
+          <CompositionStrip trip={data} boardedAt={search.od} now={now} />
           <CirculationLinks trip={data} vehicle={vehicle} />
         </section>
+      ) : (
+        <CompositionStrip trip={data} boardedAt={search.od} now={now} heading />
       )}
     </div>
   );

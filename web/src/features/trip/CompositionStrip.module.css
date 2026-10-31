@@ -1,3 +1,35 @@
+/* A card like the vehicle's own: a title row (and the direction), the stretch, the train,
+   then where it is from. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.foot {
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
 .caption {
   color: var(--ob-text-secondary);
   font-size: 13px;

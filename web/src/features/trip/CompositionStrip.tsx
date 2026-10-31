@@ -72,17 +72,21 @@ const ON_COACH = [
   "power_socket",
 ];
 
-/** "Řazení vlaku" (above the timetable): the train's coaches in order for one segment, the one
- * a rider boards in (else the one it is in now), with a coach's detail on a tap. Only for a
- * trip a source answers for; hidden while there is no answer to show. */
+/** "Řazení vlaku": a card in the vehicle section, beside the vehicle's own card: the train's
+ * vehicles in order for one stretch, the one a rider boards in (else the one it is in now),
+ * with a vehicle's detail on a tap. Only for a trip a source answers for; nothing while there
+ * is no answer to show. `heading`: no vehicle card above it, so it brings the section's
+ * heading itself. */
 export function CompositionStrip({
   trip,
   boardedAt,
   now,
+  heading = false,
 }: {
   trip: Trip;
   boardedAt: string | undefined;
   now: number;
+  heading?: boolean;
 }) {
   // Asked from the board's stop when it is a call of this part of the run.
   const from = trip.calls.some((c) => c.location_id === boardedAt) ? boardedAt : undefined;
@@ -97,13 +101,22 @@ export function CompositionStrip({
   if (composition.gaveUp && !data?.units.length) return null;
   // Pending with nothing known yet: a placeholder. An older answer (from another station, or
   // earlier) shows while the new one comes, and is replaced when it does.
-  if (!data || (data.status === "pending" && data.units.length === 0)) {
-    return (
-      <section className={panel.section} aria-busy>
-        <h3 className={panel.sectionTitle}>Řazení vlaku</h3>
-        <Skeleton height={56} radius="sm" />
-        <span className={classes.caption}>Zjišťuji řazení…</span>
+  const frame = (card: React.ReactNode) =>
+    heading ? (
+      <section className={panel.section}>
+        <h3 className={panel.sectionTitle}>Vozidlo</h3>
+        {card}
       </section>
+    ) : (
+      card
+    );
+  if (!data || (data.status === "pending" && data.units.length === 0)) {
+    return frame(
+      <div className={classes.card} aria-busy>
+        <span className={classes.title}>Řazení vlaku</span>
+        <Skeleton height={44} radius="sm" />
+        <span className={classes.caption}>Zjišťuji řazení…</span>
+      </div>,
     );
   }
   if (data.status === "not_available" || data.segments.length === 0) return null;
@@ -132,17 +145,13 @@ export function CompositionStrip({
   const ends = cabEnds(units);
   const sources = [...new Set(units.map((u) => u.label?.cs ?? u.source))].join(", ");
 
-  return (
-    <section className={panel.section}>
-      <div className={panel.sectionHead}>
-        <h3 className={panel.sectionTitle}>Řazení vlaku</h3>
-        <span className={classes.caption}>
-          {checking
-            ? composition.gaveUp && data.answered_at
-              ? `zjištěno ${ago(data.answered_at, now)} · `
-              : "ověřuji… · "
-            : ""}
-          Zdroj: {sources}
+  return frame(
+    <div className={classes.card}>
+      <div className={classes.head}>
+        <span className={classes.title}>Řazení vlaku</span>
+        <span className={classes.direction}>
+          <IconArrowNarrowLeft size={14} stroke={2} aria-hidden />
+          směr jízdy
         </span>
       </div>
       {shown.length > 1 ? (
@@ -167,10 +176,6 @@ export function CompositionStrip({
           {callName(trip, segment.from_call)} – {callName(trip, segment.to_call)}
         </span>
       )}
-      <div className={classes.direction}>
-        <IconArrowNarrowLeft size={16} stroke={2} aria-hidden />
-        směr jízdy
-      </div>
       <ol className={classes.strip} aria-label="Vozy od čela vlaku">
         {units.map((unit, n) => (
           <li key={`${unit.source}-${unit.sequence}`}>
@@ -204,7 +209,14 @@ export function CompositionStrip({
           </li>
         ))}
       </ol>
-    </section>
+      <span className={classes.foot}>
+        {sources}
+        {checking &&
+          (composition.gaveUp && data.answered_at
+            ? ` · zjištěno ${ago(data.answered_at, now)}`
+            : " · ověřuji…")}
+      </span>
+    </div>,
   );
 }
 

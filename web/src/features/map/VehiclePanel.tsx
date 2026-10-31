@@ -7,6 +7,7 @@ import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { VehicleCard } from "../../components/VehicleCard";
 import { ago, useNow } from "../../lib/hooks";
 import { usePhone } from "../../lib/layout";
+import { CompositionStrip } from "../trip/CompositionStrip";
 import { TripBody, TripHeader } from "../trip/TripDetail";
 import { useFollowingParts } from "../trip/queries";
 import { isPassed, runCalls } from "../trip/runCalls";
@@ -163,7 +164,9 @@ export function VehiclePanel() {
         now={now}
         stale={stale}
       />
-      <VehicleSection vehicleId={vehicleId} detail={info} vehicle={vehicle} mode={data.line.mode} />
+      <VehicleSection vehicleId={vehicleId} detail={info} vehicle={vehicle} mode={data.line.mode}>
+        <CompositionStrip trip={data} boardedAt={undefined} now={now} />
+      </VehicleSection>
     </div>
   );
 }
@@ -183,12 +186,15 @@ function VehicleSection({
   detail,
   vehicle,
   mode,
+  children,
 }: {
   vehicleId: string;
   /** The vehicle's own answer, once it is in. */
   detail: VehicleDetail | undefined;
   vehicle: Vehicle | null;
   mode: string | undefined;
+  /** Under the vehicle: the train's composition. */
+  children?: React.ReactNode;
 }) {
   const registry = detail?.registry;
   // Its oběh is under a source's own ID: the first report's that names a physical vehicle (a
@@ -214,6 +220,7 @@ function VehicleSection({
         }
         mode={mode ?? vehicle?.line?.mode ?? "bus"}
       />
+      {children}
       {source && (
         <Link
           className={tripClasses.headLink}
