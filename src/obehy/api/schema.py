@@ -416,6 +416,10 @@ class Trip(Envelope):
     realtime: TripRealtime | None
     vehicles: list[TripVehicle]
     run_parts: list[TripPart] = Field(description="All parts of a rail run on the date, in order.")
+    composition: bool = Field(
+        description="A composition source answers for this trip (`…/composition`): asking is "
+        "worth it. Declared by the source, not asked of it."
+    )
     calls: list[TripCall]
     features: list[Feature]
     notes: list[Note]

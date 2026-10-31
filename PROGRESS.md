@@ -305,10 +305,22 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 - **Next:**
   - stops and per-release route PMTiles on the map;
   - Linky and Mimořádnosti;
-  - the composition card once ČD is asked live.
+  - the composition strip's check on prod once the proxy list is renamed (below).
 
 ## Recent log
 
+- **2026-10-31** — Compositions in the web, ČD asked live. One proxy pool for every proxied
+  channel (`proxied = true` in the manifest; `OBEHY_EGRESS_PROXY_LIST_FILE` or
+  `[realtime.egress] proxy_list_file` replaces the per-source `OBEHY_EGRESS_SZ_…`); ČD's lookup
+  goes through it. A lookup declares the trips and days it answers for (`applies`: ČD's own
+  trains, a day around today); the broker refuses others before `plan`, and a trip carries
+  `composition: bool` so the web asks only there. ČD asked for nine trains on dev through the
+  real flow (60–400 ms each): front-first order, an InterPanter as one entry per car, through
+  coaches as objects (CD-Q5), empty answers (CD-Q6), ten more service codes on the vocabulary.
+  Web: *Řazení vlaku* above the timetable (coaches front first, classes, feature icons, through
+  coaches; a coach's detail on a tap; segments where coaches join or leave; hidden while ČD has
+  nothing). SŽ map polled through the renamed pool. Not checked: segment buttons on a real
+  train (no live answer split one); prod needs the proxy list setting renamed.
 - **2026-10-31** — Oběhy rework. History keeps a journey's line as it ran (migration 0026:
   `route_id`, mode, agency on each schedule snapshot, backfilled by key with a fingerprint
   check; 100 % on dev's two days), and circulation scopes read it instead of the active

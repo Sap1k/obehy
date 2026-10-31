@@ -94,7 +94,9 @@ implements scheduling, rate limits, budgets or caching itself.
 [[lookup]]             lazy: details fetched only when needed
   kind = "composition" (later: "vehicle_detail", "trip_detail", ...)
   request (URL with {placeholders} the plan fills), ttl_s, not_found_ttl_s, retry_s,
-  rate = { per_minute, burst } (token bucket), daily_budget
+  rate = { per_minute, burst } (token bucket), daily_budget, proxied
+  applies = { keys = { <namespace> = <regex> }, days_around }   which trips it answers for:
+    the broker refuses others before plan; the API tells the web (Trip.composition)
 ```
 
 Both are written as the same pure steps around one I/O step:

@@ -16,7 +16,7 @@ from obehy.realtime.policy import EgressPolicy
 from obehy.realtime.runtime.egress import (
     Egress,
     ProxyPool,
-    load_egress_lists,
+    load_proxy_list,
     parse_proxy_list,
 )
 from obehy.realtime.runtime.fetch import fetch
@@ -27,7 +27,7 @@ POLICY = EgressPolicy(refresh_s=3600, cooldown_s=600)
 T0 = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 
 
-def _channel(egress: str | None = "sz", url: str = "http://sz.invalid/trains") -> Channel:
+def _channel(proxied: bool = True, url: str = "http://sz.invalid/trains") -> Channel:
     return Channel(
         source="sz-mapa",
         channel="trains",
@@ -36,7 +36,7 @@ def _channel(egress: str | None = "sz", url: str = "http://sz.invalid/trains") -
         interval_s=30.0,
         timeout_s=5.0,
         headers={"Accept": "application/json"},
-        egress=egress,
+        proxied=proxied,
         backoff_after=5,
         max_backoff_s=300.0,
     )
@@ -85,7 +85,7 @@ def proxies() -> Iterator[tuple[_Proxy, _Proxy]]:
 
 
 def _pool(text: str, logs: list[str]) -> ProxyPool:
-    pool = ProxyPool("sz", "secret.txt", POLICY, read=lambda _: text)
+    pool = ProxyPool("secret.txt", POLICY, read=lambda _: text)
     pool.log = logs.append
     pool.refresh()
     return pool
@@ -101,24 +101,40 @@ def test_the_list_file_comes_from_the_environment_before_the_config(
 ) -> None:
     config = tmp_path / "obehy.local.toml"
     config.write_text(
+        'schema_version = 1\n[realtime.egress]\nproxy_list_file = "D:/secrets/a.txt"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OBEHY_EGRESS_PROXY_LIST_FILE", raising=False)
+    assert load_proxy_list(config) == "D:/secrets/a.txt"
+    monkeypatch.setenv("OBEHY_EGRESS_PROXY_LIST_FILE", "/app/secrets/b.txt")
+    assert load_proxy_list(config) == "/app/secrets/b.txt"
+
+
+def test_a_per_source_list_of_an_older_config_is_named_not_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "obehy.local.toml"
+    config.write_text(
         'schema_version = 1\n[realtime.egress.sz]\nproxy_list_file = "D:/secrets/a.txt"\n',
         encoding="utf-8",
     )
-    monkeypatch.delenv("OBEHY_EGRESS_SZ_PROXY_LIST_FILE", raising=False)
-    assert load_egress_lists(["sz", "other"], config) == {"sz": "D:/secrets/a.txt"}
+    monkeypatch.delenv("OBEHY_EGRESS_PROXY_LIST_FILE", raising=False)
     monkeypatch.setenv("OBEHY_EGRESS_SZ_PROXY_LIST_FILE", "/app/secrets/b.txt")
-    assert load_egress_lists(["sz"], config) == {"sz": "/app/secrets/b.txt"}
-
-
-def test_an_egress_channel_is_never_fetched_directly() -> None:
-    poll = fetch(_channel())
-    assert poll.status is None and poll.error is not None and "egress" in poll.error
-
-
-def test_an_egress_channel_without_a_pool_does_not_poll() -> None:
     logs: list[str] = []
-    kept = Egress({}).usable([_channel(), _channel(egress=None)], logs.append)
-    assert [c.egress for c in kept] == [None]
+    assert load_proxy_list(config, logs.append) is None
+    assert "OBEHY_EGRESS_SZ_PROXY_LIST_FILE" in logs[0] and "[realtime.egress.sz]" in logs[0]
+    assert "b.txt" not in logs[0]
+
+
+def test_a_proxied_channel_is_never_fetched_directly() -> None:
+    poll = fetch(_channel())
+    assert poll.status is None and poll.error is not None and "proxied" in poll.error
+
+
+def test_a_proxied_channel_without_a_pool_does_not_poll() -> None:
+    logs: list[str] = []
+    kept = Egress(None).usable([_channel(), _channel(proxied=False)], logs.append)
+    assert [c.proxied for c in kept] == [False]
     assert "not polled" in logs[0]
 
 
@@ -127,7 +143,7 @@ def test_requests_go_through_the_proxy_without_a_user_agent(
 ) -> None:
     _, working = proxies
     logs: list[str] = []
-    poll = Egress({"sz": _pool(working.line, logs)}).fetch(_channel())
+    poll = Egress(_pool(working.line, logs)).fetch(_channel())
     assert poll.ok and poll.body == b'{"ok": true}'
     (request,) = working.seen
     assert request["path"] == "http://sz.invalid/trains"  # a proxied (absolute-URI) request
@@ -143,20 +159,20 @@ def test_a_refusing_proxy_is_benched_and_the_request_retried_on_the_next(
     refusing, working = proxies
     logs: list[str] = []
     pool = _pool(f"{refusing.line}\n{working.line}\n", logs)
-    poll = Egress({"sz": pool}).fetch(_channel())
+    poll = Egress(pool).fetch(_channel())
     assert poll.ok
     assert len(refusing.seen) == 1 and len(working.seen) == 1
     assert list(pool.benched_until) == [0]
     assert any("proxy #0 benched (HTTP 403)" in line for line in logs)
-    Egress({"sz": pool}).fetch(_channel())
+    Egress(pool).fetch(_channel())
     assert len(refusing.seen) == 1  # still on the bench
 
 
 def test_every_proxy_refusing_returns_the_refusal(proxies: tuple[_Proxy, _Proxy]) -> None:
     refusing, _ = proxies
     pool = _pool(refusing.line, [])
-    assert Egress({"sz": pool}).fetch(_channel()).status == 403
-    poll = Egress({"sz": pool}).fetch(_channel())
+    assert Egress(pool).fetch(_channel()).status == 403
+    poll = Egress(pool).fetch(_channel())
     assert poll.status is None and "every proxy benched" in str(poll.error)
 
 
@@ -164,7 +180,6 @@ def test_a_failed_list_download_keeps_the_pool() -> None:
     texts = iter(["10.0.0.1:1:a:b", ""])
     clock = iter([0.0, 4000.0])
     pool = ProxyPool(
-        "sz",
         "secret.txt",
         POLICY,
         read=lambda _: next(texts),
@@ -192,12 +207,13 @@ def test_the_saved_list_is_read_from_its_file(
     saved.write_text("10.0.0.1:8080:alice:secret\n", encoding="utf-8")
     config = tmp_path / "obehy.local.toml"
     config.write_text(
-        f'schema_version = 1\n[realtime.egress.sz]\nproxy_list_file = "{saved.as_posix()}"\n',
+        f'schema_version = 1\n[realtime.egress]\nproxy_list_file = "{saved.as_posix()}"\n',
         encoding="utf-8",
     )
-    monkeypatch.delenv("OBEHY_EGRESS_SZ_PROXY_LIST_FILE", raising=False)
-    (source,) = load_egress_lists(["sz"], config).values()
-    pool = ProxyPool("sz", source, POLICY, log=lambda _: None)
+    monkeypatch.delenv("OBEHY_EGRESS_PROXY_LIST_FILE", raising=False)
+    source = load_proxy_list(config)
+    assert source is not None
+    pool = ProxyPool(source, POLICY, log=lambda _: None)
     pool.refresh()
     assert pool.proxies == ("http://alice:secret@10.0.0.1:8080",)
 
@@ -250,7 +266,7 @@ def _keyed(url: str) -> Channel:
 def test_a_cursor_channel_polls_deltas_with_its_secret() -> None:
     source = _Golemio()
     now = [T0]
-    egress = Egress({}, clock=lambda: now[0], secrets={"golemio": "k3y"})
+    egress = Egress(None, clock=lambda: now[0], secrets={"golemio": "k3y"})
     channel = _keyed(source.url)
     try:
         first = egress.fetch(channel)
@@ -276,9 +292,9 @@ def test_a_cursor_channel_polls_deltas_with_its_secret() -> None:
 def test_an_auth_channel_needs_its_secret() -> None:
     channel = _keyed("http://pid.invalid/")
     logs: list[str] = []
-    assert Egress({}).usable([channel], logs.append) == []
+    assert Egress(None).usable([channel], logs.append) == []
     assert "OBEHY_SECRET_GOLEMIO" in logs[0] and "not polled" in logs[0]
-    assert Egress({}, secrets={"golemio": "k"}).usable([channel], logs.append) == [channel]
+    assert Egress(None, secrets={"golemio": "k"}).usable([channel], logs.append) == [channel]
     poll = fetch(channel)  # without the egress fetcher there is no secret: never sent
     assert poll.status is None and poll.error is not None and "secret" in poll.error
 

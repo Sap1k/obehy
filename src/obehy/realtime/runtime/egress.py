@@ -1,17 +1,17 @@
 """Proxied, anonymous egress (docs/R2_SLICE.md section 7).
 
 SŽ is reported to IP-ban addresses that run services against it, so a channel declaring
-`egress = "<name>"` is only ever sent through that egress's proxy pool, with no User-Agent and
-no header but the manifest's own. The pool is a saved proxy list (Webshare's format, one
-`ip:port:username:password` per line), a secret file named by `OBEHY_EGRESS_<NAME>_PROXY_LIST_FILE`
-or `[realtime.egress.<name>] proxy_list_file` in the gitignored local config, re-read every
-`refresh_s`. Webshare's download links are regenerated, so they are not used. The file's
-contents and the proxies' addresses and credentials are never logged: a proxy is named by its
-index in the list.
+`proxied = true` (SŽ, ČD) is only ever sent through the proxy pool, with no User-Agent and no
+header but the manifest's own. There is one pool for every such channel: a saved proxy list
+(Webshare's format, one `ip:port:username:password` per line), a secret file named by
+`OBEHY_EGRESS_PROXY_LIST_FILE` or `[realtime.egress] proxy_list_file` in the gitignored local
+config, re-read every `refresh_s`. Webshare's download links are regenerated, so they are not
+used. The file's contents and the proxies' addresses and credentials are never logged: a proxy
+is named by its index in the list.
 
 Requests go round-robin over the pool. A proxy answering 403 or 429, or failing to connect, is
-benched for `cooldown_s` and the request is retried once on the next proxy. A channel whose
-egress is not configured never polls (fail closed).
+benched for `cooldown_s` and the request is retried once on the next proxy. A proxied channel
+never polls without the pool (fail closed).
 
 `Egress` is the fetcher of every channel, so it also holds what a request needs beyond its
 manifest: the secret of a channel with `auth` (an API key; such a channel without its secret
@@ -60,21 +60,15 @@ class EgressError(RuntimeError):
     """An egress cannot be used (no pool, an unusable proxy list)."""
 
 
-def _env_name(name: str) -> str:
-    return f"OBEHY_EGRESS_{name.upper().replace('-', '_')}_PROXY_LIST_FILE"
+LIST_ENV = "OBEHY_EGRESS_PROXY_LIST_FILE"
+LIST_SETTING = "[realtime.egress] proxy_list_file"
 
 
-def _setting(name: str, table: dict[str, Any]) -> str:
-    value = os.environ.get(_env_name(name), "").strip()
-    raw = table.get("proxy_list_file")
-    return value or (raw.strip() if isinstance(raw, str) else "")
+def load_proxy_list(path: Path | None = None, log: Callable[[str], None] = print) -> str | None:
+    """The saved proxy-list file; the environment before the config file. A per-source list of
+    an older config (`OBEHY_EGRESS_SZ_PROXY_LIST_FILE`, `[realtime.egress.sz]`) is not read: it
+    is named in the log, to be renamed."""
 
-
-def load_egress_lists(names: Sequence[str], path: Path | None = None) -> dict[str, str]:
-    """The saved proxy-list file of each configured egress; the environment before the config
-    file."""
-
-    found: dict[str, str] = {}
     document: dict[str, Any] = {}
     source = (path or default_config_path()).resolve()
     if source.is_file():
@@ -84,17 +78,19 @@ def load_egress_lists(names: Sequence[str], path: Path | None = None) -> dict[st
         except tomllib.TOMLDecodeError as error:
             raise ConfigurationError(f"Invalid TOML in {source}: {error}") from error
     realtime = document.get("realtime")
-    egress = cast(dict[str, Any], realtime).get("egress") if isinstance(realtime, dict) else None
-    for name in sorted(set(names)):
-        table: dict[str, Any] = {}
-        if isinstance(egress, dict):
-            raw_table = cast(dict[str, Any], egress).get(name)
-            table = cast(dict[str, Any], raw_table) if isinstance(raw_table, dict) else {}
-
-        saved = _setting(name, table)
-        if saved:
-            found[name] = os.path.expandvars(saved)
-    return found
+    raw = cast(dict[str, Any], realtime).get("egress") if isinstance(realtime, dict) else None
+    table = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+    old = sorted(
+        [k for k in os.environ if k.startswith("OBEHY_EGRESS_") and k != LIST_ENV]
+        + [f"[realtime.egress.{k}]" for k, v in table.items() if isinstance(v, dict)]
+    )
+    if old:
+        log(f"egress: {', '.join(old)} not read; the one list is {LIST_ENV} or {LIST_SETTING}")
+    setting = table.get("proxy_list_file")
+    saved = os.environ.get(LIST_ENV, "").strip() or (
+        setting.strip() if isinstance(setting, str) else ""
+    )
+    return os.path.expandvars(saved) if saved else None
 
 
 def parse_proxy_list(text: str) -> tuple[str, ...]:
@@ -127,9 +123,8 @@ def anonymous_opener(proxy_url: str) -> OpenerDirector:
 
 @dataclass
 class ProxyPool:
-    """One egress's proxies; thread-safe, since channels are fetched in worker threads."""
+    """The proxies; thread-safe, since channels are fetched in worker threads."""
 
-    name: str
     list_file: str
     policy: EgressPolicy
     read: Callable[[str], str] = _read_list
@@ -154,16 +149,16 @@ class ProxyPool:
             # Never the error text: it may quote the secret file.
             code = getattr(error, "code", None)
             detail = type(error).__name__ + (f" {code}" if isinstance(code, int) else "")
-            self.log(f"egress {self.name}: proxy list unreadable ({detail})")
+            self.log(f"egress: proxy list unreadable ({detail})")
             return
         if not proxies:
-            self.log(f"egress {self.name}: proxy list has no usable line; pool kept")
+            self.log("egress: proxy list has no usable line; pool kept")
             return
         if proxies != self.proxies:
             self.proxies = proxies
             self.benched_until.clear()
             self._next = 0
-            self.log(f"egress {self.name}: {len(proxies)} proxies")
+            self.log(f"egress: {len(proxies)} proxies")
 
     def pick(self) -> tuple[int, str] | None:
         """The next proxy not on the bench, round-robin; None if every one is benched."""
@@ -182,7 +177,7 @@ class ProxyPool:
     def bench(self, index: int, reason: str) -> None:
         with self._lock:
             self.benched_until[index] = self.monotonic() + self.policy.cooldown_s
-        self.log(f"egress {self.name}: proxy #{index} benched ({reason})")
+        self.log(f"egress: proxy #{index} benched ({reason})")
 
 
 def _bench_reason(poll: Poll) -> str | None:
@@ -195,9 +190,9 @@ def _bench_reason(poll: Poll) -> str | None:
 
 @dataclass
 class Egress:
-    """The fetcher of the recorder and the worker: direct, or through a channel's pool."""
+    """The fetcher of the recorder and the worker: direct, or through the pool."""
 
-    pools: Mapping[str, ProxyPool]
+    pool: ProxyPool | None
     clock: Clock = utc_clock
     opener: Callable[[str], OpenerDirector] = anonymous_opener
     secrets: Mapping[str, str] = field(default_factory=dict[str, str])
@@ -208,17 +203,13 @@ class Egress:
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def usable(self, channels: Sequence[Channel], log: Callable[[str], None]) -> list[Channel]:
-        """The channels that may poll: an egress channel needs its pool, an auth channel its
+        """The channels that may poll: a proxied channel needs the pool, an auth channel its
         secret (fail closed)."""
 
         kept: list[Channel] = []
         for channel in channels:
-            if channel.egress is not None and channel.egress not in self.pools:
-                log(
-                    f"{channel.name}: egress {channel.egress!r} has no proxy list "
-                    f"({_env_name(channel.egress)} or "
-                    f"[realtime.egress.{channel.egress}] proxy_list_file); not polled"
-                )
+            if channel.proxied and self.pool is None:
+                log(f"{channel.name}: no proxy list ({LIST_ENV} or {LIST_SETTING}); not polled")
                 continue
             if channel.auth is not None and channel.auth.secret not in self.secrets:
                 log(
@@ -250,7 +241,7 @@ class Egress:
                 self.cursors.pop(channel.name, None)
 
     def fetch(self, channel: Channel, body: bytes | None = None) -> Poll:
-        if channel.egress is None and channel.auth is None and channel.cursor is None:
+        if not channel.proxied and channel.auth is None and channel.cursor is None:
             return fetch(channel, self.clock)
         headers: dict[str, str] = {}
         if channel.auth is not None:
@@ -261,7 +252,7 @@ class Egress:
         since = self._since(channel)
         params = {} if since is None or channel.cursor is None else {channel.cursor.param: since}
         keep = () if channel.cursor is None else (channel.cursor.header,)
-        if channel.egress is None:
+        if not channel.proxied:
             request = channel_request(
                 channel, anonymous=False, body=body, headers=headers, params=params
             )
@@ -279,10 +270,9 @@ class Egress:
         params: Mapping[str, str],
         keep: tuple[str, ...],
     ) -> Poll:
-        assert channel.egress is not None
-        pool = self.pools.get(channel.egress)
+        pool = self.pool
         if pool is None:
-            return refused(channel, f"egress {channel.egress!r} is not configured", self.clock)
+            return refused(channel, "proxied: no proxy list configured", self.clock)
         poll: Poll | None = None
         for _attempt in range(2):
             picked = pool.pick()
@@ -300,7 +290,7 @@ class Egress:
             pool.bench(index, reason)
         if poll is None:
             state = "every proxy benched" if pool.proxies else "no proxy list"
-            return refused(channel, f"egress {channel.egress!r}: {state}", self.clock)
+            return refused(channel, f"proxied: {state}", self.clock)
         return poll
 
 
@@ -311,10 +301,11 @@ def build_egress(
     config: Path | None = None,
     log: Callable[[str], None] = print,
 ) -> Egress:
-    names = sorted({c.egress for c in channels if c.egress is not None})
-    lists = load_egress_lists(names, config)
-    pools = {name: ProxyPool(name, file, policy, log=log) for name, file in lists.items()}
-    for pool in pools.values():
-        pool.refresh()
+    pool: ProxyPool | None = None
+    if any(c.proxied for c in channels):
+        list_file = load_proxy_list(config, log)
+        if list_file is not None:
+            pool = ProxyPool(list_file, policy, log=log)
+            pool.refresh()
     secrets = load_secrets((c.auth.secret for c in channels if c.auth is not None), config)
-    return Egress(pools, secrets=secrets)
+    return Egress(pool, secrets=secrets)

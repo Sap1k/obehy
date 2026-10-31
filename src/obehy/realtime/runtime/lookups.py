@@ -223,6 +223,9 @@ class LookupBroker:
         """The lookup's outcome for the subject; None to wait for a token."""
 
         plan, decode = CONNECTORS[(lookup.source, lookup.name)]
+        refusal = lookup.applies.refusal(view.keys, view.service_date, local_date(now))
+        if refusal is not None:
+            return {"outcome": "not_available", "reason": refusal}
         planned = plan(subject, view)
         if isinstance(planned, NotAvailable):
             return {"outcome": "not_available", "reason": planned.reason}

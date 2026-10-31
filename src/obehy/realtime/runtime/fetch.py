@@ -1,7 +1,7 @@
 """One HTTP request of a channel, as a `Poll` (successful or not).
 
-A channel that declares an egress is never fetched directly: `fetch` refuses it, and only
-`runtime.egress` sends it, through its proxy pool (docs/R2_SLICE.md section 7).
+A proxied channel is never fetched directly: `fetch` refuses it, and only `runtime.egress`
+sends it, through the proxy pool (docs/R2_SLICE.md section 7).
 
 `{epoch_ms}` in a channel's URL is filled with the current time at each request (a cache
 buster, DPMD-Q9). A gzip-encoded response, which a manifest asks for with its own
@@ -145,8 +145,8 @@ def channel_request(
 def fetch_body(channel: Channel, body: bytes, clock: Clock = utc_clock) -> Poll:
     """A direct request with a per-read body (demand channels); refused like `fetch`."""
 
-    if channel.egress is not None:
-        return refused(channel, f"egress {channel.egress!r} required: not sent directly", clock)
+    if channel.proxied:
+        return refused(channel, "proxied: not sent directly", clock)
     if channel.auth is not None:
         return refused(channel, f"secret {channel.auth.secret!r} required", clock)
     request = channel_request(channel, anonymous=False, body=body)
@@ -154,10 +154,10 @@ def fetch_body(channel: Channel, body: bytes, clock: Clock = utc_clock) -> Poll:
 
 
 def fetch(channel: Channel, clock: Clock = utc_clock) -> Poll:
-    """A direct request; refused for a channel that must go through an egress."""
+    """A direct request; refused for a channel that must go through the proxies."""
 
-    if channel.egress is not None:
-        return refused(channel, f"egress {channel.egress!r} required: not sent directly", clock)
+    if channel.proxied:
+        return refused(channel, "proxied: not sent directly", clock)
     if channel.auth is not None:
         return refused(channel, f"secret {channel.auth.secret!r} required", clock)
     return send(channel_request(channel, anonymous=False), channel.timeout_s, clock)

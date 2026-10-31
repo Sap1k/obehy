@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import re
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
@@ -80,8 +81,8 @@ class Channel:
     live_feeds: tuple[str, ...] | None = None
     capabilities: tuple[str, ...] = ()
     semantics: dict[str, Any] = field(default_factory=dict[str, Any])
-    # A named proxied, anonymous egress (runtime/egress.py); never fetched directly.
-    egress: str | None = None
+    # Sent only through the proxy pool, anonymously (runtime/egress.py); never directly.
+    proxied: bool = False
     # Demand polling: the named query that says what to request (runtime/demand.py); the
     # request body's `{sr70}` is filled per read. Interval channels have none.
     demand: str | None = None
@@ -109,10 +110,36 @@ class Rate:
 
 
 @dataclass(frozen=True)
+class Applies:
+    """Which trips a lookup answers for, declared so that the broker and the API agree without
+    asking upstream: a trip key per namespace matching a pattern (all of them), and service
+    dates within `days_around` of today. Empty: every trip of the lookup's feeds, any day."""
+
+    keys: tuple[tuple[str, str], ...] = ()  # (namespace, regex searched in the key)
+    days_around: int | None = None
+
+    @property
+    def namespaces(self) -> tuple[str, ...]:
+        return tuple(namespace for namespace, _ in self.keys)
+
+    def refusal(self, keys: Mapping[str, str], service_date: date, today: date) -> str | None:
+        """Why the lookup does not answer for a trip with these keys on the date; None if it
+        does."""
+
+        for namespace, pattern in self.keys:
+            key = keys.get(namespace)
+            if key is None or re.search(pattern, key) is None:
+                return f"not a trip it answers for ({namespace})"
+        if self.days_around is not None and abs((service_date - today).days) > self.days_around:
+            return f"answers only within {self.days_around} day(s) of today"
+        return None
+
+
+@dataclass(frozen=True)
 class Lookup:
     """A lazy detail (a composition): asked for on demand, never polled. `request` is the
     upstream call as a channel (method, URL whose `{name}` placeholders the connector's plan
-    fills, headers, timeout, egress), so it is fetched and archived like a poll."""
+    fills, headers, timeout, proxied), so it is fetched and archived like a poll."""
 
     source: str
     name: str
@@ -124,6 +151,7 @@ class Lookup:
     retry_s: float  # a failed request is not repeated sooner
     rate: Rate
     daily_budget: int  # requests per day (Europe/Prague)
+    applies: Applies = Applies()
 
     @property
     def qualified(self) -> str:
@@ -255,9 +283,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     _core_semantics(cast(dict[str, Any], semantics), where)
     feeds = _strings(table, "feeds", where, FEED_NAMES)
     live_feeds = _strings(table, "live_feeds", where, feeds) if "live_feeds" in table else None
-    egress = table.get("egress")
-    if egress is not None and (not isinstance(egress, str) or not _IDENTIFIER.match(egress)):
-        raise ManifestError(f"{where}: egress must be a lowercase ASCII name")
+    proxied = _proxied(table, where)
     auth: Auth | None = None
     if "auth" in table:
         auth_table = _table(table, "auth", where)
@@ -290,11 +316,20 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         live_feeds=live_feeds,
         capabilities=_strings(table, "capabilities", where, CAPABILITIES),
         semantics=dict(cast(dict[str, Any], semantics)),
-        egress=egress,
+        proxied=proxied,
         demand=demand,
         auth=auth,
         cursor=cursor,
     )
+
+
+def _proxied(table: dict[str, Any], where: str) -> bool:
+    if "egress" in table:
+        raise ManifestError(f"{where}: egress was replaced by proxied = true (one proxy pool)")
+    proxied = table.get("proxied", False)
+    if not isinstance(proxied, bool):
+        raise ManifestError(f"{where}: proxied must be true or false")
+    return proxied
 
 
 def _lookup(source: str, raw: object, where: str) -> Lookup:
@@ -315,9 +350,8 @@ def _lookup(source: str, raw: object, where: str) -> Lookup:
         not isinstance(value, str) for value in cast(dict[str, object], headers).values()
     ):
         raise ManifestError(f"{where}: request.headers must be a table of strings")
-    egress = table.get("egress")
-    if egress is not None and (not isinstance(egress, str) or not _IDENTIFIER.match(egress)):
-        raise ManifestError(f"{where}: egress must be a lowercase ASCII name")
+    proxied = _proxied(table, where)
+    applies = _applies(table, where)
     rate = _table(table, "rate", where)
     feeds = _strings(table, "feeds", where, FEED_NAMES)
     channel = Channel(
@@ -330,7 +364,7 @@ def _lookup(source: str, raw: object, where: str) -> Lookup:
         headers=dict(cast(dict[str, str], headers)),
         feeds=feeds,
         capabilities=_strings(table, "capabilities", where, CAPABILITIES),
-        egress=egress,
+        proxied=proxied,
     )
     return Lookup(
         source=source,
@@ -343,7 +377,30 @@ def _lookup(source: str, raw: object, where: str) -> Lookup:
         retry_s=_positive(table, "retry_s", where),
         rate=Rate(_positive(rate, "per_minute", where), int(_positive(rate, "burst", where))),
         daily_budget=int(_positive(table, "daily_budget", where)),
+        applies=applies,
     )
+
+
+def _applies(table: dict[str, Any], where: str) -> Applies:
+    if "applies" not in table:
+        return Applies()
+    applies = _table(table, "applies", where)
+    keys = applies.get("keys", {})
+    if not isinstance(keys, dict):
+        raise ManifestError(f"{where}: applies.keys must be a table of patterns")
+    patterns: list[tuple[str, str]] = []
+    for namespace, pattern in sorted(cast(dict[str, object], keys).items()):
+        if not isinstance(pattern, str):
+            raise ManifestError(f"{where}: applies.keys.{namespace} must be a string")
+        try:
+            re.compile(pattern)
+        except re.error as error:
+            raise ManifestError(f"{where}: applies.keys.{namespace}: {error}") from error
+        patterns.append((namespace, pattern))
+    days = applies.get("days_around")
+    if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days < 0):
+        raise ManifestError(f"{where}: applies.days_around must be a whole number of days")
+    return Applies(tuple(patterns), days)
 
 
 def load_source(path: Path, filters: Sequence[str] = ()) -> Source:
@@ -438,6 +495,22 @@ def load_channels(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Cha
     """Every channel of a manifest file, or of every `*.toml` in a directory (by file name)."""
 
     return [channel for source in load_sources(path, filters) for channel in source.channels]
+
+
+def declared_lookups(path: Path = SOURCES) -> list[Lookup]:
+    """Every `[[lookup]]` only, for readers that run no connector (the API): which lookups
+    there are and which trips they answer for."""
+
+    found: list[Lookup] = []
+    for file in _manifest_files(path):
+        with file.open("rb") as stream:
+            document = tomllib.load(stream)
+        source = _string(document, "source", str(file))
+        tables = cast(list[object], document.get("lookup", []))
+        found.extend(
+            _lookup(source, raw, f"{file} lookup {n}") for n, raw in enumerate(tables, start=1)
+        )
+    return found
 
 
 def load_lookups(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Lookup]:

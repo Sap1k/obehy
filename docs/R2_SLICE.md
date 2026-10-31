@@ -194,12 +194,12 @@ The policy default is set from that report.
 ## 7. Egress and demand polling (generic runtime)
 
 **SŽ IP-bans addresses that run services against it.** Every channel to an SŽ host declares
-`egress = "sz"`.
+`proxied = true`, and so does ČD's composition lookup. There is one pool for all of them.
 
 **The proxy pool.**
-- It is the user's Webshare pool, secret, as a saved list file (`[realtime.egress.sz]
+- It is the user's Webshare pool, secret, as a saved list file (`[realtime.egress]
   proxy_list_file` in the gitignored `config/obehy.local.toml`, or
-  `OBEHY_EGRESS_SZ_PROXY_LIST_FILE`; on the server `deploy/secrets/`, mounted read-only).
+  `OBEHY_EGRESS_PROXY_LIST_FILE`; on the server `deploy/secrets/`, mounted read-only).
   Webshare's download links are regenerated, so they are not used.
 - The runtime reads the list at start and every `egress.refresh_s`. Each line is
   `ip:port:username:password`. The pool is held in memory only, and an empty or malformed list
@@ -243,7 +243,7 @@ manifest_version = 1
 
 [[channel]]
 name = "board"
-egress = "sz"
+proxied = true
 poll = { kind = "demand", query = "station_boards" }
 backoff = { after_failures = 3, max_s = 900 }
 timeout_s = 15
@@ -252,7 +252,7 @@ feeds = ["czptt"]
 capabilities = ["trip_key", "platform"]
 ```
 
-`sz-mapa.toml` gains `egress = "sz"`. The recorder uses the same runtime, so recording SŽ also
+`sz-mapa.toml` gains `proxied = true`. The recorder uses the same runtime, so recording SŽ also
 needs the pool.
 
 ## 8. Policy additions (`policy-v2.toml`; `policy_version` changes)

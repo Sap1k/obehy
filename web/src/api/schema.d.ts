@@ -2238,6 +2238,11 @@ export interface components {
             bikes_allowed: boolean | null;
             /** Calls */
             calls: components["schemas"]["TripCall"][];
+            /**
+             * Composition
+             * @description A composition source answers for this trip (`…/composition`): asking is worth it. Declared by the source, not asked of it.
+             */
+            composition: boolean;
             /** Connections */
             connections: components["schemas"]["Connection"][];
             /** Features */

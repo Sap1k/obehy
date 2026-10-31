@@ -184,7 +184,7 @@ min_raw_days = 3
 min_history_days = 7
 
 [egress]
-# Proxy pools of channels that declare an egress (SŽ; docs/R2_SLICE.md section 7).
+# The proxy pool of channels with `proxied = true` (SŽ, ČD; docs/R2_SLICE.md section 7).
 refresh_s = 21600
 # A proxy refused (403/407/429) or unreachable stays out of rotation this long.
 cooldown_s = 1800

@@ -116,7 +116,7 @@ class GuardPolicy:
 
 @dataclass(frozen=True, slots=True)
 class EgressPolicy:
-    """Proxy pools of egress channels (docs/R2_SLICE.md section 7)."""
+    """The proxy pool of proxied channels (docs/R2_SLICE.md section 7)."""
 
     refresh_s: int  # how often the proxy list is downloaded again
     cooldown_s: int  # how long a proxy that failed or was refused stays out of rotation

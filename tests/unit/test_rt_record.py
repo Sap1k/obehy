@@ -84,14 +84,14 @@ def test_shipped_manifests_load() -> None:
     assert pid.auth is not None and pid.cursor is not None and pid.live_feeds == ("jdf", "czptt")
     assert (dpmd.filter, dpmd.method) == ("dpmd", "GET") and "{epoch_ms}" in dpmd.url
     assert idol.headers["origin"] == "https://www.mpvnet.cz" and idol.feeds == ("jdf", "czptt")
-    assert (boards.demand, boards.egress, boards.method) == ("station_boards", "sz", "POST")
+    assert (boards.demand, boards.proxied, boards.method) == ("station_boards", True, "POST")
     assert boards.body is not None and b"SR70={sr70}" in boards.body
     assert arriva.method == "POST"
     assert arriva.filter == "arriva-express"
     assert arriva.body is not None and b"busesCurrentLocations" in arriva.body
     assert arriva.headers["x-enviroment"] == "client"
     assert "OsVlaky" in sz.url
-    assert sz.egress == "sz" and duk.egress is None and arriva.egress is None
+    assert sz.proxied and not duk.proxied and not arriva.proxied
     # No `live_feeds`: every feed is live. mpvnet lists only its buses.
     assert duk.live_feeds is None and duk.is_live("czptt")
     assert idol.is_live("jdf") and not idol.is_live("czptt")
@@ -128,7 +128,8 @@ EVERY_5S = 'poll = { kind = "interval", seconds = 5 }\n'
         (EVERY_5S + 'feeds = ["gtfs"]\n' + GET, "unknown feeds"),
         (EVERY_5S + 'feeds = ["jdf"]\nlive_feeds = ["czptt"]\n' + GET, "unknown live_feeds"),
         (EVERY_5S + GET + "semantics = { pre_trip_after_end_is_stale = 1 }\n", "true or false"),
-        (EVERY_5S + GET + 'egress = "SZ proxy"\n', "egress"),
+        (EVERY_5S + GET + 'egress = "sz"\n', "replaced by proxied"),
+        (EVERY_5S + GET + 'proxied = "yes"\n', "proxied must be"),
         (EVERY_5S + GET + 'auth = { header = "X-Key", secret = "Golemio Key" }\n', "auth.secret"),
         (
             EVERY_5S + GET + 'cursor = { header = "x-last-modified", param = "since" }\n',

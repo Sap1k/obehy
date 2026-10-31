@@ -49,15 +49,16 @@ nohup uv run obehy rt record --archive data/rt-raw > rt-record.log 2>&1 &
 `--sources duk,sz-mapa` limits the sources and `--duration 2d` stops after a set time. The
 recorder stops cleanly on SIGINT/SIGTERM. A restart appends to the same archive.
 
-SŽ channels (`egress = "sz"` in their manifest) are only ever sent through a proxy pool, with no
-User-Agent: SŽ blocks addresses that run services against it. Save your proxy list (Webshare's
-`ip:port:username:password` lines) to a file outside git and name it in the gitignored local
-config, or set `OBEHY_EGRESS_SZ_PROXY_LIST_FILE`. It is re-read every 6 hours (Webshare's
-download links are regenerated, so they are not used). Without one, SŽ channels are not
-polled; the other sources still are.
+Proxied channels (`proxied = true` in their manifest: SŽ, and ČD's composition lookup) are
+only ever sent through the one proxy pool, with no User-Agent: SŽ blocks addresses that run
+services against it. Save your proxy list (Webshare's `ip:port:username:password` lines) to a
+file outside git and name it in the gitignored local config, or set
+`OBEHY_EGRESS_PROXY_LIST_FILE`. It is re-read every 6 hours (Webshare's download links are
+regenerated, so they are not used). Without one, proxied channels are not polled; the other
+sources still are.
 
 ```toml
-[realtime.egress.sz]
+[realtime.egress]
 proxy_list_file = "D:/secrets/sz-proxies.txt"
 ```
 

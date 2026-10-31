@@ -102,8 +102,9 @@ class Unit:
 
 def start_call(subject: Subject, view: TripView) -> ViewCall | NotAvailable:
     """The call an answer is asked from: the subject's, else the next passenger call the train
-    has not left (the origin before it runs). Never the last passenger call: nothing departs
-    from it."""
+    has not left (the origin before it runs). Never the last passenger call, where nothing
+    departs: asked from there (an arrivals board at the terminus), or once the train has left
+    every other one, it is the last departing call, whose formation the train arrives with."""
 
     passenger = [call for call in view.calls if call.passenger]
     if len(passenger) < 2:
@@ -111,11 +112,11 @@ def start_call(subject: Subject, view: TripView) -> ViewCall | NotAvailable:
     departing = passenger[:-1]
     if subject.from_location is not None:
         named = [call for call in departing if call.location_id == subject.from_location]
+        if subject.from_location == passenger[-1].location_id:
+            return departing[-1]
         if not named:
             return NotAvailable(f"{subject.from_location} is no departing call of the trip")
         return next((call for call in named if not call.left), named[-1])
     last_left = max((call.ordinal for call in view.calls if call.left), default=-1)
     ahead = [call for call in departing if call.ordinal > last_left]
-    if not ahead:
-        return NotAvailable("the trip has left its last departing call")
-    return ahead[0]
+    return ahead[0] if ahead else departing[-1]

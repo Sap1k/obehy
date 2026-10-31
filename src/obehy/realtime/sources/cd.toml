@@ -13,6 +13,8 @@ name = "composition"
 kind = "composition"
 feeds = ["czptt"]
 capabilities = ["composition"]
+# Through the proxy pool, anonymously, like SŽ: never from the server's own address.
+proxied = true
 timeout_s = 15
 # A formation rarely changes en route; a later station is another question (another answer).
 ttl_s = 900
@@ -20,6 +22,9 @@ not_found_ttl_s = 3600
 retry_s = 300
 rate = { per_minute = 6, burst = 3 }
 daily_budget = 1000
+# ČD's own trains (the CZPTT TR key names company 1154), on the days around today: ČD answers
+# for no others. The API reads this too, to offer a composition only where one can come.
+applies = { keys = { "czptt:tr" = '^Tr:1154:' }, days_around = 1 }
 
 [lookup.request]
 method = "GET"

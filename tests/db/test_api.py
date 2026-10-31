@@ -1323,6 +1323,21 @@ def _broker(database_url: str, tmp_path: Path, fetched: list[str]) -> LookupBrok
     )
 
 
+def test_a_trip_says_whether_a_composition_can_be_asked(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ČD's train, but the API's today (the database's) is weeks after the 7th.
+    assert _get(client, "/trips/czptt:trip:1:2/2026-10-07")["composition"] is False
+
+    def the_7th(_: Instant) -> date:
+        return date(2026, 10, 7)
+
+    monkeypatch.setattr("obehy.api.lookup_rules.local_date", the_7th)
+    assert _get(client, "/trips/czptt:trip:1:2/2026-10-07")["composition"] is True
+    # A bus: no composition source covers its feed.
+    assert _get(client, "/trips/jdf:trip:1/2026-10-06")["composition"] is False
+
+
 def _fresh_for(client: TestClient, seconds: int) -> None:
     app = cast(FastAPI, client.app)
     app.state.limits = replace(app.state.limits, composition_fresh_s=seconds)
@@ -1388,18 +1403,28 @@ def test_a_composition_is_asked_then_answered_by_the_broker(
         _fresh_for(client, 300)
         bus = _get(client, "/trips/jdf:trip:1/2026-10-06/composition")
         assert (bus["status"], bus["sources"]) == ("not_available", [])
-        # The run's first part has left its only departing call.
+        # The run's first part has left its only departing call: the formation it arrives
+        # with, asked from there.
         _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition", 202)
-        assert broker.serve() == 1 and len(fetched) == 1
+        assert broker.serve() == 1 and len(fetched) == 2
+        assert "%22SR70%22%3A%225454000%22" in fetched[1]
         left = _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition")
-        assert left["status"] == "not_available"
-        assert left["sources"][0]["reason"] == "the trip has left its last departing call"
+        assert left["status"] == "fresh" and left["units"]
         _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition", 404, **{"from": "jdf:stop:1"})
         logged = broker.connection.execute(
             "SELECT lookup, cache_key, outcome FROM rt.lookup_fetch"
         ).fetchall()
         assert logged == [
-            {"lookup": "composition", "cache_key": "6600/2026-10-07/5454002", "outcome": "answered"}
+            {
+                "lookup": "composition",
+                "cache_key": "6600/2026-10-07/5454002",
+                "outcome": "answered",
+            },
+            {
+                "lookup": "composition",
+                "cache_key": "6600/2026-10-07/5454000",
+                "outcome": "answered",
+            },
         ]
         assert (tmp_path / "raw" / "cd" / "composition").is_dir()
 

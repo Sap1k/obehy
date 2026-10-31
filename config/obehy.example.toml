@@ -24,9 +24,9 @@ directory = "D:/src/jrutil"
 # Admin database for tests/db (OBEHY_TEST_DATABASE_URL overrides it); the server may be remote.
 # test_url = "postgresql://obehy:PASSWORD@localhost:45873/obehy_test"
 
-# Proxied, anonymous egress for SŽ (docs/R2_SLICE.md section 7). Secret: keep it out of git.
-# A saved list of ip:port:username:password lines; OBEHY_EGRESS_SZ_PROXY_LIST_FILE overrides it.
-# [realtime.egress.sz]
+# The proxy pool of proxied channels (SŽ, ČD; docs/R2_SLICE.md section 7). Secret: keep it out
+# of git. A saved list of ip:port:username:password lines; OBEHY_EGRESS_PROXY_LIST_FILE overrides it.
+# [realtime.egress]
 # proxy_list_file = "D:/secrets/sz-proxies.txt"
 
 # API keys of realtime sources (connector manifests' `auth`). Secret: keep it out of git.

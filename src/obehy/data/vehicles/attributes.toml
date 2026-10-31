@@ -67,3 +67,12 @@ bicycle_reservation_required = { type = "bool", cs = "Jízdní kolo s povinnou r
 open_saloon = { type = "bool", cs = "Velkoprostorový vůz", en = "Open saloon", icon = "open_saloon" }
 family_compartment = { type = "bool", cs = "Oddíl pro cestující s dětmi", en = "Family compartment", icon = "family" }
 children_cinema = { type = "bool", cs = "Dětské kino", en = "Children's cinema", icon = "cinema" }
+bicycle_reservation_possible = { type = "bool", cs = "Jízdní kolo s možností rezervace", en = "Bicycle reservation possible", icon = "bicycle" }
+luggage_storage = { type = "bool", cs = "Úschova zavazadel a kol během jízdy", en = "Luggage and bicycle storage", icon = "luggage" }
+couchette = { type = "bool", cs = "Lehátkový vůz", en = "Couchette car", icon = "couchette" }
+sleeper = { type = "bool", cs = "Lůžkový vůz", en = "Sleeping car", icon = "sleeper" }
+restaurant = { type = "bool", cs = "Restaurační vůz", en = "Restaurant car", icon = "restaurant" }
+refreshments = { type = "bool", cs = "Občerstvení", en = "Refreshments", icon = "refreshments" }
+quiet_zone = { type = "bool", cs = "Tichý oddíl", en = "Quiet zone", icon = "quiet" }
+business_compartment = { type = "bool", cs = "Business oddíl", en = "Business compartment", icon = "business" }
+ladies_compartment = { type = "bool", cs = "Dámský oddíl", en = "Ladies' compartment", icon = "ladies" }

@@ -846,8 +846,9 @@ operation exist:
   `fetch() → bytes → decode(bytes) → Observations`. Slow channels are ordinary channels: a
   55p.cz-style vehicle-assignment batch every 30–60 minutes is one.
 - **lookups** are lazy details for APIs that must not be polled (compositions, vehicle or trip
-  detail). Each declares its kind, TTL, token-bucket rate, daily budget and prefetch rule, and is
-  three steps:
+  detail). Each declares its kind, TTL, token-bucket rate, daily budget, prefetch rule and which
+  trips it answers for (`applies`: key patterns and days around today, so the broker and the API
+  agree without asking upstream), and is three steps:
 
   ```text
   plan(subject, view) → UpstreamRequest | not_available     pure

@@ -1,0 +1,1 @@
+({"d":{"__type":"OrderData:#CHAPS.RazeniCD.Web.RazeniWSData","SvcDescEnum":[],"Trains":[{"__type":"TrainData:#CHAPS.RazeniCD.Web.RazeniWSData","Date":"31.10.2026","DisabledTrainTypes":null,"GetPlan":false,"ResultOutput":3,"SR70":5458377,"TrainNum":"443","Coachs":null,"ExistsMimo":false,"IsMimo":false}]}});

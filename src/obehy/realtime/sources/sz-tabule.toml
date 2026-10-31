@@ -9,7 +9,7 @@ covers = "Platforms of trains due at a station, where they are tracks; read only
 [[channel]]
 name = "board"
 # SŽ blocks addresses running services: proxied and anonymous only (docs/R2_SLICE.md 7).
-egress = "sz"
+proxied = true
 poll = { kind = "demand", query = "station_boards" }
 backoff = { after_failures = 3, max_s = 900 }
 timeout_s = 15

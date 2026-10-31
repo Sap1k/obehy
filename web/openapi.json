@@ -4207,6 +4207,11 @@
             "title": "Calls",
             "type": "array"
           },
+          "composition": {
+            "description": "A composition source answers for this trip (`…/composition`): asking is worth it. Declared by the source, not asked of it.",
+            "title": "Composition",
+            "type": "boolean"
+          },
           "connections": {
             "items": {
               "$ref": "#/components/schemas/Connection"
@@ -4355,6 +4360,7 @@
           "realtime",
           "vehicles",
           "run_parts",
+          "composition",
           "calls",
           "features",
           "notes",

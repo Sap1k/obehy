@@ -2,9 +2,10 @@
 service behind the composition (řazení) pages of cd.cz, asked per train lazily (a lookup, never
 polled).
 
-- `plan`: a ČD train (its CZPTT TR key names company 1154) by its train number, its service date
-  and the station to answer from: the asked call or the next passenger call, by its SR70 code
-  written as ČD writes stations (CD-Q1: `54` and the five-digit SR70, no check digit).
+- `plan`: a ČD train by its train number, its service date and the station to answer from: the
+  asked call or the next passenger call, by its SR70 code written as ČD writes stations (CD-Q1:
+  `54` and the five-digit SR70, no check digit). Which trains and days ČD answers for (its own,
+  around today) is the manifest's `applies`, checked by the broker before `plan`.
 - `decode`: the answer is JSON wrapped in parentheses (CD-Q2). Each coach (`Coachs`) is a unit
   in train order: its type (`Bdmpz 896`), coach number, classes and services (icon codes with
   their Czech texts in `SvcDescEnum`). The locomotive is a placeholder without detail
@@ -14,7 +15,7 @@ polled).
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+import re
 from typing import Any, cast
 
 from obehy.realtime.compositions import (
@@ -26,15 +27,11 @@ from obehy.realtime.compositions import (
     UpstreamRequest,
     start_call,
 )
-from obehy.realtime.times import local_date
 
 SOURCE = "cd"
 COMPOSITION = "composition"
-COMPANY = "1154"  # ČD's company code in CZPTT (the TR key's second field)
 COUNTRY = "54"  # CD-Q1: a ČD station code is the UIC country code and the SR70
-# How far from today ČD is asked about a train (its answers are for the days around today).
-DAYS_AROUND = 1
-CLASSES = {"1": 1, "2": 2}
+CLASSES = {"1": (1,), "2": (2,), "12": (1, 2)}  # `12`: a coach with both
 # ČD's service icons onto the vehicle attribute vocabulary; any other is `raw:cd:<code>`.
 SERVICES = {
     "wifi": "wifi",
@@ -45,6 +42,16 @@ SERVICES = {
     "vp": "open_saloon",
     "D": "family_compartment",
     "kino": "children_cinema",
+    "inv": "wheelchair_accessible",
+    "mozkolo": "bicycle_reservation_possible",
+    "mozzav": "luggage_storage",
+    "leh": "couchette",
+    "luz": "sleeper",
+    "rest": "restaurant",
+    "kal": "refreshments",
+    "tichy": "quiet_zone",
+    "business": "business_compartment",
+    "damy": "ladies_compartment",
 }
 
 
@@ -53,16 +60,9 @@ class PayloadError(ValueError):
 
 
 def plan(subject: Subject, view: TripView) -> UpstreamRequest | NotAvailable:
-    if view.feed != "czptt":
-        return NotAvailable("ČD answers trains only")
-    tr = view.keys.get("czptt:tr", "")
-    if tr.split(":")[1:2] != [COMPANY]:
-        return NotAvailable("not a ČD train")
     number = view.keys.get("czptt:train_number")
     if number is None:
         return NotAvailable("the train has no train number")
-    if abs(view.service_date - local_date(view.now)) > timedelta(days=DAYS_AROUND):
-        return NotAvailable("ČD answers only for trains around today")
     start = start_call(subject, view)
     if isinstance(start, NotAvailable):
         return start
@@ -99,6 +99,40 @@ def _json(body: bytes) -> dict[str, Any]:
     return cast(dict[str, Any], inner)
 
 
+# CD-Q7: a multiple unit's car has a bare series as its type, maybe with a variant (`661`,
+# `814.2`, `064`); a coach's type has letters (`Bmz 245`).
+SERIES = re.compile(r"^\d{3}(\.\d+)?$")
+# CD-Q7: the cab's side in the pictogram's name, front first: a token of its own (`814_l_…`,
+# `914_R_…`, `014_M_…`: none).
+SIDES = {"l": "front", "r": "rear", "lr": "both", "m": None}
+
+
+def _kind(image: str, vehicle_type: object) -> UnitKind:
+    """CD-Q7: a locomotive's pictogram is `hv_…` (hnací vozidlo); a multiple unit's car has a
+    series as its type."""
+
+    if image.lower().startswith("hv"):  # ČD lowercases the first entry's name only
+        return "locomotive"
+    if isinstance(vehicle_type, str) and SERIES.match(vehicle_type):
+        return "unit"
+    return "coach"
+
+
+def _cab(image: str) -> str | None:
+    """CD-Q7: a car's driving cab from its pictogram's name: `front` or `rear` where the name
+    says the side (`814_l`, `914_R`), `true` where it says only that there is one (a control
+    car's `RV_…`, a Panter's end car `661l`, `650L`: the side is where the unit ends)."""
+
+    tokens = image.rsplit(".", 1)[0].split("_")
+    for token in tokens[1:]:
+        if token.lower() in SIDES:
+            return SIDES[token.lower()]
+    if tokens[0] == "RV":
+        return "true"
+    marked = any(len(t) > 1 and t[:-1].isdigit() and t[-1] in "lL" for t in tokens)
+    return "true" if marked else None
+
+
 def _unit(sequence: int, coach: dict[str, Any], texts: dict[str, str]) -> Unit:
     image = str(coach.get("Img") or "").rsplit("/", 1)[-1]
     raw_type = coach.get("Type")
@@ -106,7 +140,10 @@ def _unit(sequence: int, coach: dict[str, Any], texts: dict[str, str]) -> Unit:
     if isinstance(raw_type, str) and raw_type.startswith("#"):
         details.append(("type", raw_type))  # CD-Q3: not a type
         raw_type = None
-    kind: UnitKind = "locomotive" if image.startswith("hv") else "coach"  # hnací vozidlo
+    kind = _kind(image, raw_type)
+    cab = _cab(image)
+    if cab is not None:
+        details.append(("cab", cab))
     classes: list[int] = []
     features: list[str] = []
     codes: list[tuple[str, str]] = []
@@ -119,13 +156,12 @@ def _unit(sequence: int, coach: dict[str, Any], texts: dict[str, str]) -> Unit:
         if start or until:
             details.append((f"service:{code}", f"{start or ''}/{until or ''}"))
         if code in CLASSES:
-            classes.append(CLASSES[code])
+            classes.extend(CLASSES[code])
             continue
         feature = SERVICES.get(code, f"raw:{SOURCE}:{code}")
         if feature not in features:
             features.append(feature)
-    if coach.get("DirectCoach"):
-        details.append(("direct_coach", str(coach["DirectCoach"])))
+    details.extend(_direct_coach(coach.get("DirectCoach")))
     if coach.get("NumStar"):
         details.append(("number_star", "true"))  # CD-Q4
     notes = [str(n) for n in cast(list[object], coach.get("Notes") or []) if n]
@@ -145,6 +181,23 @@ def _unit(sequence: int, coach: dict[str, Any], texts: dict[str, str]) -> Unit:
         destination=str(coach["DestSt"]) if coach.get("DestSt") else None,
         details=tuple(details),
     )
+
+
+def _direct_coach(raw: object) -> list[tuple[str, str]]:
+    """A through coach (CD-Q5): where it leaves this train and the train it goes on in."""
+
+    if not isinstance(raw, dict):
+        return [("direct_coach", str(raw))] if raw else []
+    coach = cast(dict[str, Any], raw)
+    found: list[tuple[str, str]] = []
+    if coach.get("OdpSt"):
+        found.append(("direct_coach_leaves_at", str(coach["OdpSt"])))
+    train = coach.get("NaslVl")
+    if isinstance(train, dict):
+        named = cast(dict[str, Any], train)
+        parts = (named.get("TrType"), named.get("TrNum"), named.get("TrName"))
+        found.append(("direct_coach_train", " ".join(str(p) for p in parts if p)))
+    return found
 
 
 def decode(body: bytes, request: UpstreamRequest) -> tuple[Unit, ...]:

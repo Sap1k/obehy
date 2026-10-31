@@ -30,6 +30,7 @@ from obehy.api.common import (
     trip_vehicle,
 )
 from obehy.api.limits import Limits
+from obehy.api.lookup_rules import can_ask
 from obehy.api.params import date_span
 from obehy.api.physical import is_physical
 from obehy.realtime.times import local_date
@@ -323,6 +324,7 @@ def trip(
         vehicles=[trip_vehicle(v, row["mode"]) for v in vehicles],
         run_parts=[schema.TripPart.model_validate(p) for p in parts]
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
+        composition=can_ask(snap, "composition", trip_id, service_date),
         calls=[
             _call(c, stated, first=n == 0, last=n == len(calls) - 1) for n, c in enumerate(calls)
         ],
