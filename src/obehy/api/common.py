@@ -12,6 +12,7 @@ from psycopg_pool import ConnectionPool
 from obehy.api import schema
 from obehy.api.db import Snapshot, snapshot
 from obehy.api.limits import Limits
+from obehy.api.physical import is_physical
 from obehy.realtime.times import PRAGUE
 
 
@@ -79,9 +80,19 @@ def traits(row: DictRow) -> schema.VehicleTraits:
     )
 
 
-def trip_vehicle(row: DictRow) -> schema.TripVehicle:
-    """A vehicle on a trip (`trip_vehicles.sql`)."""
+def trip_vehicle(row: DictRow, mode: str | None = None) -> schema.TripVehicle:
+    """A vehicle on a trip (`trip_vehicles.sql`) of `mode`."""
 
+    sources = sorted(set(row["sources"]))
+    # Its oběh is under the first report whose source's ID is a physical vehicle on this mode.
+    followed = next(
+        (
+            schema.SourceVehicleRef(source=s, source_vehicle_id=v)
+            for s, v in sorted(zip(row["sources"], row["source_vehicle_ids"], strict=True))
+            if is_physical(s, mode)
+        ),
+        None,
+    )
     return schema.TripVehicle(
         vehicle_id=row["vehicle_id"],
         state=row["state"],
@@ -91,5 +102,7 @@ def trip_vehicle(row: DictRow) -> schema.TripVehicle:
         longitude=row["longitude"],
         bearing=row["bearing"],
         traits=traits(row),
-        sources=sorted(set(row["sources"])),
+        sources=sources,
+        physical=followed is not None,
+        followed_as=followed,
     )

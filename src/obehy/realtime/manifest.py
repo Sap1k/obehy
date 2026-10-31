@@ -140,6 +140,15 @@ class Source:
     covers: str  # what it covers and contributes, one or two sentences
     channels: tuple[Channel, ...]
     lookups: tuple[Lookup, ...] = ()
+    # Whether its vehicle IDs name physical vehicles, by mode ("default" for the rest): a train
+    # or a metro run keyed by its train or trip has no vehicle to follow through a day (oběhy).
+    physical_vehicles: dict[str, bool] = field(default_factory=lambda: {"default": True})
+
+    def physical(self, mode: str | None) -> bool:
+        """Whether its vehicle IDs on `mode`'s journeys (None: unknown) are physical vehicles."""
+
+        found = self.physical_vehicles.get(mode) if mode is not None else None
+        return found if found is not None else self.physical_vehicles.get("default", True)
 
     @property
     def live_feeds(self) -> tuple[str, ...]:
@@ -373,7 +382,20 @@ def load_source(path: Path, filters: Sequence[str] = ()) -> Source:
         covers=_string(document, "covers", str(path)),
         channels=tuple(channels),
         lookups=tuple(lookups),
+        physical_vehicles=_physical_vehicles(document, str(path)),
     )
+
+
+def _physical_vehicles(document: dict[str, Any], where: str) -> dict[str, bool]:
+    vehicles = document.get("vehicles", {})
+    if not isinstance(vehicles, dict):
+        raise ManifestError(f"{where}: [vehicles] must be a table")
+    raw = cast(dict[str, Any], vehicles).get("physical", {})
+    if not isinstance(raw, dict) or any(
+        not isinstance(v, bool) for v in cast(dict[str, object], raw).values()
+    ):
+        raise ManifestError(f"{where}: vehicles.physical must map modes to true or false")
+    return {"default": True, **cast(dict[str, bool], raw)}
 
 
 def load_manifest(path: Path, filters: Sequence[str] = ()) -> list[Channel]:
@@ -391,6 +413,25 @@ def load_sources(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Sour
     """Every connector manifest in a directory (by file name), or one manifest file."""
 
     return [load_source(file, filters) for file in _manifest_files(path)]
+
+
+def physical_vehicles(path: Path = SOURCES) -> dict[str, Source]:
+    """Each source's `[vehicles]` only, for readers that run no connector (the API): the rest
+    of a returned `Source` is empty."""
+
+    found: dict[str, Source] = {}
+    for file in _manifest_files(path):
+        with file.open("rb") as stream:
+            document = tomllib.load(stream)
+        source = _string(document, "source", str(file))
+        found[source] = Source(
+            source=source,
+            title="",
+            covers="",
+            channels=(),
+            physical_vehicles=_physical_vehicles(document, str(file)),
+        )
+    return found
 
 
 def load_channels(path: Path = SOURCES, filters: Sequence[str] = ()) -> list[Channel]:

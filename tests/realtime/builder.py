@@ -188,6 +188,7 @@ class Timetable:
                 run_key=None if spec.run is None else spec.run[0],
                 run_part=None if spec.run is None else spec.run[1],
                 train_number=spec.train,
+                agency_id=f"{self.feed}:agency:1",
             )
             if spec.run is not None:
                 parts = [*index.runs.get(spec.run[0], ()), spec.trip_id]

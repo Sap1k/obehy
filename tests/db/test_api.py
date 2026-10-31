@@ -389,10 +389,13 @@ def client(
         "INSERT INTO history.derivation (core_version, policy_version, release_id)"
         " VALUES ('c', 'p', 'run-old')"
     )
+    # Its line as it ran is kept with it: the route is still in the release, the trip is not.
     connection.execute(
-        "INSERT INTO history.journey_schedule VALUES ('jdf', 'cis:line_trip', '000001:1',"
-        " '2026-10-06', 1, 'run-old', 'jdf:trip:old', '1', 'Nový Bor',"
-        " (SELECT min(derivation_id) FROM history.derivation))"
+        "INSERT INTO history.journey_schedule (feed, key_namespace, key, service_date, revision,"
+        " release_id, trip_id, route_name, headsign, derivation_id, route_id, mode, agency_id)"
+        " VALUES ('jdf', 'cis:line_trip', '000001:1', '2026-10-06', 1, 'run-old',"
+        " 'jdf:trip:old', '1', 'Nový Bor', (SELECT min(derivation_id) FROM history.derivation),"
+        " 'jdf:route:000001', 'bus', 'jdf:agency:1')"
     )
     # That run's calls and what it did: left 2 min late, arrived 1 min late.
     for table in (
@@ -411,6 +414,19 @@ def client(
         "INSERT INTO history.journey (feed, key_namespace, key, service_date, first_bound_at,"
         " latest_revision) VALUES ('jdf', 'cis:line_trip', '000001:1', '2026-10-06',"
         " '2026-10-06 05:50+02', 1)"
+    )
+    # A PID metro run, its vehicle ID made of its trip: no physical vehicle (pid.toml).
+    connection.execute(
+        "INSERT INTO history.journey (feed, key_namespace, key, service_date, first_bound_at,"
+        " latest_revision) VALUES ('jdf', 'pid:gtfs_trip_id', 'M1', '2026-10-06',"
+        " '2026-10-06 05:50+02', 1)"
+    )
+    connection.execute(
+        "INSERT INTO history.journey_schedule (feed, key_namespace, key, service_date, revision,"
+        " release_id, trip_id, route_name, headsign, derivation_id, route_id, mode, agency_id)"
+        " VALUES ('jdf', 'pid:gtfs_trip_id', 'M1', '2026-10-06', 1, 'run-old', 'jdf:trip:m1',"
+        " 'A', 'Depo Hostivař', (SELECT min(derivation_id) FROM history.derivation),"
+        " 'jdf:route:000001', 'metro', 'jdf:agency:1')"
     )
     connection.execute(
         "INSERT INTO history.term (value) VALUES ('jdf:stop:1'), ('jdf:stop:2'),"
@@ -457,6 +473,9 @@ def client(
         "  (SELECT min(derivation_id) FROM history.derivation)),"
         " ('jdf', 'mpvnet', '4U1 2345', 'cis:line_trip', '000001:1', '2026-10-06',"
         "  '2026-10-06 05:59+02', '2026-10-06 06:15+02', 'keyed',"
+        "  (SELECT min(derivation_id) FROM history.derivation)),"
+        " ('jdf', 'pid', 'trip:M1', 'pid:gtfs_trip_id', 'M1', '2026-10-06',"
+        "  '2026-10-06 06:00+02', '2026-10-06 06:20+02', 'keyed',"
         "  (SELECT min(derivation_id) FROM history.derivation))"
     )
     # Train 6600 continues as 6601 and continued from 6599 (neither in the release).
@@ -826,6 +845,7 @@ def test_the_vehicle_on_a_board_row_and_a_trip(client: TestClient) -> None:
     assert row["vehicle"]["vehicle_id"] == "duk:1001"
     trip = _get(client, "/trips/jdf:trip:1/2026-10-06")
     assert [v["vehicle_id"] for v in trip["vehicles"]] == ["duk:1001"]
+    assert trip["vehicles"][0]["followed_as"] == {"source": "duk", "source_vehicle_id": "1001"}
     assert _get(client, "/trips/jdf:trip:1/2026-10-05")["vehicles"] == []
 
 
@@ -916,6 +936,10 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
     assert (day["service_date"], day["trip_id"]) == ("2026-10-06", "jdf:trip:old")
     assert day["cancelled"] is False  # cancelled, then seen running
     assert day["vehicles"] == ["duk:1001", "mpvnet:4U1 2345"]
+    assert [
+        (v["source"], v["source_vehicle_id"], v["fleet_number"], v["physical"])
+        for v in day["worked_by"]
+    ] == [("duk", "1001", "1001", True), ("mpvnet", "4U1 2345", None, True)]
     assert [(c["departure_delay_s"], c["arrival_delay_s"]) for c in day["calls"]] == [
         (120, None),
         (None, 60),
@@ -956,7 +980,9 @@ def test_a_trips_circulation_and_a_vehicles_days(client: TestClient) -> None:
         ("000009:9", None, None, None, 840),
     ]
     assert bus["journeys"][0]["departure"] == "2026-10-06T06:00:00+02:00"
-    assert bus["journeys"][0]["line"] is None  # its trip is of an earlier release
+    # Its trip is of an earlier release; the line it ran as is kept, shown as the release has it.
+    assert bus["journeys"][0]["line"]["route_id"] == "jdf:route:000001"
+    assert bus["journeys"][1]["line"] is None
     days = _get(client, "/vehicles/duk:1001/days", since="2026-10-01", until="2026-10-07")
     (day,) = days["days"]
     (chain,) = day["chains"]
@@ -971,6 +997,7 @@ def test_a_trips_circulation_and_a_vehicles_days(client: TestClient) -> None:
 def test_a_sources_oběhy_scoped_by_company_and_mode_or_by_route(client: TestClient) -> None:
     day: dict[str, Any] = {"date": "2026-10-06"}
     scopes = _get(client, "/circulations/scopes", source="duk", **day)
+    # PID's metro run names no physical vehicle: PID is not offered.
     assert [(s["source"], s["vehicles"]) for s in scopes["sources"]] == [
         ("duk", 1),
         ("mpvnet", 1),
@@ -996,6 +1023,11 @@ def test_a_sources_oběhy_scoped_by_company_and_mode_or_by_route(client: TestCli
     assert by_route["vehicles"] == by_agency["vehicles"]
     plates = _get(client, "/circulations", source="mpvnet", route_id="jdf:route:000001", **day)
     assert [c["source_vehicle_id"] for c in plates["vehicles"]] == ["4U1 2345"]
+    one = _get(client, "/circulations", source="duk", source_vehicle_id="1001", **day)
+    assert (one["source_vehicle_id"], one["vehicles"]) == ("1001", by_agency["vehicles"])
+    metro = _get(client, "/circulations", source="pid", agency_id="jdf:agency:1", **day)
+    assert metro["vehicles"] == []
+    assert _get(client, "/circulations/scopes", source="pid", **day)["agencies"] == []
     trams = _get(
         client, "/circulations", source="duk", agency_id="jdf:agency:1", mode="tram", **day
     )
@@ -1005,6 +1037,7 @@ def test_a_sources_oběhy_scoped_by_company_and_mode_or_by_route(client: TestCli
     _get(client, "/circulations", 422, source="duk", **day)
     _get(client, "/circulations", 422, source="duk", agency_id="x", route_id="y", **day)
     _get(client, "/circulations", 422, source="duk", route_id="y", mode="bus", **day)
+    _get(client, "/circulations", 422, source="duk", route_id="y", source_vehicle_id="1", **day)
 
 
 def test_debug_shows_a_journey_and_its_parts(client: TestClient) -> None:

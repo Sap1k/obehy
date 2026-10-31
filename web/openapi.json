@@ -890,6 +890,17 @@
             "title": "Source",
             "type": "string"
           },
+          "source_vehicle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Vehicle Id"
+          },
           "vehicles": {
             "description": "By first sighting",
             "items": {
@@ -907,6 +918,7 @@
           "agency_ids",
           "modes",
           "route_id",
+          "source_vehicle_id",
           "vehicles"
         ],
         "title": "Circulations",
@@ -1959,6 +1971,14 @@
             },
             "title": "Vehicles",
             "type": "array"
+          },
+          "worked_by": {
+            "description": "The same, per source report, with what follows it to its oběh",
+            "items": {
+              "$ref": "#/components/schemas/HistoryVehicle"
+            },
+            "title": "Worked By",
+            "type": "array"
           }
         },
         "required": [
@@ -1966,6 +1986,7 @@
           "trip_id",
           "cancelled",
           "vehicles",
+          "worked_by",
           "calls"
         ],
         "title": "HistoryDay",
@@ -2044,6 +2065,60 @@
           "max_delay_s"
         ],
         "title": "HistoryStop",
+        "type": "object"
+      },
+      "HistoryVehicle": {
+        "description": "A source's report of a vehicle that worked the journey that day.",
+        "properties": {
+          "fleet_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fleet Number"
+          },
+          "physical": {
+            "description": "The source's ID names a physical vehicle on the journey's mode: its oběh that day can be followed (`/circulations?source_vehicle_id=`)",
+            "title": "Physical",
+            "type": "boolean"
+          },
+          "public_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Label"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_vehicle_id": {
+            "title": "Source Vehicle Id",
+            "type": "string"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "source",
+          "source_vehicle_id",
+          "fleet_number",
+          "public_label",
+          "physical"
+        ],
+        "title": "HistoryVehicle",
         "type": "object"
       },
       "IntegratedSystem": {
@@ -3478,6 +3553,25 @@
         "title": "SourceHealth",
         "type": "object"
       },
+      "SourceVehicleRef": {
+        "description": "A vehicle as one source names it.",
+        "properties": {
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_vehicle_id": {
+            "title": "Source Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "source_vehicle_id"
+        ],
+        "title": "SourceVehicleRef",
+        "type": "object"
+      },
       "Status": {
         "properties": {
           "activated_at": {
@@ -4617,6 +4711,17 @@
             ],
             "title": "Bearing"
           },
+          "followed_as": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceVehicleRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The source report its oběh is under (`/circulations?source_vehicle_id=`), when it is physical"
+          },
           "last_seen": {
             "format": "date-time",
             "title": "Last Seen",
@@ -4643,6 +4748,12 @@
               }
             ],
             "title": "Longitude"
+          },
+          "physical": {
+            "default": true,
+            "description": "Whether a source names it as a physical vehicle on this trip's mode (its oběh can be followed), not a run keyed by its trip or train number",
+            "title": "Physical",
+            "type": "boolean"
           },
           "position_at": {
             "anyOf": [
@@ -5338,6 +5449,12 @@
             ],
             "title": "Last Seen"
           },
+          "physical": {
+            "default": true,
+            "description": "Whether the source's ID names a physical vehicle on its current mode (its oběh can be followed), not a run keyed by its trip or train number",
+            "title": "Physical",
+            "type": "boolean"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -5926,6 +6043,24 @@
               "description": "One route; or `agency_id`",
               "title": "Route Id"
             }
+          },
+          {
+            "description": "One of the source's vehicles; or a company or route",
+            "in": "query",
+            "name": "source_vehicle_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One of the source's vehicles; or a company or route",
+              "title": "Source Vehicle Id"
+            }
           }
         ],
         "responses": {
@@ -5950,7 +6085,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "A source's oběhy on a date, of some companies (and modes) or of one route",
+        "summary": "A source's oběhy on a date, of some companies (and modes), one route or vehicle",
         "tags": [
           "circulations"
         ]

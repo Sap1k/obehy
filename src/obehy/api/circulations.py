@@ -1,9 +1,11 @@
 """Observed circulations (oběhy, BASE_PLAN.md section 22): the journeys each vehicle worked in a
 row, cut by the nightly job's rule (`history.vehicle_chains`) and read live from the vehicle
 assignments, so today's are there too. A vehicle's days; a trip's oběh on a date, with the
-feed's own block where it has one; a source's oběhy on a date, scoped by company and mode or by
-route (a journey's company and mode are those of the active release's trip its key names).
-Learned and roster tours are not served yet.
+feed's own block where it has one; a source's oběhy on a date, scoped by company and mode, by
+route or by vehicle (a journey's company, mode and line are those it ran as, kept with its
+schedule snapshot). Only vehicles a source's manifest calls physical for the mode are served
+by scope (`[vehicles] physical`): a metro run or a train keyed by its number is no vehicle to
+follow. Learned and roster tours are not served yet.
 
 History knows a vehicle by its source's ID; which registry vehicle that was on a date is
 `history.vehicle_of` (by the registry's source-ID keys).
@@ -23,6 +25,7 @@ from obehy.api.codes import load_codes
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
 from obehy.api.db import Snapshot
 from obehy.api.params import ParameterError, date_span
+from obehy.api.physical import physical_table
 from obehy.realtime.policy import load_policy
 from obehy.realtime.times import local_date
 
@@ -222,7 +225,7 @@ def circulation_scopes(
     realtime_cache(response, limits)
     day = service_date or local_date(snap.now)
     agencies: dict[str, schema.ScopeAgency] = {}
-    asked = {"source": source, "service_date": day}
+    asked = {"source": source, "service_date": day, **physical_table()}
     rows = snap.all("circulation_scopes", asked) if source else []
     routes = snap.all("circulation_routes", asked) if source else []
     for r in rows:
@@ -244,7 +247,7 @@ def circulation_scopes(
             schema.ScopeSource(
                 source=r["source"], label=load_codes().source(r["source"]), vehicles=r["vehicles"]
             )
-            for r in snap.all("circulation_sources", {"service_date": day})
+            for r in snap.all("circulation_sources", {"service_date": day, **physical_table()})
         ],
         agencies=sorted(agencies.values(), key=lambda a: (-a.vehicles, a.name)),
         routes=[
@@ -258,7 +261,7 @@ def circulation_scopes(
     "/circulations",
     tags=["circulations"],
     response_model=schema.Circulations,
-    summary="A source's oběhy on a date, of some companies (and modes) or of one route",
+    summary="A source's oběhy on a date, of some companies (and modes), one route or vehicle",
 )
 def circulations(
     response: Response,
@@ -269,9 +272,12 @@ def circulations(
     agency_id: Annotated[list[str] | None, Query(description="Companies; or `route_id`")] = None,
     mode: Annotated[list[str] | None, Query(description="With `agency_id`: these modes")] = None,
     route_id: Annotated[str | None, Query(description="One route; or `agency_id`")] = None,
+    source_vehicle_id: Annotated[
+        str | None, Query(description="One of the source's vehicles; or a company or route")
+    ] = None,
 ) -> schema.Circulations:
-    if bool(agency_id) == (route_id is not None):
-        raise ParameterError("scope by agency_id or by route_id")
+    if [bool(agency_id), route_id is not None, source_vehicle_id is not None].count(True) != 1:
+        raise ParameterError("scope by agency_id, route_id or source_vehicle_id")
     if mode and not agency_id:
         raise ParameterError("mode narrows agency_id")
     realtime_cache(response, limits)
@@ -283,8 +289,10 @@ def circulations(
             "source": source,
             "service_date": day,
             "route_id": route_id,
+            "source_vehicle_id": source_vehicle_id,
             "agency_ids": agency_id or [],
             "modes": mode or None,
+            **physical_table(),
         },
     ):
         matched.setdefault(r["source_vehicle_id"], set()).add((r["key_namespace"], r["key"]))
@@ -309,5 +317,6 @@ def circulations(
         agency_ids=sorted(agency_id or []),
         modes=sorted(mode or []),
         route_id=route_id,
+        source_vehicle_id=source_vehicle_id,
         vehicles=vehicles,
     )

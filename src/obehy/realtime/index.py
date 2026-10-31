@@ -102,6 +102,7 @@ class Trip:
     train_number: str | None = None
     # Only on a run trip: its published parts, in order.
     parts: tuple[TripPart, ...] = ()
+    agency_id: str | None = None
 
     @property
     def start(self) -> int:
@@ -371,4 +372,5 @@ def run_trip(run_id: str, run_key: str, parts: list[Trip]) -> Trip:
         tuple(numbered),
         run_key=run_key,
         parts=tuple(spans),
+        agency_id=head.agency_id,
     )

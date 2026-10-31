@@ -12,6 +12,7 @@ import pytest
 from obehy import cli
 from obehy.realtime import record
 from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls, prune
+from obehy.realtime.manifest import physical_vehicles
 from obehy.realtime.model import SourceSemantics
 from obehy.realtime.runtime import fetch
 from obehy.realtime.runtime.scheduler import run_channel
@@ -52,6 +53,14 @@ def _channel(
 def _arriva_body(*main_types: str) -> bytes:
     vehicles = [{"spz": f"1AB{index}", "mainType": kind} for index, kind in enumerate(main_types)]
     return json.dumps([{"data": {"busesCurrentLocations": vehicles}}]).encode()
+
+
+def test_physical_vehicles_by_source_and_mode() -> None:
+    sources = physical_vehicles()
+    assert (sources["pid"].physical("bus"), sources["pid"].physical("metro")) == (True, False)
+    assert (sources["pid"].physical("rail"), sources["pid"].physical(None)) == (False, True)
+    assert sources["sz-mapa"].physical("rail") is False
+    assert sources["dpmd"].physical("trolleybus") is True
 
 
 def test_shipped_manifests_load() -> None:

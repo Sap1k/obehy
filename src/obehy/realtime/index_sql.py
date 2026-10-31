@@ -211,7 +211,7 @@ class IndexLoader:
     def _load_trips(self, trip_ids: list[str]) -> None:
         heads = self._rows_first(
             "SELECT t.trip_id, t.route_id, coalesce(r.short_name, r.route_id), r.mode,"
-            " t.service_id, t.headsign, t.shape_id, t.run_key, t.run_part,"
+            " t.service_id, t.headsign, t.shape_id, t.run_key, t.run_part, r.agency_id,"
             " (SELECT min(k.identifier) FROM static.source_key k"
             "  WHERE k.load_id = t.load_id AND k.public_id = t.trip_id"
             "  AND k.namespace = 'czptt:train_number')"
@@ -257,6 +257,7 @@ class IndexLoader:
             shape_id,
             run_key,
             run_part,
+            agency_id,
             train_number,
         ) in heads:
             self.index.trips[trip_id] = Trip(
@@ -271,6 +272,7 @@ class IndexLoader:
                 run_key=run_key,
                 run_part=run_part,
                 train_number=train_number,
+                agency_id=agency_id,
             )
             if run_key is not None and run_key not in self.index.runs:
                 runs.add(run_key)

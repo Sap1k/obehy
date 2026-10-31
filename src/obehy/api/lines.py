@@ -362,7 +362,7 @@ def line_trips(
         "trip_vehicles",
         params | {"trip_ids": [r["trip_id"] for r in rows], "seen_since": seen_since},
     ):
-        on_trips.setdefault(v["trip_id"], []).append(trip_vehicle(v))
+        on_trips.setdefault(v["trip_id"], []).append(trip_vehicle(v, found.mode))
     return schema.LineTrips(
         **envelope(snap),
         line=found,

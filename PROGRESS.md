@@ -309,6 +309,18 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-10-31** — Oběhy rework. History keeps a journey's line as it ran (migration 0026:
+  `route_id`, mode, agency on each schedule snapshot, backfilled by key with a fingerprint
+  check; 100 % on dev's two days), and circulation scopes read it instead of the active
+  release, so past days keep their lines. Per-source, per-mode `[vehicles] physical` in the
+  manifests (PID metro and rail, MPVnet/DÚK/SŽ rail off) hides generated vehicle IDs from
+  oběhy and their links. `circulations?source_vehicle_id=` scopes one vehicle; trip vehicles
+  carry `followed_as`, history days `worked_by`. Web: one row per vehicle (chains joined, the
+  break dashed), zoom (buttons, ctrl+wheel, pinch; kept per viewer), a progress bar and dimmed
+  old answer while loading, *Historie zpoždění* replaces *Jak jezdí* (days over an Odkud–Kam
+  segment, 21 days), Oběhy left the nav (links under the trip's vehicle and the vehicle panel).
+  DPP's day on dev 1.1–1.9 s. Not checked: the backfill on prod's 21 days; the Linky page is a
+  placeholder, so it has no *Oběhy linky* link yet.
 - **2026-10-30** — Web: a trip's *Jak jezdí* dialog (per-stop range bars: median, 9 in 10,
   worst, over the on-time band) and an *Oběhy* page (`/obehy`): a source's vehicles on a date
   as a day timeline, a row per chain (each journey its line and its ends, shortened as a

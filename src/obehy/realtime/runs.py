@@ -151,4 +151,7 @@ def _snapshot(
         headsign=trip.headsign,
         calls=tuple(calls),
         run_key=run_key,
+        route_id=trip.route_id,
+        mode=trip.mode,
+        agency_id=trip.agency_id,
     )

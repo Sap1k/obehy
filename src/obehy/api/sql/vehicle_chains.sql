@@ -1,8 +1,8 @@
 -- The working days of some source vehicles between two service dates, by the nightly job's
 -- rule (history.vehicle_chains), with the registry vehicle each was (only %(vehicle_id)s's, when
 -- given). Each journey as history recorded it (its latest schedule revision: trip ID, line
--- name, headsign, first and last passenger call), with the line of the active release when
--- the trip is in it, and what the registry knows of the vehicle (its profile, as the worker
+-- name, headsign, first and last passenger call, the line it ran as), the line shown as the
+-- active release has it when it still does, and what the registry knows of the vehicle (its profile, as the worker
 -- resolves it). One row per journey, chains in order.
 WITH chains AS (
     SELECT c.*, history.vehicle_of(c.source, c.source_vehicle_id, c.service_date) AS vehicle_id
@@ -27,11 +27,13 @@ SELECT j.vehicle_id, j.feed, j.source, j.source_vehicle_id, j.day, j.seq, j.chai
        s.trip_id, s.route_name, s.headsign,
        ends.origin_id, ends.origin, ends.departure, ends.destination_id, ends.destination,
        ends.arrival,
-       t.route_id, r.short_name, r.long_name, r.mode, r.color, r.text_color,
+       coalesce(s.route_id, t.route_id) AS route_id,
+       coalesce(r.short_name, s.route_name) AS short_name, r.long_name,
+       coalesce(s.mode, r.mode) AS mode, r.color, r.text_color,
        vp.fleet_number, vp.public_label, vp.manufacturer, vp.model AS vehicle_model
 FROM journeys j
 LEFT JOIN LATERAL (
-    SELECT x.trip_id, x.route_name, x.headsign, x.revision
+    SELECT x.trip_id, x.route_name, x.headsign, x.revision, x.route_id, x.mode
     FROM history.journey_schedule x
     WHERE (x.feed, x.key_namespace, x.key, x.service_date)
         = (j.feed, j.key_namespace, j.key, j.service_date)
@@ -58,7 +60,8 @@ LEFT JOIN LATERAL (
     WHERE c.journey_id = hj.journey_id AND c.service_date = j.service_date
         AND c.revision = s.revision AND c.passenger_service
 ) ends ON true
-LEFT JOIN active.trip t ON t.trip_id = s.trip_id
-LEFT JOIN active.route r ON r.route_id = t.route_id
+-- Snapshots written before the line was kept with them: the active release's trip.
+LEFT JOIN active.trip t ON t.trip_id = s.trip_id AND s.route_id IS NULL
+LEFT JOIN active.route r ON r.route_id = coalesce(s.route_id, t.route_id)
 LEFT JOIN rt.vehicle_profile vp ON vp.vehicle_id = j.vehicle_id AND vp.registered
 ORDER BY j.day DESC, j.chain_first_seen, j.vehicle_id, j.source, j.source_vehicle_id, j.ord

@@ -9,6 +9,12 @@ manifest_version = 1
 title = "PID vehicle positions (Golemio)"
 covers = "Prague integrated transport (PID): city and regional buses, trams, metro, trolleybuses and trains in Prague and Central Bohemia. Positions and delays."
 
+
+# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those):
+# metro runs are keyed by trip and trains by train number.
+[vehicles]
+physical = { default = true, metro = false, rail = false }
+
 [[channel]]
 name = "vehicles"
 poll = { kind = "interval", seconds = 10 }

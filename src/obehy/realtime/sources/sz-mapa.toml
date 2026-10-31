@@ -5,6 +5,12 @@ manifest_version = 1
 title = "SŽ train map"
 covers = "Trains nationwide: positions, passages at railway points and delays."
 
+
+# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those):
+# SŽ names a train's path, not a unit.
+[vehicles]
+physical = { default = true, rail = false }
+
 [[channel]]
 name = "trains"
 # SŽ blocks addresses running services: proxied and anonymous only (docs/R2_SLICE.md 7).

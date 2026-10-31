@@ -617,6 +617,10 @@ class SnapshotJourney:
     headsign: str | None
     calls: tuple[ScheduledCall, ...]
     run_key: str | None = None  # rail: the CZPTT path (PA) the journey runs on
+    # The line as it ran (opaque copies of the release's), kept after the release is gone.
+    route_id: str | None = None
+    mode: str | None = None
+    agency_id: str | None = None
 
 
 JourneyLinkKind = Literal["continues_as", "splits_from", "joins"]

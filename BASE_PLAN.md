@@ -1640,12 +1640,21 @@ circulation_edge
 - CZPTT and GTFS `block_key` are used directly where present; they are static, not learned.
   CZPTT's names the train path (its run's parts), not a circulation.
 - **Served** (section 30): the observed layer as `vehicles/<id>/days`,
-  `trips/…/circulation` and `circulations` (a source's day, by company and mode or by route:
-  a journey's company and mode are those of the active release's trip its key names), cut live from `history.vehicle_assignment` by the nightly job's own
+  `trips/…/circulation` and `circulations` (a source's day, by company and mode, by route or
+  by one source vehicle), cut live from `history.vehicle_assignment` by the nightly job's own
   rule (`history.vehicle_chains`), so today is there too. History knows a vehicle by its
   source's ID; `history.vehicle_of` maps it to the registry by source-ID keys only, so a
   vehicle recognised only by plate, co-location or train has no history under its registry ID
   yet.
+- **A journey's line as it ran.** The journey key stays its identity; each schedule snapshot
+  also keeps opaque copies of its trip's `route_id`, mode and `agency_id`, so a past day scopes
+  and draws by the line it ran as after its release is gone. With the calls this is the
+  fingerprint above. Presentation (colours, current names) joins the active route by
+  `route_id`, never a trip.
+- **Physical vehicles only.** A source's manifest says per mode whether its vehicle IDs name
+  physical vehicles (`[vehicles] physical`; PID's metro runs keyed by trip and trains keyed by
+  number do not). Oběhy and the links to them follow only those, decided at read time, so
+  turning a mode on applies to the days already kept.
 
 Uses:
 

@@ -118,6 +118,12 @@ def test_a_new_release_adds_a_revision_and_orphans_vanished_calls(
     second.write([without_b])  # the same release again is not a new revision
 
     assert _scalar(connection, "SELECT latest_revision FROM history.journey") == 2
+    # The line it ran as is kept with each revision, for after the release is gone.
+    trip = ctx.index.trip("jdf:t1")
+    lines = connection.execute(
+        "SELECT DISTINCT route_id, mode FROM history.journey_schedule"
+    ).fetchall()
+    assert lines == [(trip.route_id, trip.mode)]
     events = connection.execute(
         "SELECT location_id, event_type, revision, orphaned FROM history.named_stop_event"
         " ORDER BY location_id, event_type"

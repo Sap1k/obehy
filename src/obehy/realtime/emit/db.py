@@ -194,8 +194,9 @@ class Writer:
         revision = latest + 1
         self.connection.execute(
             "INSERT INTO history.journey_schedule (feed, key_namespace, key, service_date,"
-            " revision, release_id, trip_id, route_name, headsign, derivation_id, run_key)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " revision, release_id, trip_id, route_name, headsign, derivation_id, run_key,"
+            " route_id, mode, agency_id)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 *key,
                 revision,
@@ -205,6 +206,9 @@ class Writer:
                 snapshot.headsign,
                 self.derivation_id,
                 snapshot.run_key,
+                snapshot.route_id,
+                snapshot.mode,
+                snapshot.agency_id,
             ),
         )
         with self.connection.cursor() as cursor:

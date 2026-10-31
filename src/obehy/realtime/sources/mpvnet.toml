@@ -9,6 +9,12 @@ title = "MPV net regional vehicle maps"
 covers = "Vehicles of IDOL (Liberecký kraj), JIKORD (Jihočeský kraj), ODIS (Moravskoslezský kraj) and IDZK (Zlínský kraj): positions and delays."
 
 # IDOL, Liberecký kraj
+
+# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those):
+# trains are keyed by train number.
+[vehicles]
+physical = { default = true, rail = false }
+
 [[channel]]
 name = "idol"
 poll = { kind = "interval", seconds = 15 }

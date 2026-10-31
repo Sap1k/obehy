@@ -10,6 +10,8 @@ FROM (
            v.bearing, bool_or(v.represents) OVER (PARTITION BY v.trip_id, v.vehicle_id)
                AS represents,
            array_agg(v.source) OVER (PARTITION BY v.trip_id, v.vehicle_id) AS sources,
+           array_agg(v.source_vehicle_id) OVER (PARTITION BY v.trip_id, v.vehicle_id)
+               AS source_vehicle_ids,
            p.low_floor, p.air_conditioning, p.wheelchair_accessible, p.manufacturer, p.model,
            p.operator, p.licence_plate, p.fleet_number
     FROM rt.vehicle_state_current v

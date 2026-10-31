@@ -31,6 +31,7 @@ from obehy.api.common import (
 )
 from obehy.api.limits import Limits
 from obehy.api.params import date_span
+from obehy.api.physical import is_physical
 from obehy.realtime.times import local_date
 
 router = APIRouter(tags=["trips"])
@@ -190,7 +191,18 @@ def trip_history(
         raise HTTPException(404, f"no journey of {trip_id} is known")
     journey = schema.JourneyKey(namespace=found["namespace"], key=found["key"])
     keyed = span | {"namespace": journey.namespace, "key": journey.key}
-    vehicles = {r["service_date"]: r["vehicles"] for r in snap.all("journey_vehicles", keyed)}
+    worked_by: defaultdict[date, list[schema.HistoryVehicle]] = defaultdict(list)
+    for r in snap.all("journey_vehicles", keyed):
+        worked_by[r["service_date"]].append(
+            schema.HistoryVehicle(
+                vehicle_id=r["vehicle_id"],
+                source=r["source"],
+                source_vehicle_id=r["source_vehicle_id"],
+                fleet_number=r["fleet_number"],
+                public_label=r["public_label"],
+                physical=is_physical(r["source"], r["mode"]),
+            )
+        )
     seen: dict[date, tuple[str, bool]] = {}  # per service date: its trip, whether cancelled
     calls: defaultdict[date, list[schema.HistoryCall]] = defaultdict(list)
     for r in snap.all("trip_history", keyed):
@@ -212,7 +224,8 @@ def trip_history(
             service_date=day,
             trip_id=trip,
             cancelled=cancelled,
-            vehicles=vehicles.get(day, []),
+            vehicles=sorted({v.vehicle_id for v in worked_by.get(day, [])}),
+            worked_by=worked_by.get(day, []),
             calls=calls[day],
         )
         for day, (trip, cancelled) in seen.items()
@@ -307,7 +320,7 @@ def trip(
         bikes_allowed=tristate(row["bikes_allowed"]),
         amenities=amenities(stated),
         realtime=None if realtime is None else _realtime(realtime),
-        vehicles=[trip_vehicle(v) for v in vehicles],
+        vehicles=[trip_vehicle(v, row["mode"]) for v in vehicles],
         run_parts=[schema.TripPart.model_validate(p) for p in parts]
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
         calls=[

@@ -240,6 +240,13 @@ class VehicleTraits(BaseModel):
     fleet_number: str | None = None
 
 
+class SourceVehicleRef(BaseModel):
+    """A vehicle as one source names it."""
+
+    source: str
+    source_vehicle_id: str
+
+
 class TripVehicle(BaseModel):
     """The vehicle currently on a trip."""
 
@@ -255,6 +262,16 @@ class TripVehicle(BaseModel):
     bearing: float | None
     traits: VehicleTraits = Field(default_factory=VehicleTraits)
     sources: list[str] = Field(default_factory=list, description="Sources reporting it now")
+    physical: bool = Field(
+        default=True,
+        description="Whether a source names it as a physical vehicle on this trip's mode (its "
+        "oběh can be followed), not a run keyed by its trip or train number",
+    )
+    followed_as: SourceVehicleRef | None = Field(
+        default=None,
+        description="The source report its oběh is under (`/circulations?source_vehicle_id=`), "
+        "when it is physical",
+    )
 
 
 class Departure(BaseModel):
@@ -571,6 +588,11 @@ class VehicleSource(BaseModel):
         "side with another source's report of it (provisional), or the train number of the rail "
         "run it is on (`train:<number>`)"
     )
+    physical: bool = Field(
+        default=True,
+        description="Whether the source's ID names a physical vehicle on its current mode (its "
+        "oběh can be followed), not a run keyed by its trip or train number",
+    )
 
 
 class RegistryEntry(BaseModel):
@@ -742,11 +764,28 @@ class HistoryCall(BaseModel):
     departure_delay_s: int | None
 
 
+class HistoryVehicle(BaseModel):
+    """A source's report of a vehicle that worked the journey that day."""
+
+    vehicle_id: str
+    source: str
+    source_vehicle_id: str
+    fleet_number: str | None
+    public_label: str | None
+    physical: bool = Field(
+        description="The source's ID names a physical vehicle on the journey's mode: its oběh "
+        "that day can be followed (`/circulations?source_vehicle_id=`)"
+    )
+
+
 class HistoryDay(BaseModel):
     service_date: date
     trip_id: str
     cancelled: bool = Field(description="A source cancelled it and no vehicle was seen running it")
     vehicles: list[str] = Field(description="The vehicles that worked it (`vehicle_id`)")
+    worked_by: list[HistoryVehicle] = Field(
+        description="The same, per source report, with what follows it to its oběh"
+    )
     calls: list[HistoryCall]
 
 
@@ -904,6 +943,7 @@ class Circulations(Envelope):
     agency_ids: list[str]
     modes: list[str]
     route_id: str | None
+    source_vehicle_id: str | None
     vehicles: list[ScopedChain] = Field(description="By first sighting")
 
 
