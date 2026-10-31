@@ -1,4 +1,4 @@
-import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, unwrap, type Trip } from "../../api/client";
 import { POLL_MS } from "../board/queries";
 import { addDays, dayKey } from "../../lib/time";
@@ -75,6 +75,47 @@ export function useFollowingParts(trip: Trip | undefined) {
   return useQueries({
     queries: following.map((p) => tripQuery(p.trip_id, trip?.service_date ?? "")),
   });
+}
+
+/** How many `pending` answers the strip waits through (about a minute at the API's 3 s) before
+ * it gives up: a worker that cannot ask the source answers nothing. */
+const COMPOSITION_PATIENCE = 20;
+
+/** A train's composition from `from` (a call of the trip; the API's default: the next
+ * passenger call), asked only for a trip a source answers for (`trip.composition`). The API
+ * asks the source lazily: `pending` and `stale` are polled at its `retry_after_s` until the
+ * answer comes; a `fresh` one is kept. `gaveUp`: still no new answer after a minute. */
+export function useComposition(trip: Trip | undefined, from: string | undefined) {
+  const enabled = Boolean(trip?.composition);
+  const key = ["composition", trip?.trip_id, trip?.service_date, from ?? null];
+  const query = useQuery({
+    queryKey: key,
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await api.GET("/api/v1/trips/{trip_id}/{service_date}/composition", {
+          params: {
+            path: { trip_id: trip!.trip_id, service_date: trip!.service_date },
+            query: from ? { from } : {},
+          },
+          signal,
+        }),
+      ),
+    enabled,
+    staleTime: 10 * 60_000,
+    // Pending, or an older answer while a newer one is asked: polled at the API's pace until
+    // it comes (then replaced in place), for about a minute.
+    refetchInterval: ({ state }) => {
+      const status = state.data?.status;
+      if (status !== "pending" && status !== "stale") return false;
+      return state.dataUpdateCount < COMPOSITION_PATIENCE
+        ? (state.data?.retry_after_s ?? 3) * 1000
+        : false;
+    },
+  });
+  const answers = useQueryClient().getQueryState(key)?.dataUpdateCount ?? 0;
+  const waiting = query.data?.status === "pending" || query.data?.status === "stale";
+  const gaveUp = waiting && answers >= COMPOSITION_PATIENCE;
+  return { ...query, enabled, gaveUp };
 }
 
 /** A trip's journey as it ran on the recorded days, asked for while `enabled` (the history

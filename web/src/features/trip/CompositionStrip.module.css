@@ -1,0 +1,205 @@
+.caption {
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.segment {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  color: var(--ob-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.segment[aria-selected="true"] {
+  border-color: var(--ob-selection);
+  background: var(--ob-selection);
+  color: var(--ob-selection-text);
+  font-weight: 600;
+}
+
+.direction {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ob-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The train, front first, scrolling sideways when it is longer than the panel. */
+.strip {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 2px 4px;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+}
+
+.strip > li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  scroll-snap-align: start;
+}
+
+/* A vehicle: its outline (an SVG at its size: rectangle, slanted at a cab end) with its number,
+   class and features over it. The outline carries the fill and the selection, so both follow
+   the shape. */
+.unit {
+  position: relative;
+  display: block;
+  width: 80px;
+  height: 44px;
+  color: var(--ob-text);
+  --fill: var(--ob-surface);
+  --line: var(--ob-border-control);
+  --line-width: 1px;
+}
+
+.unit[data-first-class] {
+  color: var(--ob-info-text);
+  --fill: var(--ob-info-fill);
+}
+
+.unit[data-kind="locomotive"] {
+  --fill: var(--ob-text-secondary);
+  --line: var(--ob-text-secondary);
+}
+
+.unit[aria-pressed="true"] {
+  --line: var(--ob-focus);
+  --line-width: 3px;
+}
+
+.unit:focus-visible {
+  outline: none;
+  --line: var(--ob-focus);
+  --line-width: 3px;
+}
+
+.shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.shape path {
+  fill: var(--fill);
+  stroke: var(--line);
+  stroke-width: var(--line-width);
+  stroke-linejoin: round;
+}
+
+/* A coach running only part of the segment shown. */
+.unit[data-part] .shape path {
+  stroke-dasharray: 4 3;
+}
+
+.face {
+  position: absolute;
+  inset: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Clear of a slanted end. */
+.face[data-front] {
+  left: 16px;
+}
+
+.face[data-rear] {
+  right: 16px;
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.number {
+  font-size: 11px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.class {
+  font-size: 16px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+.icons {
+  display: flex;
+  gap: 2px;
+  min-height: 12px;
+}
+
+.through {
+  max-width: 80px;
+  overflow: hidden;
+  color: var(--ob-text-secondary);
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover {
+  border: 1px solid var(--ob-border);
+  background: var(--ob-surface);
+  color: var(--ob-text);
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detailHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.detailText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.features > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

@@ -10,6 +10,7 @@ import { tripAlerts } from "../../lib/alerts";
 import { timeState } from "../../lib/punctuality";
 import { linkify } from "../../lib/linkify";
 import { usePersistentFlag } from "../../lib/storage";
+import { CompositionStrip } from "./CompositionStrip";
 import { HistoryLink } from "./History";
 import { Timetable } from "./Timetable";
 import { noteGroups, type MarkedNote } from "./notes";
@@ -115,6 +116,8 @@ export function TripBody({
           context={alertContext(alert, stopName)}
         />
       ))}
+
+      <CompositionStrip trip={trip} boardedAt={boardedAt} now={now} />
 
       <section className={classes.section}>
         <div className={classes.sectionHead}>
