@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v13.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v14.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v13.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v14.toml"
 
 
 class PolicyError(ValueError):
@@ -17,7 +17,7 @@ class PolicyError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class ByMode:
-    """A value with per-route-mode overrides."""
+    """A value with per-route-mode (or per-source) overrides."""
 
     default: float
     overrides: tuple[tuple[str, float], ...]
@@ -101,8 +101,12 @@ class RetentionPolicy:
     """How long stored realtime data is kept (`obehy jobs hourly` and `nightly`)."""
 
     observation_hours: int  # rt.observation hours, past the end of each hour
-    raw_days: int  # raw archive days
+    raw_days: ByMode  # raw archive days, per source
     history_days: int  # history service dates before today
+
+    @property
+    def longest_raw_days(self) -> int:
+        return int(max([self.raw_days.default, *(v for _, v in self.raw_days.overrides)]))
 
 
 @dataclass(frozen=True, slots=True)

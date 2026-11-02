@@ -388,7 +388,8 @@ at most 60 a minute. Rail point events and the SŽ station codes need a release 
 vehicles' working days; `obehy jobs nightly` (03:30 Prague in the server stack)
 rebuilds them for the last two service dates and drops history service dates older than
 `[retention] history_days` (21; about 0.5 GB a day with PID) and raw archive days older than
-`raw_days` (14, about 0.6 GB a day; pin days to keep with `obehy rt corpus pin` first).
+`raw_days` per source (yesterday and today, SŽ station boards two weeks; pin days to keep
+with `obehy rt corpus pin` first).
 `obehy jobs hourly` (every hour in the server stack) drops `rt.observation` hours older than
 `observation_hours` (8; all sources are about 10 GB a day) and keeps `[guard] free_gb` free on
 the data disk by deleting the oldest raw days, then history days. The design is in

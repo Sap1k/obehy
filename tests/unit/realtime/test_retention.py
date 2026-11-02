@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from pathlib import Path
 
+from obehy.realtime.archive import prune, sources
 from obehy.realtime.disk_guard import GB, Step, next_step
 from obehy.realtime.emit.storage import (
     history_day,
@@ -52,5 +54,22 @@ def test_the_guard_stops_at_both_minimums() -> None:
 def test_the_policy_window_fits_the_api() -> None:
     policy = load_policy()
     assert policy.retention.history_days == 21
+    assert policy.retention.raw_days("pid") == 1
+    assert policy.retention.raw_days("sz-tabule") == 14
+    assert policy.retention.longest_raw_days == 14
     assert policy.retention.observation_hours > policy.warm_replay_max_hours
     assert policy.guard.min_history_days <= policy.retention.history_days
+
+
+def test_the_archive_is_pruned_per_source(tmp_path: Path) -> None:
+    for source, channel in (("pid", "vehicles"), ("sz-tabule", "boards")):
+        for day in (20, 21, 22):
+            (tmp_path / source / channel / f"2026-10-{day}").mkdir(parents=True)
+    assert sources(tmp_path) == ["pid", "sz-tabule"]
+    pruned = prune(tmp_path, date(2026, 10, 22), "pid")
+    assert [p.name for p in pruned] == ["2026-10-20", "2026-10-21"]
+    assert sorted(p.name for p in (tmp_path / "sz-tabule" / "boards").iterdir()) == [
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22",
+    ]

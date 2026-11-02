@@ -979,8 +979,8 @@ changes). Its manifest semantics must be backed by captured examples.
   be decoded again. A lookup that one day yields core facts is replayed from those recorded
   pairs at their received time, never by re-running `plan`.
 - Raw retention is a rolling window (default 3 months, per-source where a licence requires
-  less; the single server keeps 14 days, `[retention] raw_days`, since all sources with PID are
-  about 1 GB a day). **Pinned corpora** — the dossier captures, regression days, DST and holiday days — are
+  less; the single server keeps yesterday and today, SŽ station boards 14 days, `[retention]
+  raw_days`, since all sources with PID are about 1 GB a day). **Pinned corpora** — the dossier captures, regression days, DST and holiday days — are
   copied to a pinned archive kept indefinitely; they are the replay and golden test set. The
   first one to pin is 2026-10-25 (DST fall-back).
 - `obehy rt evaluate` compares predictions against later actual events: MAE and p90 by lead time,

@@ -173,7 +173,7 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | `[prediction]` | propagation (BASE_PLAN.md 20.5): dwell recovery, early departure limit, observed dwell credit, early fade; hop running times `runtime_decay_s`, `runtime_prior_weight`, `runtime_ratio_max`, `publish_deadband_s`, `floor_fresh_s` (v11) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
-| `[retention]` | observation_hours = 8 (v13; hourly partitions dropped by `obehy jobs hourly`; 1 day in v12), raw_days = 14 (v9; raw archive days), history_days = 21 (v13), both dropped by `obehy jobs nightly` |
+| `[retention]` | observation_hours = 8 (v13; hourly partitions dropped by `obehy jobs hourly`; 1 day in v12), raw_days = { default = 1, "sz-tabule" = 14 } (v14; raw archive days per source; 14 for all in v9–v13), history_days = 21 (v13), both dropped by `obehy jobs nightly` |
 | `[guard]` | free_gb = 6, min_raw_days = 3, min_history_days = 7 (v13): `obehy jobs hourly` deletes the oldest raw, then history days below the free space; release loads keep it |
 
 The file carries `policy_version`, which goes into `derivation`. Code holds no defaults for

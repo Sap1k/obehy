@@ -5,10 +5,10 @@
 # kept after the trip ends, observed dwell credited at stops without a timetabled one, and
 # the distance driven followed where a shape misses the road, v11 hop running times learned
 # live, v12 one day of rt.observation, v13 hourly rt.observation, a history window and the disk
-# guard).
+# guard, v14 the raw archive window per source).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "13"
+policy_version = "14"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -164,12 +164,12 @@ compact_index_at_s = 12600
 # endpoints read them; delay history and vehicle tours live in history.*. All sources together
 # are about 10 GB a day with PID, so 8 hours is about 3.5 GB.
 observation_hours = 8
-# Raw archive day directories (data/rt-raw/<source>/<channel>/<UTC day>) older than this are
-# deleted by `obehy jobs nightly`. Inside the window history can be rebuilt by replay; outside it
-# is kept as recorded. Pinned corpora are copies elsewhere and stay. All sources together are
-# about 0.6 GB a day with PID (BASE_PLAN.md section 18.4 plans 3 months; the server disk fits
-# 2 weeks).
-raw_days = 14
+# Raw archive day directories (data/rt-raw/<source>/<channel>/<UTC day>) older than this, per
+# source, are deleted by `obehy jobs nightly`. Nothing live reads the archive: it is for replay
+# and for pinning corpora (`obehy rt corpus pin`, copies elsewhere that stay), so a source keeps
+# yesterday and today only, about 1 GB a day for all of them with PID. SŽ station boards keep
+# two weeks (about 0.1 GB a day). Withdrawn alerts and lookup requests go after the longest.
+raw_days = { default = 1, "sz-tabule" = 14 }
 # History service dates older than this many days before today are dropped, every table's daily
 # partition at once, by `obehy jobs nightly`; the API's history spans (`history.max_days`) stay
 # within it. History is about 0.5 GB a day with PID.

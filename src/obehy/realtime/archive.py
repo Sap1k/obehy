@@ -74,14 +74,21 @@ def days(root: Path) -> list[date]:
     return sorted(found)
 
 
-def prune(root: Path, before: date) -> list[Path]:
-    """Delete the day directories of every source and channel older than `before`; returns them.
+def sources(root: Path) -> list[str]:
+    """The sources with a directory in the archive."""
+
+    return sorted(directory.name for directory in root.glob("*") if directory.is_dir())
+
+
+def prune(root: Path, before: date, source: str = "*") -> list[Path]:
+    """Delete the day directories of every channel of `source` (every source by default) older
+    than `before`; returns them.
 
     Only `<root>/<source>/<channel>/<YYYY-MM-DD>` directories are touched.
     """
 
     pruned: list[Path] = []
-    for directory in sorted(root.glob("*/*/*")):
+    for directory in sorted(root.glob(f"{source}/*/*")):
         try:
             day = date.fromisoformat(directory.name)
         except ValueError:

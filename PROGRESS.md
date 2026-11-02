@@ -309,6 +309,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-02** — Raw archive kept per source (policy v14): yesterday and today, SŽ station
+  boards 14 days. The server ran out of room again: raw was about 1.1 GB a day (PID half of
+  it), not 0.6, so the guard held 6 GB free while a release's CZPTT load needed 8 GB and the
+  release stayed half-loaded. Nothing live reads the archive; replay windows and corpora
+  must be pinned within two days now. Unit tests pass; sizes on the server after deploy.
 - **2026-10-31** — Compositions in the web, ČD asked live. One proxy pool for every proxied
   channel (`proxied = true` in the manifest; `OBEHY_EGRESS_PROXY_LIST_FILE` or
   `[realtime.egress] proxy_list_file` replaces the per-source `OBEHY_EGRESS_SZ_…`); ČD's lookup

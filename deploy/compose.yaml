@@ -6,8 +6,8 @@
 # polled only with a Golemio API key: OBEHY_SECRET_GOLEMIO in .env.
 # Disk (one disk for both volumes; 64 GB fits): PostgreSQL about 25 GB (one timetable copy of
 # 7.5 GB, another while a release loads, 8 hours of observations, 21 days of history), data/
-# about 11 GB (14 days of raw archive, two fetched releases). `jobs` keeps 6 GB free
-# (policy [guard]) and release loads wait for room.
+# about 6 GB (two days of raw archive, two weeks of SŽ boards, two fetched releases). `jobs`
+# keeps 6 GB free (policy [guard]) and release loads wait for room.
 name: obehy
 
 x-app: &app
