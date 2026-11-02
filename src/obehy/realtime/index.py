@@ -285,10 +285,11 @@ class Index:
             if trip.shape_id is not None and trip.shape_id in self.shapes
         }
         self.locations = {
-            call.location_id: self.locations[call.location_id]
+            location_id: self.locations[location_id]
             for trip in kept_trips.values()
             for call in trip.calls
-            if call.location_id in self.locations
+            for location_id in {call.location_id, call.placed_at}
+            if location_id in self.locations
         }
         self.service_dates = {
             service: self.service_dates[service] & dates
