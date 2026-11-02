@@ -88,7 +88,7 @@ def _live(name: str, ticks: list[str]) -> dict[str, list[CallState]]:
         while upcoming is not None and upcoming.received_at <= now:
             step(state, upcoming, ctx)
             upcoming = next(pending, None)
-        refresh(state, now, POLICY)
+        refresh(state, now, ctx)
         estimate_all(state, ctx, now)
         (instance,) = state.instances.values()
         shown[clock] = list(instance.calls)

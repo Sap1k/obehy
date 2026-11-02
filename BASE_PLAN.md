@@ -1499,12 +1499,19 @@ deviations are expected and some are correct.
   geometry. Committed progress and events pause; the lateness follows the held reading
   (section 20.4: the distance driven on a shape, the leg estimate on a chord), so it neither
   freezes nor grows from a stalled projection.
-- On rejoining, decoding resumes (section 20.4). Calls passed without matching fixes get no
-  event and are shown as passed without realtime, never as departed.
+- On rejoining, decoding resumes (section 20.4). Calls passed without matching fixes are shown
+  as passed with an inferred time, never as departed; history records them only as inferred
+  events when the lateness either side agrees (below).
 
-**Reception gaps.** History records only what was observed: a call crossed between fixes further
-apart than `max_event_interval_s` gets no event. Realtime still shows it passed, at a time
-interpolated between those fixes (`inferred`). Predictions hold the last measured lateness
+**Reception gaps.** A call crossed between fixes further apart than `max_event_interval_s` is
+not observed. Realtime still shows it passed, at a time interpolated between those fixes
+(`inferred`). History records it as an `inferred` event when the vehicle was about as late at
+both fixes (within `max_inferred_spread_s`): the timetable then says when it passed, and the
+event's interval is what that lateness allows; when the lateness changed across the gap there
+is no event. The same goes for the first call's departure before a journey's first fix and the
+last call's arrival after its last one (the vehicle lost, or on to its next trip), within
+`max_extrapolate_s` of timetable time; such a journey is then finished. The API marks inferred
+times as estimated. Predictions hold the last measured lateness
 through the gap and never fall back to the timetable as if the vehicle were on time. Without
 observations a journey is `stale` after `stale_after_s` (position withdrawn) and `lost` after
 `predict_without_data_s` (predictions withdrawn); both are per mode, longer for rail.
@@ -2067,7 +2074,7 @@ source prediction, project prediction, source-reported actual event, GPS-inferre
 ```text
 actual_stop_event
     journey, location_id, visit_n, revision, event_type (arrival | departure | passage),
-    event_time, interval, method (source | progress | interpolated_crossing),
+    event_time, interval, method (source | progress | inferred),
     confidence, source_ids, derivation
 ```
 

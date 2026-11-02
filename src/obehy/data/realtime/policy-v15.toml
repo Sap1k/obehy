@@ -5,10 +5,10 @@
 # kept after the trip ends, observed dwell credited at stops without a timetabled one, and
 # the distance driven followed where a shape misses the road, v11 hop running times learned
 # live, v12 one day of rt.observation, v13 hourly rt.observation, a history window and the disk
-# guard, v14 the raw archive window per source).
+# guard, v14 the raw archive window per source, v15 inferred history events).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "14"
+policy_version = "15"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -71,9 +71,18 @@ prune = 15
 # below it (e.g. a reading holding through one off-path fix) it is negligible and does not block.
 agree_within = 7
 max_commit_lag_s = 900
-# A crossing bracketed by fixes further apart than this was not observed: no event, the call
-# is passed without realtime (e.g. inside a reception gap).
+# A crossing bracketed by fixes further apart than this was not observed (e.g. inside a
+# reception gap, or off a shape that misses the road)...
 max_event_interval_s = 300
+# ...but if the vehicle was late by about the same at both fixes (at most this apart), the
+# timetable says when it passed: an `inferred` event, its interval what that lateness allows.
+# Else the call is passed without one.
+max_inferred_spread_s = 120
+# The first call's departure before the first fix, and the last call's arrival after the last
+# one, are inferred from the lateness there when the fix is at most this much timetable time
+# away (and the lateness steady): a vehicle first seen just past its origin, or lost just
+# before its terminus.
+max_extrapolate_s = 180
 off_route_hold_s = 180
 # Two roads of about the same length differ in where they go, not how far: the distance driven
 # is the measure of progress where a shape misses the road taken.

@@ -22,6 +22,7 @@ from obehy.realtime.model import (
     Effect,
     Freshness,
     Instance,
+    Interval,
     Observation,
     PointEvent,
     Position,
@@ -221,7 +222,8 @@ def _cross(
 ) -> tuple[tuple[CallState, ...], list[Effect]]:
     """Set the calls' passed times and recorded events; recorded ones go to history. A call a
     source's point event already holds keeps that event, narrowed by the crossing if they
-    agree (`fusion.merge`)."""
+    agree (`fusion.merge`). An inferred crossing goes to history only where nothing better is
+    recorded, and leaves the call's realtime `inferred`."""
 
     if not crossed:
         return instance.calls, []
@@ -229,21 +231,25 @@ def _cross(
     effects: list[Effect] = []
     for crossing in crossed:
         state = calls[crossing.call]
+        held = state.arrival if crossing.kind == "arrival" else state.departure
         fixes = crossing.fixes
+        if crossing.method == "progress":
+            if fuse and held is not None:
+                fixes = merge(held, fixes, new_is_point=False, policy=policy)
+            recorded: Interval | None = fixes
+        else:
+            # Inferred: history only where nothing better holds the call; realtime unchanged.
+            recorded = crossing.interval if held is None else None
         if crossing.kind == "arrival":
-            if fuse and state.arrival is not None:
-                fixes = merge(state.arrival, fixes, new_is_point=False, policy=policy)
             state = replace(state, passed_arrival=crossing.at)
-            if crossing.recorded:
+            if crossing.method == "progress":
                 state = replace(state, arrival=fixes)
         else:
-            if fuse and state.departure is not None:
-                fixes = merge(state.departure, fixes, new_is_point=False, policy=policy)
             state = replace(state, passed_departure=crossing.at)
-            if crossing.recorded:
+            if crossing.method == "progress":
                 state = replace(state, departure=fixes)
         calls[crossing.call] = state
-        if crossing.recorded:  # one passed inside a reception gap is realtime only
+        if recorded is not None and crossing.method is not None:
             journey, visit = instance.public_call(crossing.call, crossing.kind)
             effects.append(
                 WriteEvent(
@@ -251,8 +257,8 @@ def _cross(
                     state.location_id,
                     visit,
                     crossing.kind,
-                    fixes,
-                    "progress",
+                    recorded,
+                    crossing.method,
                     source,
                 )
             )

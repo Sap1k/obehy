@@ -63,7 +63,7 @@ export function TripBody({
   trip,
   parts,
   calls,
-  boardedAt,
+  boarded,
   aheadFrom,
   now,
   stale,
@@ -73,8 +73,8 @@ export function TripBody({
   /** The trip and the run's parts after it that are loaded. */
   parts: Trip[];
   calls: RunCall[];
-  /** The stop one boards at, which anchors the timetable. */
-  boardedAt: string | undefined;
+  /** The call one boards at, which anchors the timetable. */
+  boarded: RunCall | undefined;
   /** Severe stop alerts show for the stops after this call. */
   aheadFrom: RunCall | undefined;
   now: number;
@@ -121,7 +121,12 @@ export function TripBody({
           <h3 className={classes.sectionTitle}>Jízdní řád</h3>
           <HistoryLink tripId={trip.trip_id} stopId={stopId} />
         </div>
-        <Timetable calls={calls} boardedAt={boardedAt} now={now} stale={stale} />
+        <Timetable
+          calls={calls}
+          boarded={boarded && calls.indexOf(boarded)}
+          now={now}
+          stale={stale}
+        />
       </section>
 
       <Notes trip={trip} />
@@ -330,7 +335,7 @@ function Connections({ trip, stopId }: { trip: Trip; stopId: string | undefined 
             className={classes.connection}
             to="/odjezdy/$stopId/spoj/$tripId/$date"
             params={{ stopId, tripId: c.trip.trip_id, date: c.trip.service_date }}
-            search={(prev) => ({ ...prev, od: undefined })}
+            search={(prev) => ({ ...prev, od: undefined, poradi: undefined })}
           >
             {body}
           </Link>

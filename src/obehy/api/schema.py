@@ -766,6 +766,14 @@ class HistoryCall(BaseModel):
     actual_departure: Time | None
     arrival_delay_s: int | None
     departure_delay_s: int | None
+    arrival_estimated: bool = Field(
+        description="The arrival was not seen but inferred: passed in a gap in the vehicle's "
+        "positions it was about as late on either side of, or just next to its last fix"
+    )
+    departure_estimated: bool = Field(
+        description="The departure was inferred (see arrival_estimated), e.g. at a first stop "
+        "the vehicle was first seen just past"
+    )
 
 
 class HistoryVehicle(BaseModel):

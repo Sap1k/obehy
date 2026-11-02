@@ -57,16 +57,15 @@ const TRIP = { calls: [CHEB, call(2, "Sokolov"), MOST, call(4, "x"), USTI, call(
 
 describe("segmentAt", () => {
   it("finds the segment a call is in; a boundary call starts the next", () => {
-    expect(segmentAt(COMPOSITION, TRIP as never, "czptt:location:Sokolov")).toBe(0);
-    expect(segmentAt(COMPOSITION, TRIP as never, "czptt:location:Most")).toBe(1);
-    expect(segmentAt(COMPOSITION, TRIP as never, "czptt:location:y")).toBe(2);
+    expect(segmentAt(COMPOSITION, 2)).toBe(0); // Sokolov
+    expect(segmentAt(COMPOSITION, MOST.sequence)).toBe(1);
+    expect(segmentAt(COMPOSITION, 6)).toBe(2);
   });
 
   it("falls back to the first segment, and the last for the terminus", () => {
-    expect(segmentAt(COMPOSITION, TRIP as never, undefined)).toBe(0);
-    expect(segmentAt(COMPOSITION, TRIP as never, "elsewhere")).toBe(0);
-    expect(segmentAt(COMPOSITION, TRIP as never, "czptt:location:Praha")).toBe(2);
-    expect(segmentAt({ ...COMPOSITION, segments: [] }, TRIP as never, undefined)).toBe(-1);
+    expect(segmentAt(COMPOSITION, undefined)).toBe(0);
+    expect(segmentAt(COMPOSITION, PRAHA.sequence)).toBe(2);
+    expect(segmentAt({ ...COMPOSITION, segments: [] }, undefined)).toBe(-1);
   });
 });
 

@@ -234,7 +234,7 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
     run = Run().at("08:00", east(0)).at("08:03", east(500), delay=60)
     run.at("08:03", None, vehicle="2002", key="999999:1")  # unmatched: never in GTFS-RT
     now = local("2026-10-08 08:03:10")
-    refresh(run.state, now, POLICY)
+    refresh(run.state, now, run.ctx)
     estimate_all(run.state, run.ctx, now)
     raw = feed_message(run.state, now, POLICY.lifecycle).SerializeToString(deterministic=True)
     message = rt.FeedMessage()
@@ -255,14 +255,14 @@ def test_gtfs_rt_carries_matched_journeys_and_vehicles_only() -> None:
 
     # Stale after 300 s: the position goes, the predictions stay through a reception gap...
     later = local("2026-10-08 08:10")
-    refresh(run.state, later, POLICY)
+    refresh(run.state, later, run.ctx)
     assert [e.id for e in feed_message(run.state, later, POLICY.lifecycle).entity] == [
         "trip:cis:line_trip:582492:143:2026-10-08"
     ]
     # ...until nothing has been heard for predict_without_data_s: then the calls made stay and
     # every call ahead is NO_DATA, never reverted to the timetable by leaving the feed.
     lost = local("2026-10-08 08:34")
-    refresh(run.state, lost, POLICY)
+    refresh(run.state, lost, run.ctx)
     (entity,) = feed_message(run.state, lost, POLICY.lifecycle).entity
     stops = entity.trip_update.stop_time_update
     no_data = rt.TripUpdate.StopTimeUpdate.NO_DATA
@@ -278,7 +278,7 @@ def test_a_finished_trip_keeps_its_trip_update_for_a_while() -> None:
     run.at("08:13", east(2000))  # three minutes late at C
     assert run.instance.lifecycle == "finished"
     now = local("2026-10-08 08:20")
-    refresh(run.state, now, POLICY)
+    refresh(run.state, now, run.ctx)
     estimate_all(run.state, run.ctx, now)
     (entity,) = feed_message(run.state, now, POLICY.lifecycle).entity
     update = entity.trip_update
@@ -289,7 +289,7 @@ def test_a_finished_trip_keeps_its_trip_update_for_a_while() -> None:
     # Gone publish_finished_s after its last call.
     keep = int(POLICY.lifecycle.publish_finished_s("bus"))
     gone = Instant(local("2026-10-08 08:13") + timedelta(seconds=keep + 10))
-    refresh(run.state, gone, POLICY)
+    refresh(run.state, gone, run.ctx)
     assert len(feed_message(run.state, gone, POLICY.lifecycle).entity) == 0
 
 
@@ -302,7 +302,7 @@ def test_gtfs_rt_bytes_reused_across_ticks_match_a_fresh_serialization() -> None
     for clock, metres in (("08:01", 150), ("08:02", 300), ("08:03", 500), ("08:04", 700)):
         run.at(clock, east(metres))
         now = local(f"2026-10-08 {clock}:10")
-        refresh(run.state, now, POLICY)
+        refresh(run.state, now, run.ctx)
         estimate_all(run.state, run.ctx, now)
         payload = emitter.serialize(run.state, now)
         # The same bytes as serializing the whole message at once, with nothing cached.
@@ -469,7 +469,7 @@ def test_a_bus_reported_by_two_sources_is_one_vehicle_in_gtfs_rt() -> None:
     run = Run().at("08:00", east(0)).at("08:03", east(500), delay=60)
     run.at("08:03", east(510), vehicle="842", source="dpmd")  # the same bus, the city's feed
     now = local("2026-10-08 08:03:10")
-    refresh(run.state, now, POLICY)
+    refresh(run.state, now, run.ctx)
     estimate_all(run.state, run.ctx, now)
     message = feed_message(run.state, now, POLICY.lifecycle)
     assert len(run.state.vehicles) == 2  # both bound to the journey
@@ -504,7 +504,7 @@ def test_pid_and_duk_on_one_trip_are_one_journey_in_gtfs_rt() -> None:
     run.at("08:00", east(0)).at("08:03", east(500), delay=60)
     run.effects.extend(step(run.state, pid("08:03:05", east(505)), run.ctx))
     now = local("2026-10-08 08:03:10")
-    refresh(run.state, now, POLICY)
+    refresh(run.state, now, run.ctx)
     estimate_all(run.state, run.ctx, now)
     (journey,) = run.state.instances
     assert (journey.namespace, journey.key) == ("cis:line_trip", "582492:143")

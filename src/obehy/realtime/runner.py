@@ -241,10 +241,12 @@ class Runner:
                 raise InvariantError(f"{old.journey} was re-dated while still admissible")
         return effects
 
-    def tick(self, now: Instant, *, emit: bool = True) -> None:
+    def tick(self, now: Instant, *, emit: bool = True) -> list[Effect]:
         """Housekeeping and estimates at `now`; with `emit`, also GTFS-RT files and the state
         tables. Warm replay estimates too: a published estimate is kept until a new one leaves
-        the deadband (BASE_PLAN.md section 20.5), so estimates carry state from tick to tick."""
+        the deadband (BASE_PLAN.md section 20.5), so estimates carry state from tick to tick.
+        Housekeeping's history effects (a terminus arrival inferred) are written like a step's
+        and returned."""
 
         if self.next_compaction is None:
             self.next_compaction = self._compaction_after(now)
@@ -258,9 +260,10 @@ class Runner:
             with self.phases.time("sweep"):
                 self.sweep(now)
             self.next_sweep = instant(now + timedelta(seconds=self.policy.sweep_index_every_s))
+        effects: list[Effect] = []
         for feed, runtime in sorted(self.runtimes.items()):
             with self.phases.time("refresh"):
-                refresh(runtime.state, now, self.policy)
+                effects.extend(refresh(runtime.state, now, runtime.ctx))
             with self.phases.time("estimate"):
                 estimate_all(runtime.state, runtime.ctx, now)
             if emit and self.gtfs_rt_dir is not None:
@@ -275,9 +278,13 @@ class Runner:
                         self.gtfs_rt_dir / f"{feed}.pb",
                         emitter.serialize(runtime.state, now, alerts),
                     )
+        if self.writer is not None and effects:
+            with self.phases.time("write"):
+                self.writer.write(effects)
         if emit and self.writer is not None:
             with self.phases.time("state"):
                 self.writer.write_state({feed: r.state for feed, r in self.runtimes.items()})
+        return effects
 
     def _compaction_after(self, now: Instant) -> Instant:
         day = local_date(now)

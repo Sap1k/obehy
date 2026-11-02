@@ -78,6 +78,7 @@ from obehy.realtime.model import (
 from obehy.realtime.platforms import apply_platform
 from obehy.realtime.policy import Policy, PredictionPolicy
 from obehy.realtime.runs import journey_spans, part_spans, snapshots
+from obehy.realtime.timeline.commit import terminus
 from obehy.realtime.timeline.estimate import (
     dwell_credit,
     estimate,
@@ -238,13 +239,19 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
                 ctx.plans,
                 ctx.semantics_of(observation),
             )
-            state.instances[binding.journey] = instance
-            state.dirty.add(binding.journey)
             if binding.confirmed and instance.calls is not calls_before:
                 plan = ctx.plans.plan(trip, binding.journey.service_date, ctx.index, ctx.policy)
                 record(state.hops, instance, calls_before, plan.scheduled, ctx.policy.prediction)
-            if not binding.confirmed:  # realtime only until continuity confirms the inference
+            if not binding.confirmed:  # history waits until continuity confirms the inference
+                events = [e for e in timeline_effects if isinstance(e, WriteEvent)]
                 timeline_effects = [e for e in timeline_effects if not isinstance(e, WriteEvent)]
+                if events:
+                    instance = instance.evolve(held=(*instance.held, *events))
+            elif instance.held:
+                timeline_effects = [*instance.held, *timeline_effects]
+                instance = instance.evolve(held=())
+            state.instances[binding.journey] = instance
+            state.dirty.add(binding.journey)
             effects.extend(timeline_effects)
     status: VehicleStatus = "running"
     if instance.lifecycle in ("forecast", "pre_trip", "cancelled"):
@@ -375,10 +382,13 @@ def _behind(instance: Instance, now: Instant) -> bool:
     return False
 
 
-def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
+def refresh(state: FeedState, now: Instant, ctx: Context) -> list[Effect]:
     """Emit-tick housekeeping: flag stale and lost journeys, forget long-unseen vehicles and
-    journeys."""
+    journeys. A journey going stale just short of its terminus is taken to have arrived there
+    (`_arrived_unseen`); its inferred arrival is the history effect returned."""
 
+    policy = ctx.policy
+    effects: list[Effect] = []
     forget(state.hops, now, policy.prediction)
     # Each entry is decided on its own, so iteration order cannot change the result.
     unseen = timedelta(seconds=policy.lifecycle.forget_after_s)
@@ -386,6 +396,11 @@ def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
         if now - current.last_seen > unseen:
             del state.vehicles[vehicle]
     bound = {v.binding.journey for v in state.vehicles.values() if v.binding is not None}
+    unconfirmed = {
+        v.binding.journey
+        for v in state.vehicles.values()
+        if v.binding is not None and not v.binding.confirmed
+    }
     limits: dict[str, tuple[timedelta, timedelta]] = {}
     for journey, instance in list(state.instances.items()):
         idle = now - instance.freshness.heard_at
@@ -404,7 +419,40 @@ def refresh(state: FeedState, now: Instant, policy: Policy) -> None:
         fresh = instance.freshness
         if (stale, lost) != (fresh.stale, fresh.lost):
             fresh = replace(fresh, stale=stale, lost=lost)
-            state.instances[journey] = replace(instance, freshness=fresh)
+            instance = replace(instance, freshness=fresh)
+            if stale and journey not in unconfirmed and not instance.held:
+                arrived = _arrived_unseen(instance, ctx)
+                if arrived is not None:
+                    instance, event = arrived
+                    effects.append(event)
+                    state.dirty.add(journey)
+            state.instances[journey] = instance
+    return effects
+
+
+def _arrived_unseen(instance: Instance, ctx: Context) -> tuple[Instance, WriteEvent] | None:
+    """A running journey gone quiet just short of its terminus (its vehicle lost, or on to its
+    next trip without the arrival seen): finished, its arrival inferred from the lateness at
+    the last fixes (`timeline.commit.terminus`)."""
+
+    last = len(instance.calls) - 1
+    call = instance.calls[last]
+    track = instance.track
+    if instance.lifecycle != "running" or call.arrival is not None or call.passed_arrival:
+        return None
+    if track is None or not track.hypotheses:
+        return None
+    trip = ctx.index.trip(instance.trip_id)
+    plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)
+    interval = terminus(plan, track.hypotheses[0].history, ctx.policy.progress)
+    if interval is None:
+        return None
+    at = Instant(interval.lo + (interval.hi - interval.lo) / 2)
+    calls = (*instance.calls[:last], replace(call, passed_arrival=at))
+    journey, visit = instance.public_call(last, "arrival")
+    source = instance.track_source or ""
+    event = WriteEvent(journey, call.location_id, visit, "arrival", interval, "inferred", source)
+    return instance.evolve(calls=calls, lifecycle="finished"), event
 
 
 def _leads(

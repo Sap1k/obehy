@@ -71,6 +71,11 @@ def stop_zones(path: Path, policy: Policy) -> tuple[StopZone, ...]:
     but never past the midpoint to the neighbouring call: for stops closer together than the
     two margins, a departure must not trigger after the next arrival, so event times always
     follow call order.
+
+    Calls in a row at one point (a stop place visited twice at one post, a layover split into
+    arrival and departure) are one dwell: the first's arrival trigger also ends the earlier
+    visits and starts the last, whose departure ends it. A vehicle standing there is at the
+    last visit, not stuck on the first until it projects past the pole.
     """
 
     radius = policy.lifecycle.arrival_radius_m
@@ -81,9 +86,17 @@ def stop_zones(path: Path, policy: Policy) -> tuple[StopZone, ...]:
     for i, distance in enumerate(distances):
         arrival = departure = None
         if i > 0:
-            arrival = max(distance - radius, (distances[i - 1] + distance) / 2)
+            if distances[i - 1] == distance:
+                arrival = zones[i - 1].arrival_m
+                if arrival is None:
+                    arrival = distance - radius  # visits at the origin
+            else:
+                arrival = max(distance - radius, (distances[i - 1] + distance) / 2)
         if i < last:
-            departure = min(distance + margin, (distance + distances[i + 1]) / 2)
+            if distances[i + 1] == distance:
+                departure = arrival if arrival is not None else distance - radius
+            else:
+                departure = min(distance + margin, (distance + distances[i + 1]) / 2)
         zones.append(StopZone(arrival, departure))
     return tuple(zones)
 
@@ -113,15 +126,20 @@ class Timetable:
     __slots__ = ("_bounds_us", "_spans", "_starts")
 
     def __init__(self, path: Path, scheduled: Scheduled, zones: tuple[StopZone, ...]) -> None:
+        distances = path.call_distances_m
         spans: list[_Span] = []
         starts: list[float] = []
         for i, ((arrival, departure), zone) in enumerate(zip(scheduled, zones, strict=True)):
             earliest = None if i == 0 else (arrival if arrival is not None else departure)
             latest = departure if departure is not None else arrival
+            if i > 0 and distances[i - 1] == distances[i]:
+                # Visits in a row at one point are one dwell: it starts with the first (none at
+                # the origin).
+                earliest = spans[-1].window.earliest
             start = -math.inf if zone.arrival_m is None else zone.arrival_m
             end = math.inf if zone.departure_m is None else zone.departure_m
             spans.append(_Span(start, end, Window(earliest, latest)))
-            starts.append(start if i > 0 else path.call_distances_m[i])
+            starts.append(start)
         self._spans = tuple(spans)
         self._starts = tuple(starts)
         # The windows in exact microseconds, for the tracker's inner loop (`lateness_us`).

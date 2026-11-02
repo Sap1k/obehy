@@ -1360,8 +1360,18 @@ export interface components {
             actual_departure: string | null;
             /** Arrival Delay S */
             arrival_delay_s: number | null;
+            /**
+             * Arrival Estimated
+             * @description The arrival was not seen but inferred: passed in a gap in the vehicle's positions it was about as late on either side of, or just next to its last fix
+             */
+            arrival_estimated: boolean;
             /** Departure Delay S */
             departure_delay_s: number | null;
+            /**
+             * Departure Estimated
+             * @description The departure was inferred (see arrival_estimated), e.g. at a first stop the vehicle was first seen just past
+             */
+            departure_estimated: boolean;
             /** Location Id */
             location_id: string;
             /** Name */

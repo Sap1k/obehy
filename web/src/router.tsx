@@ -21,7 +21,10 @@ export interface BoardSearch {
 }
 
 export interface TripSearch extends BoardSearch {
+  /** The stop one boards at (`location_id`). */
   od?: string;
+  /** Which of the trip's calls there (its `sequence`): a stop served several times in a row. */
+  poradi?: number;
 }
 
 /** The oběhy page's scope: a source on a date, and companies (comma-separated agency IDs) with
@@ -86,6 +89,7 @@ const tripRoute = createRoute({
     cas: text(search.cas),
     jen: text(search.jen),
     od: text(search.od),
+    poradi: Number.isInteger(search.poradi) ? (search.poradi as number) : undefined,
   }),
 });
 

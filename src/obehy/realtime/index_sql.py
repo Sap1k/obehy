@@ -231,19 +231,34 @@ class IndexLoader:
             arrival,
             departure,
             on_request,
+            point_id,
         ) in self._rows_first(
-            "SELECT trip_id, sequence, location_id,"
-            " row_number() OVER (PARTITION BY trip_id, location_id ORDER BY sequence),"
-            " passenger_service, scheduled_arrival, scheduled_departure,"
-            " pickup_type = 3 OR dropoff_type = 3"
-            " FROM static.trip_call WHERE trip_id = ANY(%s) AND load_id = %s"
-            " ORDER BY trip_id, sequence",
+            "SELECT c.trip_id, c.sequence, c.location_id,"
+            " row_number() OVER (PARTITION BY c.trip_id, c.location_id ORDER BY c.sequence),"
+            " c.passenger_service, c.scheduled_arrival, c.scheduled_departure,"
+            " c.pickup_type = 3 OR c.dropoff_type = 3,"
+            " CASE WHEN p.coordinate_precision = 'exact' THEN p.location_id END"
+            " FROM static.trip_call c LEFT JOIN static.location p"
+            " ON p.load_id = c.load_id AND p.location_id = c.boarding_point_id"
+            " WHERE c.trip_id = ANY(%s) AND c.load_id = %s"
+            " ORDER BY c.trip_id, c.sequence",
             trip_ids,
         ):
             calls[trip_id].append(
-                Call(sequence, location_id, visit_n, passenger, arrival, departure, on_request)
+                Call(
+                    sequence,
+                    location_id,
+                    visit_n,
+                    passenger,
+                    arrival,
+                    departure,
+                    on_request,
+                    point_id,
+                )
             )
             locations.add(location_id)
+            if point_id is not None:
+                locations.add(point_id)
         shapes: set[str] = set()
         services: set[str] = set()
         runs: set[str] = set()

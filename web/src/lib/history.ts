@@ -11,24 +11,34 @@ export type HistoryCall = Schemas["HistoryCall"];
 
 const MINUTE = 60;
 
+/** A delay in seconds, and whether it was inferred rather than seen (history records a stop
+ * passed out of sight when the vehicle was about as late either side of it). */
+export interface Delay {
+  delayS: number | null;
+  estimated: boolean;
+}
+
 /** A day's run over the segment. */
 export interface SegmentDay {
   day: HistoryDay;
-  /** The departure delay where the segment starts, in seconds. */
-  from: number | null;
+  /** The departure delay where the segment starts. */
+  from: Delay;
   /** The arrival delay where it ends (its departure when no arrival was seen). */
-  to: number | null;
+  to: Delay;
   /** The largest delay at any of its stops. */
-  worst: number | null;
+  worst: Delay;
   /** The day's calls within the segment, in order. */
   calls: HistoryCall[];
 }
 
+const NONE: Delay = { delayS: null, estimated: false };
+
 /** A call's delay as the rider meets it: its departure, at the segment's end its arrival. */
-function delayAt(call: HistoryCall, end: boolean): number | null {
-  return end
-    ? (call.arrival_delay_s ?? call.departure_delay_s)
-    : (call.departure_delay_s ?? call.arrival_delay_s);
+export function callDelay(call: HistoryCall, end: boolean): Delay {
+  const arrival = { delayS: call.arrival_delay_s, estimated: call.arrival_estimated };
+  const departure = { delayS: call.departure_delay_s, estimated: call.departure_estimated };
+  const [first, second] = end ? [arrival, departure] : [departure, arrival];
+  return first.delayS !== null ? first : second.delayS !== null ? second : NONE;
 }
 
 /** Each day's run from the `from`th to the `to`th of the journey's stops (`history.stops`), a
@@ -40,17 +50,19 @@ export function segmentDays(history: TripHistory, from: number, to: number): Seg
   return history.days.map((day) => {
     const first = day.calls.findIndex((c) => c.location_id === start);
     const last = first < 0 ? -1 : day.calls.findIndex((c, i) => i > first && c.location_id === end);
-    if (first < 0 || last < 0) return { day, from: null, to: null, worst: null, calls: [] };
+    if (first < 0 || last < 0) return { day, from: NONE, to: NONE, worst: NONE, calls: [] };
     const calls = day.calls.slice(first, last + 1);
-    const delays = calls.flatMap((c, i) => {
-      const d = delayAt(c, i === calls.length - 1);
-      return d === null ? [] : [d];
-    });
+    const delays = calls.map((c, i) => callDelay(c, i === calls.length - 1));
+    const worst = delays.reduce(
+      (most, d) =>
+        d.delayS !== null && (most.delayS === null || d.delayS > most.delayS) ? d : most,
+      NONE,
+    );
     return {
       day,
-      from: delayAt(calls[0]!, false),
-      to: delayAt(calls.at(-1)!, true),
-      worst: delays.length ? Math.max(...delays) : null,
+      from: delays[0]!,
+      to: delays.at(-1)!,
+      worst,
       calls,
     };
   });
@@ -62,8 +74,8 @@ export function segmentSummary(
   days: SegmentDay[],
 ): { runs: number; onTime: number; median: number } | null {
   const ends = days
-    .filter((d) => !d.day.cancelled && d.to !== null)
-    .map((d) => d.to!)
+    .filter((d) => !d.day.cancelled && d.to.delayS !== null)
+    .map((d) => d.to.delayS!)
     .sort((a, b) => a - b);
   if (ends.length === 0) return null;
   const onTime = ends.filter((d) => toneOf(Math.round(d / MINUTE)) === "onTime").length;

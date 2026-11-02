@@ -309,6 +309,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-02** — Repeated stops and gaps in history. The core places each call at its post
+  when that is known exactly (every one of the 64 790 back-to-back visits of one stop place in
+  the release has one): a bus serving three distant posts in a row no longer waits at the
+  first with its delay climbing, then jumps; calls in a row at one point are one dwell. The web
+  opens a board's trip at the row's own call (`poradi`). History records `inferred` events
+  (policy v15): a stop passed out of sight when the lateness either side agrees within 2 min,
+  the origin's departure just before the first fix and the terminus arrival just after the
+  last (within 3 min of timetable), and a keyless journey's events from before continuity
+  confirmed it (they were dropped). The API marks them (`arrival_estimated`,
+  `departure_estimated`) and the history dialog shows them with "~". Not done: the map's
+  stop markers still key by stop place.
 - **2026-11-02** — Raw archive kept per source (policy v14): yesterday and today, SŽ station
   boards 14 days. The server ran out of room again: raw was about 1.1 GB a day (PID half of
   it), not 0.6, so the guard held 6 GB free while a release's CZPTT load needed 8 GB and the

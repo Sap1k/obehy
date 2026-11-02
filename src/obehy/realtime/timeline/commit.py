@@ -3,8 +3,9 @@
 `BASE_PLAN.md` section 20.4 ("Commit when all agree") and `docs/R1_SLICE.md` section 9, step 6.
 A crossing is committed in path order when every reading that is not negligible has passed the
 trigger between the same two fixes. Its time is placed between those fixes by timetable time;
-it is recorded as an event (history) only when the fixes are close enough to say when it
-happened, and realtime gets its time either way.
+it is recorded as an event (history) when the fixes are close enough to say when it happened,
+or, further apart, as an inferred one when the vehicle was about as late at both (then the
+timetable says when it passed); realtime gets its time either way.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from itertools import pairwise
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from obehy.realtime.model import EventKind, Hypothesis, Interval, Placement
 from obehy.realtime.policy import ProgressPolicy
@@ -28,7 +29,11 @@ class Crossing:
     kind: EventKind
     fixes: Interval  # the fixes either side
     at: Instant  # when, placed between them
-    recorded: bool  # close enough fixes: an event for history too
+    # An event for history too: observed between close enough fixes (`progress`, its interval
+    # the fixes), or inferred across a gap the lateness agrees on either side (`inferred`, its
+    # interval the times that lateness allows); None: realtime only.
+    method: Literal["progress", "inferred"] | None
+    interval: Interval | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,8 +66,10 @@ def commit(
     prefix of their histories). The first disagreement stops committing: that crossing is still
     undecided, as is one a reading held off the path has passed with no fix past it yet. A
     crossing before every history starts was never observed and gets nothing. One
-    bracketed by fixes further apart than `max_event_interval_s` (a reception gap) gets a time
-    for realtime but is not recorded as an event. Crossing times never decrease along the path:
+    bracketed by fixes further apart than `max_event_interval_s` (a reception gap, a stretch off
+    the path) is recorded as inferred when the lateness at the two fixes differs by at most
+    `max_inferred_spread_s`, else it gets a time for realtime only. Crossing times never
+    decrease along the path:
     each is at least the one committed before it (`crossed_at`). Readings outside the decision
     that are behind the new commit point contradict it and are dropped.
     """
@@ -83,14 +90,32 @@ def commit(
             break  # passed by a reading held off the path: no fix past it yet
         reached = trigger.along_m
         if bracket is None:
-            continue  # crossed before anything was observed
+            # Crossed before anything was observed: nothing, except the origin's departure
+            # just before the first fix, inferred from the lateness there.
+            first = deciding[0].history[0]
+            origin = trigger.call == 0 and trigger.kind == "departure"
+            inferred = _before_first(first, trigger, plan, policy) if origin else None
+            if inferred is not None:
+                when = Instant(inferred.lo + (inferred.hi - inferred.lo) / 2)
+                if crossed_at is not None and when < crossed_at:
+                    when = crossed_at
+                crossed_at = when
+                fixes = Interval(first.at, first.at)
+                crossed.append(
+                    Crossing(trigger.call, trigger.kind, fixes, when, "inferred", inferred)
+                )
+            continue
         when = _crossing_time(bracket, trigger, plan)
         if crossed_at is not None and when < crossed_at:
             when = crossed_at
         crossed_at = when
         fixes = Interval(bracket.before.at, bracket.after.at)
-        recorded = fixes.hi - fixes.lo <= longest
-        crossed.append(Crossing(trigger.call, trigger.kind, fixes, when, recorded))
+        if fixes.hi - fixes.lo <= longest:
+            crossed.append(Crossing(trigger.call, trigger.kind, fixes, when, "progress", fixes))
+            continue
+        inferred = _inferred(bracket, trigger, when, plan, policy)
+        method = None if inferred is None else "inferred"
+        crossed.append(Crossing(trigger.call, trigger.kind, fixes, when, method, inferred))
     if reached == committed_m:
         return Committed(beam, committed_m, (), crossed_at)
     survivors = (h for h in beam if h in deciding or h.along_m >= reached)
@@ -143,6 +168,75 @@ def _crossing_time(bracket: Bracket, trigger: Trigger, plan: Plan) -> Instant:
     else:
         share = (trigger.along_m - before.along_m) / (after.along_m - before.along_m)
     return Instant(before.at + (after.at - before.at) * min(1.0, max(0.0, share)))
+
+
+def _inferred(
+    bracket: Bracket, trigger: Trigger, when: Instant, plan: Plan, policy: ProgressPolicy
+) -> Interval | None:
+    """When a crossing between fixes too far apart to observe it happened, if the vehicle was
+    about as late at both: the scheduled time shifted by the lateness either side (within the
+    fixes, and holding the placed time `when`). None if the lateness differs by more than
+    `max_inferred_spread_s` (it was made up or lost somewhere unknown in between) or the call has
+    no scheduled time."""
+
+    planned = plan.scheduled_time(trigger.call, trigger.kind)
+    if planned is None:
+        return None
+    timetable = plan.timetable
+    before, after = bracket
+    least, most = sorted(
+        (
+            timetable.lateness_s(before.at, before.along_m),
+            timetable.lateness_s(after.at, after.along_m),
+        )
+    )
+    if most - least > policy.max_inferred_spread_s:
+        return None
+    lo = max(before.at, min(when, planned + timedelta(seconds=least)))
+    hi = min(after.at, max(when, planned + timedelta(seconds=most)))
+    return Interval(Instant(lo), Instant(hi)) if lo <= hi else Interval(when, when)
+
+
+def terminus(plan: Plan, history: tuple[Placement, ...], policy: ProgressPolicy) -> Interval | None:
+    """When a vehicle last seen just short of its terminus arrived there: the scheduled arrival
+    shifted by the lateness at its last fixes (their range), if the last is at most
+    `max_extrapolate_s` of timetable time before it and the lateness over the fixes kept (at
+    most `max_inferred_spread_s` apart). From the last fix on; None otherwise."""
+
+    last = len(plan.scheduled) - 1
+    planned = plan.scheduled_time(last, "arrival")
+    if planned is None or not history:
+        return None
+    fix = history[-1]
+    reached = plan.timetable.planned(fix.at, fix.along_m)
+    if reached is None or (planned - reached).total_seconds() > policy.max_extrapolate_s:
+        return None
+    lateness = [plan.timetable.lateness_s(p.at, p.along_m) for p in history]
+    if max(lateness) - min(lateness) > policy.max_inferred_spread_s:
+        return None
+    lo = max(fix.at, planned + timedelta(seconds=min(lateness)))
+    hi = max(fix.at, planned + timedelta(seconds=max(lateness)))
+    return Interval(Instant(lo), Instant(hi))
+
+
+def _before_first(
+    first: Placement, trigger: Trigger, plan: Plan, policy: ProgressPolicy
+) -> Interval | None:
+    """When the vehicle left its origin, first seen just past it: the scheduled departure
+    shifted by the lateness at the first fix, if that fix is at most `max_extrapolate_s` of
+    timetable time past it. Between the scheduled departure (or earlier, running early) and the
+    first fix; None without a scheduled time or further away."""
+
+    planned = plan.scheduled_time(trigger.call, trigger.kind)
+    reached = plan.timetable.planned(first.at, first.along_m)
+    if planned is None or reached is None:
+        return None
+    if (reached - planned).total_seconds() > policy.max_extrapolate_s:
+        return None
+    lateness = timedelta(seconds=plan.timetable.lateness_s(first.at, first.along_m))
+    lo = min(planned, planned + lateness)
+    hi = min(first.at, planned + max(lateness, timedelta(0)))
+    return Interval(Instant(min(lo, hi)), Instant(hi))
 
 
 def _before(history: tuple[Placement, ...], along_m: float) -> bool:

@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from itertools import pairwise
 
-from obehy.realtime.core import Context, estimate_all, step
+from obehy.realtime.core import Context, estimate_all, refresh, step
 from obehy.realtime.geo import cumulative_m
 from obehy.realtime.index import Index, Shape
 from obehy.realtime.model import (
@@ -102,6 +102,13 @@ class Drive:
 
     def times(self) -> list[Instant]:
         return [e.interval.hi for e in self.effects if isinstance(e, WriteEvent)]
+
+    def methods(self) -> dict[tuple[str, int, str], str]:
+        return {
+            (e.location_id.split(":")[1], e.visit_n, e.kind): e.method
+            for e in self.effects
+            if isinstance(e, WriteEvent)
+        }
 
     def arrivals(self) -> list[tuple[str, int]]:
         return [(stop, visit) for stop, visit, kind in self.events() if kind == "arrival"]
@@ -261,17 +268,36 @@ GAP_ROUTE = route(
 )
 
 
-def test_a_long_reception_gap_gives_no_history_event_but_an_inferred_time() -> None:
+def test_a_long_reception_gap_with_steady_lateness_gives_inferred_history_events() -> None:
+    # On time before and after a 21-minute gap: the timetable says when B and C were passed.
     fixes = drive([("08:00", 0, 0), ("08:30", 6000, 0)])
     fixes = [f for f in fixes if not at("08:03") < at(f[0]) < at("08:24")]
     d = Drive(GAP_ROUTE).run(fixes)
-    stops = {stop for stop, _, _ in d.events()}
-    assert "B" not in stops and "C" not in stops  # inside the gap: not known well enough
-    assert ("D", 1) in d.arrivals()
+    methods = d.methods()
+    assert methods[("B", 1, "arrival")] == methods[("C", 1, "departure")] == "inferred"
+    assert methods[("D", 1, "arrival")] == "progress"
     b, c = d.instance.calls[1:3]
-    assert (b.status, c.status) == ("inferred", "inferred")  # realtime still gets a time
+    assert (b.status, c.status) == ("inferred", "inferred")  # realtime is unchanged
     assert b.estimated_arrival is not None and c.estimated_arrival is not None
     assert at("08:03") < b.estimated_arrival < c.estimated_arrival < at("08:24")
+    events = {
+        (e.location_id.split(":")[1], e.kind): e.interval
+        for e in d.effects
+        if isinstance(e, WriteEvent)
+    }
+    b_arrival = events[("B", "arrival")]
+    assert at("08:09:30") <= b_arrival.lo <= b_arrival.hi <= at("08:10:30")
+
+
+def test_a_reception_gap_the_lateness_changes_across_gives_no_history_event() -> None:
+    # On time into the gap, ten minutes late out of it, just before C: when B was passed is
+    # unknown.
+    fixes = drive([("08:00", 0, 0), ("08:02", 400, 0), ("08:30", 4000, 0), ("08:38", 6000, 0)])
+    fixes = [f for f in fixes if not at("08:03") < at(f[0]) < at("08:29")]
+    d = Drive(GAP_ROUTE).run(fixes)
+    assert {stop for stop, _, _ in d.events()} == {"A", "C", "D"}
+    assert d.methods()[("C", 1, "arrival")] == "progress"
+    assert d.instance.calls[1].status == "inferred"  # realtime still gets a time
 
 
 def test_predictions_hold_the_last_lateness_through_a_reception_gap() -> None:
@@ -437,3 +463,97 @@ def test_pid_q8_after_the_start_a_vehicle_far_ahead_on_the_path_is_not_running_i
     d.run(drive([("08:12", 2100, 0), ("08:13", 2600, 0), ("08:24", 4100, 0)]))
     assert d.instance.lifecycle == "running"
     assert d.arrivals() == [("C", 1)]
+
+
+# --- a stop place served at several posts in a row ----------------------------------------------
+
+
+def test_a_stop_served_at_three_distant_posts_moves_on_post_by_post() -> None:
+    # The stop place S has one coordinate (by its last post); the bus serves it at three posts
+    # hundreds of metres apart, in a row. Each visit is placed at its own post: the bus waiting
+    # at the first is at the first visit, on time, and the visits arrive one after another.
+    tt = timetable()
+    for name, (east, north) in {
+        "A": (0, 0),
+        "S": (1000, 1000),
+        "S1": (1000, 0),
+        "S2": (1000, 500),
+        "S3": (1000, 1000),
+        "D": (2000, 1000),
+    }.items():
+        tt.stop(name, *point(east, north))
+    calls = [("A", "08:00"), ("S@S1", "08:02", "08:05"), ("S@S2", "08:07"), ("S@S3", "08:09")]
+    index = tt.trip("582492:143", days=[DAY], calls=[*calls, ("D", "08:11")], shape=False).index()
+    d = Drive(index).run(drive([("08:00", 0, 0), ("08:02", 1000, 0), ("08:05", 1000, 0)]))
+    track = d.instance.track
+    assert track is not None and track.lateness_s is not None
+    assert abs(track.lateness_s) < 30  # waiting at the first post is on time
+    assert d.arrivals() == [("S", 1)]
+    d.run(drive([("08:05", 1000, 0), ("08:07", 1000, 500), ("08:09", 1000, 1000)])[1:])
+    d.run(drive([("08:09", 1000, 1000), ("08:11", 2000, 1000)])[1:])
+    assert d.arrivals() == [("S", 1), ("S", 2), ("S", 3), ("D", 1)]
+    arrivals = [
+        t for t, (_, _, kind) in zip(d.times(), d.events(), strict=True) if kind == "arrival"
+    ]
+    assert arrivals == sorted(arrivals) and at("08:06") < arrivals[1] < at("08:08")
+
+
+def test_a_layover_split_into_two_calls_at_one_post_is_one_dwell() -> None:
+    # B is called at twice at one post (arrival 08:05, departure 08:15). The bus stands a few
+    # metres short of the pole for the whole layover: it has reached the second visit, and the
+    # stops after it are not predicted late.
+    layover = route(
+        {"A": (0, 0), "B": (1000, 0), "C": (2000, 0)},
+        [("A", "08:00"), ("B", "08:05"), ("B", "08:15"), ("C", "08:20")],
+    )
+    d = Drive(layover).run(drive([("08:00", 0, 0), ("08:04", 996, 0), ("08:14", 996, 0)]))
+    assert d.arrivals() == [("B", 1), ("B", 2)]
+    c = d.instance.calls[3]
+    assert c.estimated_arrival is not None
+    assert abs((c.estimated_arrival - at("08:20")).total_seconds()) <= 30
+    d.run(drive([("08:14", 996, 0), ("08:15", 996, 0), ("08:20", 2000, 0)])[1:])
+    assert ("B", 2, "departure") in d.events() and ("C", 1) in d.arrivals()
+
+
+# --- the first and last calls: estimated from the fixes next to them -----------------------------
+
+
+def _event(d: Drive, stop: str, kind: str) -> WriteEvent | None:
+    found = [
+        e
+        for e in d.effects
+        if isinstance(e, WriteEvent) and e.location_id.endswith(f":{stop}") and e.kind == kind
+    ]
+    return found[-1] if found else None
+
+
+def test_first_seen_just_past_the_origin_its_departure_is_inferred() -> None:
+    # Bound two minutes into the trip, on time: it left A about on time.
+    d = Drive(GAP_ROUTE).run(drive([("08:02", 400, 0), ("08:10", 2000, 0)]))
+    a = _event(d, "A", "departure")
+    assert a is not None and a.method == "inferred"
+    assert at("08:00") <= a.interval.lo <= a.interval.hi <= at("08:02")
+    assert d.instance.calls[0].status == "inferred"
+
+
+def test_first_seen_well_past_the_origin_its_departure_is_not_guessed() -> None:
+    d = Drive(GAP_ROUTE).run(drive([("08:08", 1600, 0), ("08:10", 2000, 0)]))
+    assert _event(d, "A", "departure") is None
+
+
+def test_lost_just_short_of_the_terminus_its_arrival_is_inferred() -> None:
+    # Two minutes late all the way, last seen 300 m before D: it arrived about two minutes late.
+    d = Drive(GAP_ROUTE).run(drive([("08:02", 0, 0), ("08:31", 5700, 0)]))
+    assert _event(d, "D", "arrival") is None
+    effects = refresh(d.state, at("08:40"), d.ctx)
+    (event,) = [e for e in effects if isinstance(e, WriteEvent)]
+    assert (event.location_id, event.kind, event.method) == ("jdf:D", "arrival", "inferred")
+    assert at("08:31") <= event.interval.lo <= event.interval.hi <= at("08:33")
+    assert d.instance.lifecycle == "finished"
+    assert refresh(d.state, at("08:50"), d.ctx) == []  # once
+
+
+def test_lost_well_before_the_terminus_its_arrival_is_not_guessed() -> None:
+    d = Drive(GAP_ROUTE).run(drive([("08:00", 0, 0), ("08:24", 4800, 0)]))
+    assert refresh(d.state, at("08:40"), d.ctx) == []
+    assert d.instance.lifecycle == "running"

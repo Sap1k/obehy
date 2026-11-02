@@ -5,10 +5,12 @@ import { useMemo, useState } from "react";
 import { ApiError } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import {
+  callDelay,
   delayTone,
   delayWords,
   segmentDays,
   segmentSummary,
+  type Delay as DelayValue,
   type HistoryCall,
   type SegmentDay,
   type TripHistory,
@@ -158,10 +160,17 @@ function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
   );
 }
 
-function Delay({ delayS }: { delayS: number | null }) {
+/** A delay; an inferred one (passed out of sight) marked "~", with a title saying so. */
+function Delay({ delay: { delayS, estimated } }: { delay: DelayValue }) {
+  const mark = estimated && delayS !== null;
   return (
-    <span className={classes.delay} data-tone={delayTone(delayS)}>
-      {delayS === null ? "–" : delayWords(delayS)}
+    <span
+      className={classes.delay}
+      data-tone={delayTone(delayS)}
+      data-estimated={mark || undefined}
+      title={mark ? "odhad: vůz tu nebyl vidět, ale před i za zastávkou jel stejně" : undefined}
+    >
+      {delayS === null ? "–" : `${mark ? "~" : ""}${delayWords(delayS)}`}
     </span>
   );
 }
@@ -189,9 +198,9 @@ function DayRow({ row, open, onToggle }: { row: SegmentDay; open: boolean; onTog
           <span className={classes.cancelled}>zrušeno</span>
         ) : (
           <>
-            <Delay delayS={row.from} />
-            <Delay delayS={row.to} />
-            <Delay delayS={row.worst} />
+            <Delay delay={row.from} />
+            <Delay delay={row.to} />
+            <Delay delay={row.worst} />
           </>
         )}
       </UnstyledButton>
@@ -222,18 +231,12 @@ function DayRow({ row, open, onToggle }: { row: SegmentDay; open: boolean; onTog
 function Calls({ calls }: { calls: HistoryCall[] }) {
   return (
     <ol className={classes.calls}>
-      {calls.map((c, i) => {
-        const end = i === calls.length - 1;
-        const delay = end
-          ? (c.arrival_delay_s ?? c.departure_delay_s)
-          : (c.departure_delay_s ?? c.arrival_delay_s);
-        return (
-          <li key={`${c.location_id}:${i}`} className={classes.call}>
-            <span className={classes.callName}>{c.name}</span>
-            <Delay delayS={delay} />
-          </li>
-        );
-      })}
+      {calls.map((c, i) => (
+        <li key={`${c.location_id}:${i}`} className={classes.call}>
+          <span className={classes.callName}>{c.name}</span>
+          <Delay delay={callDelay(c, i === calls.length - 1)} />
+        </li>
+      ))}
     </ol>
   );
 }

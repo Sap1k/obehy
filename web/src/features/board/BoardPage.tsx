@@ -295,7 +295,7 @@ function BoardBody({
                 data-selected={selected}
                 to="/odjezdy/$stopId/spoj/$tripId/$date"
                 params={{ stopId, tripId: row.trip_id, date: row.service_date }}
-                search={(prev) => ({ ...prev, od: row.location_id })}
+                search={(prev) => ({ ...prev, od: row.location_id, poradi: row.sequence })}
               >
                 <DepartureRow departure={row} offline={offline} />
               </Link>

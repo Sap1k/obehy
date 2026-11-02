@@ -95,7 +95,7 @@ def _away(departure: Departure, call: Call, index: IndexView, policy: Policy) ->
     """Whether the vehicle was far from the stop when its name changed (ARRIVA-Q9)."""
 
     where = departure.position
-    location = index.location(call.location_id)
+    location = index.location(call.placed_at)
     if where is None or location.lon is None or location.lat is None:
         return False
     gap = distance_m((where.lon, where.lat), (location.lon, location.lat))

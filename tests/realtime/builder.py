@@ -11,7 +11,8 @@ straight shape through its stops unless `shape=False`.
 Rail: `trip(..., run=("PA", part), train="6006", first_sequence=n)` makes a part of a run;
 parts of one run share the junction call's sequence. A stop name starting with `~` is a railway
 point without passenger service. `stop(..., sr70="53414")` and `track(stop, "102")` add the
-location keys the SŽ sources resolve through.
+location keys the SŽ sources resolve through. `"S@S2"` is a call at stop place S served at its
+post S2 (a stop declared like any other, whose position is exact).
 """
 
 from __future__ import annotations
@@ -114,8 +115,9 @@ class Timetable:
         visits: dict[str, int] = {}
         built: list[Call] = []
         for sequence, spec in enumerate(calls, start=first_sequence):
-            # "~X" is a railway point without passenger service, "?X" a request stop.
-            name = spec[0].lstrip("~?")
+            # "~X" is a railway point without passenger service, "?X" a request stop, "X@P"
+            # a call at X served at its post P.
+            name, _, post = spec[0].lstrip("~?").partition("@")
             passenger = not spec[0].startswith("~")
             on_request = spec[0].startswith("?")
             if len(spec) == 2:
@@ -134,6 +136,7 @@ class Timetable:
                     arrival,
                     departure,
                     on_request,
+                    self._location(post).location_id if post else None,
                 )
             )
         line = key.split(":", 1)[0]
@@ -170,7 +173,7 @@ class Timetable:
             if spec.shape:
                 shape_id = f"{spec.trip_id}:shape"
                 points = tuple(
-                    (by_location[c.location_id].lon or 0.0, by_location[c.location_id].lat or 0.0)
+                    (by_location[c.placed_at].lon or 0.0, by_location[c.placed_at].lat or 0.0)
                     for c in calls
                 )
                 distances = cumulative_m(points)
@@ -311,6 +314,7 @@ def serving_rows(tt: Timetable) -> dict[str, list[dict[str, object]]]:
                 "trip_id": trip.trip_id,
                 "sequence": call.sequence,
                 "location_id": call.location_id,
+                "boarding_point_id": call.point_id,
                 "passenger_service": call.passenger_service,
                 "scheduled_arrival": call.arrival,
                 "scheduled_departure": call.departure,

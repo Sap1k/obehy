@@ -159,13 +159,13 @@ export function VehiclePanel() {
         trip={data}
         parts={parts}
         calls={calls}
-        boardedAt={undefined}
+        boarded={undefined}
         aheadFrom={last}
         now={now}
         stale={stale}
       />
       <VehicleSection vehicleId={vehicleId} detail={info} vehicle={vehicle} mode={data.line.mode}>
-        <CompositionStrip trip={data} boardedAt={undefined} now={now} />
+        <CompositionStrip trip={data} boarded={undefined} now={now} />
       </VehicleSection>
     </div>
   );

@@ -61,16 +61,9 @@ function closedPlan(count: number, anchor: number): Collapsed | null {
   return { before: a > 0 ? [0, a - 1] : null, head, middle, last };
 }
 
-/** The anchor: the first call at `locationId` when given, else the first call not yet passed. */
-export function anchorIndex(
-  calls: readonly { location_id: string }[],
-  passed: readonly boolean[],
-  locationId?: string,
-): number {
-  if (locationId) {
-    const found = calls.findIndex((c) => c.location_id === locationId);
-    if (found >= 0) return found;
-  }
+/** The anchor: the boarded call (its index) when given, else the first call not yet passed. */
+export function anchorIndex(passed: readonly boolean[], boarded?: number): number {
+  if (boarded !== undefined && boarded >= 0) return boarded;
   const next = passed.findIndex((p) => !p);
-  return next >= 0 ? next : Math.max(calls.length - 1, 0);
+  return next >= 0 ? next : Math.max(passed.length - 1, 0);
 }

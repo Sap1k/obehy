@@ -3,7 +3,7 @@ Q8). An hourly express line A → Teplice,Celní and back; stops 1 km apart."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from obehy.realtime.core import Context, step
 from obehy.realtime.index import Index
@@ -229,6 +229,14 @@ def test_a_real_arriva_express_trip_binds_from_its_first_report() -> None:
     assert binding is not None and binding.confirmed
     events = [e for effects in steps for e in effects if isinstance(e, WriteEvent)]
     assert events  # history once confirmed
+    # The stops passed before continuity confirmed the binding are written once it does: the
+    # first events written are from about 12 minutes before (the origin's departure among them).
+    first = next(
+        i for i, effects in enumerate(steps) if any(isinstance(e, WriteEvent) for e in effects)
+    )
+    held = [e for e in steps[first] if isinstance(e, WriteEvent)]
+    assert len(held) == 4
+    assert min(e.interval.hi for e in held) < observations[first].at - timedelta(minutes=10)
 
 
 def test_arriva_q9_a_next_stop_stuck_on_the_origin_is_no_departure_time() -> None:

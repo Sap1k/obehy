@@ -218,6 +218,8 @@ def trip_history(
                 actual_departure=r["actual_departure"],
                 arrival_delay_s=_delay(r["actual_arrival"], r["scheduled_arrival"]),
                 departure_delay_s=_delay(r["actual_departure"], r["scheduled_departure"]),
+                arrival_estimated=bool(r["arrival_inferred"]),
+                departure_estimated=bool(r["departure_inferred"]),
             )
         )
     days = [

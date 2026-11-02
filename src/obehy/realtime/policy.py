@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v14.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v15.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v14.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v15.toml"
 
 
 class PolicyError(ValueError):
@@ -75,6 +75,8 @@ class ProgressPolicy:
     agree_within: float
     max_commit_lag_s: int
     max_event_interval_s: int
+    max_inferred_spread_s: int
+    max_extrapolate_s: int
     off_route_hold_s: int
     move_sigma_m: float
     move_slack_m: float

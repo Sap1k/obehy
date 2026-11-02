@@ -61,7 +61,7 @@ def test_pid_q4_a_cancellation_cancels_the_journey_and_every_call() -> None:
     # Neither estimated nor ever stale or lost: it does not run.
     later = local("2026-10-08 09:00")
     estimate_all(state, Context(_index(), POLICY), later)
-    refresh(state, later, POLICY)
+    refresh(state, later, Context(_index(), POLICY))
     instance = state.instances[JOURNEY]
     assert {c.status for c in instance.calls} == {"cancelled"}
     assert not (instance.freshness.stale or instance.freshness.lost)

@@ -8,16 +8,11 @@ export type Composition = Schemas["Composition"];
 export type CompositionUnit = Schemas["CompositionUnit"];
 export type CompositionSegment = Schemas["CompositionSegment"];
 
-/** The segment holding the call at `locationId` (a call of this trip), else the first. A call
- * that ends one segment and starts the next is in the next: one boards there. */
-export function segmentAt(
-  composition: Composition,
-  trip: Pick<Trip, "calls">,
-  locationId: string | undefined,
-): number {
+/** The segment holding the call `sequence` (a call of this trip), else the first. A call that
+ * ends one segment and starts the next is in the next: one boards there. */
+export function segmentAt(composition: Composition, sequence: number | undefined): number {
   const { segments } = composition;
   if (segments.length === 0) return -1;
-  const sequence = trip.calls.find((c) => c.location_id === locationId)?.sequence;
   if (sequence === undefined) return 0;
   const at = segments.findIndex(
     (s) => s.from_call.sequence <= sequence && sequence < s.to_call.sequence,

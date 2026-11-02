@@ -170,8 +170,10 @@ def test_gtfs_rt_has_a_trip_update_per_part_without_railway_points() -> None:
     assert sorted(updates) == ["czptt:trip:PA1:1", "czptt:trip:PA1:2"]
     first = updates["czptt:trip:PA1:1"].stop_time_update
     second = updates["czptt:trip:PA1:2"].stop_time_update
-    assert [u.stop_sequence for u in first] == [3]  # A passed unobserved; X never published
-    assert first[0].HasField("arrival") and not first[0].HasField("departure")
+    # A's departure inferred from the first fix just past it; X never published.
+    assert [u.stop_sequence for u in first] == [1, 3]
+    assert first[0].HasField("departure") and not first[0].HasField("arrival")
+    assert first[1].HasField("arrival") and not first[1].HasField("departure")
     assert [u.stop_sequence for u in second] == [3, 4]
     assert second[0].HasField("departure") and not second[0].HasField("arrival")
     (vehicle,) = [e.vehicle for e in message.entity if e.HasField("vehicle")]

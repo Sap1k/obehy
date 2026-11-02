@@ -91,6 +91,11 @@ def update(
     committed_m = track.committed_m if live and track is not None else floor
     if track is not None and not live:
         committed_m = max(track.committed_m, floor)
+    origin = plan.zones[0].departure_m if track is None and plan.zones else None
+    if origin is not None and origin <= committed_m:
+        # A new track first seen past the origin: its departure, just before the first fix,
+        # may still be inferred (`commit`).
+        committed_m = math.nextafter(origin, -math.inf)
     crossed_at = track.crossed_at if track is not None else None
     done = commit(plan, beam, committed_m, crossed_at, at, policy)
     best = done.beam[0]

@@ -45,6 +45,25 @@ export function runCalls(trip: Trip, following: readonly (Trip | undefined)[]): 
   return calls;
 }
 
+/** The call one boards at: the board row's (`sequence` of the opened trip), else the first at
+ * the stop `od` not yet passed, else the first at it. A stop served several times in a row
+ * (posts of one stop place, a layover) is told apart by its sequence. */
+export function boardedCall(
+  calls: readonly RunCall[],
+  tripId: string,
+  od: string | undefined,
+  sequence: number | undefined,
+  now: number,
+): RunCall | undefined {
+  if (!od) return undefined;
+  const at = calls.filter((c) => c.call.location_id === od);
+  return (
+    at.find((c) => c.tripId === tripId && c.call.sequence === sequence) ??
+    at.find((c) => !isPassed(c.call, now)) ??
+    at[0]
+  );
+}
+
 /** The time that counts for a call: its departure, or its arrival at the terminus. */
 export function callTimes(call: TripCall): { scheduled: string | null; estimated: string | null } {
   return {

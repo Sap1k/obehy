@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   delayTone,
   delayWords,
+  callDelay,
   segmentDays,
   segmentSummary,
   type HistoryCall,
@@ -19,6 +20,8 @@ function call(location: string, arrival: number | null, departure: number | null
     actual_departure: null,
     arrival_delay_s: arrival,
     departure_delay_s: departure,
+    arrival_estimated: false,
+    departure_estimated: false,
   };
 }
 
@@ -77,7 +80,8 @@ const runs = history([
 describe("segmentDays", () => {
   it("measures each day from where the rider boards to where they get off", () => {
     const days = segmentDays(runs, 1, 3);
-    expect(days.map((d) => [d.day.service_date, d.from, d.to, d.worst])).toEqual([
+    const seconds = days.map((d) => [d.from, d.to, d.worst].map((x) => x.delayS));
+    expect(days.map((d, i) => [d.day.service_date, ...seconds[i]!])).toEqual([
       ["2026-10-12", 60, 240, 360],
       ["2026-10-11", null, 0, 60],
       ["2026-10-10", null, null, null],
@@ -86,7 +90,22 @@ describe("segmentDays", () => {
   });
 
   it("takes a stop's arrival at the segment's end, else its departure", () => {
-    expect(segmentDays(runs, 0, 2)[0]!.to).toBe(300);
+    expect(segmentDays(runs, 0, 2)[0]!.to.delayS).toBe(300);
+  });
+
+  it("carries whether a delay was inferred rather than seen", () => {
+    const inferred = history([
+      day("2026-10-12", [
+        { ...call("A", null, 0), departure_estimated: true },
+        call("B", 0, 60),
+        { ...call("C", 300, null), arrival_estimated: true },
+      ]),
+    ]);
+    const [run] = segmentDays(inferred, 0, 2);
+    expect(run!.from).toEqual({ delayS: 0, estimated: true });
+    expect(run!.to).toEqual({ delayS: 300, estimated: true });
+    expect(run!.worst).toEqual({ delayS: 300, estimated: true });
+    expect(callDelay(run!.calls[1]!, false)).toEqual({ delayS: 60, estimated: false });
   });
 });
 

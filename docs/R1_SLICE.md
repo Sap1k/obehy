@@ -315,8 +315,11 @@ and backtrack tolerance): `gps_sigma_m`, `shape_sigma_m`, `chord_min_sigma_m`, `
 `max_speed_mps` (by mode), `agree_within`,
 `loss_sigma_base_s`, `loss_sigma_rate`, `gain_sigma_base_s`, `gain_sigma_rate`,
 `start_lateness_sigma_s`, `beam`, `prune`, `max_commit_lag_s`, `max_event_interval_s` (a crossing
-bracketed by fixes further apart is not known well enough for history: no event, but realtime
-gets its time interpolated between those fixes, status `inferred`), `off_route_hold_s`,
+bracketed by fixes further apart is not observed: realtime gets its time interpolated between
+those fixes, status `inferred`), `max_inferred_spread_s` (history still records it, as an
+`inferred` event, when the lateness at the two fixes differs by at most this),
+`max_extrapolate_s` (the origin's departure before the first fix and the terminus arrival
+after the last, inferred within this much timetable time), `off_route_hold_s`,
 `move_sigma_m`, `move_slack_m`, `reckon_slack`.
 
 **Reception gaps in realtime.** Predictions use the lateness the tracker measures from GPS
@@ -356,7 +359,11 @@ were 7-11 s worse on the 2026-10-12 peak).
 | stop passed on the way out, served on the way back | no event on the first pass |
 | first fix inside a *závlek* (restart) | resolved by the following fixes |
 | bus 10 min early from the start, and one losing 15 min | both followed; never rejected for lateness |
-| reception gap of 20 min on a plain road | progress resumes; passed calls get no history event but an `inferred` realtime time |
+| reception gap of 20 min on a plain road, as late before as after | progress resumes; passed calls get `inferred` history events and realtime times |
+| reception gap the lateness changes across | passed calls get no history event, but an `inferred` realtime time |
+| first seen 2 min past the origin; lost 1 min before the terminus | departure and arrival inferred (not 10 min away) |
+| a stop place served at three distant posts in a row | each visit placed at its post; waiting at the first is on time |
+| a layover split into two calls at one post | standing there is the second visit; later stops not predicted late |
 | reception gap while late | predictions keep the last lateness, not the timetable |
 | waiting at the origin with a frozen GPS clock, then a loop off the chord (522586:107) | departure shown on time while waiting, late once it leaves; no stop claimed passed early |
 | jitter around a stop | no backward move, no duplicate events |

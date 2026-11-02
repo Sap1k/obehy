@@ -481,6 +481,9 @@ class Instance:
     # map's vehicle does not change with every source's fix (emit/represent.py).
     shown_source: str | None = None
     published: Published | None = None
+    # History events of a keyless binding continuity has not confirmed yet: written once it is
+    # (the first stops of an inferred journey), dropped with the instance if it never is.
+    held: tuple[WriteEvent, ...] = ()
 
     def evolve(
         self,
@@ -498,6 +501,7 @@ class Instance:
         track_source: str | None | Keep = KEEP,
         shown_source: str | None | Keep = KEEP,
         published: Published | None | Keep = KEEP,
+        held: tuple[WriteEvent, ...] | Keep = KEEP,
     ) -> Instance:
         """A copy with the fields the timeline changes per fix replaced; `dataclasses.replace`
         is several times slower, and this runs a few times for every observation."""
@@ -522,6 +526,7 @@ class Instance:
             self.track_source if track_source is KEEP else track_source,
             self.shown_source if shown_source is KEEP else shown_source,
             self.published if published is KEEP else published,
+            self.held if held is KEEP else held,
         )
 
     def source_track(self, source: str) -> SourceTrack | None:
@@ -653,7 +658,10 @@ class WriteEvent:
     visit_n: int
     kind: EventKind
     interval: Interval
-    method: Literal["source", "progress"]
+    # `source`: the source said so; `progress`: crossed between close fixes; `inferred`: crossed
+    # in a gap the vehicle was about as late on both sides of (or, at the first and last call,
+    # just next to one), timed by the timetable.
+    method: Literal["source", "progress", "inferred"]
     source: str
 
 

@@ -1884,6 +1884,11 @@
             ],
             "title": "Arrival Delay S"
           },
+          "arrival_estimated": {
+            "description": "The arrival was not seen but inferred: passed in a gap in the vehicle's positions it was about as late on either side of, or just next to its last fix",
+            "title": "Arrival Estimated",
+            "type": "boolean"
+          },
           "departure_delay_s": {
             "anyOf": [
               {
@@ -1894,6 +1899,11 @@
               }
             ],
             "title": "Departure Delay S"
+          },
+          "departure_estimated": {
+            "description": "The departure was inferred (see arrival_estimated), e.g. at a first stop the vehicle was first seen just past",
+            "title": "Departure Estimated",
+            "type": "boolean"
           },
           "location_id": {
             "title": "Location Id",
@@ -1936,7 +1946,9 @@
           "actual_arrival",
           "actual_departure",
           "arrival_delay_s",
-          "departure_delay_s"
+          "departure_delay_s",
+          "arrival_estimated",
+          "departure_estimated"
         ],
         "title": "HistoryCall",
         "type": "object"

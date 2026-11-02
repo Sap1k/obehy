@@ -267,7 +267,7 @@ def simplify(
 def build_path(trip: Trip, index: IndexView) -> Path:
     located: list[tuple[float, float] | None] = []
     for call in trip.calls:
-        location = index.location(call.location_id)
+        location = index.location(call.placed_at)
         lon, lat = location.lon, location.lat
         located.append((lon, lat) if lon is not None and lat is not None else None)
     shape = index.shape(trip.shape_id) if trip.shape_id is not None else None

@@ -39,10 +39,10 @@ describe("collapsed timetable", () => {
     expect(collapse(11, 0, { before: false, middle: true })).toBeNull();
   });
 
-  it("anchors on the boarding stop, else the next call", () => {
-    const calls = [{ location_id: "a" }, { location_id: "b" }, { location_id: "c" }];
-    expect(anchorIndex(calls, [true, false, false], "c")).toBe(2);
-    expect(anchorIndex(calls, [true, false, false])).toBe(1);
-    expect(anchorIndex(calls, [true, true, true])).toBe(2);
+  it("anchors on the boarded call, else the next call", () => {
+    expect(anchorIndex([true, false, false], 2)).toBe(2);
+    expect(anchorIndex([true, false, false])).toBe(1);
+    expect(anchorIndex([true, false, false], -1)).toBe(1);
+    expect(anchorIndex([true, true, true])).toBe(2);
   });
 });

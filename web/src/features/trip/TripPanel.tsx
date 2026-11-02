@@ -8,7 +8,7 @@ import { useNow } from "../../lib/hooks";
 import { CompositionStrip } from "./CompositionStrip";
 import { CirculationLinks, TripBody, TripHeader } from "./TripDetail";
 import { useFollowingParts, useTrip } from "./queries";
-import { runCalls } from "./runCalls";
+import { boardedCall, runCalls } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
 /** A trip opened from a board (Figma 11 panel, 15 phone): header, alerts, the run's timetable,
@@ -86,20 +86,21 @@ export function TripPanel() {
     following.map((q) => q.data),
   );
   const stale = Boolean(data.realtime?.stale) || trip.isError;
-  const boarded = calls.find((c) => c.call.location_id === search.od) ?? calls[0];
+  const boarded = boardedCall(calls, data.trip_id, search.od, search.poradi, now);
+  const from = boarded ?? calls[0];
   const parts = [data, ...following.flatMap((q) => (q.data ? [q.data] : []))];
   const vehicle = data.vehicles[0];
 
   return (
     <div className={classes.root} data-loading={trip.isPlaceholderData || undefined}>
       {top}
-      <TripHeader trip={data} at={boarded} stale={stale} />
+      <TripHeader trip={data} at={from} stale={stale} />
       <TripBody
         trip={data}
         parts={parts}
         calls={calls}
-        boardedAt={search.od}
-        aheadFrom={boarded}
+        boarded={boarded}
+        aheadFrom={from}
         now={now}
         stale={stale}
         stopId={stopId}
@@ -108,11 +109,11 @@ export function TripPanel() {
         <section className={classes.section}>
           <h3 className={classes.sectionTitle}>Vozidlo</h3>
           <VehicleCard vehicle={vehicle} mode={data.line.mode} />
-          <CompositionStrip trip={data} boardedAt={search.od} now={now} />
+          <CompositionStrip trip={data} boarded={boarded?.call} now={now} />
           <CirculationLinks trip={data} vehicle={vehicle} />
         </section>
       ) : (
-        <CompositionStrip trip={data} boardedAt={search.od} now={now} heading />
+        <CompositionStrip trip={data} boarded={boarded?.call} now={now} heading />
       )}
     </div>
   );

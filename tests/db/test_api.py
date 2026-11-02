@@ -430,7 +430,7 @@ def client(
     )
     connection.execute(
         "INSERT INTO history.term (value) VALUES ('jdf:stop:1'), ('jdf:stop:2'),"
-        " ('Česká Lípa,,aut.nádr.'), ('Nový Bor,,nám.'), ('gps'), ('duk')"
+        " ('Česká Lípa,,aut.nádr.'), ('Nový Bor,,nám.'), ('gps'), ('inferred'), ('duk')"
     )
     connection.execute(
         "INSERT INTO history.journey_call (journey_id, service_date, revision, ordinal,"
@@ -447,13 +447,13 @@ def client(
         " visit_n, event_type, revision, event_time, interval_lo, interval_hi, method_term,"
         " source_term, derivation_id)"
         " SELECT j.journey_id, j.service_date, l.term_id, 0, e::history.event_kind, 1, t, t, t,"
-        " (SELECT term_id FROM history.term WHERE value = 'gps'),"
-        " (SELECT term_id FROM history.term WHERE value = 'duk'),"
+        " m.term_id, (SELECT term_id FROM history.term WHERE value = 'duk'),"
         " (SELECT min(derivation_id) FROM history.derivation)"
         " FROM history.journey j,"
-        " (VALUES ('jdf:stop:1', 'departure', timestamptz '2026-10-06 06:02+02'),"
-        "  ('jdf:stop:2', 'arrival', timestamptz '2026-10-06 06:16+02')) v (location, e, t)"
-        " JOIN history.term l ON l.value = v.location"
+        " (VALUES ('jdf:stop:1', 'departure', timestamptz '2026-10-06 06:02+02', 'gps'),"
+        "  ('jdf:stop:2', 'arrival', timestamptz '2026-10-06 06:16+02', 'inferred'))"
+        " v (location, e, t, method)"
+        " JOIN history.term l ON l.value = v.location JOIN history.term m ON m.value = v.method"
     )
     # It was cancelled on the 6th, then seen running after all.
     connection.execute(
@@ -940,6 +940,11 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
         (v["source"], v["source_vehicle_id"], v["fleet_number"], v["physical"])
         for v in day["worked_by"]
     ] == [("duk", "1001", "1001", True), ("mpvnet", "4U1 2345", None, True)]
+    # The arrival at Nový Bor was inferred, not seen.
+    assert [(c["departure_estimated"], c["arrival_estimated"]) for c in day["calls"]] == [
+        (False, False),
+        (False, True),
+    ]
     assert [(c["departure_delay_s"], c["arrival_delay_s"]) for c in day["calls"]] == [
         (120, None),
         (None, 60),

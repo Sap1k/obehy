@@ -27,12 +27,13 @@ function stopsWord(n: number): string {
  * an expander and the last stop; each hidden range opens on its own. */
 export function Timetable({
   calls,
-  boardedAt,
+  boarded,
   now,
   stale,
 }: {
   calls: RunCall[];
-  boardedAt: string | undefined;
+  /** The index of the call one boards at. */
+  boarded: number | undefined;
   now: number;
   stale: boolean;
 }) {
@@ -87,11 +88,7 @@ export function Timetable({
     unfold(added, change.expanderPx);
   }, [open]);
   const passed = calls.map((c) => isPassed(c.call, now));
-  const anchor = anchorIndex(
-    calls.map((c) => c.call),
-    passed,
-    boardedAt,
-  );
+  const anchor = anchorIndex(passed, boarded);
   const next = passed.findIndex((p) => !p);
   const plan = collapse(calls.length, anchor, open);
   const anyOpen = open.before || open.middle;

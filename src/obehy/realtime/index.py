@@ -65,6 +65,15 @@ class Call:
     departure: int | None
     # A request stop (pickup or drop-off "coordinate with driver"): the vehicle may pass it.
     on_request: bool = False
+    # The post (boarding point) it stops at, where its position is known exactly: a stop place
+    # visited at several posts in a row is placed at each of them, not three times at one point.
+    point_id: str | None = None
+
+    @property
+    def placed_at(self) -> str:
+        """The location the call is placed on the path at: its post, else its stop place."""
+
+        return self.point_id if self.point_id is not None else self.location_id
 
     @property
     def time(self) -> int:
@@ -336,6 +345,7 @@ def run_trip(run_id: str, run_key: str, parts: list[Trip]) -> Trip:
                     previous.arrival if previous.arrival is not None else call.arrival,
                     call.departure if call.departure is not None else previous.departure,
                     previous.on_request and call.on_request,
+                    previous.point_id if previous.point_id is not None else call.point_id,
                 )
                 index = len(calls) - 1
             else:
@@ -358,6 +368,7 @@ def run_trip(run_id: str, run_key: str, parts: list[Trip]) -> Trip:
                 call.arrival,
                 call.departure,
                 call.on_request,
+                call.point_id,
             )
         )
     head, tail = parts[0], parts[-1]

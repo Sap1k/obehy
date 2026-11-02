@@ -277,14 +277,14 @@ def test_an_early_train_waits_for_its_departure() -> None:
 
 
 def test_r6_a_run_is_stale_only_when_every_source_is_silent() -> None:
-    state, _, _ = _run(
+    state, _, ctx = _run(
         _index(),
         _duk("2026-10-08 08:00:30", 0.2),
         _sz("2026-10-08 08:20:00", Delay(120, "point")),
     )
-    refresh(state, local("2026-10-08 08:30"), POLICY)
+    refresh(state, local("2026-10-08 08:30"), ctx)
     assert not state.instances[PA].freshness.stale  # DÚK left; SŽ still reports
-    refresh(state, local("2026-10-08 08:40"), POLICY)
+    refresh(state, local("2026-10-08 08:40"), ctx)
     assert state.instances[PA].freshness.stale
 
 

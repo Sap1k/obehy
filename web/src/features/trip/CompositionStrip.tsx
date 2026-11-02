@@ -18,7 +18,7 @@ import {
   type Icon,
 } from "@tabler/icons-react";
 import { useState } from "react";
-import type { Trip } from "../../api/client";
+import type { Trip, TripCall } from "../../api/client";
 import { ago } from "../../lib/hooks";
 import {
   cabEnds,
@@ -79,17 +79,19 @@ const ON_COACH = [
  * heading itself. */
 export function CompositionStrip({
   trip,
-  boardedAt,
+  boarded,
   now,
   heading = false,
 }: {
   trip: Trip;
-  boardedAt: string | undefined;
+  /** The call one boards at (of this trip or a later part of its run). */
+  boarded: TripCall | undefined;
   now: number;
   heading?: boolean;
 }) {
   // Asked from the board's stop when it is a call of this part of the run.
-  const from = trip.calls.some((c) => c.location_id === boardedAt) ? boardedAt : undefined;
+  const ours = boarded && trip.calls.some((c) => c.sequence === boarded.sequence);
+  const from = ours ? boarded.location_id : undefined;
   const composition = useComposition(trip, from);
   const [chosen, setChosen] = useState<number | null>(null);
   // The vehicle whose detail is open, in the answer it was opened on: a newer answer closes it.
@@ -121,11 +123,11 @@ export function CompositionStrip({
   }
   if (data.status === "not_available" || data.segments.length === 0) return null;
 
-  const at = from ?? trip.calls.find((c) => !isPassed(c, now))?.location_id;
+  const at = ours ? boarded.sequence : trip.calls.find((c) => !isPassed(c, now))?.sequence;
   // Segments running the same train are shown as one; of its members, the one where the rider
   // is gives the order shown.
   const shown = shownSegments(data);
-  const here = segmentAt(data, trip, at);
+  const here = segmentAt(data, at);
   const index = Math.min(
     chosen ??
       Math.max(
