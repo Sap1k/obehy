@@ -664,6 +664,96 @@ def test_a_trip_id_of_an_older_timetable_is_gone_with_its_key(client: TestClient
     _get(client, "/trips/jdf:trip:never/2026-10-06", 404)
 
 
+def _enrich(client: TestClient, legs: list[dict[str, str]], status: int = 200) -> Any:
+    response = client.post("/api/v1/journeys/enrich", json={"legs": legs})
+    assert response.status_code == status, response.text
+    return response.json()
+
+
+def test_motis_legs_resolve_to_trips_or_say_why_not(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/journeys/enrich",
+        json={
+            "legs": [
+                # motis.obehy.cz: our own IDs; boards at a post of stop 1, alights at stop 2.
+                {
+                    "trip_id": "20261006_06:00_jdf_jdf:trip:1",
+                    "from_stop_id": "jdf_jdf:stop:1:post:1",
+                    "to_stop_id": "jdf_jdf:stop:2",
+                },
+                # Transitous: PID's own trip and stop IDs, resolved by key; no alighting stop.
+                {"trip_id": "20261006_06:00_cz-PID_P1", "from_stop_id": "cz-PID_U1Z1"},
+                # An older timetable version's trip ID: found through its journey key.
+                {"trip_id": "20261006_06:00_cz-JDF-merged_jdf:trip:old"},
+                {"trip_id": "20261007_06:00_jdf_jdf:trip:1"},
+                {"trip_id": "20261006_06:00_jdf_jdf:trip:never"},
+                {"trip_id": "20261006_09:14_de-DELFI_3461130415"},
+                {"trip_id": "jdf:trip:1"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    legs = response.json()["legs"]
+    trips = [leg["trip"]["trip_id"] if leg["trip"] else None for leg in legs]
+    assert [(leg["outcome"], trip) for leg, trip in zip(legs, trips, strict=True)] == [
+        ("resolved", "jdf:trip:1"),
+        ("resolved", "jdf:trip:1"),
+        ("resolved", "jdf:trip:1"),
+        ("not_running", None),
+        ("not_found", None),
+        ("unknown_dataset", None),
+        ("malformed", None),
+    ]
+    first, pid, old = legs[:3]
+    assert first["motis_trip_id"] == "20261006_06:00_jdf_jdf:trip:1"
+    assert first["journey"] == {"namespace": "cis:line_trip", "key": "000001:1"}
+    assert first["realtime"]["delay_s"] == 600 and first["leg_calls"]
+    assert [(c["sequence"], c["estimated_departure"]) for c in first["calls"]] == [
+        (1, "2026-10-06T06:10:00+02:00"),
+        (2, "2026-10-06T06:25:00+02:00"),
+    ]
+    assert [v["vehicle_id"] for v in first["vehicles"]] == ["duk:1001"]
+    # Without both stops the client gets the whole trip and is told so.
+    assert not pid["leg_calls"] and len(pid["calls"]) == 2
+    assert old["trip"] == {"trip_id": "jdf:trip:1", "service_date": "2026-10-06"}
+    assert legs[3]["detail"] == "jdf:trip:1 does not run on 2026-10-07"
+
+
+def test_an_overlaid_feeds_stops_are_found_by_key(client: TestClient) -> None:
+    # PID's stop U1Z1 is stop 1; a post of stop 2 names its stop place.
+    (leg,) = _enrich(
+        client,
+        [
+            {
+                "trip_id": "20261006_06:00_cz-PID_P1",
+                "from_stop_id": "cz-PID_U1Z1",
+                "to_stop_id": "cz-JDF-merged_jdf:stop:2:post:1",
+            }
+        ],
+    )["legs"]
+    assert leg["leg_calls"] and [c["sequence"] for c in leg["calls"]] == [1, 2]
+    # Alighting before boarding is no span: the whole trip, untrimmed.
+    (back,) = _enrich(
+        client,
+        [
+            {
+                "trip_id": "20261006_06:00_cz-PID_P1",
+                "from_stop_id": "cz-JDF-merged_jdf:stop:2",
+                "to_stop_id": "cz-PID_U1Z1",
+            }
+        ],
+    )["legs"]
+    assert not back["leg_calls"] and len(back["calls"]) == 2
+
+
+def test_enrichment_takes_a_bounded_number_of_legs(client: TestClient) -> None:
+    leg = {"trip_id": "20261006_06:00_jdf_jdf:trip:1"}
+    problem = _enrich(client, [leg] * 61, 422)
+    assert "at most 60 legs" in problem["detail"]
+    _enrich(client, [], 422)
+
+
 def test_vehicles_fresh_in_the_viewport_of_this_release(client: TestClient) -> None:
     box = "14.5,50.6,14.6,50.7"
     (bus,) = _get(client, "/vehicles", bbox=box)["vehicles"]
@@ -712,6 +802,7 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
         "/api/v1/trips/{trip_id}/{service_date}/composition",
         "/api/v1/trips/{trip_id}/{service_date}/circulation",
         "/api/v1/trips/{trip_id}/history",
+        "/api/v1/journeys/enrich",
         "/api/v1/lines",
         "/api/v1/lines/{route_id}",
         "/api/v1/lines/{route_id}/timetable",

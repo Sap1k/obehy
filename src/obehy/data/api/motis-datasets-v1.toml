@@ -1,0 +1,47 @@
+# MOTIS datasets the API can enrich (`POST /api/v1/journeys/enrich`, src/obehy/api/motis.py).
+# A MOTIS instance prefixes each dataset's trip and stop IDs with its own tag, so the tags are
+# listed per instance rather than parsed. Versioned like the API limits: a change of meaning is a
+# new file.
+#
+# resolve = "trip_id": the dataset is an Oběhy feed; its trip and stop IDs are ours.
+# resolve = "source_key": the dataset is a feed Oběhy overlays; its IDs are source keys in
+#   `trip_namespace` and `stop_namespace` (the serving contract's namespaces).
+#
+# A tag that is not listed is answered `unknown_dataset`: the client keeps the MOTIS data.
+version = "1"
+
+# Transitous (feeds/cz.json): Oběhy's CZPTT and filtered JDF feeds, and the regional ones.
+[[dataset]]
+tag = "cz-CZPTT"
+instance = "transitous"
+resolve = "trip_id"
+
+[[dataset]]
+tag = "cz-JDF-merged"
+instance = "transitous"
+resolve = "trip_id"
+
+[[dataset]]
+tag = "cz-PID"
+instance = "transitous"
+resolve = "source_key"
+trip_namespace = "pid:gtfs_trip_id"
+stop_namespace = "pid:gtfs_stop_id"
+
+[[dataset]]
+tag = "cz-IDS-JMK"
+instance = "transitous"
+resolve = "source_key"
+trip_namespace = "ids-jmk:gtfs_trip_id"
+stop_namespace = "ids-jmk:gtfs_stop_id"
+
+# motis.obehy.cz: the published feeds themselves (PID and IDS JMK are overlaid into `jdf`).
+[[dataset]]
+tag = "czptt"
+instance = "motis.obehy.cz"
+resolve = "trip_id"
+
+[[dataset]]
+tag = "jdf"
+instance = "motis.obehy.cz"
+resolve = "trip_id"

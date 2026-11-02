@@ -432,6 +432,68 @@ class Trip(Envelope):
     shape: dict[str, Any] | None = Field(default=None, description="GeoJSON LineString.")
 
 
+EnrichOutcome = Literal[
+    "resolved", "not_running", "not_found", "ambiguous", "unknown_dataset", "malformed"
+]
+
+
+class EnrichLegRequest(BaseModel):
+    """A transit leg of a MOTIS itinerary (or a MOTIS stop time), as MOTIS named it."""
+
+    trip_id: str = Field(description="The leg's MOTIS `tripId`, verbatim")
+    from_stop_id: str | None = Field(
+        default=None, description="The leg's MOTIS `from.stopId`: where the passenger boards"
+    )
+    to_stop_id: str | None = Field(
+        default=None, description="The leg's MOTIS `to.stopId`: where the passenger alights"
+    )
+
+
+class EnrichRequest(BaseModel):
+    legs: list[EnrichLegRequest] = Field(
+        min_length=1, description="At most the limit's `enrich_legs_max` legs"
+    )
+
+
+class EnrichedLeg(BaseModel):
+    """What Oběhy knows of one leg's trip. Anything but `resolved` leaves the client with the
+    MOTIS data alone; `detail` says why."""
+
+    motis_trip_id: str
+    outcome: EnrichOutcome = Field(
+        description="resolved; not_running (the trip does not run on the date); not_found; "
+        "ambiguous (a key names several trips); unknown_dataset (not an Oběhy-known MOTIS "
+        "dataset: abroad, or a feed without keys); malformed (not a MOTIS trip ID)"
+    )
+    detail: str | None = None
+    trip: TripRef | None = Field(
+        default=None, description="The Oběhy trip: `/trips/{trip_id}/{service_date}`"
+    )
+    journey: JourneyKey | None = None
+    line: Line | None = None
+    agency: str | None = None
+    trip_short_name: str | None = None
+    headsign: str | None = None
+    realtime: TripRealtime | None = None
+    vehicles: list[TripVehicle] = Field(default_factory=list[TripVehicle])
+    composition: bool = Field(
+        default=False, description="A composition source answers for this trip (`…/composition`)"
+    )
+    calls: list[TripCall] = Field(
+        default_factory=list[TripCall],
+        description="The leg's calls, boarding to alighting, when both stops were found on the "
+        "trip (`leg_calls`); otherwise every passenger call of the trip",
+    )
+    leg_calls: bool = Field(
+        default=False, description="Whether `calls` are the leg's span, not the whole trip"
+    )
+    alerts: list[Alert] = Field(default_factory=list[Alert], description="As a trip's `alerts`")
+
+
+class Enrichment(Envelope):
+    legs: list[EnrichedLeg] = Field(description="One per leg asked, in the order asked")
+
+
 class CompositionCall(BaseModel):
     sequence: int = Field(description="The trip call's sequence")
     location_id: str

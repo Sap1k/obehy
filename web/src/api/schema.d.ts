@@ -293,6 +293,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journeys/enrich": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What Oběhy knows of the trips of MOTIS itinerary legs, leg by leg */
+        post: operations["enrich_api_v1_journeys_enrich_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lines": {
         parameters: {
             query?: never;
@@ -1262,6 +1279,105 @@ export interface components {
              * Format: date-time
              */
             until: string;
+        };
+        /**
+         * EnrichLegRequest
+         * @description A transit leg of a MOTIS itinerary (or a MOTIS stop time), as MOTIS named it.
+         */
+        EnrichLegRequest: {
+            /**
+             * From Stop Id
+             * @description The leg's MOTIS `from.stopId`: where the passenger boards
+             */
+            from_stop_id?: string | null;
+            /**
+             * To Stop Id
+             * @description The leg's MOTIS `to.stopId`: where the passenger alights
+             */
+            to_stop_id?: string | null;
+            /**
+             * Trip Id
+             * @description The leg's MOTIS `tripId`, verbatim
+             */
+            trip_id: string;
+        };
+        /** EnrichRequest */
+        EnrichRequest: {
+            /**
+             * Legs
+             * @description At most the limit's `enrich_legs_max` legs
+             */
+            legs: components["schemas"]["EnrichLegRequest"][];
+        };
+        /**
+         * EnrichedLeg
+         * @description What Oběhy knows of one leg's trip. Anything but `resolved` leaves the client with the
+         *     MOTIS data alone; `detail` says why.
+         */
+        EnrichedLeg: {
+            /** Agency */
+            agency?: string | null;
+            /**
+             * Alerts
+             * @description As a trip's `alerts`
+             */
+            alerts?: components["schemas"]["Alert"][];
+            /**
+             * Calls
+             * @description The leg's calls, boarding to alighting, when both stops were found on the trip (`leg_calls`); otherwise every passenger call of the trip
+             */
+            calls?: components["schemas"]["TripCall"][];
+            /**
+             * Composition
+             * @description A composition source answers for this trip (`…/composition`)
+             * @default false
+             */
+            composition: boolean;
+            /** Detail */
+            detail?: string | null;
+            /** Headsign */
+            headsign?: string | null;
+            journey?: components["schemas"]["JourneyKey"] | null;
+            /**
+             * Leg Calls
+             * @description Whether `calls` are the leg's span, not the whole trip
+             * @default false
+             */
+            leg_calls: boolean;
+            line?: components["schemas"]["Line"] | null;
+            /** Motis Trip Id */
+            motis_trip_id: string;
+            /**
+             * Outcome
+             * @description resolved; not_running (the trip does not run on the date); not_found; ambiguous (a key names several trips); unknown_dataset (not an Oběhy-known MOTIS dataset: abroad, or a feed without keys); malformed (not a MOTIS trip ID)
+             * @enum {string}
+             */
+            outcome: "resolved" | "not_running" | "not_found" | "ambiguous" | "unknown_dataset" | "malformed";
+            realtime?: components["schemas"]["TripRealtime"] | null;
+            /** @description The Oběhy trip: `/trips/{trip_id}/{service_date}` */
+            trip?: components["schemas"]["TripRef"] | null;
+            /** Trip Short Name */
+            trip_short_name?: string | null;
+            /** Vehicles */
+            vehicles?: components["schemas"]["TripVehicle"][];
+        };
+        /** Enrichment */
+        Enrichment: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Legs
+             * @description One per leg asked, in the order asked
+             */
+            legs: components["schemas"]["EnrichedLeg"][];
+            /**
+             * Release Id
+             * @description The active release the answer was read from.
+             */
+            release_id: string;
         };
         /**
          * Feature
@@ -3377,6 +3493,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enrich_api_v1_journeys_enrich_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Enrichment"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };

@@ -1651,6 +1651,240 @@
         "title": "Departures",
         "type": "object"
       },
+      "EnrichLegRequest": {
+        "description": "A transit leg of a MOTIS itinerary (or a MOTIS stop time), as MOTIS named it.",
+        "properties": {
+          "from_stop_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The leg's MOTIS `from.stopId`: where the passenger boards",
+            "title": "From Stop Id"
+          },
+          "to_stop_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The leg's MOTIS `to.stopId`: where the passenger alights",
+            "title": "To Stop Id"
+          },
+          "trip_id": {
+            "description": "The leg's MOTIS `tripId`, verbatim",
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id"
+        ],
+        "title": "EnrichLegRequest",
+        "type": "object"
+      },
+      "EnrichRequest": {
+        "properties": {
+          "legs": {
+            "description": "At most the limit's `enrich_legs_max` legs",
+            "items": {
+              "$ref": "#/components/schemas/EnrichLegRequest"
+            },
+            "minItems": 1,
+            "title": "Legs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "legs"
+        ],
+        "title": "EnrichRequest",
+        "type": "object"
+      },
+      "EnrichedLeg": {
+        "description": "What Oběhy knows of one leg's trip. Anything but `resolved` leaves the client with the\nMOTIS data alone; `detail` says why.",
+        "properties": {
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          },
+          "alerts": {
+            "description": "As a trip's `alerts`",
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "calls": {
+            "description": "The leg's calls, boarding to alighting, when both stops were found on the trip (`leg_calls`); otherwise every passenger call of the trip",
+            "items": {
+              "$ref": "#/components/schemas/TripCall"
+            },
+            "title": "Calls",
+            "type": "array"
+          },
+          "composition": {
+            "default": false,
+            "description": "A composition source answers for this trip (`…/composition`)",
+            "title": "Composition",
+            "type": "boolean"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headsign"
+          },
+          "journey": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JourneyKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "leg_calls": {
+            "default": false,
+            "description": "Whether `calls` are the leg's span, not the whole trip",
+            "title": "Leg Calls",
+            "type": "boolean"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Line"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "motis_trip_id": {
+            "title": "Motis Trip Id",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "resolved; not_running (the trip does not run on the date); not_found; ambiguous (a key names several trips); unknown_dataset (not an Oběhy-known MOTIS dataset: abroad, or a feed without keys); malformed (not a MOTIS trip ID)",
+            "enum": [
+              "resolved",
+              "not_running",
+              "not_found",
+              "ambiguous",
+              "unknown_dataset",
+              "malformed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "realtime": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripRealtime"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Oběhy trip: `/trips/{trip_id}/{service_date}`"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Short Name"
+          },
+          "vehicles": {
+            "items": {
+              "$ref": "#/components/schemas/TripVehicle"
+            },
+            "title": "Vehicles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "motis_trip_id",
+          "outcome"
+        ],
+        "title": "EnrichedLeg",
+        "type": "object"
+      },
+      "Enrichment": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "legs": {
+            "description": "One per leg asked, in the order asked",
+            "items": {
+              "$ref": "#/components/schemas/EnrichedLeg"
+            },
+            "title": "Legs",
+            "type": "array"
+          },
+          "release_id": {
+            "description": "The active release the answer was read from.",
+            "title": "Release Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "generated_at",
+          "legs"
+        ],
+        "title": "Enrichment",
+        "type": "object"
+      },
       "Feature": {
         "description": "One source code as the timetable states it (a JDF fixed code, a CZPTT central note or\ntrain activity), with its official Czech text and the typed meanings it carries.",
         "properties": {
@@ -6813,6 +7047,47 @@
         "summary": "One board of departures from several stop places",
         "tags": [
           "boards"
+        ]
+      }
+    },
+    "/api/v1/journeys/enrich": {
+      "post": {
+        "operationId": "enrich_api_v1_journeys_enrich_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrichment"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "What Oběhy knows of the trips of MOTIS itinerary legs, leg by leg",
+        "tags": [
+          "journeys"
         ]
       }
     },

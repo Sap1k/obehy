@@ -2139,6 +2139,10 @@ PID, DÚK, SŽ or another provider.
 /api/v1/trips/<trip_id>/history             its journey's recorded runs under every trip ID
                                             it had: actual times, delays, vehicles; per stop
                                             the on-time share, median and 90th percentile
+POST /api/v1/journeys/enrich                MOTIS legs (Transitous, motis.obehy.cz) → per leg the
+                                            Oběhy trip, its realtime, vehicles and the leg's calls,
+                                            or why not (unknown dataset, not found, …); for the
+                                            native app (data/api/motis-datasets-v1.toml)
 /api/v1/lines?q=…                           search
 /api/v1/lines/<route_id>                    validity, integrated systems, features and notes;
                                             the date's trips, first and last departure, and

@@ -76,7 +76,7 @@ def trip_by_key(
     return RedirectResponse(trip_path(rows[0]["trip_id"], service_date), status_code=308)
 
 
-def _call(
+def trip_call(
     row: DictRow, features: list[schema.Feature], *, first: bool, last: bool
 ) -> schema.TripCall:
     codes = load_codes()
@@ -102,7 +102,7 @@ def _call(
     )
 
 
-def _realtime(row: DictRow) -> schema.TripRealtime:
+def trip_realtime(row: DictRow) -> schema.TripRealtime:
     codes = load_codes()
     return schema.TripRealtime(
         lifecycle=row["lifecycle"],
@@ -322,13 +322,14 @@ def trip(
         wheelchair_accessible=tristate(row["wheelchair_accessible"]),
         bikes_allowed=tristate(row["bikes_allowed"]),
         amenities=amenities(stated),
-        realtime=None if realtime is None else _realtime(realtime),
+        realtime=None if realtime is None else trip_realtime(realtime),
         vehicles=[trip_vehicle(v, row["mode"]) for v in vehicles],
         run_parts=[schema.TripPart.model_validate(p) for p in parts]
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
         composition=can_ask(snap, "composition", trip_id, service_date),
         calls=[
-            _call(c, stated, first=n == 0, last=n == len(calls) - 1) for n, c in enumerate(calls)
+            trip_call(c, stated, first=n == 0, last=n == len(calls) - 1)
+            for n, c in enumerate(calls)
         ],
         features=stated,
         notes=[f.note for f in stated if f.note is not None],

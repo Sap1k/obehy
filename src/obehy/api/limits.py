@@ -37,6 +37,7 @@ class Limits:
     alerts_limit: int
     composition_fresh_s: int
     composition_retry_after_s: int
+    enrich_legs_max: int
     debug_window_min: int
     debug_limit: int
     vehicle_max_age_s: int
@@ -62,7 +63,7 @@ def load_limits(path: Path = LIMITS) -> Limits:
         table("cache"),
     )
     lines, history, debug = table("lines"), table("history"), table("debug")
-    alerts, compositions = table("alerts"), table("compositions")
+    alerts, compositions, journeys = table("alerts"), table("compositions"), table("journeys")
     return Limits(
         version=str(document["api_version"]),
         search_min_chars=int(stops["search_min_chars"]),
@@ -89,6 +90,7 @@ def load_limits(path: Path = LIMITS) -> Limits:
         alerts_limit=int(alerts["limit"]),
         composition_fresh_s=int(compositions["fresh_s"]),
         composition_retry_after_s=int(compositions["retry_after_s"]),
+        enrich_legs_max=int(journeys["enrich_legs_max"]),
         debug_window_min=int(debug["window_min"]),
         debug_limit=int(debug["limit"]),
         vehicle_max_age_s=int(vehicles["max_age_s"]),

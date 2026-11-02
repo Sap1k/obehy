@@ -276,7 +276,8 @@ It answers under `/api/v1`: `status`; `stops?q=|bbox=|near=`; `stop-places/<id>`
 `departures` and `arrivals` (and `departures|arrivals?stops=a,b` for several, paged by `next`);
 `trips/<trip_id>/<service_date>` (and `trips/by-key/<namespace>/<key>/<service_date>`, which
 redirects) with its `composition?from=` (asked of the worker: 202 until answered) and
-`circulation`, and `trips/<trip_id>/history`; `lines?q=`, `lines/<route_id>` with its
+`circulation`, and `trips/<trip_id>/history`; `POST journeys/enrich` (MOTIS itinerary legs → the Oběhy
+trips they ride, for the native app); `lines?q=`, `lines/<route_id>` with its
 `timetable[?date=]` and `trips`; `vehicles?bbox=`, `vehicles/<vehicle_id>` and its `days`;
 `circulations` (a source's oběhy on a date, by company and mode or by route) and its `scopes`;
 `alerts?line=|stop=|trip=` and `alerts/<id>`; and

@@ -309,6 +309,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-02** — `POST /api/v1/journeys/enrich` for the native app: MOTIS leg trip IDs
+  (`{service date}_{GTFS time}_{tag}_{trip_id}`) resolve to Oběhy trips with realtime, vehicles,
+  alerts and the leg's calls. Tags are configured per instance (`data/api/motis-datasets-v1.toml`:
+  Transitous `cz-CZPTT`, `cz-JDF-merged`, `cz-PID`, `cz-IDS-JMK`; motis.obehy.cz `czptt`, `jdf`);
+  our own IDs resolve directly, PID/IDS JMK by source key, older timetable versions through
+  history. Checked live: Transitous CZPTT, filtered-JDF, PID and IDS JMK IDs all resolve on
+  obehy.cz. Unit and DB tests pass; pinned corpus not run.
 - **2026-11-02** — Repeated stops and gaps in history. The core places each call at its post
   when that is known exactly (every one of the 64 790 back-to-back visits of one stop place in
   the release has one): a bus serving three distant posts in a row no longer waits at the
