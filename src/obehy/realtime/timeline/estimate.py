@@ -93,6 +93,24 @@ def waiting_is_not_early(instance: Instance, plan: Plan, current: Lateness) -> L
     return timedelta(0), source_class
 
 
+def last_fix_at_stop(instance: Instance, plan: Plan) -> tuple[int, Instant] | None:
+    """The passenger call without a timetabled dwell where the best reading's last fix on the
+    path lies, and when it was taken: the vehicle was dwelling there then, which says nothing
+    of whether it still is."""
+
+    track = instance.track
+    if track is None or not track.hypotheses:
+        return None
+    best = track.hypotheses[0]
+    if best.off_path_since is not None or not best.history:
+        return None
+    fix = best.history[-1]
+    call = plan.dwelling_call(fix.along_m)
+    if call is None or not instance.calls[call].passenger:
+        return None
+    return call, fix.at
+
+
 def _zero_dwell(scheduled: tuple[Instant | None, Instant | None]) -> bool:
     arrival, departure = scheduled
     return arrival is not None and arrival == departure
@@ -175,11 +193,16 @@ def estimate(
     anchor: tuple[int, timedelta] | None = None,
     extra: tuple[timedelta, ...] | None = None,
     now: Instant | None = None,
+    dwelt: tuple[int, Instant] | None = None,
 ) -> Instance:
     """Per-call estimates; computed when state is emitted, not on every fix.
 
     Rail runs pass the fused current lateness and, from a source's prediction, the lateness at
-    one call ahead (`anchor`) from which propagation continues (`timeline.fusion`)."""
+    one call ahead (`anchor`) from which propagation continues (`timeline.fusion`).
+
+    Road vehicles pass the call without a timetabled dwell their last fix was taken at, and
+    when (`dwelt`, `last_fix_at_stop`): its predicted departure is never before that fix, nor
+    before a typical dwell after the arrival (`_dwelling_until`)."""
 
     lateness, delay_class = current if current is not None else own_lateness(instance)
     if instance.lifecycle == "pre_trip" and lateness is not None and lateness < timedelta(0):
@@ -242,6 +265,8 @@ def estimate(
                     policy,
                     passenger=state.passenger,
                 )
+                if dwelt is not None and dwelt[0] == i and est_dep is not None:
+                    est_dep = _dwelling_until(est_dep, est_arr, dwelt[1], instance.mode, policy)
             calls.append(_call(state, est_arr, est_dep, status, "gps"))
             latest = est_dep or est_arr
             if latest is not None and (floor is None or latest > floor):
@@ -343,6 +368,25 @@ def _departure(
     if floor is not None and leaves < floor:
         leaves = floor
     return Instant(leaves), leaves - sched_dep
+
+
+def _dwelling_until(
+    departure: Instant,
+    arrival: Instant | None,
+    seen: Instant,
+    mode: str,
+    policy: PredictionPolicy,
+) -> Instant:
+    """The predicted departure from a call without a timetabled dwell where the vehicle was
+    last seen at `seen`: it was dwelling then, so it leaves no sooner, and no sooner than a
+    typical dwell (`dwell_credit_s`) after it arrived. Whether it still stands there the fix
+    does not say, so nothing follows from `now`. The lateness carried on is unchanged: the
+    timetable's minute already holds that typical dwell (`dwell_credit`)."""
+
+    leaves = max(departure, seen)
+    if arrival is not None:
+        leaves = max(leaves, Instant(arrival + timedelta(seconds=policy.dwell_credit_s(mode))))
+    return leaves
 
 
 def _within(

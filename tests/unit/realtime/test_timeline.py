@@ -547,6 +547,39 @@ def test_a_vehicle_driving_through_a_request_stop_is_not_credited() -> None:
     assert abs((plain - expected).total_seconds()) <= 2
 
 
+def test_one_fix_at_a_stop_without_dwell_puts_a_typical_dwell_after_it() -> None:
+    """One fix at B, the next three minutes on down the leg: the time not seen is not all the
+    leg's (the departure on the fix at B, early by the whole dwell); a typical dwell is B's."""
+
+    credit = timedelta(seconds=POLICY.prediction.dwell_credit_s("bus"))
+    run = _at_b(("08:05:00", 1000), ("08:08:00", 1300))
+    b = run.instance.calls[1]
+    assert b.passed_departure == local("2026-10-08 08:05:00") + credit
+    departure = next(e for e in run.events() if e[:2] == ("B", "departure"))
+    assert departure[2] == between("08:05:00", "08:08:00")  # history keeps the fixes
+
+
+def test_a_vehicle_seen_nowhere_near_a_stop_is_placed_by_the_timetable() -> None:
+    run = _at_b(("08:04:55", 930), ("08:05:15", 1100))
+    b = run.instance.calls[1]
+    assert near(b.passed_arrival, "08:04:57", slack_s=2)
+    assert near(b.passed_departure, "08:04:58", slack_s=2)
+
+
+def test_a_bus_seen_at_a_stop_without_dwell_leaves_no_sooner_than_a_typical_dwell() -> None:
+    credit = timedelta(seconds=POLICY.prediction.dwell_credit_s("bus"))
+    run = _at_b(("08:05:00", 1000))
+    b, c = run.instance.calls[1], run.instance.calls[2]
+    assert b.passed_arrival is not None and b.estimated_departure is not None
+    assert b.estimated_departure >= b.passed_arrival + credit
+    assert b.estimated_departure > local("2026-10-08 08:05:00")  # not on the fix
+    assert near(c.estimated_arrival, "08:10:00", slack_s=8)  # the minute holds the dwell
+    run.at("08:05:50", east(1000))  # still there: it leaves no sooner than that fix
+    b = run.instance.calls[1]
+    assert b.estimated_departure is not None
+    assert b.estimated_departure >= local("2026-10-08 08:05:50")
+
+
 def test_a_hop_driven_slower_lately_stretches_the_predictions_beyond_it() -> None:
     """Vehicles lately took 1.5 times the timetable's 5 minutes from B to C: the bus between A
     and B is predicted at C later by the hop's ratio now (decayed and shrunk toward 1)."""

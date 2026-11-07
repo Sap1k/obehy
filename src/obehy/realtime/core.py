@@ -82,6 +82,7 @@ from obehy.realtime.timeline.commit import terminus
 from obehy.realtime.timeline.estimate import (
     dwell_credit,
     estimate,
+    last_fix_at_stop,
     monotone,
     own_lateness,
     waiting_is_not_early,
@@ -343,6 +344,7 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
                 current=current,
                 extra=extra,
                 now=_fresh(instance, now, policy),
+                dwelt=last_fix_at_stop(instance, plan),
             )
             continue
         predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)

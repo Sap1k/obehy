@@ -58,6 +58,7 @@ def commit(
     crossed_at: Instant | None,
     at: Instant,
     policy: ProgressPolicy,
+    dwell_s: float,
 ) -> Committed:
     """Commit, in path order, every crossing the deciding readings agree on.
 
@@ -69,9 +70,10 @@ def commit(
     bracketed by fixes further apart than `max_event_interval_s` (a reception gap, a stretch off
     the path) is recorded as inferred when the lateness at the two fixes differs by at most
     `max_inferred_spread_s`, else it gets a time for realtime only. Crossing times never
-    decrease along the path:
-    each is at least the one committed before it (`crossed_at`). Readings outside the decision
-    that are behind the new commit point contradict it and are dropped.
+    decrease along the path: each is at least the one committed before it (`crossed_at`). At a
+    stop without a timetabled dwell a fix there stands for a typical dwell, `dwell_s`
+    (`_crossing_time`). Readings outside the decision that are behind the new commit point
+    contradict it and are dropped.
     """
 
     if not beam:
@@ -105,7 +107,7 @@ def commit(
                     Crossing(trigger.call, trigger.kind, fixes, when, "inferred", inferred)
                 )
             continue
-        when = _crossing_time(bracket, trigger, plan)
+        when = _crossing_time(bracket, trigger, plan, dwell_s)
         if crossed_at is not None and when < crossed_at:
             when = crossed_at
         crossed_at = when
@@ -150,13 +152,21 @@ def _bracket(history: tuple[Placement, ...], along_m: float) -> Bracket | None:
     return None
 
 
-def _crossing_time(bracket: Bracket, trigger: Trigger, plan: Plan) -> Instant:
+def _crossing_time(bracket: Bracket, trigger: Trigger, plan: Plan, dwell_s: float) -> Instant:
     """When the vehicle crossed `trigger` between two fixes.
 
     Lateness drifts between fixes, so the crossing is placed in proportion to timetable time,
     not distance: a vehicle that waited at a stop and then drove on is placed by the dwell, and
     across a reception gap the timetable's pace between the fixes is kept. Without timetable
-    times it falls back to distance."""
+    times it falls back to distance.
+
+    A stop the timetable gives no dwell has none to place by: a fix there shows the vehicle
+    dwelling at that moment, not for how long. Left alone, the time not seen goes all to the
+    leg, so the departure lands on the last fix at the stop (and the arrival on the first),
+    early by the whole dwell. That fix's end of the bracket gets a typical dwell instead,
+    `dwell_s` (the mode's `dwell_credit_s`; 0 keeps the timetable's placement), at most the
+    time the timetable does not explain; sharing it with the other end if that is at such a
+    stop too."""
 
     before, after = bracket
     timetable: Timetable = plan.timetable
@@ -167,7 +177,21 @@ def _crossing_time(bracket: Bracket, trigger: Trigger, plan: Plan) -> Instant:
         share = (planned - s0) / (s1 - s0)
     else:
         share = (trigger.along_m - before.along_m) / (after.along_m - before.along_m)
-    return Instant(before.at + (after.at - before.at) * min(1.0, max(0.0, share)))
+    when = Instant(before.at + (after.at - before.at) * min(1.0, max(0.0, share)))
+    if dwell_s <= 0 or s0 is None or s1 is None:
+        return when
+    left = trigger.kind == "departure" and plan.dwelling_call(before.along_m) == trigger.call
+    reached = trigger.kind == "arrival" and plan.dwelling_call(after.along_m) == trigger.call
+    if not (left or reached):
+        return when
+    ends = 1 + (plan.dwelling_call(after.along_m if left else before.along_m) is not None)
+    unexplained = (after.at - before.at) - (s1 - s0)
+    credit = min(timedelta(seconds=dwell_s), unexplained / ends)
+    if credit <= timedelta(0):
+        return when
+    if left:
+        return max(when, Instant(before.at + credit))
+    return min(when, Instant(after.at - credit))
 
 
 def _inferred(

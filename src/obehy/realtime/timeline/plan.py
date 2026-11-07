@@ -243,6 +243,19 @@ class Plan:
                 return True
         return False
 
+    def dwelling_call(self, along_m: float) -> int | None:
+        """The call the timetable gives no dwell (arrival = departure) whose stop zone, between
+        its triggers, holds `along_m`: a fix there shows the vehicle dwelling, for a time the
+        timetable does not say. None elsewhere."""
+
+        for call, zone in enumerate(self.zones):
+            if zone.arrival_m is not None and along_m < zone.arrival_m:
+                return None
+            if zone.departure_m is None or along_m < zone.departure_m:
+                arrival, departure = self.scheduled[call]
+                return call if arrival is not None and arrival == departure else None
+        return None
+
     def scheduled_time(self, call: int, kind: EventKind) -> Instant | None:
         """The call's scheduled time of the event, falling back to its other time."""
 

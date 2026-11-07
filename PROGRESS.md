@@ -210,7 +210,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   Predictions follow `BASE_PLAN.md` 20.5 (dwell recovery, early running carried over, hop
   running times learned live for road vehicles, no uncertainty); hop ratios by time of day,
   per-stop holding and knock-on to the next trip of a tour wait for history learning and
-  circulations (section 22). JrUtil's
+  circulations (section 22). Dwell at stops without a timetabled one is the typical
+  `dwell_credit_s` everywhere; a per-stop remaining dwell learned from history (SQL) replaces
+  it later. A standing vehicle's reading creeps forward on GPS jitter (`_extend` keeps
+  `max(candidate, along)`) toward the departure trigger 40 m on: hold it while consecutive
+  fixes barely move, measured by replay before it lands. JrUtil's
   `serving-v5.json` time description still says noon − 12 h and needs correcting.
   Step 11 (Arriva Express): connector and keyless inference implemented (2026-10-12), replay
   replayed clean on the server capture of 2026-10-09 to 10-12, live on jdf. Open: `rt evaluate`
@@ -309,6 +313,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-07** — Buses at stops without a timetabled dwell. With one fix at the stop, the
+  departure was placed on that fix (the time not seen went all to the leg), early by the whole
+  dwell, and the predicted departure was the fix too. Now a fix inside a stop's zone stands
+  for a typical dwell (`dwell_credit_s`, shared with the bracket's other end when that is at
+  such a stop, at most what the timetable leaves unexplained): the departure goes that long
+  after it, the arrival that long before the first fix there. A predicted departure is never
+  before the last fix there, nor a typical dwell after the arrival; the lateness carried on is
+  unchanged (the timetable's minute already holds that dwell). Rail runs unchanged. History
+  intervals are the fixes as before. Unit tests pass; no replay (no dev database), so the bus
+  bias effect is unmeasured and the pinned-corpus golden digests need regenerating.
 - **2026-11-02** — `POST /api/v1/journeys/enrich` for the native app: MOTIS leg trip IDs
   (`{service date}_{GTFS time}_{tag}_{trip_id}`) resolve to Oběhy trips with realtime, vehicles,
   alerts and the leg's calls. Tags are configured per instance (`data/api/motis-datasets-v1.toml`:

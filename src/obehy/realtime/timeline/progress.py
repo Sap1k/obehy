@@ -56,9 +56,10 @@ def update(
     mode: str,
     source: str,
     policy: ProgressPolicy,
+    dwell_s: float,
 ) -> Step:
     """Extend the journey's hypotheses with one fix (from `source`) and commit what they
-    agree on."""
+    agree on; a fix at a stop without a timetabled dwell stands for `dwell_s` there."""
 
     if len(plan.path.points) < 2:
         return Step(track or Track((), 0.0), None, (), None, False)
@@ -97,7 +98,7 @@ def update(
         # may still be inferred (`commit`).
         committed_m = math.nextafter(origin, -math.inf)
     crossed_at = track.crossed_at if track is not None else None
-    done = commit(plan, beam, committed_m, crossed_at, at, policy)
+    done = commit(plan, beam, committed_m, crossed_at, at, policy, dwell_s)
     best = done.beam[0]
     progress = Progress(best.along_m, plan.call_index_at(best.along_m), at)
     since = best.off_path_since
