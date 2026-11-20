@@ -129,6 +129,26 @@ def trip_call(
     )
 
 
+def next_sequence(snap: Snapshot, limits: Limits, trip: TripOnDate) -> int | None:
+    """The sequence of the trip's first call not passed."""
+
+    params = {
+        "trip_id": trip.trip_id,
+        "service_date": trip.service_date,
+        "release_id": snap.release_id,
+    }
+    rows = snap.all("trip_calls", params)
+    after = timedelta(seconds=limits.passed_after_s)
+    return next(
+        (
+            r["sequence"]
+            for n, r in enumerate(rows)
+            if not _passed(r, n == len(rows) - 1, snap.now, after)
+        ),
+        None,
+    )
+
+
 def next_call(calls: list[schema.TripCall]) -> int | None:
     """The index of the first call not passed."""
 

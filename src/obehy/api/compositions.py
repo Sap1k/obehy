@@ -16,11 +16,12 @@ from typing import Annotated, Any, Literal, cast
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from psycopg_pool import ConnectionPool
 
-from obehy.api import schema
+from obehy.api import formations, schema
 from obehy.api.codes import load_codes
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, realtime_cache
 from obehy.api.db import request_lookup
 from obehy.api.resolve import running
+from obehy.api.trips import next_sequence
 from obehy.reference.vocabulary import load_vocabulary
 
 CompositionStatus = Literal["fresh", "stale", "pending", "not_available"]
@@ -91,9 +92,13 @@ def composition(
         "key": key.key,
         "service_date": service_date,
     }
+    rows = snap.all("composition_calls", journey)
+    public = [r for r in rows if r["passenger_service"]] or rows
+    first = schema.CompositionCall.model_validate(public[0])
+    last = schema.CompositionCall.model_validate(public[-1])
     calls = {
-        r["sequence"]: schema.CompositionCall.model_validate(r)
-        for r in snap.all("composition_calls", journey)
+        r["sequence"]: formations.public_name(schema.CompositionCall.model_validate(r), first, last)
+        for r in rows
     }
     if from_location is not None and from_location not in {c.location_id for c in calls.values()}:
         raise HTTPException(404, f"{from_location} is not a call of {trip_id}")
@@ -112,7 +117,7 @@ def composition(
     )
     if not fresh and (asked is None or not asked["pending"]):
         request_lookup(cast(ConnectionPool[Any], request.app.state.requests), asked_params)
-    rows = snap.all("composition_units", journey)
+    found = snap.all("composition_units", journey)
     codes = load_codes()
     units = [
         schema.CompositionUnit(
@@ -133,17 +138,30 @@ def composition(
             open=r["open"],
             observed_at=r["observed_at"],
         )
-        for r in rows
+        for r in found
     ]
-    position = {(r["composition_id"], r["unit_sequence"]): n for n, r in enumerate(rows)}
+    position = {(r["composition_id"], r["unit_sequence"]): n for n, r in enumerate(found)}
     segments = [
         schema.CompositionSegment(
             from_call=calls[s["from_sequence"]],
             to_call=calls[s["to_sequence"]],
-            units=[position[(composition_id, sequence)] for composition_id, sequence in s["units"]],
+            vehicles=formations.vehicles(
+                units,
+                [position[(composition_id, sequence)] for composition_id, sequence in s["units"]],
+                s["from_sequence"],
+                s["to_sequence"],
+            ),
         )
         for s in snap.all("composition_segments", journey)
     ]
+    shown = formations.stretches(units, segments)
+    # Where the rider is: the asked call, else the trip's next one.
+    at = (
+        next(c.sequence for c in calls.values() if c.location_id == from_location)
+        if from_location is not None
+        else next_sequence(snap, limits, trip)
+    )
+    here = formations.segment_at(segments, at)
     status = STATUS[(fresh, bool(units))]
     retry_after = None
     if status == "pending":
@@ -165,4 +183,7 @@ def composition(
         sources=_sources(asked["outcomes"] if asked is not None else {}),
         units=units,
         segments=segments,
+        stretches=shown,
+        here_segment=here,
+        here_stretch=formations.stretch_of(shown, here),
     )

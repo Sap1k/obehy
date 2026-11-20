@@ -1540,7 +1540,11 @@ def test_a_composition_is_asked_then_answered_by_the_broker(
             "icon": "bicycle_reservation",
             "text": None,
         }
-        assert [s["units"] for s in answer["segments"]] == [list(range(6))]
+        assert [[v["unit"] for v in s["vehicles"]] for s in answer["segments"]] == [list(range(6))]
+        # One segment, one stretch; the rider is in it, from Zákupy. The locomotive heads it.
+        assert [s["segments"] for s in answer["stretches"]] == [[0]]
+        assert (answer["here_segment"], answer["here_stretch"]) == (0, 0)
+        assert answer["segments"][0]["vehicles"][0]["cab"] == {"front": True, "rear": False}
         # Older than fresh: served stale and asked again; the broker reuses its cached answer.
         _fresh_for(client, 0)
         stale = _get(client, path)
@@ -1609,10 +1613,12 @@ def test_answers_from_later_calls_close_earlier_ones_into_segments(
     ]
     assert spans == [("A", 1, 2, False), ("B", 1, 2, False), ("A", 2, 3, True)]
     pieces = [
-        (s["from_call"]["sequence"], s["to_call"]["sequence"], s["units"])
+        (s["from_call"]["sequence"], s["to_call"]["sequence"], [v["unit"] for v in s["vehicles"]])
         for s in answer["segments"]
     ]
     assert pieces == [(1, 2, [0, 1]), (2, 3, [2])]
+    # The train changes at the second call: two stretches.
+    assert [s["segments"] for s in answer["stretches"]] == [[0], [1]]
 
 
 def test_a_failed_lookup_is_not_repeated_and_the_budget_holds(

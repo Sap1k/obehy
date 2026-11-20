@@ -596,12 +596,33 @@ class CompositionUnit(BaseModel):
     observed_at: Time
 
 
+class CabEnds(BaseModel):
+    """Which ends of a vehicle are drawn as a cab: `front` toward the head of the train."""
+
+    front: bool
+    rear: bool
+
+
+class SegmentVehicle(BaseModel):
+    unit: int = Field(description="Its position in `units`")
+    cab: CabEnds
+    partial: bool = Field(description="It joins or leaves within the segment")
+
+
 class CompositionSegment(BaseModel):
-    """A piece of the trip between span boundaries, with the units running it."""
+    """A piece of the trip between span boundaries, with the vehicles running it."""
 
     from_call: CompositionCall
     to_call: CompositionCall
-    units: list[int] = Field(description="Positions in `units`, in train order per source")
+    vehicles: list[SegmentVehicle] = Field(description="In train order, per source")
+
+
+class CompositionStretch(BaseModel):
+    """Neighbouring segments running the same train (in either order), shown as one."""
+
+    from_call: CompositionCall
+    to_call: CompositionCall
+    segments: list[int] = Field(description="Positions in `segments`")
 
 
 class CompositionSource(BaseModel):
@@ -635,6 +656,13 @@ class Composition(Envelope):
     sources: list[CompositionSource]
     units: list[CompositionUnit]
     segments: list[CompositionSegment]
+    stretches: list[CompositionStretch] = Field(
+        description="What to show: the segments, those running the same train as one"
+    )
+    here_segment: int | None = Field(
+        description="The segment the rider is in: at `from`, else at the trip's next call"
+    )
+    here_stretch: int | None = Field(description="The stretch holding `here_segment`")
 
 
 class GoneTrip(Problem):

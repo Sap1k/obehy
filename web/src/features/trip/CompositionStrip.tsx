@@ -21,17 +21,11 @@ import { useState } from "react";
 import type { Trip, TripCall } from "../../api/client";
 import { ago } from "../../lib/hooks";
 import {
-  cabEnds,
-  callName,
   classLabel,
   featureText,
-  partOfSegment,
-  segmentAt,
-  shownSegments,
   unitName,
-  unitsOf,
   type CompositionUnit,
-  type Ends,
+  type CabEnds,
 } from "./composition";
 import { useComposition } from "./queries";
 import classes from "./CompositionStrip.module.css";
@@ -122,28 +116,18 @@ export function CompositionStrip({
   }
   if (data.status === "not_available" || data.segments.length === 0) return null;
 
-  const at = ours ? boarded.sequence : trip.calls[trip.next_call ?? -1]?.sequence;
-  // Segments running the same train are shown as one; of its members, the one where the rider
-  // is gives the order shown.
-  const shown = shownSegments(data);
-  const here = segmentAt(data, at);
-  const index = Math.min(
-    chosen ??
-      Math.max(
-        0,
-        shown.findIndex((s) => s.members.includes(here)),
-      ),
-    shown.length - 1,
-  );
-  const stretch = shown[index]!;
-  const member = stretch.members.includes(here) ? here : stretch.members[0]!;
-  // The stretch's names, and its member's own span for what runs only part of it.
-  const segment = { ...data.segments[member]!, ...stretch };
+  // The API's stretches (segments running the same train shown as one) and where the rider
+  // is; of a stretch's segments, the one where the rider is gives the order shown.
+  const stretches = data.stretches;
+  const index = Math.min(chosen ?? data.here_stretch ?? 0, stretches.length - 1);
+  const stretch = stretches[index]!;
+  const here = data.here_segment;
+  const member = here !== null && stretch.segments.includes(here) ? here : stretch.segments[0]!;
   const own = data.segments[member]!;
-  const units = unitsOf(data, own);
+  const vehicles = own.vehicles.map((v) => ({ ...v, unit: data.units[v.unit]! }));
+  const units = vehicles.map((v) => v.unit);
   const checking = data.status === "pending" || data.status === "stale";
   const answer = `${data.answered_at}:${index}`;
-  const ends = cabEnds(units);
   const sources = [...new Set(units.map((u) => u.label?.cs ?? u.source))].join(", ");
 
   return frame(
@@ -155,9 +139,9 @@ export function CompositionStrip({
           směr jízdy
         </span>
       </div>
-      {shown.length > 1 ? (
+      {stretches.length > 1 ? (
         <div className={classes.segments} role="tablist" aria-label="Úsek trasy">
-          {shown.map((s, n) => (
+          {stretches.map((s, n) => (
             <UnstyledButton
               key={`${s.from_call.sequence}-${s.to_call.sequence}`}
               role="tab"
@@ -168,17 +152,17 @@ export function CompositionStrip({
                 setOpen(null);
               }}
             >
-              {callName(trip, s.from_call)} – {callName(trip, s.to_call)}
+              {s.from_call.name} – {s.to_call.name}
             </UnstyledButton>
           ))}
         </div>
       ) : (
         <span className={classes.caption}>
-          {callName(trip, segment.from_call)} – {callName(trip, segment.to_call)}
+          {stretch.from_call.name} – {stretch.to_call.name}
         </span>
       )}
       <ol className={classes.strip} aria-label="Vozy od čela vlaku">
-        {units.map((unit, n) => (
+        {vehicles.map(({ unit, cab, partial }, n) => (
           <li key={`${unit.source}-${unit.sequence}`}>
             <Popover
               opened={opened === `${answer}:${n}`}
@@ -194,16 +178,16 @@ export function CompositionStrip({
                   className={classes.unit}
                   data-kind={unit.kind}
                   data-first-class={unit.classes.includes(1) || undefined}
-                  data-part={partOfSegment(unit, own) || undefined}
+                  data-part={partial || undefined}
                   aria-pressed={opened === `${answer}:${n}`}
                   aria-label={unitName(unit)}
                   onClick={() => setOpen(opened === `${answer}:${n}` ? null : `${answer}:${n}`)}
                 >
-                  <Glyph unit={unit} ends={ends[n]!} />
+                  <Glyph unit={unit} ends={cab} />
                 </UnstyledButton>
               </Popover.Target>
               <Popover.Dropdown>
-                <UnitDetail trip={trip} unit={unit} partial={partOfSegment(unit, own)} />
+                <UnitDetail unit={unit} partial={partial} />
               </Popover.Dropdown>
             </Popover>
             {unit.destination && <span className={classes.through}>{unit.destination}</span>}
@@ -227,7 +211,7 @@ const W = 80;
 const H = 44;
 const SLANT = 14;
 
-function outline({ front, rear }: Ends): string {
+function outline({ front, rear }: CabEnds): string {
   const i = 1.5;
   const mid = H * 0.55;
   const left = front ? `M${i + SLANT},${i} ` : `M${i},${i} `;
@@ -236,7 +220,7 @@ function outline({ front, rear }: Ends): string {
   return left + right + bottom;
 }
 
-function Glyph({ unit, ends }: { unit: CompositionUnit; ends: Ends }) {
+function Glyph({ unit, ends }: { unit: CompositionUnit; ends: CabEnds }) {
   const shape = (
     <svg className={classes.shape} viewBox={`0 0 ${W} ${H}`} aria-hidden>
       <path d={outline(ends)} />
@@ -271,15 +255,7 @@ function Glyph({ unit, ends }: { unit: CompositionUnit; ends: Ends }) {
   );
 }
 
-function UnitDetail({
-  trip,
-  unit,
-  partial,
-}: {
-  trip: Trip;
-  unit: CompositionUnit;
-  partial: boolean;
-}) {
+function UnitDetail({ unit, partial }: { unit: CompositionUnit; partial: boolean }) {
   const label = unit.details.label;
   // A through coach: where it leaves this train, and as which train it goes on (ČD).
   const leaves = unit.details.direct_coach_leaves_at;
@@ -306,7 +282,7 @@ function UnitDetail({
       {unit.details.notes && <p className={classes.detailText}>{unit.details.notes}</p>}
       {partial && (
         <p className={classes.detailText}>
-          Jen v úseku {callName(trip, unit.from_call)} – {callName(trip, unit.to_call)}
+          Jen v úseku {unit.from_call.name} – {unit.to_call.name}
         </p>
       )}
       {unit.features.length > 0 && (

@@ -836,6 +836,16 @@ export interface components {
             public_code: string | null;
         };
         /**
+         * CabEnds
+         * @description Which ends of a vehicle are drawn as a cab: `front` toward the head of the train.
+         */
+        CabEnds: {
+            /** Front */
+            front: boolean;
+            /** Rear */
+            rear: boolean;
+        };
+        /**
          * ChainJourney
          * @description One journey of a vehicle's working day, as history recorded it.
          */
@@ -1013,6 +1023,16 @@ export interface components {
              */
             generated_at: string;
             /**
+             * Here Segment
+             * @description The segment the rider is in: at `from`, else at the trip's next call
+             */
+            here_segment: number | null;
+            /**
+             * Here Stretch
+             * @description The stretch holding `here_segment`
+             */
+            here_stretch: number | null;
+            /**
              * Release Id
              * @description The active release the answer was read from.
              */
@@ -1035,6 +1055,11 @@ export interface components {
              * @enum {string}
              */
             status: "fresh" | "stale" | "pending" | "not_available";
+            /**
+             * Stretches
+             * @description What to show: the segments, those running the same train as one
+             */
+            stretches: components["schemas"]["CompositionStretch"][];
             /** Trip Id */
             trip_id: string;
             /** Units */
@@ -1054,16 +1079,16 @@ export interface components {
         };
         /**
          * CompositionSegment
-         * @description A piece of the trip between span boundaries, with the units running it.
+         * @description A piece of the trip between span boundaries, with the vehicles running it.
          */
         CompositionSegment: {
             from_call: components["schemas"]["CompositionCall"];
             to_call: components["schemas"]["CompositionCall"];
             /**
-             * Units
-             * @description Positions in `units`, in train order per source
+             * Vehicles
+             * @description In train order, per source
              */
-            units: number[];
+            vehicles: components["schemas"]["SegmentVehicle"][];
         };
         /**
          * CompositionSource
@@ -1085,6 +1110,19 @@ export interface components {
             reason: string | null;
             /** Source */
             source: string;
+        };
+        /**
+         * CompositionStretch
+         * @description Neighbouring segments running the same train (in either order), shown as one.
+         */
+        CompositionStretch: {
+            from_call: components["schemas"]["CompositionCall"];
+            /**
+             * Segments
+             * @description Positions in `segments`
+             */
+            segments: number[];
+            to_call: components["schemas"]["CompositionCall"];
         };
         /**
          * CompositionUnit
@@ -2186,6 +2224,20 @@ export interface components {
             source_vehicle_id: string;
             /** Vehicle Id */
             vehicle_id: string;
+        };
+        /** SegmentVehicle */
+        SegmentVehicle: {
+            cab: components["schemas"]["CabEnds"];
+            /**
+             * Partial
+             * @description It joins or leaves within the segment
+             */
+            partial: boolean;
+            /**
+             * Unit
+             * @description Its position in `units`
+             */
+            unit: number;
         };
         /**
          * SourceCode

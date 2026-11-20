@@ -580,6 +580,25 @@
         "title": "BoardingPoint",
         "type": "object"
       },
+      "CabEnds": {
+        "description": "Which ends of a vehicle are drawn as a cab: `front` toward the head of the train.",
+        "properties": {
+          "front": {
+            "title": "Front",
+            "type": "boolean"
+          },
+          "rear": {
+            "title": "Rear",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "front",
+          "rear"
+        ],
+        "title": "CabEnds",
+        "type": "object"
+      },
       "ChainJourney": {
         "description": "One journey of a vehicle's working day, as history recorded it.",
         "properties": {
@@ -956,6 +975,30 @@
             "title": "Generated At",
             "type": "string"
           },
+          "here_segment": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The segment the rider is in: at `from`, else at the trip's next call",
+            "title": "Here Segment"
+          },
+          "here_stretch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stretch holding `here_segment`",
+            "title": "Here Stretch"
+          },
           "release_id": {
             "description": "The active release the answer was read from.",
             "title": "Release Id",
@@ -1013,6 +1056,14 @@
             "title": "Status",
             "type": "string"
           },
+          "stretches": {
+            "description": "What to show: the segments, those running the same train as one",
+            "items": {
+              "$ref": "#/components/schemas/CompositionStretch"
+            },
+            "title": "Stretches",
+            "type": "array"
+          },
           "trip_id": {
             "title": "Trip Id",
             "type": "string"
@@ -1037,7 +1088,10 @@
           "answered_at",
           "sources",
           "units",
-          "segments"
+          "segments",
+          "stretches",
+          "here_segment",
+          "here_stretch"
         ],
         "title": "Composition",
         "type": "object"
@@ -1067,7 +1121,7 @@
         "type": "object"
       },
       "CompositionSegment": {
-        "description": "A piece of the trip between span boundaries, with the units running it.",
+        "description": "A piece of the trip between span boundaries, with the vehicles running it.",
         "properties": {
           "from_call": {
             "$ref": "#/components/schemas/CompositionCall"
@@ -1075,19 +1129,19 @@
           "to_call": {
             "$ref": "#/components/schemas/CompositionCall"
           },
-          "units": {
-            "description": "Positions in `units`, in train order per source",
+          "vehicles": {
+            "description": "In train order, per source",
             "items": {
-              "type": "integer"
+              "$ref": "#/components/schemas/SegmentVehicle"
             },
-            "title": "Units",
+            "title": "Vehicles",
             "type": "array"
           }
         },
         "required": [
           "from_call",
           "to_call",
-          "units"
+          "vehicles"
         ],
         "title": "CompositionSegment",
         "type": "object"
@@ -1152,6 +1206,32 @@
           "reason"
         ],
         "title": "CompositionSource",
+        "type": "object"
+      },
+      "CompositionStretch": {
+        "description": "Neighbouring segments running the same train (in either order), shown as one.",
+        "properties": {
+          "from_call": {
+            "$ref": "#/components/schemas/CompositionCall"
+          },
+          "segments": {
+            "description": "Positions in `segments`",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "to_call": {
+            "$ref": "#/components/schemas/CompositionCall"
+          }
+        },
+        "required": [
+          "from_call",
+          "to_call",
+          "segments"
+        ],
+        "title": "CompositionStretch",
         "type": "object"
       },
       "CompositionUnit": {
@@ -3984,6 +4064,30 @@
           "matched"
         ],
         "title": "ScopedChain",
+        "type": "object"
+      },
+      "SegmentVehicle": {
+        "properties": {
+          "cab": {
+            "$ref": "#/components/schemas/CabEnds"
+          },
+          "partial": {
+            "description": "It joins or leaves within the segment",
+            "title": "Partial",
+            "type": "boolean"
+          },
+          "unit": {
+            "description": "Its position in `units`",
+            "title": "Unit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unit",
+          "cab",
+          "partial"
+        ],
+        "title": "SegmentVehicle",
         "type": "object"
       },
       "SourceCode": {
