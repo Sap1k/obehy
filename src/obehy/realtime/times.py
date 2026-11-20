@@ -47,6 +47,13 @@ class ServiceTime:
         return _schedule_instant(self.service_date, self.seconds)
 
 
+def service_day_origin(service_date: date) -> Instant:
+    """The instant a service date's timeline counts from: noon less twelve hours, as GTFS
+    counts schedule times, so noon is 12:00 on a day the clocks change too."""
+
+    return instant(ServiceTime(service_date, 12 * 3600).instant() - timedelta(hours=12))
+
+
 @lru_cache(maxsize=1 << 16)  # schedule times repeat on every fix of a journey; bounded
 def _schedule_instant(service_date: date, seconds: int) -> Instant:
     wall = datetime.combine(service_date, time()) + timedelta(seconds=seconds)

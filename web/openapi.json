@@ -804,6 +804,51 @@
         "title": "Circulation",
         "type": "object"
       },
+      "CirculationRow": {
+        "description": "A vehicle's day: its chains one after another, where it stood between them.",
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/RowBar"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "breaks": {
+            "description": "Where it stood between its chains",
+            "items": {
+              "$ref": "#/components/schemas/RowSpan"
+            },
+            "title": "Breaks",
+            "type": "array"
+          },
+          "chains": {
+            "description": "In the order they start",
+            "items": {
+              "$ref": "#/components/schemas/ScopedChain"
+            },
+            "title": "Chains",
+            "type": "array"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "vehicle_id": {
+            "title": "Vehicle Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vehicle_id",
+          "display_name",
+          "chains",
+          "bars",
+          "breaks"
+        ],
+        "title": "CirculationRow",
+        "type": "object"
+      },
       "CirculationScopes": {
         "description": "What oběhy on a date can be scoped by: the sources that saw vehicles work, and a\nsource's vehicles' companies and modes, and lines.",
         "properties": {
@@ -847,6 +892,7 @@
                 "type": "null"
               }
             ],
+            "description": "The source asked for, else the one that saw the most vehicles that day",
             "title": "Source"
           },
           "sources": {
@@ -892,6 +938,12 @@
             "title": "Modes",
             "type": "array"
           },
+          "origin": {
+            "description": "What the rows' seconds count from: the service date's noon less 12 h",
+            "format": "date-time",
+            "title": "Origin",
+            "type": "string"
+          },
           "release_id": {
             "description": "The active release the answer was read from.",
             "title": "Release Id",
@@ -907,6 +959,14 @@
               }
             ],
             "title": "Route Id"
+          },
+          "rows": {
+            "description": "A row per vehicle, by its name (numbers as numbers)",
+            "items": {
+              "$ref": "#/components/schemas/CirculationRow"
+            },
+            "title": "Rows",
+            "type": "array"
           },
           "service_date": {
             "format": "date",
@@ -927,14 +987,6 @@
               }
             ],
             "title": "Source Vehicle Id"
-          },
-          "vehicles": {
-            "description": "By first sighting",
-            "items": {
-              "$ref": "#/components/schemas/ScopedChain"
-            },
-            "title": "Vehicles",
-            "type": "array"
           }
         },
         "required": [
@@ -946,7 +998,8 @@
           "modes",
           "route_id",
           "source_vehicle_id",
-          "vehicles"
+          "origin",
+          "rows"
         ],
         "title": "Circulations",
         "type": "object"
@@ -3887,6 +3940,63 @@
         "title": "RegistryEntry",
         "type": "object"
       },
+      "RowBar": {
+        "description": "A journey of a vehicle's row on the day's timeline.",
+        "properties": {
+          "chain": {
+            "description": "Its chain's place in the row's `chains`",
+            "title": "Chain",
+            "type": "integer"
+          },
+          "end_s": {
+            "description": "Its arrival (else last sighting); at least a minute long",
+            "title": "End S",
+            "type": "integer"
+          },
+          "in_scope": {
+            "description": "Of the scope asked for; the others are its day's rest",
+            "title": "In Scope",
+            "type": "boolean"
+          },
+          "journey": {
+            "description": "Its place in that chain's `journeys`",
+            "title": "Journey",
+            "type": "integer"
+          },
+          "start_s": {
+            "description": "Its scheduled departure (else first sighting), from `origin`",
+            "title": "Start S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chain",
+          "journey",
+          "start_s",
+          "end_s",
+          "in_scope"
+        ],
+        "title": "RowBar",
+        "type": "object"
+      },
+      "RowSpan": {
+        "properties": {
+          "end_s": {
+            "title": "End S",
+            "type": "integer"
+          },
+          "start_s": {
+            "title": "Start S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_s",
+          "end_s"
+        ],
+        "title": "RowSpan",
+        "type": "object"
+      },
       "RunAlert": {
         "description": "An alert a run shows: its parts' own and their lines', and the severe ones of its stops\nstill ahead (a stop's others are on its board).",
         "properties": {
@@ -3962,11 +4072,14 @@
         "type": "object"
       },
       "ScopeAgency": {
-        "description": "A company whose lines a source's vehicles worked, and in which modes.",
+        "description": "A company whose lines a source's vehicles worked, and in which modes: one name, however\nmany agency IDs (licences) it has.",
         "properties": {
-          "agency_id": {
-            "title": "Agency Id",
-            "type": "string"
+          "agency_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agency Ids",
+            "type": "array"
           },
           "modes": {
             "items": {
@@ -3985,7 +4098,7 @@
           }
         },
         "required": [
-          "agency_id",
+          "agency_ids",
           "name",
           "vehicles",
           "modes"

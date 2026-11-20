@@ -40,17 +40,18 @@ function vehiclesWord(n: number): string {
   return n >= 2 && n <= 4 ? `${n} vozidla` : `${n} vozidel`;
 }
 
-/** Companies by name: one company can have several agency IDs (one per licence). */
+/** The source's companies by name (the API groups a company's agency IDs). */
 function companies(scopes: CirculationScopes | undefined) {
-  const byName = new Map<string, { ids: string[]; vehicles: number; modes: Map<string, number> }>();
-  for (const a of scopes?.agencies ?? []) {
-    const c = byName.get(a.name) ?? { ids: [], vehicles: 0, modes: new Map<string, number>() };
-    c.ids.push(a.agency_id);
-    c.vehicles += a.vehicles;
-    for (const m of a.modes) c.modes.set(m.mode, (c.modes.get(m.mode) ?? 0) + m.vehicles);
-    byName.set(a.name, c);
-  }
-  return byName;
+  return new Map(
+    (scopes?.agencies ?? []).map((a) => [
+      a.name,
+      {
+        ids: a.agency_ids,
+        vehicles: a.vehicles,
+        modes: new Map(a.modes.map((m) => [m.mode, m.vehicles])),
+      },
+    ]),
+  );
 }
 
 export function CirculationsPage() {
@@ -62,11 +63,10 @@ export function CirculationsPage() {
   const set = (patch: Partial<CirculationsSearch>) =>
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
-  // Without a source in the URL, the one that saw the most vehicles that day.
-  const day = useScopes(search.zdroj, date);
-  const source = search.zdroj ?? day.data?.sources[0]?.source;
-  const scopes = useScopes(source, date);
-  const sources = (day.data?.sources ?? []).map((s) => ({
+  // Without a source in the URL, the API's: the one that saw the most vehicles that day.
+  const scopes = useScopes(search.zdroj, date);
+  const source = search.zdroj ?? scopes.data?.source ?? undefined;
+  const sources = (scopes.data?.sources ?? []).map((s) => ({
     value: s.source,
     label: `${s.label?.cs ?? s.source} (${s.vehicles})`,
   }));
@@ -74,7 +74,7 @@ export function CirculationsPage() {
     sources.push({ value: source, label: source });
   }
   const sourceName =
-    day.data?.sources.find((s) => s.source === source)?.label?.cs ?? source ?? "Zdroj";
+    scopes.data?.sources.find((s) => s.source === source)?.label?.cs ?? source ?? "Zdroj";
   const byName = useMemo(() => companies(scopes.data), [scopes.data]);
   // What the URL scopes by; with nothing chosen yet, the viewer's pick.
   const [picked, setPicked] = useState<By>("dopravce");
@@ -116,10 +116,7 @@ export function CirculationsPage() {
   const rows = useMemo(
     () =>
       circulations.data
-        ? rowsOf(circulations.data.vehicles, circulations.data.service_date, {
-            vehicle: search.vuz,
-            tripId: search.spoj,
-          })
+        ? rowsOf(circulations.data, { vehicle: search.vuz, tripId: search.spoj })
         : [],
     [circulations.data, search.vuz, search.spoj],
   );
@@ -304,7 +301,11 @@ export function CirculationsPage() {
             busy={loading}
             rows={rows}
             span={span}
-            now={date === today ? secondsOfDay(date, now) : null}
+            now={
+              date === today && circulations.data
+                ? secondsOfDay(circulations.data.origin, now)
+                : null
+            }
             today={date === today}
             sourceLabel={sourceName}
             selected={selected}

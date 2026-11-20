@@ -1153,9 +1153,10 @@ class ScopeMode(BaseModel):
 
 
 class ScopeAgency(BaseModel):
-    """A company whose lines a source's vehicles worked, and in which modes."""
+    """A company whose lines a source's vehicles worked, and in which modes: one name, however
+    many agency IDs (licences) it has."""
 
-    agency_id: str
+    agency_ids: list[str]
     name: str
     vehicles: int
     modes: list[ScopeMode]
@@ -1179,7 +1180,9 @@ class CirculationScopes(Envelope):
     """What oběhy on a date can be scoped by: the sources that saw vehicles work, and a
     source's vehicles' companies and modes, and lines."""
 
-    source: str | None
+    source: str | None = Field(
+        description="The source asked for, else the one that saw the most vehicles that day"
+    )
     service_date: date
     sources: list[ScopeSource] = Field(description="Most vehicles first")
     agencies: list[ScopeAgency] = Field(description="The source's; most vehicles first")
@@ -1188,6 +1191,31 @@ class CirculationScopes(Envelope):
 
 class ScopedChain(VehicleChain):
     matched: list[int] = Field(description="The places in `journeys` in the scope, from 0")
+
+
+class RowBar(BaseModel):
+    """A journey of a vehicle's row on the day's timeline."""
+
+    chain: int = Field(description="Its chain's place in the row's `chains`")
+    journey: int = Field(description="Its place in that chain's `journeys`")
+    start_s: int = Field(description="Its scheduled departure (else first sighting), from `origin`")
+    end_s: int = Field(description="Its arrival (else last sighting); at least a minute long")
+    in_scope: bool = Field(description="Of the scope asked for; the others are its day's rest")
+
+
+class RowSpan(BaseModel):
+    start_s: int
+    end_s: int
+
+
+class CirculationRow(BaseModel):
+    """A vehicle's day: its chains one after another, where it stood between them."""
+
+    vehicle_id: str
+    display_name: str
+    chains: list[ScopedChain] = Field(description="In the order they start")
+    bars: list[RowBar]
+    breaks: list[RowSpan] = Field(description="Where it stood between its chains")
 
 
 class Circulations(Envelope):
@@ -1200,7 +1228,12 @@ class Circulations(Envelope):
     modes: list[str]
     route_id: str | None
     source_vehicle_id: str | None
-    vehicles: list[ScopedChain] = Field(description="By first sighting")
+    origin: Time = Field(
+        description="What the rows' seconds count from: the service date's noon less 12 h"
+    )
+    rows: list[CirculationRow] = Field(
+        description="A row per vehicle, by its name (numbers as numbers)"
+    )
 
 
 class SourceHealth(BaseModel):

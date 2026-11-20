@@ -1158,36 +1158,47 @@ def test_a_sources_oběhy_scoped_by_company_and_mode_or_by_route(client: TestCli
         ("duk", 1),
         ("mpvnet", 1),
     ]
-    assert _get(client, "/circulations/scopes", **day)["agencies"] == []
+    # Without a source asked: the one that saw the most vehicles.
+    default = _get(client, "/circulations/scopes", **day)
+    assert (default["source"], default["agencies"]) == ("duk", scopes["agencies"])
     # The lines it worked that day, and only those: the release's other routes are not there.
     assert [(r["line"]["route_id"], r["agency"], r["vehicles"]) for r in scopes["routes"]] == [
         ("jdf:route:000001", "Dopravce", 1)
     ]
     assert scopes["agencies"] == [
         {
-            "agency_id": "jdf:agency:1",
+            "agency_ids": ["jdf:agency:1"],
             "name": "Dopravce",
             "vehicles": 1,
             "modes": [{"mode": "bus", "vehicles": 1}],
         }
     ]
     by_agency = _get(client, "/circulations", source="duk", agency_id="jdf:agency:1", **day)
-    (bus,) = by_agency["vehicles"]
+    (row,) = by_agency["rows"]
+    (bus,) = row["chains"]
     # The whole day, the journey outside the release (no company) included but not matched.
     assert (bus["vehicle_id"], len(bus["journeys"]), bus["matched"]) == ("duk:1001", 2, [0])
+    # Its bars in seconds from the service date's noon less 12 h: as scheduled, 6:00 to 6:15,
+    # then the journey without a schedule as it was seen, 6:30 to 7:00.
+    assert by_agency["origin"] == "2026-10-06T00:00:00+02:00"
+    assert [(b["start_s"], b["end_s"], b["in_scope"]) for b in row["bars"]] == [
+        (6 * 3600, 6 * 3600 + 15 * 60, True),
+        (6 * 3600 + 30 * 60, 7 * 3600, False),
+    ]
+    assert (row["display_name"], row["breaks"]) == ("1001", [])
     by_route = _get(client, "/circulations", source="duk", route_id="jdf:route:000001", **day)
-    assert by_route["vehicles"] == by_agency["vehicles"]
+    assert by_route["rows"] == by_agency["rows"]
     plates = _get(client, "/circulations", source="mpvnet", route_id="jdf:route:000001", **day)
-    assert [c["source_vehicle_id"] for c in plates["vehicles"]] == ["4U1 2345"]
+    assert [c["source_vehicle_id"] for r in plates["rows"] for c in r["chains"]] == ["4U1 2345"]
     one = _get(client, "/circulations", source="duk", source_vehicle_id="1001", **day)
-    assert (one["source_vehicle_id"], one["vehicles"]) == ("1001", by_agency["vehicles"])
+    assert (one["source_vehicle_id"], one["rows"]) == ("1001", by_agency["rows"])
     metro = _get(client, "/circulations", source="pid", agency_id="jdf:agency:1", **day)
-    assert metro["vehicles"] == []
+    assert metro["rows"] == []
     assert _get(client, "/circulations/scopes", source="pid", **day)["agencies"] == []
     trams = _get(
         client, "/circulations", source="duk", agency_id="jdf:agency:1", mode="tram", **day
     )
-    assert trams["vehicles"] == []
+    assert trams["rows"] == []
     elsewhen = _get(client, "/circulations/scopes", source="duk", date="2026-10-05")
     assert (elsewhen["agencies"], elsewhen["routes"]) == ([], [])
     _get(client, "/circulations", 422, source="duk", **day)

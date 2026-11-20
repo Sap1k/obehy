@@ -928,6 +928,28 @@ export interface components {
             trip_id: string;
         };
         /**
+         * CirculationRow
+         * @description A vehicle's day: its chains one after another, where it stood between them.
+         */
+        CirculationRow: {
+            /** Bars */
+            bars: components["schemas"]["RowBar"][];
+            /**
+             * Breaks
+             * @description Where it stood between its chains
+             */
+            breaks: components["schemas"]["RowSpan"][];
+            /**
+             * Chains
+             * @description In the order they start
+             */
+            chains: components["schemas"]["ScopedChain"][];
+            /** Display Name */
+            display_name: string;
+            /** Vehicle Id */
+            vehicle_id: string;
+        };
+        /**
          * CirculationScopes
          * @description What oběhy on a date can be scoped by: the sources that saw vehicles work, and a
          *     source's vehicles' companies and modes, and lines.
@@ -958,7 +980,10 @@ export interface components {
              * Format: date
              */
             service_date: string;
-            /** Source */
+            /**
+             * Source
+             * @description The source asked for, else the one that saw the most vehicles that day
+             */
             source: string | null;
             /**
              * Sources
@@ -982,12 +1007,23 @@ export interface components {
             /** Modes */
             modes: string[];
             /**
+             * Origin
+             * Format: date-time
+             * @description What the rows' seconds count from: the service date's noon less 12 h
+             */
+            origin: string;
+            /**
              * Release Id
              * @description The active release the answer was read from.
              */
             release_id: string;
             /** Route Id */
             route_id: string | null;
+            /**
+             * Rows
+             * @description A row per vehicle, by its name (numbers as numbers)
+             */
+            rows: components["schemas"]["CirculationRow"][];
             /**
              * Service Date
              * Format: date
@@ -997,11 +1033,6 @@ export interface components {
             source: string;
             /** Source Vehicle Id */
             source_vehicle_id: string | null;
-            /**
-             * Vehicles
-             * @description By first sighting
-             */
-            vehicles: components["schemas"]["ScopedChain"][];
         };
         /**
          * Composition
@@ -2185,6 +2216,44 @@ export interface components {
             vehicle_id: string;
         };
         /**
+         * RowBar
+         * @description A journey of a vehicle's row on the day's timeline.
+         */
+        RowBar: {
+            /**
+             * Chain
+             * @description Its chain's place in the row's `chains`
+             */
+            chain: number;
+            /**
+             * End S
+             * @description Its arrival (else last sighting); at least a minute long
+             */
+            end_s: number;
+            /**
+             * In Scope
+             * @description Of the scope asked for; the others are its day's rest
+             */
+            in_scope: boolean;
+            /**
+             * Journey
+             * @description Its place in that chain's `journeys`
+             */
+            journey: number;
+            /**
+             * Start S
+             * @description Its scheduled departure (else first sighting), from `origin`
+             */
+            start_s: number;
+        };
+        /** RowSpan */
+        RowSpan: {
+            /** End S */
+            end_s: number;
+            /** Start S */
+            start_s: number;
+        };
+        /**
          * RunAlert
          * @description An alert a run shows: its parts' own and their lines', and the severe ones of its stops
          *     still ahead (a stop's others are on its board).
@@ -2219,11 +2288,12 @@ export interface components {
         };
         /**
          * ScopeAgency
-         * @description A company whose lines a source's vehicles worked, and in which modes.
+         * @description A company whose lines a source's vehicles worked, and in which modes: one name, however
+         *     many agency IDs (licences) it has.
          */
         ScopeAgency: {
-            /** Agency Id */
-            agency_id: string;
+            /** Agency Ids */
+            agency_ids: string[];
             /** Modes */
             modes: components["schemas"]["ScopeMode"][];
             /** Name */

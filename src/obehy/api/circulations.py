@@ -13,8 +13,10 @@ History keeps each source report with the vehicle the worker resolved it as
 
 from __future__ import annotations
 
+import itertools
+import re
 from collections.abc import Mapping, Sequence
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from functools import cache
 from typing import Annotated, Any
 
@@ -27,6 +29,7 @@ from obehy.api.db import Snapshot
 from obehy.api.params import ParameterError, date_span
 from obehy.api.resolve import trip_on
 from obehy.realtime.policy import load_policy
+from obehy.realtime.times import Instant, service_day_origin
 
 router = APIRouter()
 
@@ -99,6 +102,61 @@ def _chains(
             )
         )
     return list(found.values())
+
+
+def _natural(name: str) -> tuple[tuple[int, int | str], ...]:
+    """A name's sort key with its numbers as numbers ("9" before "10")."""
+
+    return tuple(
+        (0, int(p)) if p.isdigit() else (1, p.casefold()) for p in re.split(r"(\d+)", name)
+    )
+
+
+def rows_of(chains: list[schema.ScopedChain], origin: Instant) -> list[schema.CirculationRow]:
+    """A row per vehicle: its chains in the order they start, each journey a bar from its
+    scheduled departure to its arrival (where it was seen when history has no schedule), at
+    least a minute long, in seconds from `origin`; where it stood between its chains. Rows by
+    the vehicle's name, numbers as numbers."""
+
+    def seconds(at: datetime) -> int:
+        return round((at - origin).total_seconds())
+
+    by_vehicle: dict[str, list[schema.ScopedChain]] = {}
+    for chain in chains:
+        by_vehicle.setdefault(chain.vehicle_id, []).append(chain)
+    rows: list[schema.CirculationRow] = []
+    for vehicle_id, theirs in by_vehicle.items():
+        ordered = sorted(theirs, key=lambda c: c.first_seen)
+        bars: list[schema.RowBar] = []
+        for part, chain in enumerate(ordered):
+            matched = set(chain.matched)
+            for n, journey in enumerate(chain.journeys):
+                start = seconds(journey.departure or journey.first_seen)
+                end = seconds(journey.arrival or journey.last_seen)
+                bars.append(
+                    schema.RowBar(
+                        chain=part,
+                        journey=n,
+                        start_s=start,
+                        end_s=max(end, start + 60),
+                        in_scope=n in matched,
+                    )
+                )
+        breaks = [
+            schema.RowSpan(start_s=before.end_s, end_s=after.start_s)
+            for before, after in itertools.pairwise(bars)
+            if after.chain != before.chain and after.start_s > before.end_s
+        ]
+        rows.append(
+            schema.CirculationRow(
+                vehicle_id=vehicle_id,
+                display_name=ordered[0].display_name,
+                chains=ordered,
+                bars=bars,
+                breaks=breaks,
+            )
+        )
+    return sorted(rows, key=lambda r: (_natural(r.display_name), r.vehicle_id))
 
 
 @router.get(
@@ -221,31 +279,41 @@ def circulation_scopes(
 ) -> schema.CirculationScopes:
     realtime_cache(response, limits)
     day = service_date or today(snap)
-    agencies: dict[str, schema.ScopeAgency] = {}
+    sources = [
+        schema.ScopeSource(
+            source=r["source"], label=load_codes().source(r["source"]), vehicles=r["vehicles"]
+        )
+        for r in snap.all("circulation_sources", {"service_date": day})
+    ]
+    # Without one asked, the source that saw the most vehicles that day.
+    source = source or (sources[0].source if sources else None)
     asked = {"source": source, "service_date": day}
     rows = snap.all("circulation_scopes", asked) if source else []
     routes = snap.all("circulation_routes", asked) if source else []
+    # A company by its name, however many agency IDs (licences) it has.
+    agencies: dict[str, schema.ScopeAgency] = {}
+    modes: dict[str, dict[str, int]] = {}
     for r in rows:
+        company = agencies.setdefault(
+            r["name"], schema.ScopeAgency(agency_ids=[], name=r["name"], vehicles=0, modes=[])
+        )
         if r["mode"] is None:
-            agencies[r["agency_id"]] = schema.ScopeAgency(
-                agency_id=r["agency_id"], name=r["name"], vehicles=r["vehicles"], modes=[]
-            )
+            company.agency_ids.append(r["agency_id"])
+            company.vehicles += r["vehicles"]
         else:
-            agencies[r["agency_id"]].modes.append(
-                schema.ScopeMode(mode=r["mode"], vehicles=r["vehicles"])
-            )
-    for agency in agencies.values():
-        agency.modes.sort(key=lambda m: (-m.vehicles, m.mode))
+            counted = modes.setdefault(r["name"], {})
+            counted[r["mode"]] = counted.get(r["mode"], 0) + r["vehicles"]
+    for name, company in agencies.items():
+        company.agency_ids.sort()
+        company.modes = sorted(
+            (schema.ScopeMode(mode=m, vehicles=n) for m, n in modes.get(name, {}).items()),
+            key=lambda m: (-m.vehicles, m.mode),
+        )
     return schema.CirculationScopes(
         **envelope(snap),
         source=source,
         service_date=day,
-        sources=[
-            schema.ScopeSource(
-                source=r["source"], label=load_codes().source(r["source"]), vehicles=r["vehicles"]
-            )
-            for r in snap.all("circulation_sources", {"service_date": day})
-        ],
+        sources=sources,
         agencies=sorted(agencies.values(), key=lambda a: (-a.vehicles, a.name)),
         routes=[
             schema.ScopeRoute(line=line(r), agency=r["agency"], vehicles=r["vehicles"])
@@ -305,7 +373,7 @@ def circulations(
         ]
         if places:
             vehicles.append(schema.ScopedChain(**chain.model_dump(), matched=places))
-    vehicles.sort(key=lambda c: (c.first_seen, c.source_vehicle_id))
+    origin = service_day_origin(day)
     return schema.Circulations(
         **envelope(snap),
         source=source,
@@ -314,5 +382,6 @@ def circulations(
         modes=sorted(mode or []),
         route_id=route_id,
         source_vehicle_id=source_vehicle_id,
-        vehicles=vehicles,
+        origin=origin,
+        rows=rows_of(vehicles, origin),
     )

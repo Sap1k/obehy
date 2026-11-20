@@ -1,10 +1,8 @@
-import type { ChainJourney, ScopedChain, ScopeRoute } from "../../api/client";
-import { pragueInstant } from "../../lib/time";
+import type { ChainJourney, Circulations, ScopedChain, ScopeRoute } from "../../api/client";
 
-// The oběhy page's day timeline laid out: one row per vehicle, its chains (its journeys in a
-// row, split where it stood for hours) one after another, each journey a bar from its scheduled departure to its arrival (where the vehicle was seen
-// when history has no schedule), in seconds from the service date's midnight in Prague, so a
-// chain past midnight runs on past 24:00. Pure.
+// The oběhy page's day timeline: the API's rows (one per vehicle, its chains one after another,
+// each journey a bar in seconds from the service date's noon less 12 h, so a chain past midnight
+// runs on past 24:00) as the timeline draws them. Pure.
 
 export interface TimelineBar {
   journey: ChainJourney;
@@ -34,69 +32,46 @@ export interface Span {
 }
 
 const HOUR = 3600;
-const BY_ID = new Intl.Collator("cs-CZ", { numeric: true });
 
 /** "Iveco Crossway LE LINE 13M", when the registry knows it. */
 export function vehicleModel(chain: ScopedChain): string | null {
   return [chain.manufacturer, chain.model].filter(Boolean).join(" ") || null;
 }
 
-function secondsFrom(origin: number, iso: string): number {
-  return Math.round((Date.parse(iso) - origin) / 1000);
-}
-
-/** A row per vehicle of the chains whose vehicle matches `vehicle` (its IDs or fleet number,
- * any part, any case), by the vehicle's name (numbers as numbers), its chains in the order they
- * start. */
+/** The API's rows whose vehicle matches `vehicle` (its IDs, fleet number or name, any part,
+ * any case), with the trip the page was opened from marked. */
 export function rowsOf(
-  chains: ScopedChain[],
-  serviceDate: string,
+  data: Pick<Circulations, "rows" | "service_date">,
   { vehicle, tripId }: { vehicle?: string; tripId?: string },
 ): TimelineRow[] {
-  const origin = pragueInstant(serviceDate, "00:00").getTime();
   const wanted = vehicle?.trim().toLocaleLowerCase("cs-CZ");
-  const byVehicle = new Map<string, ScopedChain[]>();
-  for (const c of chains) {
-    const matches =
-      !wanted ||
-      [c.source_vehicle_id, c.vehicle_id, c.fleet_number, c.public_label].some((id) =>
-        id?.toLocaleLowerCase("cs-CZ").includes(wanted),
-      );
-    if (matches) byVehicle.set(c.vehicle_id, [...(byVehicle.get(c.vehicle_id) ?? []), c]);
-  }
-  const rows = [...byVehicle].map(([vehicleId, theirs]): TimelineRow => {
-    const ordered = [...theirs].sort((a, b) => Date.parse(a.first_seen) - Date.parse(b.first_seen));
-    const bars = ordered.flatMap((chain, part) => {
-      const matched = new Set(chain.matched);
-      return chain.journeys.map((journey, i) => {
-        const start = secondsFrom(origin, journey.departure ?? journey.first_seen);
-        const end = secondsFrom(origin, journey.arrival ?? journey.last_seen);
+  return data.rows
+    .filter(
+      (row) =>
+        !wanted ||
+        row.chains.some((c) =>
+          [c.source_vehicle_id, c.vehicle_id, c.fleet_number, c.public_label, c.display_name].some(
+            (id) => id?.toLocaleLowerCase("cs-CZ").includes(wanted),
+          ),
+        ),
+    )
+    .map((row) => ({
+      key: `${row.vehicle_id}@${data.service_date}`,
+      chain: row.chains[0]!,
+      chains: row.chains,
+      bars: row.bars.map((b) => {
+        const journey = row.chains[b.chain]!.journeys[b.journey]!;
         return {
           journey,
-          start,
-          end: Math.max(end, start + 60),
-          inScope: matched.has(i),
+          start: b.start_s,
+          end: b.end_s,
+          inScope: b.in_scope,
           highlighted: tripId !== undefined && journey.trip_id === tripId,
-          part,
+          part: b.chain,
         };
-      });
-    });
-    const breaks: Span[] = [];
-    for (let i = 1; i < bars.length; i++) {
-      const [before, after] = [bars[i - 1]!, bars[i]!];
-      if (after.part !== before.part && after.start > before.end) {
-        breaks.push({ start: before.end, end: after.start });
-      }
-    }
-    return {
-      key: `${vehicleId}@${serviceDate}`,
-      chain: ordered[0]!,
-      chains: ordered,
-      bars,
-      breaks,
-    };
-  });
-  return rows.sort((a, b) => BY_ID.compare(a.chain.display_name, b.chain.display_name));
+      }),
+      breaks: row.breaks.map((b) => ({ start: b.start_s, end: b.end_s })),
+    }));
 }
 
 /** Whole hours from the earliest bar's start to the latest bar's end. */
@@ -158,9 +133,9 @@ export function percent(seconds: number, span: Span): number {
   return ((seconds - span.start) / (span.end - span.start)) * 100;
 }
 
-/** Seconds from the service date's midnight to `now`. */
-export function secondsOfDay(serviceDate: string, now: number): number {
-  return Math.round((now - pragueInstant(serviceDate, "00:00").getTime()) / 1000);
+/** `now` in the rows' seconds (from the API's `origin`). */
+export function secondsOfDay(origin: string, now: number): number {
+  return Math.round((now - Date.parse(origin)) / 1000);
 }
 
 /** A journey's ends cut for a bar, as a headsign would put them (JDF names run town, part,
