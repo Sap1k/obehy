@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from obehy.api import punctuality, schema
 from obehy.api.alerts import alert_ids, find_alerts
-from obehy.api.codes import tristate, wheelchair_of
+from obehy.api.codes import step_free, tristate, wheelchair_of
 from obehy.api.common import (
     LimitsDep,
     SnapshotDep,
@@ -130,9 +130,12 @@ def _board(
             source_class=r["source_class"],
             stale=r["stale"],
             platform=r["platform"],
-            vehicle=vehicles.get((r["trip_id"], r["service_date"])),
+            vehicle=(vehicle := vehicles.get((r["trip_id"], r["service_date"]))),
             sources=list(r["sources"] or []),
-            wheelchair=wheelchair_of(r["wheelchair_kinds"] or [], tristate(r["trip_wheelchair"])),
+            step_free=step_free(
+                wheelchair_of(r["wheelchair_kinds"] or [], tristate(r["trip_wheelchair"])),
+                None if vehicle is None else vehicle.traits,
+            ),
         )
         for r in rows
     ]

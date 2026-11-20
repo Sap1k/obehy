@@ -20,7 +20,7 @@ from psycopg.rows import DictRow
 
 from obehy.api import punctuality, schema
 from obehy.api.alerts import find_alerts, trip_alerts
-from obehy.api.codes import amenities, call_flags, features, load_codes, tristate
+from obehy.api.codes import amenities, call_flags, features, load_codes, note_groups, tristate
 from obehy.api.common import (
     LimitsDep,
     SnapshotDep,
@@ -581,7 +581,7 @@ def trip(
         next_call=next_call(shown.calls),
         run=_run(snap, limits, found, shown, parts) if "run" in included else None,
         features=shown.features,
-        notes=[f.note for f in shown.features if f.note is not None],
+        notes=note_groups(load_codes(), shown.features),
         connections=[
             schema.Connection(
                 direction=c["direction"],

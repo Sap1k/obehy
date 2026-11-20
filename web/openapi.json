@@ -1606,6 +1606,23 @@
             "title": "Status",
             "type": "string"
           },
+          "step_free": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accessible",
+                  "booking",
+                  "partly"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether one boards in a wheelchair: what the timetable states for the whole trip, unless the vehicle on it is known (a step-free one confirms it, a booking still stands; one with steps overrides it); null: not step-free or not known",
+            "title": "Step Free"
+          },
           "trip_id": {
             "title": "Trip Id",
             "type": "string"
@@ -1630,24 +1647,6 @@
                 "type": "null"
               }
             ]
-          },
-          "wheelchair": {
-            "anyOf": [
-              {
-                "enum": [
-                  "booking_required",
-                  "booking_recommended",
-                  "accessible",
-                  "partly"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "What the timetable states for the whole trip; the vehicle's traits, when known, are realtime's",
-            "title": "Wheelchair"
           }
         },
         "required": [
@@ -3285,6 +3284,43 @@
         "title": "Lines",
         "type": "object"
       },
+      "MarkedNote": {
+        "description": "A code the timetable marks with a sign (a JDF fixed code, a CZPTT central note).",
+        "properties": {
+          "icon": {
+            "description": "The API's icon of the code's meaning",
+            "title": "Icon",
+            "type": "string"
+          },
+          "key": {
+            "description": "`system:code`, the sign's key",
+            "title": "Key",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tier": {
+            "description": "plain: shown as its sign alone (its text in the legend); stated: its sign with its text; detail: on request",
+            "enum": [
+              "plain",
+              "stated",
+              "detail"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "text",
+          "icon",
+          "tier"
+        ],
+        "title": "MarkedNote",
+        "type": "object"
+      },
       "Note": {
         "properties": {
           "code": {
@@ -3333,6 +3369,42 @@
           "text"
         ],
         "title": "Note",
+        "type": "object"
+      },
+      "NoteGroups": {
+        "description": "A trip's timetable notes grouped for reading (codes repeat per call range; each is\nlisted once; the stopping codes of single calls are the calls' flags, not notes).",
+        "properties": {
+          "long": {
+            "description": "The longer texts",
+            "items": {
+              "type": "string"
+            },
+            "title": "Long",
+            "type": "array"
+          },
+          "marked": {
+            "description": "The codes marked with a sign, in print order",
+            "items": {
+              "$ref": "#/components/schemas/MarkedNote"
+            },
+            "title": "Marked",
+            "type": "array"
+          },
+          "operates": {
+            "description": "When it runs, in week order",
+            "items": {
+              "$ref": "#/components/schemas/MarkedNote"
+            },
+            "title": "Operates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operates",
+          "marked",
+          "long"
+        ],
+        "title": "NoteGroups",
         "type": "object"
       },
       "ObservedCirculation": {
@@ -4909,11 +4981,7 @@
             "title": "Next Call"
           },
           "notes": {
-            "items": {
-              "$ref": "#/components/schemas/Note"
-            },
-            "title": "Notes",
-            "type": "array"
+            "$ref": "#/components/schemas/NoteGroups"
           },
           "realtime": {
             "anyOf": [

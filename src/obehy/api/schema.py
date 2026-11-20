@@ -26,6 +26,8 @@ Boarding = Literal["regular", "none", "phone", "ask_driver"]
 WheelchairAmenity = Literal["booking_required", "booking_recommended", "accessible", "partly"]
 BicycleAmenity = Literal["prohibited", "reservation_required", "reservation_available", "allowed"]
 ReservationAmenity = Literal["required", "available"]
+# Whether one boards in a wheelchair: step-free, step-free but booked ahead, or with help.
+StepFree = Literal["accessible", "booking", "partly"]
 SourceSystem = Literal["jdf", "czptt_note", "czptt_activity"]
 # A stop's modes in the order they are shown: rail first, then the city's own.
 MODE_ORDER = ("rail", "metro", "tram", "trolleybus", "bus", "water", "cable", "funicular")
@@ -102,6 +104,30 @@ class Feature(BaseModel):
     system: IntegratedSystem | None = None
     note: Note | None = None
     source_code: SourceCode | None = None
+
+
+SignTier = Literal["plain", "stated", "detail"]
+
+
+class MarkedNote(BaseModel):
+    """A code the timetable marks with a sign (a JDF fixed code, a CZPTT central note)."""
+
+    key: str = Field(description="`system:code`, the sign's key")
+    text: str
+    icon: str = Field(description="The API's icon of the code's meaning")
+    tier: SignTier = Field(
+        description="plain: shown as its sign alone (its text in the legend); stated: its sign "
+        "with its text; detail: on request"
+    )
+
+
+class NoteGroups(BaseModel):
+    """A trip's timetable notes grouped for reading (codes repeat per call range; each is
+    listed once; the stopping codes of single calls are the calls' flags, not notes)."""
+
+    operates: list[MarkedNote] = Field(description="When it runs, in week order")
+    marked: list[MarkedNote] = Field(description="The codes marked with a sign, in print order")
+    long: list[str] = Field(description="The longer texts")
 
 
 class Amenities(BaseModel):
@@ -305,10 +331,11 @@ class Departure(BaseModel):
     stale: bool | None
     platform: str | None = Field(description="The scheduled platform, track or post code.")
     vehicle: TripVehicle | None = None
-    wheelchair: WheelchairAmenity | None = Field(
+    step_free: StepFree | None = Field(
         default=None,
-        description="What the timetable states for the whole trip; the vehicle's traits, when "
-        "known, are realtime's",
+        description="Whether one boards in a wheelchair: what the timetable states for the whole "
+        "trip, unless the vehicle on it is known (a step-free one confirms it, a booking still "
+        "stands; one with steps overrides it); null: not step-free or not known",
     )
     sources: list[str] = Field(default_factory=list, description="Where its realtime came from")
     alert_ids: list[str] = Field(
@@ -482,7 +509,7 @@ class Trip(Envelope):
         "merged in, and the run's alerts",
     )
     features: list[Feature]
-    notes: list[Note]
+    notes: NoteGroups
     connections: list[Connection]
     links: list[JourneyLink]
     alerts: list[Alert] = Field(

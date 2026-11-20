@@ -1275,16 +1275,16 @@ export interface components {
              * @enum {string}
              */
             status: "scheduled" | "predicted" | "actual" | "inferred" | "no_realtime" | "cancelled";
+            /**
+             * Step Free
+             * @description Whether one boards in a wheelchair: what the timetable states for the whole trip, unless the vehicle on it is known (a step-free one confirms it, a booking still stands; one with steps overrides it); null: not step-free or not known
+             */
+            step_free?: ("accessible" | "booking" | "partly") | null;
             /** Trip Id */
             trip_id: string;
             /** Trip Short Name */
             trip_short_name: string | null;
             vehicle?: components["schemas"]["TripVehicle"] | null;
-            /**
-             * Wheelchair
-             * @description What the timetable states for the whole trip; the vehicle's traits, when known, are realtime's
-             */
-            wheelchair?: ("booking_required" | "booking_recommended" | "accessible" | "partly") | null;
         };
         /** Departures */
         Departures: {
@@ -1929,6 +1929,30 @@ export interface components {
              */
             release_id: string;
         };
+        /**
+         * MarkedNote
+         * @description A code the timetable marks with a sign (a JDF fixed code, a CZPTT central note).
+         */
+        MarkedNote: {
+            /**
+             * Icon
+             * @description The API's icon of the code's meaning
+             */
+            icon: string;
+            /**
+             * Key
+             * @description `system:code`, the sign's key
+             */
+            key: string;
+            /** Text */
+            text: string;
+            /**
+             * Tier
+             * @description plain: shown as its sign alone (its text in the legend); stated: its sign with its text; detail: on request
+             * @enum {string}
+             */
+            tier: "plain" | "stated" | "detail";
+        };
         /** Note */
         Note: {
             /**
@@ -1945,6 +1969,28 @@ export interface components {
              * @description For a CZPTT central note, its official KJŘ text
              */
             text: string | null;
+        };
+        /**
+         * NoteGroups
+         * @description A trip's timetable notes grouped for reading (codes repeat per call range; each is
+         *     listed once; the stopping codes of single calls are the calls' flags, not notes).
+         */
+        NoteGroups: {
+            /**
+             * Long
+             * @description The longer texts
+             */
+            long: string[];
+            /**
+             * Marked
+             * @description The codes marked with a sign, in print order
+             */
+            marked: components["schemas"]["MarkedNote"][];
+            /**
+             * Operates
+             * @description When it runs, in week order
+             */
+            operates: components["schemas"]["MarkedNote"][];
         };
         /** ObservedCirculation */
         ObservedCirculation: {
@@ -2570,8 +2616,7 @@ export interface components {
              * @description Index in `calls` of the first not passed
              */
             next_call: number | null;
-            /** Notes */
-            notes: components["schemas"]["Note"][];
+            notes: components["schemas"]["NoteGroups"];
             realtime: components["schemas"]["TripRealtime"] | null;
             /**
              * Release Id

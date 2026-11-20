@@ -576,7 +576,7 @@ def test_departures_scheduled_and_late(client: TestClient) -> None:
     assert _times(monday) == [("jdf:trip:1", "2026-10-05T06:00:00+02:00", None, "scheduled")]
     assert monday[0]["platform"] == "1" and monday[0]["line"]["short_name"] == "1"
     # The timetable's "@": step-free with no vehicle known yet.
-    assert monday[0]["wheelchair"] == "accessible" and monday[0]["vehicle"] is None
+    assert monday[0]["step_free"] == "accessible" and monday[0]["vehicle"] is None
     # Scheduled 06:00, five minutes ago, but expected at 06:10: still on the board.
     late = _get(client, board, start="2026-10-06T06:05:00+02:00")["departures"]
     assert _times(late) == [
@@ -644,7 +644,14 @@ def test_a_trip_with_calls_realtime_features_and_journey_key(client: TestClient)
         (10, "very_late"),
         (10, "very_late"),
     ]
-    assert [n["text"] for n in trip["notes"]] == ["jede přes Sloup"]
+    notes = trip["notes"]
+    assert [n["key"] for n in notes["operates"]] == ["jdf:X"]
+    # In print order, each with how it shows; the longer texts apart.
+    assert [(n["key"], n["tier"]) for n in notes["marked"]] == [
+        ("jdf:@", "plain"),
+        ("jdf:O", "plain"),
+    ]
+    assert notes["long"] == ["jede přes Sloup"]
     assert trip["run_parts"] == [{"trip_id": "jdf:trip:1", "run_part": None}]
     assert trip["shape"]["type"] == "LineString"
     assert _get(client, "/trips/jdf:trip:1/2026-10-07", 404)["status"] == 404

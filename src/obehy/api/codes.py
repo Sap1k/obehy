@@ -9,6 +9,7 @@ drive the amenities and call flags and give the feature its group, icon and Engl
 
 from __future__ import annotations
 
+import sys
 import tomllib
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
@@ -69,6 +70,14 @@ class CodeText:
 
 
 @dataclass(frozen=True, slots=True)
+class Sign:
+    """How a code's sign stands among a trip's notes (`[signs]`)."""
+
+    order: int
+    tier: schema.SignTier
+
+
+@dataclass(frozen=True, slots=True)
 class Codes:
     version: str
     kinds: Mapping[str, Kind]
@@ -77,6 +86,7 @@ class Codes:
     systems: Mapping[str, tuple[str, str | None]]
     sources: Mapping[str, schema.Label]
     source_codes: Mapping[str, Mapping[str, CodeText]]  # system -> code -> its texts
+    signs: Mapping[str, Sign]  # `system:code` -> its order and tier
 
     def kind(self, name: str) -> Kind:
         return self.kinds.get(name) or Kind("other", "other", name)
@@ -159,6 +169,13 @@ def load_codes(path: Path = CODES) -> Codes:
             for k, v in systems.items()
         },
         sources={k: label(v) for k, v in cast(dict[str, Any], document["sources"]).items()},
+        signs={
+            f"{system}:{code}": Sign(
+                int(entry["order"]), cast(schema.SignTier, entry.get("tier", "detail"))
+            )
+            for system, entries in cast(dict[str, dict[str, Any]], document["signs"]).items()
+            for code, entry in entries.items()
+        },
         source_codes={
             system: {code: _code_text(entry) for code, entry in entries.items()}
             for system, entries in cast(dict[str, dict[str, Any]], document["source_codes"]).items()
@@ -281,6 +298,34 @@ def wheelchair_of(kinds: Iterable[str], accessible: bool | None) -> schema.Wheel
     return found
 
 
+def step_free(
+    stated: schema.WheelchairAmenity | None, traits: schema.VehicleTraits | None
+) -> schema.StepFree | None:
+    """Whether one boards in a wheelchair: the timetable's statement for the whole trip,
+    unless the vehicle on it is known. A known step-free vehicle confirms it (a booking the
+    timetable asks for still stands); a vehicle known to have steps overrides the timetable."""
+
+    said: schema.StepFree | None = (
+        "booking"
+        if stated == "booking_required"
+        else "partly"
+        if stated == "partly"
+        else "accessible"
+        if stated is not None
+        else None
+    )
+    known = [
+        v
+        for v in ((traits and (traits.low_floor, traits.wheelchair_accessible)) or ())
+        if v is not None
+    ]
+    if not known:
+        return said
+    if True not in known:
+        return None
+    return "booking" if said == "booking" else "accessible"
+
+
 def _calendar_order(feature: schema.Feature) -> int:
     """Working days, the days of the week, then Sundays and holidays (the `[calendar]` order),
     whatever order the feed states them in."""
@@ -288,6 +333,59 @@ def _calendar_order(feature: schema.Feature) -> int:
     order = list(load_codes().calendar)
     code = feature.source_code.code if feature.source_code is not None else None
     return order.index(code) if code in order else len(order)
+
+
+# The systems whose codes a timetable marks with a sign; the kinds a call's flag shows.
+_MARKED_SYSTEMS = {"jdf", "czptt_note"}
+_CALL_FLAG_KINDS = _FLAGS | {"on_request", "conditional"}
+
+
+def note_groups(codes: Codes, features: Iterable[schema.Feature]) -> schema.NoteGroups:
+    """A trip's notes grouped for reading: when it runs, the codes the timetable marks with a
+    sign in print order (each once; a stopping code of single calls is the call's flag, not a
+    note), and the longer texts (but those repeating a day of operation)."""
+
+    operates: dict[str, schema.MarkedNote] = {}
+    marked: dict[str, schema.MarkedNote] = {}
+    long: list[str] = []
+
+    def mark(key: str, text: str, icon: str) -> schema.MarkedNote:
+        sign = codes.signs.get(key)
+        return schema.MarkedNote(
+            key=key, text=text, icon=icon, tier="detail" if sign is None else sign.tier
+        )
+
+    for f in features:
+        source = f.source_code
+        key = None if source is None else f"{source.system}:{source.code}"
+        if key is not None and "calendar_designation" in f.kinds:
+            operates.setdefault(key, mark(key, f.label.cs, f.icon))
+        elif key is not None and source is not None and source.system in _MARKED_SYSTEMS:
+            single = f.scope in ("call", "call_range") and set(f.kinds) <= _CALL_FLAG_KINDS
+            if not single:
+                marked.setdefault(key, mark(key, f.label.cs, f.icon))
+        elif f.note is not None and f.note.kind == "czptt_central_note" and f.note.code:
+            # A central note of some calls comes as the note alone: its code is the sign's key.
+            text = f.note.text or f.note.label
+            if text:
+                key = f"czptt_note:{f.note.code}"
+                marked.setdefault(key, mark(key, text, f.icon))
+        elif f.note is not None and source is None:
+            text = f.note.text or f.note.label
+            if text and text not in long:
+                long.append(text)
+
+    def order(note: schema.MarkedNote) -> tuple[int, str]:
+        sign = codes.signs.get(note.key)
+        return (sys.maxsize if sign is None else sign.order, note.key)
+
+    days = sorted(operates.values(), key=order)
+    said = {d.text for d in days}
+    return schema.NoteGroups(
+        operates=days,
+        marked=sorted(marked.values(), key=order),
+        long=[t for t in long if t not in said],
+    )
 
 
 def call_flags(

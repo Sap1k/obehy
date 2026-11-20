@@ -219,3 +219,88 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 "0030" = { name = "Zastavení jen na znamení", text = "vlak zastavuje jen na znamení nebo požádání" }
 "0032" = { name = "Odjezd ihned po výstupu", text = "vlak může do konečné stanice odjet ihned po ukončení výstupu cestujících i před uvedeným časovým údajem příjezdu vlaku" }
 "0033" = { name = "Nečeká na žádné přípoje", text = "vlak nečeká na žádné přípoje" }
+
+# How a source code's sign stands among a trip's notes (api/codes.py `note_groups`; the
+# clients draw the signs). `order` is the print order: the KADR Priorita, and the JDF table's
+# order with the days of operation in week order (X, 1-7, +). `tier`: `plain` codes a passenger
+# picks a train or bus by show as their sign alone (their text in the legend), `stated` ones
+# with their text, the rest (`detail`, the default) on request. A code without an entry goes
+# last, as detail.
+[signs.jdf]
+"X" = { order = 0 }
+"1" = { order = 10 }
+"2" = { order = 20 }
+"3" = { order = 30 }
+"4" = { order = 40 }
+"5" = { order = 50 }
+"6" = { order = 60 }
+"7" = { order = 70 }
+"+" = { order = 80 }
+"R" = { order = 90 }
+"#" = { order = 100, tier = "stated" }
+"|" = { order = 110 }
+"<" = { order = 120, tier = "stated" }
+"@" = { order = 130, tier = "plain" }
+"%" = { order = 140, tier = "plain" }
+"W" = { order = 150 }
+"w" = { order = 160 }
+"x" = { order = 170 }
+"~" = { order = 180 }
+"(" = { order = 190 }
+")" = { order = 200 }
+"$" = { order = 210 }
+"{" = { order = 220, tier = "plain" }
+"}" = { order = 230 }
+"[" = { order = 240 }
+"O" = { order = 250, tier = "plain" }
+"v" = { order = 260 }
+"§" = { order = 270 }
+"A" = { order = 280 }
+"B" = { order = 290 }
+"C" = { order = 300 }
+"T" = { order = 310, tier = "stated" }
+"!" = { order = 320, tier = "stated" }
+"t" = { order = 330 }
+"b" = { order = 340 }
+"U" = { order = 350 }
+"S" = { order = 360 }
+"J" = { order = 370 }
+"P" = { order = 380 }
+
+[signs.czptt_note]
+"10" = { order = 300, tier = "plain" }
+"11" = { order = 310, tier = "plain" }
+"12" = { order = 320, tier = "plain" }
+"13" = { order = 340, tier = "plain" }
+"14" = { order = 350, tier = "plain" }
+"15" = { order = 360 }
+"16" = { order = 370 }
+"17" = { order = 400, tier = "plain" }
+"18" = { order = 410, tier = "plain" }
+"19" = { order = 440 }
+"20" = { order = 450, tier = "stated" }
+"21" = { order = 470 }
+"22" = { order = 500, tier = "plain" }
+"23" = { order = 702, tier = "stated" }
+"24" = { order = 430, tier = "plain" }
+"25" = { order = 420, tier = "plain" }
+"26" = { order = 480 }
+"27" = { order = 490, tier = "stated" }
+"28" = { order = 510, tier = "plain" }
+"29" = { order = 520, tier = "stated" }
+"30" = { order = 540, tier = "plain" }
+"32" = { order = 590, tier = "stated" }
+"33" = { order = 460 }
+"34" = { order = 390, tier = "plain" }
+"35" = { order = 330 }
+"36" = { order = 530, tier = "plain" }
+"37" = { order = 995 }
+"38" = { order = 560 }
+"39" = { order = 550, tier = "plain" }
+"40" = { order = 570, tier = "plain" }
+"41" = { order = 580 }
+"42" = { order = 620 }
+"43" = { order = 690, tier = "stated" }
+"44" = { order = 1000 }
+"45" = { order = 630 }
+"46" = { order = 640, tier = "plain" }

@@ -1,7 +1,7 @@
 import { IconAlertTriangle, IconChevronRight, IconSnowflake } from "@tabler/icons-react";
 import type { Departure } from "../api/client";
 import { timeState } from "../lib/punctuality";
-import { STEP_FREE_LABEL, STEP_FREE_SIGN, stepFree } from "../lib/wheelchair";
+import { STEP_FREE_LABEL, STEP_FREE_SIGN } from "../lib/wheelchair";
 import { LineBadge } from "./LineBadge";
 import { CodeSign } from "./Pictogram";
 import { PlatformBox } from "./PlatformBox";
@@ -27,7 +27,7 @@ export function DepartureRow({
     offline,
   );
   const airConditioned = departure.vehicle?.traits?.air_conditioning === true;
-  const access = stepFree(departure.wheelchair, departure.vehicle?.traits);
+  const access = departure.step_free;
   const hasAlert = (departure.alert_ids?.length ?? 0) > 0;
   return (
     <>

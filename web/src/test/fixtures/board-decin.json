@@ -24,7 +24,8 @@
     "platform": "3",
     "vehicle": null,
     "sources": [],
-    "alert_ids": []
+    "alert_ids": [],
+    "step_free": null
   },
   {
     "trip_id": "czptt:trip:Pa%3A0054%3A--KADR367470%3A01%3A2026:1",
@@ -51,7 +52,8 @@
     "platform": "6",
     "vehicle": null,
     "sources": [],
-    "alert_ids": []
+    "alert_ids": [],
+    "step_free": null
   },
   {
     "trip_id": "czptt:trip:Pa%3A0054%3A--KADR170544%3A01%3A2026:1",
@@ -78,6 +80,7 @@
     "platform": "1",
     "vehicle": null,
     "sources": [],
-    "alert_ids": []
+    "alert_ids": [],
+    "step_free": null
   }
 ]
