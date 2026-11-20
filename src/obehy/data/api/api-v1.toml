@@ -46,6 +46,10 @@ patterns = 20
 max_days = 21
 default_days = 7
 
+[trips]
+# A call without realtime saying so counts as passed this long after its (expected) time.
+passed_after_s = 30
+
 [punctuality]
 # Bands of a delay in shown minutes (expected minus scheduled, each cut to the minute): early up
 # to early_max_min, on time up to on_time_max_min, late up to late_max_min, very late beyond.

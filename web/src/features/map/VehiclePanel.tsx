@@ -9,8 +9,7 @@ import { ago, useNow } from "../../lib/hooks";
 import { usePhone } from "../../lib/layout";
 import { CompositionStrip } from "../trip/CompositionStrip";
 import { TripBody, TripHeader } from "../trip/TripDetail";
-import { useFollowingParts } from "../trip/queries";
-import { isPassed, runCalls } from "../trip/runCalls";
+import { runCalls } from "../trip/runCalls";
 import { useSelection } from "./selection";
 import { follow, setSnap, unfollow } from "./store";
 import tripClasses from "../trip/TripPanel.module.css";
@@ -35,7 +34,6 @@ export function VehiclePanel() {
   const vehicle = known ?? null;
   const navigate = useNavigate();
   const phone = usePhone();
-  const later = useFollowingParts(trip.data);
   const now = useNow(15_000);
 
   const close = () => void navigate({ to: "/" });
@@ -140,14 +138,10 @@ export function VehiclePanel() {
     );
   }
 
-  const calls = runCalls(
-    data,
-    later.map((q) => q.data),
-  );
+  const calls = runCalls(data);
   const stale = Boolean(data.realtime?.stale) || trip.isError;
-  const next = calls.find((c) => !isPassed(c.call, now)) ?? calls.at(-1);
+  const next = calls[data.run?.next ?? data.next_call ?? -1] ?? calls.at(-1);
   const last = calls[calls.indexOf(next!) - 1];
-  const parts = [data, ...later.flatMap((q) => (q.data ? [q.data] : []))];
 
   return (
     <div className={tripClasses.root}>
@@ -157,7 +151,6 @@ export function VehiclePanel() {
       </TripHeader>
       <TripBody
         trip={data}
-        parts={parts}
         calls={calls}
         boarded={undefined}
         aheadFrom={last}

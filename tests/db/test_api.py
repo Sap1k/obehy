@@ -616,6 +616,18 @@ def test_a_rail_part_departs_with_the_run_realtime(client: TestClient) -> None:
         ("czptt:trip:1:2", "2026-10-07T06:16:00+02:00", "2026-10-07T06:19:00+02:00", "predicted")
     ]
     assert (board[0]["delay_min"], board[0]["punctuality"]) == (3, "late")
+    # The run from part 1 on: Zákupy, where part 1 ends and part 2 starts, is one call with
+    # part 2's departure; every call long passed (the 7th is weeks ago).
+    run = _get(client, "/trips/czptt:trip:1:1/2026-10-07", include="run")["run"]
+    at = [c["call"]["location_id"] for c in run["calls"]]
+    assert at.count("czptt:location:CZ54002") == 1
+    zakupy = run["calls"][at.index("czptt:location:CZ54002")]
+    assert (zakupy["trip_id"], zakupy["call"]["scheduled_departure"]) == (
+        "czptt:trip:1:1",
+        "2026-10-07T06:16:00+02:00",
+    )
+    assert run["calls"][-1]["trip_id"] == "czptt:trip:1:2"
+    assert all(c["call"]["passed"] for c in run["calls"]) and run["next"] is None
 
 
 def test_a_trip_with_calls_realtime_features_and_journey_key(client: TestClient) -> None:

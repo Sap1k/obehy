@@ -10,7 +10,7 @@ import { reducedMotion } from "../../lib/motion";
 import { keepInPlace } from "../../lib/scroll";
 import { CLOSED, anchorIndex, collapse, type Opened } from "../../lib/timetable";
 import { formatClock } from "../../lib/time";
-import { callTimes, isPassed, type RunCall } from "./runCalls";
+import { callTimes, type RunCall } from "./runCalls";
 import { foldAway, unfold } from "./timetableMotion";
 import classes from "./Timetable.module.css";
 
@@ -28,13 +28,11 @@ function stopsWord(n: number): string {
 export function Timetable({
   calls,
   boarded,
-  now,
   stale,
 }: {
   calls: RunCall[];
   /** The index of the call one boards at. */
   boarded: number | undefined;
-  now: number;
   stale: boolean;
 }) {
   const [open, setOpen] = useState<Opened>(CLOSED);
@@ -87,7 +85,7 @@ export function Timetable({
     const added = rows().filter((r) => r.dataset.range && !change.shown.has(r.dataset.row!));
     unfold(added, change.expanderPx);
   }, [open]);
-  const passed = calls.map((c) => isPassed(c.call, now));
+  const passed = calls.map((c) => c.call.passed);
   const anchor = anchorIndex(passed, boarded);
   const next = passed.findIndex((p) => !p);
   const plan = collapse(calls.length, anchor, open);
@@ -104,7 +102,7 @@ export function Timetable({
     if (!item) return null;
     return (
       <Stop
-        key={`${item.tripId}/${item.call.sequence}`}
+        key={`${item.trip_id}/${item.call.sequence}`}
         item={item}
         state={passed[i] ? "passed" : i === next ? "next" : "upcoming"}
         first={i === 0}
@@ -198,7 +196,7 @@ function Stop({
   /** The hidden range the call is in, which opens and closes it (timetableMotion.ts). */
   range: "before" | "middle" | undefined;
 }) {
-  const key = `${item.tripId}/${item.call.sequence}`;
+  const key = `${item.trip_id}/${item.call.sequence}`;
   const { call } = item;
   const { scheduled, estimated } = callTimes(call);
   const time = scheduled
@@ -208,7 +206,7 @@ function Stop({
   const requestStop = call.flags.includes("request_stop");
   return (
     <>
-      {item.continuesAs && (
+      {item.continues_as && (
         <li className={classes.continuation} data-row={`${key}:then`} data-range={range}>
           <span className={classes.rail} aria-hidden>
             <span className={classes.line} />
@@ -216,7 +214,7 @@ function Stop({
           <span className={classes.continuationText}>
             <IconCornerDownRight size={14} stroke={2} aria-hidden />
             Dále jako
-            <LineBadge line={item.continuesAs} size="sm" />
+            <LineBadge line={item.continues_as} size="sm" />
           </span>
         </li>
       )}

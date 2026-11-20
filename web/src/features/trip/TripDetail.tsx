@@ -2,18 +2,17 @@ import { Collapse, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronRight, IconChevronUp, IconClock } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import type { Alert, Trip, TripVehicle } from "../../api/client";
+import type { Trip, TripVehicle } from "../../api/client";
 import { AlertBanner } from "../../components/AlertBanner";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { CodeSign } from "../../components/Pictogram";
-import { tripAlerts } from "../../lib/alerts";
 import { timeState } from "../../lib/punctuality";
 import { linkify } from "../../lib/linkify";
 import { usePersistentFlag } from "../../lib/storage";
 import { HistoryLink } from "./History";
 import { Timetable } from "./Timetable";
 import { noteGroups, type MarkedNote } from "./notes";
-import { callTimes, isPassed, type RunCall } from "./runCalls";
+import { callTimes, type RunCall } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
 // A trip's detail, shared by the board's trip panel and the map's vehicle panel: the header
@@ -63,7 +62,6 @@ export function TripHeader({
 
 export function TripBody({
   trip,
-  parts,
   calls,
   boarded,
   aheadFrom,
@@ -72,8 +70,6 @@ export function TripBody({
   stopId,
 }: {
   trip: Trip;
-  /** The trip and the run's parts after it that are loaded. */
-  parts: Trip[];
   calls: RunCall[];
   /** The call one boards at, which anchors the timetable. */
   boarded: RunCall | undefined;
@@ -84,37 +80,23 @@ export function TripBody({
   /** The board the trip is open on; connections link to trips on it. */
   stopId?: string;
 }) {
-  // The run's alerts: its parts' own and lines', and severe ones of the stops still ahead of
-  // where one boards (the boarded stop's are on the board one came from).
-  const ahead = calls
-    .slice(aheadFrom ? calls.indexOf(aheadFrom) + 1 : 0)
-    .filter((c) => !isPassed(c.call, now))
-    .map((c) => c.call);
-  const alerts = tripAlerts(
-    [...new Map(parts.flatMap((p) => p.alerts).map((a) => [a.alert_id, a])).values()],
-    { routeIds: parts.map((p) => p.line.route_id), tripIds: parts.map((p) => p.trip_id), ahead },
-  );
-  const alertContext = (alert: Alert, stopName: string | null) => {
-    if (stopName) return `Zastávka ${stopName}`;
-    const part =
-      parts.find((p) =>
-        alert.informs.some(
-          (t) =>
-            (t.kind === "trip" && t.id === p.trip_id) ||
-            (t.kind === "route" && t.id === p.line.route_id),
-        ),
-      ) ?? trip;
-    return `Linka ${lineLabel(part.line, part.trip_short_name)}`;
-  };
+  // The run's alerts (the API's): its parts' own and lines', and the severe ones of stops still
+  // ahead, here only those after where one boards (the boarded stop's are on its board).
+  const after = aheadFrom ? calls.indexOf(aheadFrom) : -1;
+  const alerts = (trip.run?.alerts ?? []).filter((a) => a.call === null || a.call > after);
 
   return (
     <>
-      {alerts.map(({ alert, stopName }) => (
+      {alerts.map((a) => (
         <AlertBanner
-          key={alert.alert_id}
-          alert={alert}
+          key={a.alert.alert_id}
+          alert={a.alert}
           now={now}
-          context={alertContext(alert, stopName)}
+          context={
+            a.call === null
+              ? `Linka ${lineLabel(a.line, a.trip_short_name)}`
+              : `Zastávka ${calls[a.call]?.call.name ?? ""}`
+          }
         />
       ))}
 
@@ -123,12 +105,7 @@ export function TripBody({
           <h3 className={classes.sectionTitle}>Jízdní řád</h3>
           <HistoryLink tripId={trip.trip_id} stopId={stopId} />
         </div>
-        <Timetable
-          calls={calls}
-          boarded={boarded && calls.indexOf(boarded)}
-          now={now}
-          stale={stale}
-        />
+        <Timetable calls={calls} boarded={boarded && calls.indexOf(boarded)} stale={stale} />
       </section>
 
       <Notes trip={trip} />

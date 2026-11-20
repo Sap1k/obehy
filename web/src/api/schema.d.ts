@@ -2078,6 +2078,39 @@ export interface components {
             vehicle_id: string;
         };
         /**
+         * RunAlert
+         * @description An alert a run shows: its parts' own and their lines', and the severe ones of its stops
+         *     still ahead (a stop's others are on its board).
+         */
+        RunAlert: {
+            alert: components["schemas"]["Alert"];
+            /**
+             * Call
+             * @description For a stop's alert, the index in `run.calls` of the call it is shown at (the first not passed there); null for a part's or its line's
+             */
+            call: number | null;
+            /** @description The part's line it concerns (the trip's for a stop's) */
+            line: components["schemas"]["Line"];
+            /** Trip Short Name */
+            trip_short_name: string | null;
+        };
+        /**
+         * RunCall
+         * @description A call of a rail run: this trip's, then those of the parts it goes on as. Where a part
+         *     starts at the stop the previous one ends at, the two are one call with the later part's
+         *     departure.
+         */
+        RunCall: {
+            call: components["schemas"]["TripCall"];
+            /** @description On the first call of a later part on another line: the line it goes on as */
+            continues_as: components["schemas"]["Line"] | null;
+            /**
+             * Trip Id
+             * @description The part the call is of
+             */
+            trip_id: string;
+        };
+        /**
          * ScopeAgency
          * @description A company whose lines a source's vehicles worked, and in which modes.
          */
@@ -2480,6 +2513,11 @@ export interface components {
             line: components["schemas"]["Line"];
             /** Links */
             links: components["schemas"]["JourneyLink"][];
+            /**
+             * Next Call
+             * @description Index in `calls` of the first not passed
+             */
+            next_call: number | null;
             /** Notes */
             notes: components["schemas"]["Note"][];
             realtime: components["schemas"]["TripRealtime"] | null;
@@ -2488,6 +2526,8 @@ export interface components {
              * @description The active release the answer was read from.
              */
             release_id: string;
+            /** @description With `include=run`: the run from this trip on, its later parts' calls merged in, and the run's alerts */
+            run?: components["schemas"]["TripRun"] | null;
             /**
              * Run Parts
              * @description All parts of a rail run on the date, in order.
@@ -2548,6 +2588,11 @@ export interface components {
             longitude: number | null;
             /** Name */
             name: string;
+            /**
+             * Passed
+             * @description The vehicle has left it: as realtime says, else once its expected time is behind (`[trips] passed_after_s`); a cancelled call never is
+             */
+            passed: boolean;
             /** Platform */
             platform: string | null;
             /**
@@ -2663,6 +2708,18 @@ export interface components {
             service_date: string;
             /** Trip Id */
             trip_id: string;
+        };
+        /** TripRun */
+        TripRun: {
+            /** Alerts */
+            alerts: components["schemas"]["RunAlert"][];
+            /** Calls */
+            calls: components["schemas"]["RunCall"][];
+            /**
+             * Next
+             * @description Index of the first call not passed
+             */
+            next: number | null;
         };
         /**
          * TripVehicle
@@ -4122,7 +4179,7 @@ export interface operations {
     trip_api_v1_trips__trip_id___service_date__get: {
         parameters: {
             query?: {
-                /** @description `shape` adds the GeoJSON path */
+                /** @description Comma-separated: `shape` adds the GeoJSON path, `run` the whole run */
                 include?: string | null;
             };
             header?: never;

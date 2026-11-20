@@ -3702,6 +3702,80 @@
         "title": "RegistryEntry",
         "type": "object"
       },
+      "RunAlert": {
+        "description": "An alert a run shows: its parts' own and their lines', and the severe ones of its stops\nstill ahead (a stop's others are on its board).",
+        "properties": {
+          "alert": {
+            "$ref": "#/components/schemas/Alert"
+          },
+          "call": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a stop's alert, the index in `run.calls` of the call it is shown at (the first not passed there); null for a part's or its line's",
+            "title": "Call"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line",
+            "description": "The part's line it concerns (the trip's for a stop's)"
+          },
+          "trip_short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Short Name"
+          }
+        },
+        "required": [
+          "alert",
+          "call",
+          "line",
+          "trip_short_name"
+        ],
+        "title": "RunAlert",
+        "type": "object"
+      },
+      "RunCall": {
+        "description": "A call of a rail run: this trip's, then those of the parts it goes on as. Where a part\nstarts at the stop the previous one ends at, the two are one call with the later part's\ndeparture.",
+        "properties": {
+          "call": {
+            "$ref": "#/components/schemas/TripCall"
+          },
+          "continues_as": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Line"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "On the first call of a later part on another line: the line it goes on as"
+          },
+          "trip_id": {
+            "description": "The part the call is of",
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "continues_as",
+          "call"
+        ],
+        "title": "RunCall",
+        "type": "object"
+      },
       "ScopeAgency": {
         "description": "A company whose lines a source's vehicles worked, and in which modes.",
         "properties": {
@@ -4718,6 +4792,18 @@
             "title": "Links",
             "type": "array"
           },
+          "next_call": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Index in `calls` of the first not passed",
+            "title": "Next Call"
+          },
           "notes": {
             "items": {
               "$ref": "#/components/schemas/Note"
@@ -4739,6 +4825,17 @@
             "description": "The active release the answer was read from.",
             "title": "Release Id",
             "type": "string"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TripRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `include=run`: the run from this trip on, its later parts' calls merged in, and the run's alerts"
           },
           "run_parts": {
             "description": "All parts of a rail run on the date, in order.",
@@ -4818,6 +4915,7 @@
           "run_parts",
           "composition",
           "calls",
+          "next_call",
           "features",
           "notes",
           "connections",
@@ -4923,6 +5021,11 @@
             "title": "Name",
             "type": "string"
           },
+          "passed": {
+            "description": "The vehicle has left it: as realtime says, else once its expected time is behind (`[trips] passed_after_s`); a cancelled call never is",
+            "title": "Passed",
+            "type": "boolean"
+          },
           "platform": {
             "anyOf": [
               {
@@ -5020,7 +5123,8 @@
           "status",
           "source_class",
           "delay_min",
-          "punctuality"
+          "punctuality",
+          "passed"
         ],
         "title": "TripCall",
         "type": "object"
@@ -5216,6 +5320,43 @@
           "service_date"
         ],
         "title": "TripRef",
+        "type": "object"
+      },
+      "TripRun": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/RunAlert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/RunCall"
+            },
+            "title": "Calls",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Index of the first call not passed",
+            "title": "Next"
+          }
+        },
+        "required": [
+          "calls",
+          "next",
+          "alerts"
+        ],
+        "title": "TripRun",
         "type": "object"
       },
       "TripVehicle": {
@@ -8375,7 +8516,7 @@
             }
           },
           {
-            "description": "`shape` adds the GeoJSON path",
+            "description": "Comma-separated: `shape` adds the GeoJSON path, `run` the whole run",
             "in": "query",
             "name": "include",
             "required": false,
@@ -8388,7 +8529,7 @@
                   "type": "null"
                 }
               ],
-              "description": "`shape` adds the GeoJSON path",
+              "description": "Comma-separated: `shape` adds the GeoJSON path, `run` the whole run",
               "title": "Include"
             }
           }

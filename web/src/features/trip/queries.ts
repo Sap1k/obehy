@@ -1,4 +1,4 @@
-import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, unwrap, type Trip } from "../../api/client";
 import { POLL_MS } from "../board/queries";
 import { addDays, dayKey } from "../../lib/time";
@@ -14,7 +14,7 @@ function fetchTrip(tripId: string, date: string, shape: boolean, signal: AbortSi
   return api.GET("/api/v1/trips/{trip_id}/{service_date}", {
     params: {
       path: { trip_id: tripId, service_date: date },
-      query: shape ? { include: "shape" } : {},
+      query: { include: shape ? "shape" : "run" },
     },
     signal,
   });
@@ -65,16 +65,6 @@ export function pathsOf(shape: unknown): [number, number][][] {
   if (g?.type === "LineString") return [g.coordinates as [number, number][]];
   if (g?.type === "MultiLineString") return g.coordinates as [number, number][][];
   return [];
-}
-
-/** The parts of the run after this trip (the same train going on as another line), in order. */
-export function useFollowingParts(trip: Trip | undefined) {
-  const parts = trip?.run_parts ?? [];
-  const at = trip ? parts.findIndex((p) => p.trip_id === trip.trip_id) : -1;
-  const following = at >= 0 ? parts.slice(at + 1) : [];
-  return useQueries({
-    queries: following.map((p) => tripQuery(p.trip_id, trip?.service_date ?? "")),
-  });
 }
 
 /** How many `pending` answers the strip waits through (about a minute at the API's 3 s) before

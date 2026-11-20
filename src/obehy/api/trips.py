@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Annotated
 from urllib.parse import quote
 
@@ -68,8 +68,31 @@ def trip_by_key(
     return RedirectResponse(trip_path(found.trip_id, service_date), status_code=308)
 
 
+def _passed(row: DictRow, last: bool, now: datetime, after: timedelta) -> bool:
+    """Whether the vehicle has left the call: realtime says so, else its expected (or
+    scheduled) time is `after` behind; a cancelled call never is."""
+
+    if row["status"] == "cancelled":
+        return False
+    if row["status"] == "actual" or row["live_passed"]:
+        return True
+    scheduled, estimated = punctuality.rider_time(
+        (row["scheduled_arrival"], row["estimated_arrival"]),
+        (row["scheduled_departure"], row["estimated_departure"]),
+        last=last,
+    )
+    at = estimated or scheduled
+    return at is not None and at < now - after
+
+
 def trip_call(
-    row: DictRow, features: list[schema.Feature], *, first: bool, last: bool, stale: bool
+    row: DictRow,
+    features: list[schema.Feature],
+    *,
+    first: bool,
+    last: bool,
+    stale: bool,
+    passed: bool,
 ) -> schema.TripCall:
     codes = load_codes()
     boarding = codes.boarding_of(row["pickup_type"])
@@ -102,7 +125,14 @@ def trip_call(
                 stale=stale,
             )
         ),
+        passed=passed,
     )
+
+
+def next_call(calls: list[schema.TripCall]) -> int | None:
+    """The index of the first call not passed."""
+
+    return next((n for n, c in enumerate(calls) if not c.passed), None)
 
 
 def trip_realtime(row: DictRow) -> schema.TripRealtime:
@@ -319,6 +349,9 @@ def assemble(snap: Snapshot, limits: Limits, trip: TripOnDate) -> Assembled:
                 first=n == 0,
                 last=n == len(calls) - 1,
                 stale=realtime is not None and realtime.stale,
+                passed=_passed(
+                    c, n == len(calls) - 1, snap.now, timedelta(seconds=limits.passed_after_s)
+                ),
             )
             for n, c in enumerate(calls)
         ],
@@ -336,6 +369,120 @@ def assemble(snap: Snapshot, limits: Limits, trip: TripOnDate) -> Assembled:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class RunPart:
+    """A part of a run as its alerts are told apart: its trip, line and alerts."""
+
+    trip_id: str
+    route_id: str
+    line: schema.Line
+    trip_short_name: str | None
+    alerts: list[schema.Alert]
+
+
+def run_alerts(
+    calls: list[schema.RunCall], ahead: int | None, parts: list[RunPart]
+) -> list[schema.RunAlert]:
+    """The alerts a run shows: one informing a part or its line, with that part's line; and a
+    stop's (the severe ones a trip is sent) at the first call still ahead there (from `ahead`,
+    not passed), else not at all."""
+
+    routes = {(p.route_id): p for p in parts}
+    trips = {p.trip_id: p for p in parts}
+    shown: dict[str, schema.RunAlert] = {}
+    for part in parts:
+        for alert in part.alerts:
+            if alert.alert_id in shown:
+                continue
+            ours = next(
+                (
+                    trips.get(t.id) if t.kind == "trip" else routes.get(t.id)
+                    for t in alert.informs
+                    if (t.kind == "trip" and t.id in trips)
+                    or (t.kind == "route" and t.id in routes)
+                ),
+                None,
+            )
+            if ours is not None:
+                shown[alert.alert_id] = schema.RunAlert(
+                    alert=alert, call=None, line=ours.line, trip_short_name=ours.trip_short_name
+                )
+                continue
+            stops = {t.id for t in alert.informs if t.kind == "stop"} | {
+                t.stop_place for t in alert.informs if t.kind == "stop" and t.stop_place
+            }
+            at = next(
+                (
+                    n
+                    for n in range(len(calls) if ahead is None else ahead, len(calls))
+                    if calls[n].call.location_id in stops and not calls[n].call.passed
+                ),
+                None,
+            )
+            if at is not None:
+                shown[alert.alert_id] = schema.RunAlert(
+                    alert=alert, call=at, line=part.line, trip_short_name=part.trip_short_name
+                )
+    return list(shown.values())
+
+
+def _run(
+    snap: Snapshot,
+    limits: Limits,
+    trip: TripOnDate,
+    shown: Assembled,
+    parts: list[DictRow],
+) -> schema.TripRun:
+    """The run from this trip on: its calls, then each later part's, a part starting where the
+    previous one ends merged into its last call (with the later departure); and the alerts the
+    run shows (its parts' own and their lines', and the severe ones of its stops still ahead,
+    each at the call it is shown at)."""
+
+    ids = [p["trip_id"] for p in parts]
+    later = ids[ids.index(trip.trip_id) + 1 :] if trip.trip_id in ids else []
+    pieces: list[tuple[TripOnDate, Assembled]] = [(trip, shown)]
+    for trip_id in later:
+        part = trip_on(snap, trip_id, trip.service_date)
+        if part is None or not part.runs:
+            break
+        pieces.append((part, assemble(snap, limits, part)))
+    calls: list[schema.RunCall] = []
+    for n, (part, assembled) in enumerate(pieces):
+        own = assembled.calls
+        if n > 0 and calls and own and calls[-1].call.location_id == own[0].location_id:
+            last, first = calls[-1].call, own[0]
+            calls[-1] = calls[-1].model_copy(
+                update={
+                    "call": last.model_copy(
+                        update={
+                            "scheduled_departure": first.scheduled_departure,
+                            "estimated_departure": first.estimated_departure,
+                            "platform": last.platform or first.platform,
+                            "passed": first.passed,
+                        }
+                    )
+                }
+            )
+            own = own[1:]
+        changes = line(assembled.row).route_id != line(shown.row).route_id
+        calls.extend(
+            schema.RunCall(
+                trip_id=part.trip_id,
+                continues_as=line(assembled.row) if i == 0 and changes else None,
+                call=call,
+            )
+            for i, call in enumerate(own)
+        )
+    first_ahead = next_call([c.call for c in calls])
+    shown_parts = [
+        RunPart(p.trip_id, a.row["route_id"], line(a.row), a.row["trip_short_name"], a.alerts)
+        for p, a in pieces
+    ]
+    return schema.TripRun(
+        calls=calls, next=first_ahead, alerts=run_alerts(calls, first_ahead, shown_parts)
+    )
+
+
 @router.get(
     "/trips/{trip_id}/{service_date}",
     response_model=schema.Trip,
@@ -348,8 +495,12 @@ def trip(
     limits: LimitsDep,
     trip_id: str,
     service_date: date,
-    include: Annotated[str | None, Query(description="`shape` adds the GeoJSON path")] = None,
+    include: Annotated[
+        str | None,
+        Query(description="Comma-separated: `shape` adds the GeoJSON path, `run` the whole run"),
+    ] = None,
 ) -> schema.Trip | JSONResponse:
+    included = {part.strip() for part in (include or "").split(",") if part.strip()}
     realtime_cache(response, limits)
     found = trip_on(snap, trip_id, service_date)
     if found is None:
@@ -386,7 +537,7 @@ def trip(
         )
     )
     shape = None
-    if include == "shape" and row["shape_id"] is not None:
+    if "shape" in included and row["shape_id"] is not None:
         geometry = snap.one("trip_shape", {"shape_id": row["shape_id"]})
         shape = None if geometry is None else geometry["geometry"]
     return schema.Trip(
@@ -407,6 +558,8 @@ def trip(
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
         composition=shown.composition,
         calls=shown.calls,
+        next_call=next_call(shown.calls),
+        run=_run(snap, limits, found, shown, parts) if "run" in included else None,
         features=shown.features,
         notes=[f.note for f in shown.features if f.note is not None],
         connections=[

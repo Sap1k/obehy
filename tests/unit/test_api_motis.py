@@ -88,6 +88,7 @@ def _call(sequence: int, location: str) -> TripCall:
         source_class=None,
         delay_min=None,
         punctuality="unknown",
+        passed=False,
     )
 
 

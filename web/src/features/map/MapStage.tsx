@@ -3,11 +3,9 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useComputedColorScheme } from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNow } from "../../lib/hooks";
 import { usePhone } from "../../lib/layout";
 import { rememberPosition } from "../../lib/position";
 import { sheetHeights } from "../../lib/sheet";
-import { isPassed } from "../trip/runCalls";
 import { hexColour } from "./badges";
 import { focusOf, type LngLat } from "./camera";
 import { MapController, type MapInput } from "./controller";
@@ -32,7 +30,6 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
   const phone = usePhone();
   const navigate = useNavigate();
   const dark = useComputedColorScheme("light") === "dark";
-  const now = useNow(5000);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   // Bumped to build the map anew (its WebGL context was lost, or it failed).
@@ -70,12 +67,12 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
       (c) => c.latitude !== null && c.longitude !== null && c.boarding !== "none",
     );
     const names = stopLabels(calls.map((c) => c.name));
-    const next = calls.findIndex((c) => !isPassed(c, now));
+    const next = calls.findIndex((c) => !c.passed);
     const stops = calls.map((c, i) => ({
       id: c.location_id,
       position: [c.longitude!, c.latitude!] as [number, number],
       name: names[i]!,
-      passed: isPassed(c, now),
+      passed: c.passed,
       rank:
         c.location_id === boardStop || i === next
           ? RANK.focus
@@ -84,7 +81,7 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
             : RANK.other,
     }));
     return { paths: paths ?? [], stops, colour: hexColour(tripData.line.color, "#153438") };
-  }, [tripData, paths, now, boardStop]);
+  }, [tripData, paths, boardStop]);
 
   const input: MapInput = {
     dark,

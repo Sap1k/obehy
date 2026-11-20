@@ -32,6 +32,7 @@ class Limits:
     line_patterns: int
     history_max_days: int
     history_default_days: int
+    passed_after_s: int
     early_max_min: int
     on_time_max_min: int
     late_max_min: int
@@ -87,6 +88,7 @@ def load_limits(path: Path = LIMITS) -> Limits:
         line_patterns=int(lines["patterns"]),
         history_max_days=int(history["max_days"]),
         history_default_days=int(history["default_days"]),
+        passed_after_s=int(table("trips")["passed_after_s"]),
         early_max_min=int(punctuality["early_max_min"]),
         on_time_max_min=int(punctuality["on_time_max_min"]),
         late_max_min=int(punctuality["late_max_min"]),

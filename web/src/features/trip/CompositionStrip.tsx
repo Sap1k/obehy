@@ -34,7 +34,6 @@ import {
   type Ends,
 } from "./composition";
 import { useComposition } from "./queries";
-import { isPassed } from "./runCalls";
 import classes from "./CompositionStrip.module.css";
 import panel from "./TripPanel.module.css";
 
@@ -123,7 +122,7 @@ export function CompositionStrip({
   }
   if (data.status === "not_available" || data.segments.length === 0) return null;
 
-  const at = ours ? boarded.sequence : trip.calls.find((c) => !isPassed(c, now))?.sequence;
+  const at = ours ? boarded.sequence : trip.calls[trip.next_call ?? -1]?.sequence;
   // Segments running the same train are shown as one; of its members, the one where the rider
   // is gives the order shown.
   const shown = shownSegments(data);

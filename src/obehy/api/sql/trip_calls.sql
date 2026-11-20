@@ -18,7 +18,8 @@ SELECT c.sequence, c.location_id, l.name,
        (v.call ->> 'estimated_arrival')::timestamptz AS estimated_arrival,
        (v.call ->> 'estimated_departure')::timestamptz AS estimated_departure,
        coalesce(v.call ->> 'status', 'scheduled') AS status,
-       v.call ->> 'source_class' AS source_class
+       v.call ->> 'source_class' AS source_class,
+       coalesce((v.call ->> 'passed')::boolean, false) AS live_passed
 FROM active.trip_call c
 JOIN active.location l ON l.location_id = c.location_id
 LEFT JOIN active.location bp ON bp.location_id = c.boarding_point_id

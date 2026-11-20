@@ -7,7 +7,7 @@ import { VehicleCard } from "../../components/VehicleCard";
 import { useNow } from "../../lib/hooks";
 import { CompositionStrip } from "./CompositionStrip";
 import { CirculationLinks, TripBody, TripHeader } from "./TripDetail";
-import { useFollowingParts, useTrip } from "./queries";
+import { useTrip } from "./queries";
 import { boardedCall, runCalls } from "./runCalls";
 import classes from "./TripPanel.module.css";
 
@@ -19,7 +19,6 @@ export function TripPanel() {
   const navigate = useNavigate();
   // The map shows the same trip (it reads the route too) and selects its vehicle.
   const trip = useTrip(tripId, date, true);
-  const following = useFollowingParts(trip.data);
   const now = useNow(15_000);
 
   const close = () =>
@@ -81,14 +80,10 @@ export function TripPanel() {
   }
 
   const data = trip.data;
-  const calls = runCalls(
-    data,
-    following.map((q) => q.data),
-  );
+  const calls = runCalls(data);
   const stale = Boolean(data.realtime?.stale) || trip.isError;
-  const boarded = boardedCall(calls, data.trip_id, search.od, search.poradi, now);
+  const boarded = boardedCall(calls, data.trip_id, search.od, search.poradi);
   const from = boarded ?? calls[0];
-  const parts = [data, ...following.flatMap((q) => (q.data ? [q.data] : []))];
   const vehicle = data.vehicles[0];
 
   return (
@@ -97,7 +92,6 @@ export function TripPanel() {
       <TripHeader trip={data} at={from} stale={stale} />
       <TripBody
         trip={data}
-        parts={parts}
         calls={calls}
         boarded={boarded}
         aheadFrom={from}
