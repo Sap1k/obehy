@@ -313,6 +313,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-21** — The realtime index loads only trips that run on its loaded dates. A key names
+  every variant in the timetable year, and the worker used to load them all: on SŽ at noon
+  23,260 trips for 1,220 live journeys, about 3x a fresh process's index, which is how the
+  worker's memory grew to about twice a restarted one's. Now each named trip's service is
+  recorded and the variant loads when a date it runs on is (`Index.trip_services`,
+  `running_trip`); 5,353 trips, Python heap 466 -> 212 MB. Validated: replays of SŽ
+  2026-10-10 18:00 to 10-11 08:00 and PID 2026-10-15 06:00-08:00 give identical reports and
+  byte-identical GTFS-RT; unit, golden, index parity and replay DB tests pass. Not yet seen on
+  the production worker. `gc.freeze()` was ruled out (no cycles in a dropped runtime).
+
 - **2026-11-20** — Client logic moved into the API (cleanup phase 5). Calls say whether they are
   passed and trips their next call; `include=run` merges a rail run's later parts and lists the
   alerts it shows (the web no longer fetches each part). Compositions come with stretches, cab

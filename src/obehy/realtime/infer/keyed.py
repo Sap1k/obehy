@@ -81,8 +81,8 @@ def running(
         for entry in entries:
             if not entry.valid_on(day):
                 continue
-            trip = index.trip(entry.public_id)
-            if index.runs_on(trip.service_id, day):
+            trip = index.running_trip(entry.public_id, day)
+            if trip is not None:
                 yield day, trip
 
 

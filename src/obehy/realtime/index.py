@@ -155,6 +155,11 @@ class IndexView(Protocol):
 
     def runs_on(self, service_id: str, day: date) -> bool: ...
 
+    def running_trip(self, trip_id: str, day: date) -> Trip | None:
+        """The trip if it runs on `day`, else None; a trip that does not run need not be
+        loaded."""
+        ...
+
     def location(self, location_id: str) -> Location: ...
 
     def shape(self, shape_id: str) -> Shape: ...
@@ -193,6 +198,9 @@ class Index:
     shapes: dict[str, Shape] = field(default_factory=dict[str, Shape])
     # Rail: the trip parts of each loaded run (PA), in `run_part` order.
     runs: dict[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
+    # The service of every trip a loaded key or run names, loaded or not: only trips that run
+    # on a loaded date are loaded, the others when a date they run on is.
+    trip_services: dict[str, str] = field(default_factory=dict[str, str])
     # Location source keys: by location and namespace, and the locations each key names.
     location_keys: dict[str, dict[str, str]] = field(default_factory=dict[str, dict[str, str]])
     keyed: dict[KeyRef, tuple[str, ...]] = field(default_factory=dict[KeyRef, tuple[str, ...]])
@@ -220,6 +228,21 @@ class Index:
         if day not in self.loaded_dates:
             raise IndexMiss(f"service dates for {day} were not loaded")
         return day in self.service_dates.get(service_id, frozenset())
+
+    def running_trip(self, trip_id: str, day: date) -> Trip | None:
+        service_id = self.trip_services.get(trip_id)
+        if service_id is None:
+            service_id = self.trip(trip_id).service_id
+        return self.trip(trip_id) if self.runs_on(service_id, day) else None
+
+    def dormant(self, days: frozenset[date]) -> list[str]:
+        """The trips named but not loaded that run on one of `days`."""
+
+        return sorted(
+            trip_id
+            for trip_id, service_id in self.trip_services.items()
+            if trip_id not in self.trips and self.service_dates.get(service_id, frozenset()) & days
+        )
 
     def location(self, location_id: str) -> Location:
         try:
@@ -259,6 +282,8 @@ class Index:
         Kept: the keys `refs`, their parents and the trip keys of the kept `lines`; their trips,
         the trips `trip_ids` (live journeys, run trips included), every part of a kept trip's
         run; and those trips' shapes, locations and service dates, for dates from `since` on.
+        The services of the kept keys' and runs' trips not loaded are kept too, so a date
+        loaded later finds the ones that run on it.
         Whatever is dropped reloads when an observation names it again (the loader loads what
         is not in the index). Location source keys (one per station) are kept: they are few."""
 
@@ -274,12 +299,15 @@ class Index:
         kept_runs = {run: self.runs[run] for run in runs if run is not None and run in self.runs}
         trips |= {t for parts in kept_runs.values() for t in parts if t in self.trips}
         kept_trips = {t: self.trips[t] for t in trips}
+        named |= {t for parts in kept_runs.values() for t in parts}
+        trip_services = {t: s for t, s in self.trip_services.items() if t in named}
         dates = frozenset(d for d in self.loaded_dates if d >= since)
-        services = {trip.service_id for trip in kept_trips.values()}
+        services = {trip.service_id for trip in kept_trips.values()} | set(trip_services.values())
         self.key_entries = key_entries
         self.lines = kept_lines
         self.trips = kept_trips
         self.runs = kept_runs
+        self.trip_services = trip_services
         self.shapes = {
             trip.shape_id: self.shapes[trip.shape_id]
             for trip in kept_trips.values()
@@ -306,8 +334,7 @@ class Index:
             part_ids = self.runs[trip.run_key]
         except KeyError:
             raise IndexMiss(f"run {trip.run_key} was not loaded") from None
-        parts = [self.trip(t) for t in part_ids]
-        running = [p for p in parts if self.runs_on(p.service_id, day)] or [trip]
+        running = [p for t in part_ids if (p := self.running_trip(t, day)) is not None] or [trip]
         numbers = [p.run_part for p in running]
         if len(set(numbers)) != len(numbers):
             # Two versions of one part running the same day: no run is built, the binding is

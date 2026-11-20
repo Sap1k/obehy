@@ -119,8 +119,9 @@ class Rows(Protocol):
     (`SqlRows`) or from a release directory's serving files (`index_files.FileRows`)."""
 
     def keys(self, namespaces: list[str], identifiers: list[str]) -> list[Row]:
-        """(namespace, identifier, public_id, entity_kind, valid_from, valid_to) of each
-        (namespace, identifier) pair, ordered by key, public ID and validity."""
+        """(namespace, identifier, public_id, entity_kind, valid_from, valid_to, service_id) of
+        each (namespace, identifier) pair, ordered by key, public ID and validity; the service
+        is the trip's (None for a key naming a route)."""
         ...
 
     def line_keys(self, namespace: str, lines: list[str]) -> list[Row]:
@@ -138,7 +139,7 @@ class Rows(Protocol):
         ...
 
     def run_parts(self, run_keys: list[str]) -> list[Row]:
-        """(run_key, trip_id) of each run's parts, in `run_part` order."""
+        """(run_key, trip_id, service_id) of each run's parts, in `run_part` order."""
         ...
 
     def station_keys(self, location_ids: list[str]) -> list[Row]:
@@ -176,9 +177,12 @@ class SqlRows:
     def keys(self, namespaces: list[str], identifiers: list[str]) -> list[Row]:
         return self._rows_first(
             "SELECT k.namespace, k.identifier, k.public_id, k.entity_kind, k.valid_from,"
-            " k.valid_to FROM static.source_key k"
+            " k.valid_to, t.service_id FROM static.source_key k"
             " JOIN unnest(%s::text[], %s::text[]) AS w (namespace, identifier)"
-            " USING (namespace, identifier) WHERE k.load_id = %s"
+            " USING (namespace, identifier)"
+            " LEFT JOIN static.trip t ON k.entity_kind = 'trip'"
+            " AND t.load_id = k.load_id AND t.trip_id = k.public_id"
+            " WHERE k.load_id = %s"
             " ORDER BY 1, 2, 3, 5",
             namespaces,
             identifiers,
@@ -222,7 +226,7 @@ class SqlRows:
 
     def run_parts(self, run_keys: list[str]) -> list[Row]:
         return self._rows_first(
-            "SELECT run_key, trip_id FROM static.trip"
+            "SELECT run_key, trip_id, service_id FROM static.trip"
             " WHERE run_key = ANY(%s) AND load_id = %s ORDER BY run_key, run_part, trip_id",
             run_keys,
         )
@@ -327,30 +331,54 @@ class IndexLoader:
             wanted |= self._line_keys(new_lines)
         missing = self.index.missing(wanted)
         new_dates = set(dates) - self.index.loaded_dates
+        if new_dates:
+            services = {*self.index.service_dates, *self.index.trip_services.values()}
+            self._load_dates(services, new_dates, extend=True)
+            woken = self.index.dormant(frozenset(new_dates))
+            if woken:
+                self._load_trips(woken)
         if missing:
             self._load_keys(missing)
-        if new_dates:
-            self._load_dates(self.index.service_dates.keys(), new_dates, extend=True)
         return self.index
 
     def _load_keys(self, refs: set[KeyRef]) -> None:
         ordered = sorted(refs)
         found: dict[KeyRef, list[KeyEntry]] = defaultdict(list)
-        kinds: dict[str, str] = {}
-        for namespace, identifier, public_id, kind, valid_from, valid_to in self.rows.keys(
-            [ref[0] for ref in ordered], [ref[1] for ref in ordered]
-        ):
+        services: dict[str, str] = {}
+        for (
+            namespace,
+            identifier,
+            public_id,
+            kind,
+            valid_from,
+            valid_to,
+            service_id,
+        ) in self.rows.keys([ref[0] for ref in ordered], [ref[1] for ref in ordered]):
             found[(namespace, identifier)].append(KeyEntry(public_id, valid_from, valid_to))
-            kinds[public_id] = kind
+            if kind == "trip" and service_id is not None:
+                services[public_id] = service_id
         for ref in ordered:
             self.index.key_entries[ref] = tuple(found.get(ref, ()))
-        trips = sorted(
-            public_id
-            for public_id, kind in kinds.items()
-            if kind == "trip" and public_id not in self.index.trips
+        self._name_trips(services)
+
+    def _name_trips(self, services: dict[str, str]) -> None:
+        """Record the service of each named trip and load those that run on a loaded date;
+        the others load when a date they run on does (`ensure`)."""
+
+        self.index.trip_services.update(services)
+        unknown = {s for s in services.values() if s not in self.index.service_dates}
+        if unknown and self.index.loaded_dates:
+            self._load_dates(unknown, set(self.index.loaded_dates), extend=False)
+        for service_id in unknown:
+            self.index.service_dates.setdefault(service_id, frozenset())
+        dates = self.index.loaded_dates
+        wanted = sorted(
+            trip_id
+            for trip_id, service_id in services.items()
+            if trip_id not in self.index.trips and self.index.service_dates[service_id] & dates
         )
-        if trips:
-            self._load_trips(trips)
+        if wanted:
+            self._load_trips(wanted)
 
     def _line_keys(self, lines: list[KeyRef]) -> set[KeyRef]:
         """The trip keys of each line, by the source's key format (`<line>:<trip>`, as
@@ -449,17 +477,17 @@ class IndexLoader:
             self._load_runs(sorted(runs))
 
     def _load_runs(self, run_keys: list[str]) -> None:
-        """Every part of each run, in `run_part` order; parts not loaded yet load like any
-        trip."""
+        """Every part of each run, in `run_part` order; the parts that run on a loaded date
+        load like any trip."""
 
         parts: dict[str, list[str]] = defaultdict(list)
-        for run_key, trip_id in self.rows.run_parts(run_keys):
+        services: dict[str, str] = {}
+        for run_key, trip_id, service_id in self.rows.run_parts(run_keys):
             parts[run_key].append(trip_id)
+            services[trip_id] = service_id
         for run_key in run_keys:
             self.index.runs[run_key] = tuple(parts.get(run_key, ()))
-        siblings = sorted({t for ids in parts.values() for t in ids if t not in self.index.trips})
-        if siblings:
-            self._load_trips(siblings)
+        self._name_trips(services)
 
     def _load_rail_keys(self, location_ids: list[str]) -> None:
         """`sr70` keys of the locations, and the `sr70:track` keys of those stations' tracks."""

@@ -171,7 +171,13 @@ class FileRows:
                     "valid_to",
                 )
             )
+        services = self._services
+        found = [(*row, services.get(row[2]) if row[3] == "trip" else None) for row in found]
         return sorted(found, key=lambda r: (r[0], r[1], r[2], r[4]))
+
+    @cached_property
+    def _services(self) -> dict[str, str]:
+        return dict(_rows(self._trips, "trip_id", "service_id"))
 
     def line_keys(self, namespace: str, lines: list[str]) -> list[Row]:
         wanted = set(lines)
@@ -263,10 +269,12 @@ class FileRows:
         return found
 
     def run_parts(self, run_keys: list[str]) -> list[Row]:
-        rows = _rows(_in(self._trips, "run_key", run_keys), "run_key", "run_part", "trip_id")
+        rows = _rows(
+            _in(self._trips, "run_key", run_keys), "run_key", "run_part", "trip_id", "service_id"
+        )
         # NULLs sort last in PostgreSQL's ascending order.
         ordered = sorted(rows, key=lambda r: (r[0], r[1] is None, r[1] or 0, r[2]))
-        return [(run_key, trip_id) for run_key, _, trip_id in ordered]
+        return [(run_key, trip_id, service_id) for run_key, _, trip_id, service_id in ordered]
 
     def _location_keys(self, namespace: str) -> pa.Table:
         return _equal(self._keys_in(namespace), "entity_kind", "location")
