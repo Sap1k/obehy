@@ -1046,6 +1046,26 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
         for s in history["stops"]
     ] == [("jdf:stop:1", 1, 1.0, 120, 120), ("jdf:stop:2", 1, 1.0, 60, 60)]
     assert history["cancelled"] == 0
+    # The whole journey by default: from its departure to its (inferred) arrival.
+    assert day["segment"] == {
+        "first_call": 0,
+        "last_call": 1,
+        "start": {"delay_s": 120, "estimated": False},
+        "end": {"delay_s": 60, "estimated": True},
+        "worst": {"delay_s": 120, "estimated": False},
+        "delays": [{"delay_s": 120, "estimated": False}, {"delay_s": 60, "estimated": True}],
+    }
+    assert history["segment"] == {
+        "start_location_id": "jdf:stop:1",
+        "end_location_id": "jdf:stop:2",
+        "runs": 1,
+        "on_time_share": 1.0,
+        "median_delay_s": 60,
+        "p90_delay_s": 60,
+    }
+    # A start that is none of its stops falls back to the first.
+    fallback = _get(client, "/trips/jdf:trip:1/history", start="jdf:stop:nope", **span)
+    assert fallback["segment"] == history["segment"]
     old = _get(client, "/trips/jdf:trip:old/history", **span)
     assert old["journey"] == history["journey"] and old["days"] == history["days"]
     _get(client, "/trips/jdf:trip:nope/history", 404, **span)

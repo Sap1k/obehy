@@ -2201,6 +2201,17 @@
             "title": "Cancelled",
             "type": "boolean"
           },
+          "segment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistorySegmentRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The run over the requested segment; None if not called at both"
+          },
           "service_date": {
             "format": "date",
             "title": "Service Date",
@@ -2236,6 +2247,137 @@
           "calls"
         ],
         "title": "HistoryDay",
+        "type": "object"
+      },
+      "HistoryDelay": {
+        "properties": {
+          "delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay S"
+          },
+          "estimated": {
+            "description": "Inferred rather than seen (passed out of sight, or the nearest delay measured inside the segment standing in for one missing at its start or end)",
+            "title": "Estimated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "delay_s",
+          "estimated"
+        ],
+        "title": "HistoryDelay",
+        "type": "object"
+      },
+      "HistorySegment": {
+        "description": "How the requested segment usually ends over the days (not cancelled ones).",
+        "properties": {
+          "end_location_id": {
+            "title": "End Location Id",
+            "type": "string"
+          },
+          "median_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Delay S"
+          },
+          "on_time_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Share within the on-time band of the limits",
+            "title": "On Time Share"
+          },
+          "p90_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nine runs in ten were no later than this",
+            "title": "P90 Delay S"
+          },
+          "runs": {
+            "description": "Days with a delay at the segment's end",
+            "title": "Runs",
+            "type": "integer"
+          },
+          "start_location_id": {
+            "title": "Start Location Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_location_id",
+          "end_location_id",
+          "runs",
+          "on_time_share",
+          "median_delay_s",
+          "p90_delay_s"
+        ],
+        "title": "HistorySegment",
+        "type": "object"
+      },
+      "HistorySegmentRun": {
+        "description": "A day's run over the requested segment: the delay as the rider meets it where they\nboard (the departure) and get off (the arrival), and the largest at any of its stops.",
+        "properties": {
+          "delays": {
+            "description": "Each call of the segment's delay as the rider meets it (its departure, at the end its arrival), in call order",
+            "items": {
+              "$ref": "#/components/schemas/HistoryDelay"
+            },
+            "title": "Delays",
+            "type": "array"
+          },
+          "end": {
+            "$ref": "#/components/schemas/HistoryDelay"
+          },
+          "first_call": {
+            "description": "Index into the day's `calls` where the segment starts",
+            "title": "First Call",
+            "type": "integer"
+          },
+          "last_call": {
+            "description": "Index where it ends",
+            "title": "Last Call",
+            "type": "integer"
+          },
+          "start": {
+            "$ref": "#/components/schemas/HistoryDelay"
+          },
+          "worst": {
+            "$ref": "#/components/schemas/HistoryDelay"
+          }
+        },
+        "required": [
+          "first_call",
+          "last_call",
+          "start",
+          "end",
+          "worst",
+          "delays"
+        ],
+        "title": "HistorySegmentRun",
         "type": "object"
       },
       "HistoryStop": {
@@ -4818,6 +4960,17 @@
             "title": "Release Id",
             "type": "string"
           },
+          "segment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistorySegment"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Over the requested segment (`from`, `to`; the whole trip by default); None without a recorded day"
+          },
           "since": {
             "format": "date",
             "title": "Since",
@@ -4850,7 +5003,8 @@
           "until",
           "days",
           "cancelled",
-          "stops"
+          "stops",
+          "segment"
         ],
         "title": "TripHistory",
         "type": "object"
@@ -7990,6 +8144,42 @@
               ],
               "description": "Last service date; default today",
               "title": "Until"
+            }
+          },
+          {
+            "description": "The segment's first stop (a `stops` location ID, e.g. where the trip was opened from); the journey's first stop when it is none of them",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The segment's first stop (a `stops` location ID, e.g. where the trip was opened from); the journey's first stop when it is none of them",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Its last stop; the journey's last unless after `from`",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Its last stop; the journey's last unless after `from`",
+              "title": "To"
             }
           }
         ],

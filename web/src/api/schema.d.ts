@@ -1506,6 +1506,8 @@ export interface components {
              * @description A source cancelled it and no vehicle was seen running it
              */
             cancelled: boolean;
+            /** @description The run over the requested segment; None if not called at both */
+            segment?: components["schemas"]["HistorySegmentRun"] | null;
             /**
              * Service Date
              * Format: date
@@ -1523,6 +1525,68 @@ export interface components {
              * @description The same, per source report, with what follows it to its oběh
              */
             worked_by: components["schemas"]["HistoryVehicle"][];
+        };
+        /** HistoryDelay */
+        HistoryDelay: {
+            /** Delay S */
+            delay_s: number | null;
+            /**
+             * Estimated
+             * @description Inferred rather than seen (passed out of sight, or the nearest delay measured inside the segment standing in for one missing at its start or end)
+             */
+            estimated: boolean;
+        };
+        /**
+         * HistorySegment
+         * @description How the requested segment usually ends over the days (not cancelled ones).
+         */
+        HistorySegment: {
+            /** End Location Id */
+            end_location_id: string;
+            /** Median Delay S */
+            median_delay_s: number | null;
+            /**
+             * On Time Share
+             * @description Share within the on-time band of the limits
+             */
+            on_time_share: number | null;
+            /**
+             * P90 Delay S
+             * @description Nine runs in ten were no later than this
+             */
+            p90_delay_s: number | null;
+            /**
+             * Runs
+             * @description Days with a delay at the segment's end
+             */
+            runs: number;
+            /** Start Location Id */
+            start_location_id: string;
+        };
+        /**
+         * HistorySegmentRun
+         * @description A day's run over the requested segment: the delay as the rider meets it where they
+         *     board (the departure) and get off (the arrival), and the largest at any of its stops.
+         */
+        HistorySegmentRun: {
+            /**
+             * Delays
+             * @description Each call of the segment's delay as the rider meets it (its departure, at the end its arrival), in call order
+             */
+            delays: components["schemas"]["HistoryDelay"][];
+            end: components["schemas"]["HistoryDelay"];
+            /**
+             * First Call
+             * @description Index into the day's `calls` where the segment starts
+             */
+            first_call: number;
+            /**
+             * Last Call
+             * @description Index where it ends
+             */
+            last_call: number;
+            start: components["schemas"]["HistoryDelay"];
+            worst: components["schemas"]["HistoryDelay"];
         };
         /**
          * HistoryStop
@@ -2490,6 +2554,8 @@ export interface components {
              * @description The active release the answer was read from.
              */
             release_id: string;
+            /** @description Over the requested segment (`from`, `to`; the whole trip by default); None without a recorded day */
+            segment: components["schemas"]["HistorySegment"] | null;
             /**
              * Since
              * Format: date
@@ -3950,6 +4016,10 @@ export interface operations {
                 since?: string | null;
                 /** @description Last service date; default today */
                 until?: string | null;
+                /** @description The segment's first stop (a `stops` location ID, e.g. where the trip was opened from); the journey's first stop when it is none of them */
+                from?: string | null;
+                /** @description Its last stop; the journey's last unless after `from` */
+                to?: string | null;
             };
             header?: never;
             path: {

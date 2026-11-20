@@ -8,7 +8,6 @@ ID that journey had; its `circulation` the oběh it was part of (`circulations.p
 
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Annotated
@@ -33,6 +32,7 @@ from obehy.api.limits import Limits
 from obehy.api.lookup_rules import can_ask
 from obehy.api.params import date_span
 from obehy.api.physical import is_physical
+from obehy.api.segments import percentile, run, summary
 from obehy.realtime.times import local_date
 
 router = APIRouter(tags=["trips"])
@@ -123,13 +123,6 @@ def _delay(actual: datetime | None, scheduled: datetime | None) -> int | None:
     return round((actual - scheduled).total_seconds())
 
 
-def _percentile(ordered: list[int], share: float) -> int:
-    """The nearest-rank percentile of sorted values: the least value at least `share` of them
-    are no later than."""
-
-    return ordered[max(0, math.ceil(share * len(ordered)) - 1)]
-
-
 def _stops(days: list[schema.HistoryDay], limits: Limits) -> list[schema.HistoryStop]:
     """Per stop, how late the journey was over the days: its departure, at its last call its
     arrival. Stops in the call order of the latest day that calls there."""
@@ -153,8 +146,8 @@ def _stops(days: list[schema.HistoryDay], limits: Limits) -> list[schema.History
                 name=name,
                 runs=len(found),
                 on_time_share=len(on_time) / len(found) if found else None,
-                median_delay_s=_percentile(found, 0.5) if found else None,
-                p90_delay_s=_percentile(found, 0.9) if found else None,
+                median_delay_s=percentile(found, 0.5) if found else None,
+                p90_delay_s=percentile(found, 0.9) if found else None,
                 max_delay_s=found[-1] if found else None,
             )
         )
@@ -175,6 +168,18 @@ def trip_history(
     trip_id: str,
     since: Annotated[date | None, Query(description="First service date")] = None,
     until: Annotated[date | None, Query(description="Last service date; default today")] = None,
+    board: Annotated[
+        str | None,
+        Query(
+            alias="from",
+            description="The segment's first stop (a `stops` location ID, e.g. where the trip "
+            "was opened from); the journey's first stop when it is none of them",
+        ),
+    ] = None,
+    alight: Annotated[
+        str | None,
+        Query(alias="to", description="Its last stop; the journey's last unless after `from`"),
+    ] = None,
 ) -> schema.TripHistory:
     realtime_cache(response, limits)
     start, end = date_span(
@@ -233,6 +238,14 @@ def trip_history(
         )
         for day, (trip, cancelled) in seen.items()
     ]
+    stops = _stops(days, limits)
+    segment: schema.HistorySegment | None = None
+    if stops:
+        ids = [s.location_id for s in stops]
+        first = board if board in ids[:-1] else ids[0]
+        last = alight if alight in ids[ids.index(first) + 1 :] else ids[-1]
+        days = [d.model_copy(update={"segment": run(d, first, last)}) for d in days]
+        segment = summary(days, first, last, limits)
     return schema.TripHistory(
         **envelope(snap),
         trip_id=trip_id,
@@ -241,7 +254,8 @@ def trip_history(
         until=end,
         days=days,
         cancelled=sum(d.cancelled for d in days),
-        stops=_stops(days, limits),
+        stops=stops,
+        segment=segment,
     )
 
 

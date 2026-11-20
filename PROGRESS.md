@@ -313,6 +313,13 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — Delay history over a segment is the API's (`api/segments.py`):
+  `/trips/{id}/history?from=&to=` gives each day's run (start, end, worst and every call's delay
+  as the rider meets it, a run lost near either end counted by the nearest measured delay,
+  flagged estimated) and the summary (runs, on-time share by the API's band, median, p90); an
+  unknown `from`/`to` falls back to the journey's first/last stop. The web only words and
+  colours it (its on-time share used the boards' minute bands, now the API's −60…+179 s). The
+  native app can read the same. Unit and web tests pass; the DB API test was updated but not run.
 - **2026-11-20** — First and last stops at terminals (policy v17). Stands lie up to a few hundred
   m from a first or last stop's coordinates, often off the path: a vehicle standing within
   `terminal_radius_m` (400) is at the stop, before any reading too (start rule, origin

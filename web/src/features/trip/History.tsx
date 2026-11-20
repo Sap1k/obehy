@@ -1,22 +1,19 @@
 import { Modal, Select, Skeleton, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ApiError } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import {
-  callDelay,
   delayTone,
   delayWords,
-  segmentDays,
-  segmentSummary,
-  type Delay as DelayValue,
   type HistoryCall,
-  type SegmentDay,
+  type HistoryDay,
+  type HistoryDelay,
   type TripHistory,
 } from "../../lib/history";
 import { usePhone } from "../../lib/layout";
-import { useTripHistory } from "./queries";
+import { useTripHistory, type HistorySegmentQuery } from "./queries";
 import classes from "./History.module.css";
 
 // "Historie zpoždění": how late the trip's journey ran on each recorded day, between the stop
@@ -59,7 +56,10 @@ export function HistoryLink({ tripId, stopId }: { tripId: string; stopId?: strin
 }
 
 function HistoryBody({ tripId, stopId }: { tripId: string; stopId?: string }) {
-  const query = useTripHistory(tripId, true);
+  // The segment starts where the trip was opened from; the API falls back to the journey's
+  // first stop when that is none of its stops.
+  const [segment, setSegment] = useState<HistorySegmentQuery>({ from: stopId });
+  const query = useTripHistory(tripId, true, segment);
   if (query.isPending) {
     return (
       <div className={classes.loading} aria-busy="true" aria-label="Načítání">
@@ -85,18 +85,23 @@ function HistoryBody({ tripId, stopId }: { tripId: string; stopId?: string }) {
       />
     );
   }
-  return <Days history={query.data} stopId={stopId} />;
+  return <Days history={query.data} onSegment={setSegment} />;
 }
 
-function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
-  const last = history.stops.length - 1;
-  const boarded = history.stops.findIndex((s) => s.location_id === stopId);
-  const [from, setFrom] = useState(boarded >= 0 && boarded < last ? boarded : 0);
-  const [to, setTo] = useState(last);
+function Days({
+  history,
+  onSegment,
+}: {
+  history: TripHistory;
+  onSegment: (segment: HistorySegmentQuery) => void;
+}) {
+  const ids = history.stops.map((s) => s.location_id);
+  const from = history.segment?.start_location_id ?? ids[0];
+  const to = history.segment?.end_location_id ?? ids.at(-1);
+  const after = ids.indexOf(from ?? "") + 1;
   const [open, setOpen] = useState<string | null>(null);
-  const days = useMemo(() => segmentDays(history, from, to), [history, from, to]);
-  const summary = segmentSummary(days);
-  const stops = history.stops.map((s, i) => ({ value: String(i), label: s.name }));
+  const summary = history.segment;
+  const stops = history.stops.map((s) => ({ value: s.location_id, label: s.name }));
   const span = `${dayMonth.format(asDate(history.since))} – ${dayMonth.format(asDate(history.until))}`;
 
   return (
@@ -104,12 +109,12 @@ function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
       <div className={classes.segment}>
         <Select
           label="Odkud"
-          data={stops.slice(0, last)}
-          value={String(from)}
+          data={stops.slice(0, -1)}
+          value={from ?? null}
           onChange={(v) => {
             if (v === null) return;
-            setFrom(Number(v));
-            if (Number(v) >= to) setTo(last);
+            // A destination before the new start falls back to the journey's last stop.
+            onSegment({ from: v, to: ids.indexOf(v) < ids.indexOf(to ?? "") ? to : undefined });
           }}
           allowDeselect={false}
           searchable
@@ -117,9 +122,9 @@ function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
         />
         <Select
           label="Kam"
-          data={stops.slice(from + 1)}
-          value={String(to)}
-          onChange={(v) => v !== null && setTo(Number(v))}
+          data={stops.slice(after)}
+          value={to ?? null}
+          onChange={(v) => v !== null && onSegment({ from, to: v })}
           allowDeselect={false}
           searchable
           comboboxProps={{ withinPortal: false }}
@@ -127,12 +132,12 @@ function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
       </div>
       <p className={classes.summary}>
         {span}
-        {summary
-          ? ` · v cíli včas ${Math.round(summary.onTime * 100)} % jízd · obvykle ${delayWords(summary.median)}`
+        {summary?.on_time_share != null && summary.median_delay_s != null
+          ? ` · v cíli včas ${Math.round(summary.on_time_share * 100)} % jízd · obvykle ${delayWords(summary.median_delay_s)}`
           : ""}
         {history.cancelled > 0 ? ` · ${history.cancelled}× zrušeno` : ""}
       </p>
-      {days.length === 0 ? (
+      {history.days.length === 0 ? (
         <BoardMessage
           title="Zatím žádné záznamy"
           text="Za toto období nemáme o jízdách tohoto spoje záznam."
@@ -146,12 +151,12 @@ function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
             <span>Nejvíc</span>
             <span>Vůz</span>
           </li>
-          {days.map((d) => (
+          {history.days.map((d) => (
             <DayRow
-              key={d.day.service_date}
-              row={d}
-              open={open === d.day.service_date}
-              onToggle={() => setOpen(open === d.day.service_date ? null : d.day.service_date)}
+              key={d.service_date}
+              day={d}
+              open={open === d.service_date}
+              onToggle={() => setOpen(open === d.service_date ? null : d.service_date)}
             />
           ))}
         </ol>
@@ -161,8 +166,9 @@ function Days({ history, stopId }: { history: TripHistory; stopId?: string }) {
 }
 
 /** A delay; an inferred one (passed out of sight) marked "~", with a title saying so. */
-function Delay({ delay: { delayS, estimated } }: { delay: DelayValue }) {
-  const mark = estimated && delayS !== null;
+function Delay({ delay }: { delay: HistoryDelay | undefined }) {
+  const delayS = delay?.delay_s ?? null;
+  const mark = Boolean(delay?.estimated) && delayS !== null;
   return (
     <span
       className={classes.delay}
@@ -175,8 +181,9 @@ function Delay({ delay: { delayS, estimated } }: { delay: DelayValue }) {
   );
 }
 
-function DayRow({ row, open, onToggle }: { row: SegmentDay; open: boolean; onToggle: () => void }) {
-  const { day } = row;
+function DayRow({ day, open, onToggle }: { day: HistoryDay; open: boolean; onToggle: () => void }) {
+  const run = day.segment;
+  const calls = run ? day.calls.slice(run.first_call, run.last_call + 1) : [];
   const vehicle = day.worked_by.find((v) => v.physical) ?? day.worked_by[0];
   const name =
     vehicle && (vehicle.fleet_number ?? vehicle.public_label ?? vehicle.source_vehicle_id);
@@ -185,11 +192,11 @@ function DayRow({ row, open, onToggle }: { row: SegmentDay; open: boolean; onTog
       <UnstyledButton
         className={classes.dayLine}
         onClick={onToggle}
-        disabled={row.calls.length === 0}
+        disabled={calls.length === 0}
         aria-expanded={open}
       >
         <span className={classes.date}>
-          {row.calls.length > 0 && (
+          {calls.length > 0 && (
             <IconChevronDown size={14} stroke={2} className={classes.chevron} aria-hidden />
           )}
           {weekdayDate.format(asDate(day.service_date))}
@@ -198,9 +205,9 @@ function DayRow({ row, open, onToggle }: { row: SegmentDay; open: boolean; onTog
           <span className={classes.cancelled}>zrušeno</span>
         ) : (
           <>
-            <Delay delay={row.from} />
-            <Delay delay={row.to} />
-            <Delay delay={row.worst} />
+            <Delay delay={run?.start} />
+            <Delay delay={run?.end} />
+            <Delay delay={run?.worst} />
           </>
         )}
       </UnstyledButton>
@@ -223,18 +230,18 @@ function DayRow({ row, open, onToggle }: { row: SegmentDay; open: boolean; onTog
           (name ?? "")
         )}
       </span>
-      {open && <Calls calls={row.calls} />}
+      {open && run && <Calls calls={calls} delays={run.delays} />}
     </li>
   );
 }
 
-function Calls({ calls }: { calls: HistoryCall[] }) {
+function Calls({ calls, delays }: { calls: HistoryCall[]; delays: HistoryDelay[] }) {
   return (
     <ol className={classes.calls}>
       {calls.map((c, i) => (
         <li key={`${c.location_id}:${i}`} className={classes.call}>
           <span className={classes.callName}>{c.name}</span>
-          <Delay delay={callDelay(c, i === calls.length - 1)} />
+          <Delay delay={delays[i]} />
         </li>
       ))}
     </ol>

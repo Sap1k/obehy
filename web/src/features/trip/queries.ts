@@ -118,23 +118,36 @@ export function useComposition(trip: Trip | undefined, from: string | undefined)
   return { ...query, enabled, gaveUp };
 }
 
-/** A trip's journey as it ran on the recorded days, asked for while `enabled` (the history
- * dialog is open); not polled: a day's runs only change once it is over. */
-export function useTripHistory(tripId: string, enabled: boolean) {
+/** The stops a history segment runs between (`stops` location IDs); the API falls back to
+ * the journey's first and last stop for any that is not one of them. */
+export interface HistorySegmentQuery {
+  from?: string;
+  to?: string;
+}
+
+/** A trip's journey as it ran on the recorded days over a segment, measured by the API, asked
+ * for while `enabled` (the history dialog is open); not polled: a day's runs only change once
+ * it is over. The previous segment's answer stays shown while another is asked. */
+export function useTripHistory(tripId: string, enabled: boolean, segment: HistorySegmentQuery) {
   return useQuery({
-    queryKey: ["trip-history", tripId],
+    queryKey: ["trip-history", tripId, segment.from ?? null, segment.to ?? null],
     queryFn: async ({ signal }) =>
       unwrap(
         await api.GET("/api/v1/trips/{trip_id}/history", {
           // Every day history keeps (21), not the API's default week.
           params: {
             path: { trip_id: tripId },
-            query: { since: addDays(dayKey(new Date()), -(HISTORY_DAYS - 1)) },
+            query: {
+              since: addDays(dayKey(new Date()), -(HISTORY_DAYS - 1)),
+              from: segment.from,
+              to: segment.to,
+            },
           },
           signal,
         }),
       ),
     enabled,
+    placeholderData: keepPreviousData,
     staleTime: 10 * 60_000,
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });

@@ -852,6 +852,40 @@ class HistoryVehicle(BaseModel):
     )
 
 
+class HistoryDelay(BaseModel):
+    delay_s: int | None
+    estimated: bool = Field(
+        description="Inferred rather than seen (passed out of sight, or the nearest delay "
+        "measured inside the segment standing in for one missing at its start or end)"
+    )
+
+
+class HistorySegmentRun(BaseModel):
+    """A day's run over the requested segment: the delay as the rider meets it where they
+    board (the departure) and get off (the arrival), and the largest at any of its stops."""
+
+    first_call: int = Field(description="Index into the day's `calls` where the segment starts")
+    last_call: int = Field(description="Index where it ends")
+    start: HistoryDelay
+    end: HistoryDelay
+    worst: HistoryDelay
+    delays: list[HistoryDelay] = Field(
+        description="Each call of the segment's delay as the rider meets it (its departure, at "
+        "the end its arrival), in call order"
+    )
+
+
+class HistorySegment(BaseModel):
+    """How the requested segment usually ends over the days (not cancelled ones)."""
+
+    start_location_id: str
+    end_location_id: str
+    runs: int = Field(description="Days with a delay at the segment's end")
+    on_time_share: float | None = Field(description="Share within the on-time band of the limits")
+    median_delay_s: int | None
+    p90_delay_s: int | None = Field(description="Nine runs in ten were no later than this")
+
+
 class HistoryDay(BaseModel):
     service_date: date
     trip_id: str
@@ -861,6 +895,9 @@ class HistoryDay(BaseModel):
         description="The same, per source report, with what follows it to its oběh"
     )
     calls: list[HistoryCall]
+    segment: HistorySegmentRun | None = Field(
+        default=None, description="The run over the requested segment; None if not called at both"
+    )
 
 
 class HistoryStop(BaseModel):
@@ -887,6 +924,10 @@ class TripHistory(Envelope):
     days: list[HistoryDay] = Field(description="Latest first")
     cancelled: int = Field(description="Days it was cancelled")
     stops: list[HistoryStop] = Field(description="Per stop, in call order")
+    segment: HistorySegment | None = Field(
+        description="Over the requested segment (`from`, `to`; the whole trip by default); None "
+        "without a recorded day"
+    )
 
 
 class ChainJourney(BaseModel):
