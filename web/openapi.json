@@ -1829,6 +1829,14 @@
             "description": "The leg's MOTIS `from.stopId`: where the passenger boards",
             "title": "From Stop Id"
           },
+          "stop_ids": {
+            "description": "The MOTIS trip's stop IDs in order, to be told which Oběhy call each is",
+            "items": {
+              "type": "string"
+            },
+            "title": "Stop Ids",
+            "type": "array"
+          },
           "to_stop_id": {
             "anyOf": [
               {
@@ -1981,6 +1989,21 @@
                 "type": "null"
               }
             ]
+          },
+          "stop_sequences": {
+            "description": "Per asked `stop_ids`, the sequence of the trip's call it is, by stop key, in order (a stop either side leaves out does not shift the rest); null: not a call of it",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Stop Sequences",
+            "type": "array"
           },
           "trip": {
             "anyOf": [

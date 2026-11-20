@@ -545,6 +545,10 @@ class EnrichLegRequest(BaseModel):
     to_stop_id: str | None = Field(
         default=None, description="The leg's MOTIS `to.stopId`: where the passenger alights"
     )
+    stop_ids: list[str] = Field(
+        default_factory=list[str],
+        description="The MOTIS trip's stop IDs in order, to be told which Oběhy call each is",
+    )
 
 
 class EnrichRequest(BaseModel):
@@ -584,6 +588,11 @@ class EnrichedLeg(BaseModel):
     )
     leg_calls: bool = Field(
         default=False, description="Whether `calls` are the leg's span, not the whole trip"
+    )
+    stop_sequences: list[int | None] = Field(
+        default_factory=list[int | None],
+        description="Per asked `stop_ids`, the sequence of the trip's call it is, by stop key, in "
+        "order (a stop either side leaves out does not shift the rest); null: not a call of it",
     )
     alerts: list[Alert] = Field(default_factory=list[Alert], description="As a trip's `alerts`")
 

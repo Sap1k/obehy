@@ -1376,6 +1376,11 @@ export interface components {
              */
             from_stop_id?: string | null;
             /**
+             * Stop Ids
+             * @description The MOTIS trip's stop IDs in order, to be told which Oběhy call each is
+             */
+            stop_ids?: string[];
+            /**
              * To Stop Id
              * @description The leg's MOTIS `to.stopId`: where the passenger alights
              */
@@ -1439,6 +1444,11 @@ export interface components {
              */
             outcome: "resolved" | "not_running" | "not_found" | "ambiguous" | "unknown_dataset" | "malformed";
             realtime?: components["schemas"]["TripRealtime"] | null;
+            /**
+             * Stop Sequences
+             * @description Per asked `stop_ids`, the sequence of the trip's call it is, by stop key, in order (a stop either side leaves out does not shift the rest); null: not a call of it
+             */
+            stop_sequences?: (number | null)[];
             /** @description The Oběhy trip: `/trips/{trip_id}/{service_date}` */
             trip?: components["schemas"]["TripRef"] | null;
             /** Trip Short Name */

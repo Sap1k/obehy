@@ -710,7 +710,12 @@ def test_motis_legs_resolve_to_trips_or_say_why_not(client: TestClient) -> None:
                     "to_stop_id": "jdf_jdf:stop:2",
                 },
                 # Transitous: PID's own trip and stop IDs, resolved by key; no alighting stop.
-                {"trip_id": "20261006_06:00_cz-PID_P1", "from_stop_id": "cz-PID_U1Z1"},
+                # Its stops each told which call they are, by key: an unknown one is none.
+                {
+                    "trip_id": "20261006_06:00_cz-PID_P1",
+                    "from_stop_id": "cz-PID_U1Z1",
+                    "stop_ids": ["cz-PID_U1Z1", "cz-PID_U9Z9"],
+                },
                 # An older timetable version's trip ID: found through its journey key.
                 {"trip_id": "20261006_06:00_cz-JDF-merged_jdf:trip:old"},
                 {"trip_id": "20261007_06:00_jdf_jdf:trip:1"},
@@ -734,6 +739,7 @@ def test_motis_legs_resolve_to_trips_or_say_why_not(client: TestClient) -> None:
         ("malformed", None),
     ]
     first, pid, old = legs[:3]
+    assert (first["stop_sequences"], pid["stop_sequences"]) == ([], [1, None])
     assert first["motis_trip_id"] == "20261006_06:00_jdf_jdf:trip:1"
     assert first["journey"] == {"namespace": "cis:line_trip", "key": "000001:1"}
     assert first["realtime"]["delay_min"] == 10 and first["leg_calls"]

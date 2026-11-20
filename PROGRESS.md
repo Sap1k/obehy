@@ -313,6 +313,20 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — Client logic moved into the API (cleanup phase 5). Calls say whether they are
+  passed and trips their next call; `include=run` merges a rail run's later parts and lists the
+  alerts it shows (the web no longer fetches each part). Compositions come with stretches, cab
+  ends, partial vehicles and where the rider is (`api/formations.py`; the web's and the app's
+  copies gone). Notes come grouped in print order (`codes-v1.toml` `[signs]`, from the web's
+  pictogram table), boards with `step_free` and their banner alerts, and fill their page from
+  90 up to 360 minutes; history defaults to every kept day. Oběhy come as rows per vehicle on a
+  timeline from noon less 12 h, companies grouped, the top source picked. Colours `#RRGGBB`,
+  plates as written, vehicle display names and trip stop map labels (`api/labels.py`). Enrich
+  says which MOTIS stop is which call by stop key (the app's matching by name gone). Each moved
+  rule's web tests were ported to Python. Validated: Python unit and DB (910), web
+  typecheck/lint/tests/build, app tests/lint/debug build. Not checked in a browser or on a
+  phone. Stays client-side on purpose: wording, tones, layout, the "position N min old" label
+  and the app's MOTIS-driven progress.
 - **2026-11-20** — The API decides once what clients worked out each on their own. One resolver
   (`api/resolve.py`) maps trip + date to its feed and journey keys, source keys to a trip and
   gone trip IDs to their journey (seven queries and three ambiguity checks before). One delay

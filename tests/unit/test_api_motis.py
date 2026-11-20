@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from obehy.api.journeys import leg_span
+from obehy.api.journeys import leg_span, stop_sequences
 from obehy.api.motis import Dataset, load_datasets, parse_stop_id, parse_trip_id
 from obehy.api.schema import TripCall
 
@@ -99,3 +99,10 @@ def test_a_leg_spans_boarding_to_alighting_on_a_loop() -> None:
     assert [c.sequence for c in leg_span(calls, "a", "d") or []] == [1, 2, 3, 4, 5]
     assert leg_span(calls, "c", "b") is None
     assert leg_span(calls, None, "b") is None
+
+
+def test_motis_stops_are_matched_to_calls_in_order_by_place() -> None:
+    calls = [_call(1, "a"), _call(2, "b"), _call(3, "c"), _call(4, "a"), _call(5, "d")]
+    # `a` twice: the second asked `a` is the call after the last one matched; an unknown stop
+    # (None) or one the trip skips does not shift the rest.
+    assert stop_sequences(calls, ["a", None, "c", "x", "a", "d"]) == [1, None, 3, None, 4, 5]

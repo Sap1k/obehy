@@ -19,7 +19,14 @@ from obehy.api import schema
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
-from obehy.api.motis import Dataset, MotisTrip, datasets, parse_stop_id, parse_trip_id
+from obehy.api.motis import (
+    Dataset,
+    MotisStop,
+    MotisTrip,
+    datasets,
+    parse_stop_id,
+    parse_trip_id,
+)
 from obehy.api.params import ParameterError
 from obehy.api.resolve import TripOnDate, by_key, gone, trip_on
 from obehy.api.trips import assemble
@@ -80,34 +87,65 @@ def _trip(snap: Snapshot, limits: Limits, trip: TripOnDate) -> schema.EnrichedLe
     )
 
 
-def _stop_place(
-    snap: Snapshot, stop_id: str | None, service_date: date, known: tuple[Dataset, ...]
-) -> str | None:
-    """The one stop place a MOTIS stop ID names (a platform names its station), or None."""
+def _stop_places(
+    snap: Snapshot, stop_ids: list[str | None], service_date: date, known: tuple[Dataset, ...]
+) -> list[str | None]:
+    """The one stop place each MOTIS stop ID names (a platform names its station), else None:
+    one key lookup per dataset and one place lookup for them all."""
 
-    if stop_id is None:
-        return None
-    stop = parse_stop_id(stop_id, known)
-    if stop is None:
-        return None
-    if stop.dataset.resolve == "trip_id":
-        public = [stop.stop_id]
-    elif stop.dataset.stop_namespace is None:
-        return None
-    else:
-        keyed = snap.all(
+    parsed = [None if i is None else parse_stop_id(i, known) for i in stop_ids]
+    public: dict[int, list[str]] = {}
+    by_namespace: dict[str, list[int]] = {}
+    for n, stop in enumerate(parsed):
+        if stop is None:
+            continue
+        if stop.dataset.resolve == "trip_id":
+            public[n] = [stop.stop_id]
+        elif stop.dataset.stop_namespace is not None:
+            by_namespace.setdefault(stop.dataset.stop_namespace, []).append(n)
+    for namespace, positions in by_namespace.items():
+        found: dict[str, list[str]] = {}
+        for r in snap.all(
             "motis_stop_keys",
             {
-                "namespace": stop.dataset.stop_namespace,
-                "identifiers": [stop.stop_id],
+                "namespace": namespace,
+                "identifiers": sorted({cast(MotisStop, parsed[n]).stop_id for n in positions}),
                 "service_date": service_date,
             },
+        ):
+            found.setdefault(r["identifier"], []).append(r["public_id"])
+        for n in positions:
+            public[n] = found.get(cast(MotisStop, parsed[n]).stop_id, [])
+    asked = sorted({p for ids in public.values() for p in ids})
+    place_of: dict[str, str] = {
+        r["asked"]: r["location_id"]
+        for r in (snap.all("stops_by_id", {"location_ids": asked}) if asked else [])
+    }
+    places: list[str | None] = []
+    for n in range(len(stop_ids)):
+        named = {place_of[p] for p in public.get(n, []) if p in place_of}
+        places.append(named.pop() if len(named) == 1 else None)
+    return places
+
+
+def stop_sequences(calls: list[schema.TripCall], places: list[str | None]) -> list[int | None]:
+    """Which of the trip's calls each stop place is, in order: the first call there after the
+    previous one matched, so a stop either side leaves out does not shift the rest."""
+
+    sequences: list[int | None] = []
+    start = 0
+    for place in places:
+        at = (
+            next((n for n in range(start, len(calls)) if calls[n].location_id == place), None)
+            if place is not None
+            else None
         )
-        public = [r["public_id"] for r in keyed]
-    if not public:
-        return None
-    places = {r["location_id"] for r in snap.all("stops_by_id", {"location_ids": public})}
-    return places.pop() if len(places) == 1 else None
+        if at is None:
+            sequences.append(None)
+        else:
+            sequences.append(calls[at].sequence)
+            start = at + 1
+    return sequences
 
 
 def leg_span(
@@ -174,17 +212,20 @@ def enrich(
         if cached not in trips:
             trips[cached] = _trip(snap, limits, found)
         whole = trips[cached]
-        span = leg_span(
-            whole.calls,
-            _stop_place(snap, asked.from_stop_id, motis.service_date, known),
-            _stop_place(snap, asked.to_stop_id, motis.service_date, known),
+        board, alight, *stops = _stop_places(
+            snap,
+            [asked.from_stop_id, asked.to_stop_id, *asked.stop_ids],
+            motis.service_date,
+            known,
         )
+        span = leg_span(whole.calls, board, alight)
         legs.append(
             whole.model_copy(
                 update={
                     "motis_trip_id": asked.trip_id,
                     "calls": whole.calls if span is None else span,
                     "leg_calls": span is not None,
+                    "stop_sequences": stop_sequences(whole.calls, stops),
                 }
             )
         )

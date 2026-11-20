@@ -2217,6 +2217,14 @@ POST /api/v1/journeys/enrich                MOTIS legs (Transitous, motis.obehy.
   calls (the time a rider meets: the departure, at the last call the arrival), vehicles, a
   trip's realtime and history carry `delay_min` and `punctuality`; clients only colour and word
   them. Which trip and journey a request means is decided once too (`api/resolve.py`).
+- **Clients word and draw; the API decides.** What every client would otherwise work out the
+  same way is the API's: which calls are passed and the next one, a rail run's merged calls and
+  the alerts it shows (`include=run`), a composition's stretches, cab ends and where the rider is
+  (`api/formations.py`), notes grouped in print order with how each sign shows (`codes-v1.toml`
+  `[signs]`), step-free boarding, a board that fills its page, oběhy rows per vehicle on a
+  timeline from the service date's noon less 12 h, which MOTIS stop is which call (by stop key),
+  colours, plates, vehicle and stop labels (`api/labels.py`). The web and the app keep wording,
+  tone, layout, animation and what ticks with the clock.
 - **Trips are identified by the feed's `trip_id` and the service date;** vehicles by their
   vehicle ID. Source keys (`cis:line_trip`, `pid:gtfs_trip_id`, `czptt:train_number`, …) are
   lookup aliases only, answered with a redirect, and a trip's preferred journey key is an
