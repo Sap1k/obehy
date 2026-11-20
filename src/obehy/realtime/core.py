@@ -90,7 +90,7 @@ from obehy.realtime.timeline.estimate import (
 from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, lead_of, with_lead
 from obehy.realtime.timeline.plan import Plan, PlanCache
 from obehy.realtime.timeline.progress import at_origin_or_moving, past_first_stop
-from obehy.realtime.timeline.runtimes import forget, record, running_extra
+from obehy.realtime.timeline.runtimes import forget, minimum_drives, record, running_extra
 from obehy.realtime.timeline.stops import departure
 from obehy.realtime.times import PRAGUE, Instant
 
@@ -347,6 +347,14 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
                 now=_fresh(instance, now, policy),
                 dwelt=last_fix_at_stop(instance, plan),
                 left=_seen_leaving(instance, plan, policy),
+                drives=minimum_drives(
+                    instance,
+                    plan,
+                    state.hops,
+                    now,
+                    policy,
+                    ctx.policy.progress.max_speed_mps(instance.mode),
+                ),
             )
             continue
         predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)

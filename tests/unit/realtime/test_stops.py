@@ -111,3 +111,62 @@ def test_a_bus_driving_through_a_stop_is_timed_between_its_fixes() -> None:
     assert local("2026-10-08 08:04:55") <= b.passed_arrival <= b.passed_departure
     assert b.passed_departure <= local("2026-10-08 08:05:15")
     assert POLICY.lifecycle.departure_margin_m == 40
+
+
+def _close_stops(minutes: tuple[str, str, str, str]) -> Run:
+    """A (0 m), B (1000 m), C (1300 m), D (2300 m) at the given times."""
+
+    from obehy.realtime.core import Context
+    from tests.realtime.builder import ORIGIN, timetable
+    from tests.unit.realtime.test_timeline import DAY, LAT
+
+    index = (
+        timetable()
+        .stop("A", ORIGIN[0], LAT)
+        .stop("B", east(1000)[0], LAT)
+        .stop("C", east(1300)[0], LAT)
+        .stop("D", east(2300)[0], LAT)
+        .trip(
+            "582492:143",
+            days=[DAY],
+            calls=list(zip(("A", "B", "C", "D"), minutes, strict=True)),
+        )
+        .index()
+    )
+    run = Run()
+    run.ctx = Context(index, POLICY)
+    return run
+
+
+def _departures(run: Run, now: str) -> list[timedelta]:
+    estimate_all(run.state, run.ctx, local(f"2026-10-08 {now}"))
+    (instance,) = run.state.instances.values()
+    start = local("2026-10-08 08:00:00")
+    return [c.estimated_departure - start for c in instance.calls[1:3] if c.estimated_departure]
+
+
+def test_stops_in_one_timetable_minute_never_leave_together() -> None:
+    """B and C both at 08:05, 300 m apart; the bus stands late at B. C is not reached before B
+    is left, and is left a dwell after it is reached: never at B's departure time."""
+
+    run = _close_stops(("08:00", "08:05", "08:05", "08:10"))
+    run.at("08:00:00", east(0)).at("08:03:00", east(600)).at("08:06:00", east(1000))
+    run.at("08:07:00", east(1000))
+    b, c = _departures(run, "08:07:10")
+    (instance,) = run.state.instances.values()
+    c_arrival = instance.calls[2].estimated_arrival
+    assert c_arrival is not None
+    dwell = timedelta(seconds=POLICY.prediction.dwell_credit_s("bus"))
+    assert c_arrival - local("2026-10-08 08:00:00") >= b
+    assert c >= b + dwell
+
+
+def test_a_predicted_departure_ahead_is_a_typical_dwell_after_its_arrival() -> None:
+    run = _close_stops(("08:00", "08:05", "08:07", "08:10"))
+    run.at("08:00:00", east(0)).at("08:02:00", east(400))
+    estimate_all(run.state, run.ctx, local("2026-10-08 08:02:05"))
+    (instance,) = run.state.instances.values()
+    dwell = timedelta(seconds=POLICY.prediction.dwell_credit_s("bus"))
+    for call in instance.calls[1:3]:
+        assert call.estimated_arrival is not None and call.estimated_departure is not None
+        assert call.estimated_departure - call.estimated_arrival == dwell

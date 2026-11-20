@@ -198,6 +198,7 @@ def estimate(
     now: Instant | None = None,
     dwelt: tuple[int, Instant] | None = None,
     left: tuple[int, Instant] | None = None,
+    drives: tuple[timedelta, ...] | None = None,
 ) -> Instance:
     """Per-call estimates; computed when state is emitted, not on every fix.
 
@@ -208,8 +209,20 @@ def estimate(
     when (`dwelt`, `last_fix_at_stop`): its predicted departure is never before that fix, nor
     before a typical dwell after the arrival (`_dwelling_until`). Seen away from it and the
     departure not committed yet, the departure shown is the one that will be (`left`,
-    `stops.departure`): it does not follow `now` meanwhile."""
+    `stops.departure`): it does not follow `now` meanwhile.
 
+    Road vehicles also pass each call's least drive from the previous passenger call
+    (`drives`, `runtimes.minimum_drives`), which makes the calls ahead one feasible chain: a
+    predicted departure from a stop without a timetabled dwell is a typical dwell
+    (`dwell_credit_s`) after its arrival, and an arrival is never sooner than the previous
+    departure plus the drive. Where that holds an arrival back, the lateness carried on grows
+    with it. A dwell up to the typical one costs nothing (the timetable's minute holds it);
+    standing longer makes the vehicle later by the excess. The chain runs on times anchored to
+    the fixes (the last fix at a stop, the measured lateness), never on the floor at `now`:
+    that moves every tick, and carried on it would make every call ahead move with it."""
+
+    lateness: timedelta | None
+    delay_class: SourceClass | None
     lateness, delay_class = current if current is not None else own_lateness(instance)
     if instance.lifecycle == "pre_trip" and lateness is not None and lateness < timedelta(0):
         lateness = timedelta(0)  # not departed: an early departure is observed, never assumed
@@ -238,6 +251,9 @@ def estimate(
     last = len(instance.calls) - 1
     calls: list[CallState] = []
     ahead = 0  # passenger calls predicted so far
+    road = drives is not None
+    credit = timedelta(seconds=policy.dwell_credit_s(instance.mode))
+    leave: Instant | None = None  # the previous passenger call's departure, for the chain
     for i, (state, (sched_arr, sched_dep)) in enumerate(
         zip(instance.calls, scheduled, strict=True)
     ):
@@ -248,10 +264,14 @@ def estimate(
             status: CallStatus = "actual" if recorded else "inferred"
             # A call with an event after it was left, departure unseen: not a prediction.
             waiting = i >= latest_event
-            if est_dep is None and i < last and waiting and not finished and lateness is not None:
+            predicted_departure = (
+                est_dep is None and i < last and waiting and not finished and lateness is not None
+            )
+            chain: Instant | None = None
+            if predicted_departure and lateness is not None:
                 # Arrived, not yet left: the departure is still a prediction, never before the
                 # arrival (a source's arrival can be later than the last fix).
-                leave_floor = floor if est_arr is None or (floor and floor > est_arr) else est_arr
+                leave_floor = _latest(floor, est_arr)
                 if (
                     state.passenger
                     and delay_class == "gps"
@@ -275,10 +295,24 @@ def estimate(
                     est_dep = _dwelling_until(est_dep, est_arr, dwelt[1], instance.mode, policy)
                 if left is not None and left[0] == i and est_dep is not None:
                     est_dep = left[1]
+                if drives is not None and state.passenger:
+                    # Where the chain starts: when it leaves by the fixes, not by `now`.
+                    chain = _leaves_by_fixes(
+                        est_arr,
+                        sched_arr,
+                        sched_dep,
+                        lateness,
+                        instance.mode,
+                        policy,
+                        passenger=state.passenger,
+                        seen=dwelt[1] if dwelt is not None and dwelt[0] == i else None,
+                        left=left[1] if left is not None and left[0] == i else None,
+                    )
             calls.append(_call(state, est_arr, est_dep, status, "gps"))
-            latest = est_dep or est_arr
-            if latest is not None and (floor is None or latest > floor):
-                floor = latest
+            # Only a predicted departure starts the chain: once the vehicle has left, its
+            # fixes on the leg tell how it drives.
+            leave = chain if state.passenger and predicted_departure else None
+            floor = _latest(floor, est_dep or est_arr)
         elif i <= reached or finished:
             calls.append(_call(state, None, None, "no_realtime", None))
         elif lateness is None:
@@ -294,7 +328,14 @@ def estimate(
                 lateness += extra[i]
             if state.passenger:
                 ahead += 1
-            est_arr = _shifted(sched_arr, lateness, floor)
+            # The chain's arrival: by the lateness, no sooner than the drive from the previous
+            # departure allows; then floored like any prediction.
+            reached_at = _shifted(sched_arr, lateness, None)
+            if drives is not None and leave is not None and state.passenger:
+                held = _held_back(reached_at, sched_arr, Instant(leave + drives[i]))
+                if held is not None:
+                    reached_at, lateness = held  # held back by the drive: later from here
+            est_arr = _shifted(reached_at, timedelta(0), floor)
             if est_arr is not None:
                 floor = est_arr
             est_dep, lateness = _departure(
@@ -307,8 +348,30 @@ def estimate(
                 policy,
                 passenger=state.passenger,
             )
+            if (
+                road
+                and state.passenger
+                and est_arr is not None
+                and est_dep is not None
+                and _zero_dwell((sched_arr, sched_dep))
+                and i < last
+            ):
+                est_dep = max(est_dep, Instant(est_arr + credit))
             if est_dep is not None:
                 floor = est_dep
+            if state.passenger and drives is not None:
+                leave = (
+                    _leaves_by_fixes(
+                        reached_at,
+                        sched_arr,
+                        sched_dep,
+                        lateness,
+                        instance.mode,
+                        policy,
+                        passenger=i < last,
+                    )
+                    or reached_at
+                )
             if state.status == "predicted" and _within(
                 (state.estimated_arrival, state.estimated_departure),
                 (est_arr, est_dep),
@@ -319,6 +382,52 @@ def estimate(
             before = est_dep or est_arr or before
             calls.append(_call(state, est_arr, est_dep, "predicted", delay_class))
     return _with_calls(instance, calls)
+
+
+def _latest(a: Instant | None, b: Instant | None) -> Instant | None:
+    """The later of two times, either possibly unknown."""
+
+    if a is None:
+        return b
+    return a if b is None or a >= b else b
+
+
+def _held_back(
+    reached: Instant | None, scheduled: Instant | None, reachable: Instant
+) -> tuple[Instant, timedelta] | None:
+    """The arrival no sooner than `reachable`, and the lateness that makes, if it holds back."""
+
+    if reached is None or scheduled is None or reachable <= reached:
+        return None
+    return reachable, reachable - scheduled
+
+
+def _leaves_by_fixes(
+    arrival: Instant | None,
+    sched_arr: Instant | None,
+    sched_dep: Instant | None,
+    lateness: timedelta,
+    mode: str,
+    policy: PredictionPolicy,
+    *,
+    passenger: bool,
+    seen: Instant | None = None,
+    left: Instant | None = None,
+) -> Instant | None:
+    """When a road vehicle leaves a call by its fixes and the lateness alone, never by the floor
+    at `now`: seen leaving, then; else as `_departure` has it, a typical dwell after the arrival
+    at a passenger stop without a timetabled one, and no sooner than its last fix there."""
+
+    if left is not None:
+        return left
+    leaves, _ = _departure(
+        arrival, sched_arr, sched_dep, lateness, None, mode, policy, passenger=passenger
+    )
+    if leaves is None:
+        return None
+    if passenger and arrival is not None and _zero_dwell((sched_arr, sched_dep)):
+        leaves = max(leaves, Instant(arrival + timedelta(seconds=policy.dwell_credit_s(mode))))
+    return leaves if seen is None else max(leaves, seen)
 
 
 def monotone(instance: Instance) -> Instance:

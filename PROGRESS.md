@@ -313,6 +313,15 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — Road predictions as one feasible chain (BASE_PLAN 20.5). A predicted
+  departure from a stop without a timetabled dwell is `dwell_credit_s` after its arrival; an
+  arrival is never sooner than the previous departure plus the hop's least drive (running time
+  now less that dwell, at least the hop at top speed; `runtimes.minimum_drives`); the chain runs
+  on fix-anchored times, never the floor at now (carrying that doubled flicker on the corpus).
+  PID peak: stops in a row shown leaving together 23,497 → 11; bus departure MAE/bias next stop
+  61/−55 → 51/−31 s, third 79/−62 → 67/−32 s; tram 35/−34 → 25/−12 s; arrivals and flicker
+  about unchanged. Rail unchanged. Next: journeys lost near their terminus (315 buses on the peak
+  end without a last-stop time), bus arrivals still ~20 s early.
 - **2026-11-20** — Stop presence (`timeline/stops.py`, BASE_PLAN 20.4). A road vehicle's fixes
   within the departure margin of a stop bound its events whatever the reading makes of them:
   arrival no later than the first fix there, no departure while the newest fix is still there,

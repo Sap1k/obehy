@@ -140,3 +140,38 @@ def running_extra(
                 share = min(1.0, max(0.0, (reach - progress.distance_m) / (reach - left)))
         extra[b] = (end - start) * ((r - 1.0) * share)
     return tuple(extra)
+
+
+def minimum_drives(
+    instance: Instance,
+    plan: Plan,
+    hops: dict[HopKey, deque[Traversal]],
+    now: Instant,
+    policy: PredictionPolicy,
+    speed_mps: float,
+) -> tuple[timedelta, ...]:
+    """Per passenger call, the least time from the previous passenger call's departure to its
+    arrival: the hop's running time now (timetable times the live ratio) less the typical dwell
+    the timetable's minute holds (`dwell_credit_s`), and never less than the hop's length at the
+    mode's top speed (two calls in one timetable minute are still a drive apart). Zero for the
+    first call and non-passenger calls."""
+
+    calls = instance.calls
+    credit = timedelta(seconds=policy.dwell_credit_s(instance.mode))
+    distances = plan.path.call_distances_m
+    drives = [timedelta(0)] * len(calls)
+    for b in range(1, len(calls)):
+        if not calls[b].passenger:
+            continue
+        a = _previous_passenger(calls, b)
+        if a is None:
+            continue
+        start = plan.scheduled[a][1] or plan.scheduled[a][0]
+        end = plan.scheduled[b][0] or plan.scheduled[b][1]
+        running = end - start if start is not None and end is not None else timedelta(0)
+        r = ratio(hops, _key(instance, a, b), now, policy)
+        if r is not None:
+            running = running * r
+        fastest = timedelta(seconds=max(0.0, distances[b] - distances[a]) / speed_mps)
+        drives[b] = max(running - credit, fastest, timedelta(0))
+    return tuple(drives)

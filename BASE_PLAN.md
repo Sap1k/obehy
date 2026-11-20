@@ -1418,6 +1418,15 @@ L          ← pred_dep(j) − S_dep(j)
 - Each estimate is the single best prediction; no uncertainty is published.
 - A vehicle standing at a call gets a predicted departure; monotone repair keeps every estimate
   at or after the last fix and the previous call.
+- **The calls ahead of a road vehicle are one feasible chain.** A predicted departure from a
+  passenger stop without a timetabled dwell is the typical dwell (the credit above) after its
+  arrival, and an arrival is never sooner than the previous departure plus the hop's least
+  drive: its running time now less that dwell, and never less than its length at the mode's
+  top speed (calls in one timetable minute are still a drive apart). Where the drive holds an
+  arrival back, the lateness carried on grows with it. The chain starts from times anchored to
+  the fixes (the departure the last fix at a stop allows, the measured lateness), never from
+  the floor at now: a floor that moves every tick, carried forward, moves every call ahead
+  with it and back once the next fix arrives (half a minute old), which doubled flicker.
 - Across trips of one vehicle, the circulation anchor (section 22) gives the knock-on start of
   the next trip.
 
