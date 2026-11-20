@@ -84,7 +84,6 @@ from obehy.realtime.timeline.estimate import (
     estimate,
     last_fix_at_stop,
     monotone,
-    own_lateness,
     waiting_is_not_early,
 )
 from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, lead_of, with_lead
@@ -327,44 +326,36 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
 
     policy = ctx.policy.prediction
     due = set(state.dirty)
-    due.update(j for j, instance in state.instances.items() if _behind(instance, now))
+    due.update(j for j, instance in state.instances.items() if _behind(instance, now, policy))
     for journey in sorted(due):
         instance = state.instances.get(journey)
         if instance is None or instance.lifecycle == "cancelled":
             continue
         trip = ctx.index.trip(instance.trip_id)
         plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
-        if trip.run_key is None:  # not a rail run (a CZPTT run may start as a bus)
-            extra = running_extra(instance, plan, state.hops, now, policy)
-            current = waiting_is_not_early(instance, plan, own_lateness(instance))
-            current = dwell_credit(instance, trip, plan, current, policy)
-            state.instances[journey] = estimate(
-                instance,
-                plan.scheduled,
-                policy,
-                current=current,
-                extra=extra,
-                now=_fresh(instance, now, policy),
-                dwelt=last_fix_at_stop(instance, plan),
-                left=_seen_leaving(instance, plan, policy),
-                drives=minimum_drives(
-                    instance,
-                    plan,
-                    state.hops,
-                    now,
-                    policy,
-                    ctx.policy.progress.max_speed_mps(instance.mode),
-                ),
-            )
-            continue
-        predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)
+        # One estimate for every vehicle: buses, trams and trains alike. Where they differ is
+        # policy by mode (running times learned or not, the floor at now) and what their
+        # sources give (a point delay or a predicted next stop only where a source has them).
         current = waiting_is_not_early(instance, plan, current_lateness(instance))
+        current = dwell_credit(instance, trip, plan, current, policy)
         estimated = estimate(
             instance,
             plan.scheduled,
             policy,
-            current=dwell_credit(instance, trip, plan, current, policy),
-            anchor=predictor,
+            current=current,
+            anchor=anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor),
+            extra=running_extra(instance, plan, state.hops, now, policy),
+            now=_fresh(instance, now, policy),
+            dwelt=last_fix_at_stop(instance, plan),
+            left=_seen_leaving(instance, plan, policy),
+            drives=minimum_drives(
+                instance,
+                plan,
+                state.hops,
+                now,
+                policy,
+                ctx.policy.progress.max_speed_mps(instance.mode),
+            ),
         )
         state.instances[journey] = monotone(estimated)
     state.dirty.clear()
@@ -388,17 +379,18 @@ def _fresh(instance: Instance, now: Instant, policy: PredictionPolicy) -> Instan
     been (`floor_fresh_s`); None in a reception gap, where the vehicle may have passed it."""
 
     progress = instance.progress
-    if progress is None or now - progress.at > timedelta(seconds=policy.floor_fresh_s):
+    fresh = policy.floor_fresh_s(instance.mode)
+    if fresh <= 0 or progress is None or now - progress.at > timedelta(seconds=fresh):
         return None
     return now
 
 
-def _behind(instance: Instance, now: Instant) -> bool:
-    """Whether a running road journey's first predicted time is before `now` (rail runs are
-    estimated from their last fix: SŽ positions are minutes apart, so a train not seen at a
+def _behind(instance: Instance, now: Instant, policy: PredictionPolicy) -> bool:
+    """Whether a running journey's first predicted time is before `now`, for a mode floored at
+    now (`floor_fresh_s`; rail is not: SŽ positions are minutes apart, so a train not seen at a
     call yet may well be there)."""
 
-    if instance.lifecycle != "running" or instance.parts:
+    if instance.lifecycle != "running" or policy.floor_fresh_s(instance.mode) <= 0:
         return False
     for call in instance.calls:
         if call.status == "predicted":

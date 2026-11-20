@@ -48,9 +48,9 @@ class _Call:
     """Predictions for one call not yet reached."""
 
     mode: str
-    samples: list[tuple[int, Instant, Instant, float]] = field(
-        default_factory=list[tuple[int, Instant, Instant, float]]
-    )  # (horizon, made at, predicted arrival, predicted delay s)
+    samples: list[tuple[int, Instant, Instant, float, tuple[str, str]]] = field(
+        default_factory=list[tuple[int, Instant, Instant, float, tuple[str, str]]]
+    )  # (horizon, made at, predicted arrival, predicted delay s, (where, fix age))
     anchor: float | None = None  # predicted delay at the last significant move
     direction: int = 0
     moves: int = 0
@@ -80,6 +80,34 @@ def _quantiles(values: list[float]) -> dict[str, float]:
 DELAY_BUCKETS = ((-60, "early >1 min"), (0, "early"), (60, "late <1 min"), (180, "late 1-3 min"))
 
 
+def _context(instance: Instance, plan: Plan, at: Instant) -> tuple[str, str]:
+    """Where the vehicle is when predicting (at a stop, or how far along the leg) and how old
+    its fix is: the next call's accuracy is split by both."""
+
+    track, progress = instance.track, instance.progress
+    seen = track.seen_at if track is not None else None
+    age = "unknown" if seen is None else _age_bucket((at - seen).total_seconds())
+    if track is not None and track.at_stop is not None and track.at_stop.away is None:
+        return "at stop", age
+    if progress is None:
+        return "unknown", age
+    i = progress.call_index
+    if i < 0 or i + 1 >= len(plan.zones):
+        return "unknown", age
+    start, end = plan.zones[i].departure_m, plan.zones[i + 1].arrival_m
+    if start is None or end is None or end <= start:
+        return "unknown", age
+    share = (progress.distance_m - start) / (end - start)
+    return f"leg {min(3, max(0, int(share * 4))) * 25}%", age
+
+
+def _age_bucket(seconds: float) -> str:
+    for high in (15, 30, 45, 60, 90):
+        if seconds < high:
+            return f"fix <{high} s"
+    return "fix 90 s+"
+
+
 def _delay_bucket(seconds: float) -> str:
     for high, name in DELAY_BUCKETS:
         if seconds < high:
@@ -105,6 +133,16 @@ class QualityLog:
     # (mode, predicted delay bucket) -> the same sums, every horizon together
     by_delay: dict[tuple[str, str], list[float]] = field(
         default_factory=lambda: defaultdict[tuple[str, str], list[float]](lambda: [0.0, 0.0, 0.0])
+    )
+    # (mode, where the vehicle was, how old its fix) -> the same sums, next call only
+    by_where: dict[tuple[str, str, str], list[float]] = field(
+        default_factory=lambda: defaultdict[tuple[str, str, str], list[float]](
+            lambda: [0.0, 0.0, 0.0]
+        )
+    )
+    # (mode, horizon) -> every signed error, for quantiles: a tail of minutes moves the mean
+    signed: dict[tuple[str, int], list[float]] = field(
+        default_factory=lambda: defaultdict[tuple[str, int], list[float]](list)
     )
     errors: dict[tuple[str, int], list[float]] = field(
         default_factory=lambda: defaultdict[tuple[str, int], list[float]](lambda: [0.0, 0.0, 0.0])
@@ -138,7 +176,7 @@ class QualityLog:
             if finished:
                 self.pending.pop(journey, None)
                 continue
-            self._predict(journey, instance, plan.scheduled, at)
+            self._predict(journey, instance, plan, at)
             if not instance.parts and plan.path.shaped:
                 self._shape(journey, instance, plan, state)
         for journey in [j for j in self.pending if j.feed == state.feed]:
@@ -184,13 +222,20 @@ class QualityLog:
             interval = instance.calls[i].arrival
             assert interval is not None
             actual = _middle(interval)
-            for horizon, made, predicted, delay in call.samples:
+            for horizon, made, predicted, delay, (where, age) in call.samples:
                 if made < actual:
                     error = (predicted - actual).total_seconds()
-                    for total in (
+                    totals = [
                         self.errors[(call.mode, horizon)],
                         self.by_delay[(call.mode, _delay_bucket(delay))],
-                    ):
+                    ]
+                    self.signed[(call.mode, horizon)].append(error)
+                    if horizon == 1:
+                        totals += [
+                            self.by_where[(call.mode, where, "all")],
+                            self.by_where[(call.mode, "all", age)],
+                        ]
+                    for total in totals:
                         total[0] += 1
                         total[1] += abs(error)
                         total[2] += error
@@ -199,10 +244,10 @@ class QualityLog:
             flicker.moves += call.moves
             flicker.reversals += call.reversals
 
-    def _predict(
-        self, journey: JourneyKey, instance: Instance, scheduled: Scheduled, at: Instant
-    ) -> None:
+    def _predict(self, journey: JourneyKey, instance: Instance, plan: Plan, at: Instant) -> None:
+        scheduled = plan.scheduled
         reached = instance.progress.call_index if instance.progress is not None else -1
+        context = _context(instance, plan, at)
         horizon = 0
         for i in range(reached + 1, len(instance.calls)):
             call = instance.calls[i]
@@ -216,7 +261,7 @@ class QualityLog:
             if entry is None:
                 entry = self.pending[journey][i] = _Call(instance.mode)
             delay = (call.estimated_arrival - planned).total_seconds()
-            entry.samples.append((horizon, at, call.estimated_arrival, delay))
+            entry.samples.append((horizon, at, call.estimated_arrival, delay, context))
             if entry.anchor is None:
                 entry.anchor = delay
             elif abs(delay - entry.anchor) >= SIGNIFICANT:
@@ -261,6 +306,7 @@ class QualityLog:
                 "n": int(n),
                 "mae_s": round(absolute / n, 1),
                 "bias_s": round(signed / n, 1),
+                "error_p": _quantiles(self.signed[(mode, horizon)]),
             }
         flicker = {
             mode: {
@@ -298,8 +344,16 @@ class QualityLog:
                 "mae_s": round(absolute / n, 1),
                 "bias_s": round(signed / n, 1),
             }
+        by_where: dict[str, dict[str, Any]] = {}
+        for (mode, where, age), (n, absolute, signed) in sorted(self.by_where.items()):
+            by_where.setdefault(mode, {})[where if age == "all" else age] = {
+                "n": int(n),
+                "mae_s": round(absolute / n, 1),
+                "bias_s": round(signed / n, 1),
+            }
         return {
             "accuracy": accuracy,
+            "next_call_by_position": by_where,
             "by_predicted_delay": by_delay,
             "flicker": flicker,
             "dwell": dwell,

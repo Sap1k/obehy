@@ -5,10 +5,11 @@
 # kept after the trip ends, observed dwell credited at stops without a timetabled one, and
 # the distance driven followed where a shape misses the road, v11 hop running times learned
 # live, v12 one day of rt.observation, v13 hourly rt.observation, a history window and the disk
-# guard, v14 the raw archive window per source, v15 inferred history events).
+# guard, v14 the raw archive window per source, v15 inferred history events, v16 one estimate
+# for every mode: the floor at now per mode).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "15"
+policy_version = "16"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -114,9 +115,9 @@ max_early_departure_s = { default = 86400, rail = 0 }
 # passenger calls now, from the arrivals of every journey over the same two stops, as a ratio
 # to the timetable. Traversals weigh less by e every runtime_decay_s; the timetable's own ratio
 # (1) weighs runtime_prior_weight, as a traversal just made; a traversal's ratio is clipped to
-# [1/runtime_ratio_max, runtime_ratio_max]. Each call ahead of a road vehicle gets the running
+# [1/runtime_ratio_max, runtime_ratio_max]. Each call ahead of a vehicle gets the running
 # time its hop takes now beyond the timetable's (on the hop being driven, the share of it
-# left); rail runs keep the timetable's (few trains share a hop; SŽ predictions anchor them).
+# left); with few trains on a hop, the prior keeps a train near the timetable's.
 # Measured offline on the PID morning peak 2026-10-15 06:45-09:00: decay 30 min with weight
 # 0.5 beat a 30-minute median of at least three, decays of 10-60 min and weights of 0.25-2.
 runtime_decay_s = 1800
@@ -130,7 +131,8 @@ publish_deadband_s = { default = 20, rail = 0 }
 # A road call not yet seen reached is not reached before now while the last fix is at most this
 # old (PID fixes are 31 s old when published, 58 s at p90). In a reception gap the vehicle may
 # have passed it unseen: the last fix's time holds.
-floor_fresh_s = 90
+# Rail is never floored: SŽ positions are minutes apart, a train not seen at a call may be there.
+floor_fresh_s = { default = 90, rail = 0 }
 # A stop the timetable gives no dwell (arrival = departure, whole minutes) still has one inside
 # the minute. Time a vehicle is seen standing there, up to dwell_credit_s, is not lateness: while
 # it stands, and on the next leg, fading out by the next stop (the leg's time absorbs it). Most

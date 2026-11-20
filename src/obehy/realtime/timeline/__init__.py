@@ -79,11 +79,10 @@ def advance(
     if instance.lifecycle != "running" or position is None or repeated:
         return with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s), effects
     source = observation.source
-    progress_policy = policy.progress
-    run = trip.run_key is not None  # a CZPTT run, whatever its mode (rail-replacement bus)
+    # Every vehicle is tracked alike; only how far a source's fixes may be off differs (the SŽ
+    # map's are coarse), and with it whether a fix can say the vehicle is at a stop.
     sigma_m = policy.rail.position_sigma_m(source)
-    if run:
-        progress_policy = _rail_progress(progress_policy, sigma_m)
+    progress_policy = _source_progress(policy.progress, sigma_m)
     plan = plans.plan(trip, instance.journey.service_date, index, policy)
     if _behind(instance, plan, position, sigma_m) and not position_leads(
         instance, source, observation.at, policy
@@ -91,11 +90,12 @@ def advance(
         # A lagging fix (the SŽ map's, a feed's late copy) while a better source is fresh.
         instance = with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s)
         return instance, [*effects, Unresolved(observation, "behind", source)]
-    # A rail run's calls are timed by its sources; a road vehicle's unseen dwell at a stop
-    # without a timetabled one is the typical one (`commit._crossing_time`).
-    dwell_s = 0.0 if run else policy.prediction.dwell_credit_s(trip.mode)
-    # A road vehicle's fixes at a stop bound its events there (`stops`).
-    radius_m = 0.0 if run else policy.lifecycle.departure_margin_m
+    # An unseen dwell at a stop without a timetabled one is the typical one
+    # (`commit._crossing_time`); fixes precise enough to place the vehicle at a stop bound its
+    # events there (`stops`).
+    dwell_s = policy.prediction.dwell_credit_s(trip.mode)
+    margin = policy.lifecycle.departure_margin_m
+    radius_m = margin if sigma_m <= policy.progress.gps_sigma_m else 0.0
     step = update(
         plan,
         instance.track,
@@ -108,11 +108,16 @@ def advance(
         stop_radius_m=radius_m,
     )
     track = track.evolve(position_at=observation.at)
-    calls, crossed = _cross(instance, step.crossed, source, policy, fuse=run)
+    calls, crossed = _cross(instance, step.crossed, source, policy)
     finished = any(c.kind == "arrival" and c.call == len(calls) - 1 for c in step.crossed)
     progress = step.progress
     held = instance.progress
-    if run and held is not None and (progress is None or progress.distance_m < held.distance_m):
+    anchored = any(t.point is not None for t in instance.sources)
+    if (
+        anchored
+        and held is not None
+        and (progress is None or progress.distance_m < held.distance_m)
+    ):
         progress = held  # a source's point anchors progress; fixes never take it back
     instance = instance.evolve(
         calls=calls,
@@ -193,8 +198,8 @@ def _published(
 
 
 @lru_cache(maxsize=64)
-def _rail_progress(policy: ProgressPolicy, gps_sigma_m: float) -> ProgressPolicy:
-    """The progress policy with a rail source's position error (one per source)."""
+def _source_progress(policy: ProgressPolicy, gps_sigma_m: float) -> ProgressPolicy:
+    """The progress policy with a source's position error (one per source)."""
 
     return replace(policy, gps_sigma_m=gps_sigma_m)
 
@@ -230,8 +235,6 @@ def _cross(
     crossed: tuple[Crossing, ...],
     source: str,
     policy: Policy,
-    *,
-    fuse: bool,
 ) -> tuple[tuple[CallState, ...], list[Effect]]:
     """Set the calls' passed times and recorded events; recorded ones go to history. A call a
     source's point event already holds keeps that event, narrowed by the crossing if they
@@ -247,7 +250,7 @@ def _cross(
         held = state.arrival if crossing.kind == "arrival" else state.departure
         fixes = crossing.fixes
         if crossing.method == "progress":
-            if fuse and held is not None:
+            if held is not None:
                 fixes = merge(held, fixes, new_is_point=False, policy=policy)
             recorded: Interval | None = fixes
         else:

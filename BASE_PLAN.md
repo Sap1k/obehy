@@ -1396,9 +1396,12 @@ L          ← pred_dep(j) − S_dep(j)
 - A published prediction stays until a new estimate differs from it by a policy deadband: most
   moves of the measured lateness come from stop-and-go traffic, and every smoothing of the
   lateness itself cost accuracy.
-- Both running times and the floor at now are for road vehicles. Rail runs keep the timetable's running times (few trains share
-  a hop; SŽ predictions anchor them) and are not floored at now (SŽ positions are minutes
-  apart: a train not yet seen at a station may well be there).
+- **One estimate for every mode.** Buses, trams and trains take the same propagation, chain and
+  stop rules; what differs is policy by mode or source (the floor at now is off for rail: SŽ
+  positions are minutes apart, a train not yet seen at a station may well be there; a source's
+  position error decides whether its fixes can place a vehicle at a stop) and what a source
+  gives (a point delay, a predicted next stop). A hop few trains share keeps close to the
+  timetable's running time through the prior, not by a rail exception.
 
 - A late vehicle recovers time only in a real timetabled dwell, down to the minimum dwell
   (policy: about a minute, two in long dwells). Buses mostly have none (arrival = departure);

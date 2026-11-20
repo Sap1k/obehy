@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v15.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v16.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v15.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v16.toml"
 
 
 class PolicyError(ValueError):
@@ -93,7 +93,9 @@ class PredictionPolicy:
     runtime_prior_weight: float  # the timetable's weight, as traversals just made
     runtime_ratio_max: float  # a traversal's ratio to the timetable is clipped to [1/max, max]
     publish_deadband_s: ByMode  # a published prediction moves only by at least this much
-    floor_fresh_s: int  # with a fix this recent, a call not seen reached is not reached before now
+    floor_fresh_s: (
+        ByMode  # with a fix this recent, a call not seen reached is not reached before now
+    )
     dwell_credit_s: ByMode
     early_keep: ByMode
 

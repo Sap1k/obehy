@@ -313,6 +313,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — One estimate for every mode (policy v16). Rail runs lose their own branch in
+  `estimate_all` and the timeline's `run` forks: lateness, source anchors, running times, the
+  chain, stop presence (fixes as precise as GPS) and ordering repair apply to all; the floor at
+  now is per mode (`floor_fresh_s`, rail 0). Rail replay 2026-10-06 05:30-08:30 (DÚK + SŽ map):
+  trains next stop 95.7/−13.8 → 95.4/−12.6 s, third 135.5/−66.4 → 134.6/−60.3 s, flicker 1.21 →
+  1.15; DÚK buses unchanged; rail-replacement buses now follow bus rules. Bus arrivals: median
+  next-stop error −2 s (p10/p90 −87/+48 s); the −21 s mean is a tail of buses losing minutes
+  after the prediction. Charging unseen time on a leg moved every prediction ~4 s and added 7 %
+  flicker, rejected; the tail needs running times by time of day (history). `--quality` now
+  splits the next call by position and fix age and gives error quantiles.
 - **2026-11-20** — Road predictions as one feasible chain (BASE_PLAN 20.5). A predicted
   departure from a stop without a timetabled dwell is `dwell_credit_s` after its arrival; an
   arrival is never sooner than the previous departure plus the hop's least drive (running time

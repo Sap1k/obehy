@@ -151,7 +151,7 @@ def dwell_credit(
     arrived_at = _passed(state.passed_arrival, state.arrival)
     if arrived_at is not None:
         arrived = arrived_at - scheduled
-    elif instance.parts and not trip.calls[i].on_request and i > 0:
+    elif not trip.calls[i].on_request and i > 0:
         # It certainly stopped: the lateness it came with, at the previous call's latest time.
         before = instance.calls[i - 1]
         arrival_before, departure_before = plan.scheduled[i - 1]
