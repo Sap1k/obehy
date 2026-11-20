@@ -54,6 +54,7 @@ from obehy.realtime.model import (
     FeedState,
     Freshness,
     Instance,
+    Interval,
     JourneyKey,
     KeylessEpisode,
     LineRef,
@@ -239,6 +240,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
                 ctx.policy,
                 ctx.plans,
                 ctx.semantics_of(observation),
+                before,
             )
             if binding.confirmed and instance.calls is not calls_before:
                 plan = ctx.plans.plan(trip, binding.journey.service_date, ctx.index, ctx.policy)
@@ -448,20 +450,29 @@ def refresh(state: FeedState, now: Instant, ctx: Context) -> list[Effect]:
 
 
 def _arrived_unseen(instance: Instance, ctx: Context) -> tuple[Instance, WriteEvent] | None:
-    """A running journey gone quiet just short of its terminus (its vehicle lost, or on to its
-    next trip without the arrival seen): finished, its arrival inferred from the lateness at
-    the last fixes (`timeline.commit.terminus`)."""
+    """A running journey gone quiet at or just short of its terminus (its vehicle lost, or on to
+    its next trip without the arrival seen): finished, its arrival the start of its final
+    standstill there if it was seen standing at the terminus (`timeline.stops`), else inferred
+    from the lateness at the last fixes (`timeline.commit.terminus`)."""
 
     last = len(instance.calls) - 1
     call = instance.calls[last]
     track = instance.track
     if instance.lifecycle != "running" or call.arrival is not None or call.passed_arrival:
         return None
-    if track is None or not track.hypotheses:
+    if track is None:
         return None
-    trip = ctx.index.trip(instance.trip_id)
-    plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)
-    interval = terminus(plan, track.hypotheses[0].history, ctx.policy.progress)
+    stop = track.at_stop
+    if stop is not None and stop.call == last:
+        # Seen standing at the terminus (its stand may lie off the path): arrived when the
+        # final standstill began.
+        interval: Interval | None = Interval(stop.first, stop.first)
+    elif track.hypotheses:
+        trip = ctx.index.trip(instance.trip_id)
+        plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)
+        interval = terminus(plan, track.hypotheses[0].history, ctx.policy.progress)
+    else:
+        interval = None
     if interval is None:
         return None
     at = Instant(interval.lo + (interval.hi - interval.lo) / 2)
@@ -615,7 +626,14 @@ def _seen_starting(
     if position is None:
         return True  # nothing to judge by: the source's state stands
     plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)
-    return at_origin_or_moving(plan, previous, position, observation.at, ctx.policy.progress)
+    return at_origin_or_moving(
+        plan,
+        previous,
+        position,
+        observation.at,
+        ctx.policy.progress,
+        ctx.policy.lifecycle.terminal_radius_m,
+    )
 
 
 def _missed_departure(

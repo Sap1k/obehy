@@ -1339,6 +1339,15 @@ call, departure after it, never past the midpoint to the neighbouring call).
   The reading alone misses these: it cannot step back to a stop reached from the far side, holds
   a bay off the shape off the path, and creeps forward over the trigger on a standing vehicle's
   GPS noise.
+- **Terminals.** Bus stations and stands lie up to a few hundred metres from the coordinates
+  the timetable gives a first or last stop, often off the path. At those two calls a fix within
+  `terminal_radius_m` counts while the vehicle stands (consecutive fixes under `standing_m`
+  apart), before any reading exists too: standing there starts the trip (the start rule), the
+  first stop's departure is timed by the last standing fix and the first away, and when a
+  journey ends without its terminus arrival, the start of its final standstill there is that
+  arrival. A stand on the path past the first stop stays DUK-Q19's layover, not a start. A
+  vehicle lost just short of the terminus is inferred from its lateness on the final leg only:
+  a long dwell at the stop before is not a change of pace.
 
 **Unmatched fixes and off-route.** A fix with no candidate within reach of any segment matches
 nothing: hypotheses keep their state and age. Unmatched fixes for longer than `T` set `off_route`

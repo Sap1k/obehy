@@ -10,7 +10,9 @@ the checks hold whatever places the events:
 - `shown_departure_moved`: after the reading left a stop, its shown departure moved by half a
   minute or more;
 - `same_departure`: two stops in a row, at least `APART_M` apart, shown leaving at the same time;
-- `lost_near_end`: a journey ended without a time at its last stop, last seen near it.
+- `lost_near_end`: a journey ended without a time at its last stop, last seen near it;
+- `started_without_time`: a journey first seen near its first stop ended with events after it
+  but no time there.
 
 Departure predictions are scored like the arrivals in `quality` (MAE and bias by horizon):
 riders ask when a vehicle leaves. A few examples of each check are kept for trace fixtures.
@@ -40,6 +42,7 @@ SAME = timedelta(seconds=5)
 APART_M = 100.0
 SETTLED = timedelta(seconds=180)  # a departure is judged this long after it, or two stops on
 NEAR_END_M = 500.0
+NEAR_START_M = 1000.0  # first seen this close to its first stop: it was seen starting
 
 CallKey = tuple[JourneyKey, int]
 
@@ -59,6 +62,8 @@ class _Counts:
     ended: int = 0
     ended_with_time: int = 0
     lost_near_end: int = 0
+    started: int = 0  # ended, first seen near its first stop
+    started_without_time: int = 0  # of those, with later events but no time at the first stop
 
 
 @dataclass(slots=True)
@@ -83,6 +88,8 @@ class Checks:
     running: dict[JourneyKey, tuple[str, str, float | None]] = field(
         default_factory=dict[JourneyKey, tuple[str, str, float | None]]
     )
+    # How far each journey's first fix was from its first stop.
+    first_seen_m: dict[JourneyKey, float] = field(default_factory=dict[JourneyKey, float])
     # Departure predictions not yet scored: (horizon, made at, predicted departure).
     pending: dict[CallKey, list[tuple[int, Instant, Instant]]] = field(
         default_factory=dict[CallKey, list[tuple[int, Instant, Instant]]]
@@ -148,6 +155,8 @@ class Checks:
         calls = plan.path.call_distances_m
         end = distance_m(here, point_at(plan.path, calls[-1]))
         self.running[journey] = (instance.mode, instance.trip_id, end)
+        if journey not in self.first_seen_m:
+            self.first_seen_m[journey] = distance_m(here, point_at(plan.path, calls[0]))
         if self.fix_at.get(journey) == track.seen_at:
             return
         self.fix_at[journey] = track.seen_at
@@ -279,6 +288,17 @@ class Checks:
         self.fix_at.pop(journey, None)
         counts = self.counts[mode]
         counts.ended += 1
+        near_start = self.first_seen_m.pop(journey, None)
+        if instance is not None and near_start is not None and near_start <= NEAR_START_M:
+            counts.started += 1
+            first = instance.calls[0]
+            later = any(
+                c.passed_arrival is not None or c.passed_departure is not None
+                for c in instance.calls[1:]
+            )
+            if later and first.departure is None and first.passed_departure is None:
+                counts.started_without_time += 1
+                self._example("started_without_time", journey, trip_id)
         last = instance.calls[-1] if instance is not None else None
         if last is not None and (last.arrival is not None or last.passed_arrival is not None):
             counts.ended_with_time += 1
@@ -297,6 +317,8 @@ class Checks:
                 "ended": counts.ended,
                 "ended_with_time": counts.ended_with_time,
                 "lost_near_end": counts.lost_near_end,
+                "started": counts.started,
+                "started_without_time": counts.started_without_time,
             }
         accuracy: dict[str, dict[str, Any]] = {}
         for (mode, horizon), (n, absolute, signed) in sorted(self.errors.items()):

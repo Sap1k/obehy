@@ -313,6 +313,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — First and last stops at terminals (policy v17). Stands lie up to a few hundred
+  m from a first or last stop's coordinates, often off the path: a vehicle standing within
+  `terminal_radius_m` (400) is at the stop, before any reading too (start rule, origin
+  departure from the stand, terminus arrival at the final standstill when the journey ends); a
+  vehicle lost short of its terminus is inferred from the final leg's lateness only. Arriva
+  Express 2026-10-11/12: first stops without a time 27 → 3 of 99, last stops with one 56 → 68 of
+  101, lost near the end 14 → 10. PID 07:00-08:00: buses ended with a last-stop time 2738/2835 →
+  2817/2893, lost near the end 14 → 10. DÚK 2026-10-06 05:30-08:30: 906 → 929, 24 → 19.
+  Accuracy unchanged. The web delay summary counts a run without a time at the segment's end by
+  its last measured delay, flagged estimated (the native app needs the same). Unit and web tests
+  pass; no database checks.
 - **2026-11-20** — One estimate for every mode (policy v16). Rail runs lose their own branch in
   `estimate_all` and the timeline's `run` forks: lateness, source anchors, running times, the
   chain, stop presence (fixes as precise as GPS) and ordering repair apply to all; the floor at

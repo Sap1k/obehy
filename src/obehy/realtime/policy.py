@@ -1,4 +1,4 @@
-"""Versioned realtime policy (`data/realtime/policy-v16.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v17.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v16.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v17.toml"
 
 
 class PolicyError(ValueError):
@@ -47,6 +47,7 @@ class LifecyclePolicy:
     predict_without_data_s: ByMode
     arrival_radius_m: float
     departure_margin_m: float
+    terminal_radius_m: float  # a stand this far from the first or last stop is at it
     publish_finished_s: ByMode
     forget_after_s: int
 
@@ -81,6 +82,7 @@ class ProgressPolicy:
     move_sigma_m: float
     move_slack_m: float
     reckon_slack: float
+    standing_m: float  # consecutive fixes closer than this: the vehicle stands
 
 
 @dataclass(frozen=True, slots=True)

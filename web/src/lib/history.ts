@@ -53,6 +53,12 @@ export function segmentDays(history: TripHistory, from: number, to: number): Seg
     if (first < 0 || last < 0) return { day, from: NONE, to: NONE, worst: NONE, calls: [] };
     const calls = day.calls.slice(first, last + 1);
     const delays = calls.map((c, i) => callDelay(c, i === calls.length - 1));
+    // A run lost just before the segment's end (or first seen just after its start) still
+    // counts: by the nearest delay measured inside the segment, flagged estimated. Dropping it
+    // would leave out exactly the bad days.
+    const measured = delays.filter((d) => d.delayS !== null);
+    const nearest = (d: Delay, fallback: Delay | undefined): Delay =>
+      d.delayS !== null || fallback === undefined ? d : { ...fallback, estimated: true };
     const worst = delays.reduce(
       (most, d) =>
         d.delayS !== null && (most.delayS === null || d.delayS > most.delayS) ? d : most,
@@ -60,8 +66,8 @@ export function segmentDays(history: TripHistory, from: number, to: number): Seg
     );
     return {
       day,
-      from: delays[0]!,
-      to: delays.at(-1)!,
+      from: nearest(delays[0]!, measured[0]),
+      to: nearest(delays.at(-1)!, measured.at(-1)),
       worst,
       calls,
     };

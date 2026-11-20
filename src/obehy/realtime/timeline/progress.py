@@ -29,12 +29,20 @@ from dataclasses import dataclass, replace
 from datetime import timedelta
 
 from obehy.realtime.geo import distance_m
-from obehy.realtime.model import Hypothesis, OffPath, Placement, Position, Progress, Track
+from obehy.realtime.model import (
+    Hypothesis,
+    OffPath,
+    Placement,
+    Position,
+    Progress,
+    StopSeen,
+    Track,
+)
 from obehy.realtime.policy import ProgressPolicy
 from obehy.realtime.timeline.commit import Crossing, commit
 from obehy.realtime.timeline.path import Candidate, Path, candidates, point_at
 from obehy.realtime.timeline.plan import Plan
-from obehy.realtime.timeline.stops import capped, seen
+from obehy.realtime.timeline.stops import capped, done_at, seen
 from obehy.realtime.times import Instant, micros
 
 
@@ -59,20 +67,17 @@ def update(
     policy: ProgressPolicy,
     dwell_s: float,
     stop_radius_m: float = 0.0,
+    terminal_m: float = 0.0,
+    prior: Position | None = None,
 ) -> Step:
     """Extend the journey's hypotheses with one fix (from `source`) and commit what they
-    agree on. A road vehicle's fixes within `stop_radius_m` of a stop bound its events there
-    (`stops`); a fix at a stop without a timetabled dwell stands for `dwell_s` there."""
+    agree on. Fixes within `stop_radius_m` of a stop, or within `terminal_m` of the first or
+    last stop while the vehicle stands, bound its events there (`stops`); a fix at a stop
+    without a timetabled dwell stands for `dwell_s` there. `prior` is the vehicle's last fix
+    before this one, whatever the journey made of it (a stand before the trip started)."""
 
     if len(plan.path.points) < 2:
         return Step(track or Track((), 0.0), None, (), None, False)
-    live = track.hypotheses if track is not None else ()
-    speed = policy.max_speed_mps(mode)
-    at_us = micros(at)
-    window = _search_window(live, at_us, speed, policy)
-    found = candidates(
-        plan.path, position.lon, position.lat, _sigma(policy), policy.reach_sigmas, window
-    )
     here = (position.lon, position.lat)
     # How far the fixes moved apart: progress on a real shape must keep up with it, and a held
     # reading advances by it. Only between fixes of one source: a run fuses sources of
@@ -80,13 +85,36 @@ def update(
     moved: float | None = None
     if track is not None and track.fix is not None and track.fix[0] == source:
         moved = distance_m(track.fix[1:], here)
+    elif prior is not None:
+        moved = distance_m((prior.lon, prior.lat), here)
+    stop = None
+    if stop_radius_m > 0:
+        # Before anything is matched too: a stand off the path is still the first stop.
+        standing = moved is not None and moved <= policy.standing_m
+        stop = seen(
+            plan,
+            track.at_stop if track is not None else None,
+            track.committed_m if track is not None and track.hypotheses else 0.0,
+            here,
+            at,
+            stop_radius_m,
+            terminal_m if standing else 0.0,
+            track.seen_at if standing and track is not None else None,
+        )
+    live = track.hypotheses if track is not None else ()
+    speed = policy.max_speed_mps(mode)
+    at_us = micros(at)
+    window = _search_window(live, at_us, speed, policy)
+    found = candidates(
+        plan.path, position.lon, position.lat, _sigma(policy), policy.reach_sigmas, window
+    )
     if live:
         extended = _extend(plan, live, found, position, at, at_us, speed, moved, policy)
         extended += _held(plan, live, at, at_us, moved, here, policy)
     else:
         extended = _start(plan, found, position, at, at_us, policy)
     if not extended:
-        return _unmatched(track, at, policy)
+        return _unmatched(track, at, policy, (source, *here), stop)
 
     beam = _prune(extended, policy)
     # A restart never commits behind what was committed (a source's point anchor can leave a
@@ -95,18 +123,17 @@ def update(
     committed_m = track.committed_m if live and track is not None else floor
     if track is not None and not live:
         committed_m = max(track.committed_m, floor)
-    origin = plan.zones[0].departure_m if track is None and plan.zones else None
+    # Nothing committed yet (no track, or only fixes that matched nothing, as on a stand off the
+    # path): the first reading may start past the origin.
+    unstarted = track is None or (not track.hypotheses and track.committed_m == 0.0)
+    origin = plan.zones[0].departure_m if unstarted and plan.zones else None
     if origin is not None and origin <= committed_m:
         # A new track first seen past the origin: its departure, just before the first fix,
         # may still be inferred (`commit`).
         committed_m = math.nextafter(origin, -math.inf)
     crossed_at = track.crossed_at if track is not None else None
-    stop = None
-    if stop_radius_m > 0:
-        before = track.at_stop if track is not None else None
-        stop = seen(plan, before, committed_m, here, at, stop_radius_m)
-        if stop is not None and stop.away == at:
-            stop = replace(stop, away_m=beam[0].along_m)
+    if stop is not None and stop.away == at and stop.away_m is None:
+        stop = replace(stop, away_m=beam[0].along_m)
     # The first fix back on the path after a stretch off it may have come onto the road past a
     # stop it then pulls back to (a detour): a departure it crossed waits for the next fix.
     returning = bool(live) and live[0].off_path_since is not None
@@ -114,10 +141,8 @@ def update(
         plan, beam, committed_m, crossed_at, at, policy, dwell_s, stop=stop, returning=returning
     )
     best = done.beam[0]
-    if stop is not None:
-        trigger = plan.zones[stop.call].departure_m
-        if trigger is None or trigger <= done.committed_m:
-            stop = None
+    if stop is not None and done_at(plan, stop.call, done.committed_m):
+        stop = None
     along = capped(plan, stop, best.along_m)
     progress = Progress(along, plan.call_index_at(along), at)
     since = best.off_path_since
@@ -137,13 +162,19 @@ def update(
 
 
 def at_origin_or_moving(
-    plan: Plan, before: Position | None, after: Position, at: Instant, policy: ProgressPolicy
+    plan: Plan,
+    before: Position | None,
+    after: Position,
+    at: Instant,
+    policy: ProgressPolicy,
+    terminal_m: float = 0.0,
 ) -> bool:
-    """Whether a fix shows the vehicle at its first stop (before the departure trigger), or
-    two consecutive fixes show it moving on along the path after it: forward by more than
-    GPS jitter (a vehicle standing on a stand past the first stop is neither), and no further
-    ahead of the timetable than the start prior allows (a vehicle driving to its start over
-    roads the trip takes later, or rolling onto its stand, is not running half an hour early)."""
+    """Whether a fix shows the vehicle at its first stop (before the departure trigger, or
+    standing within `terminal_m` of it: a terminal's stand off the path), or two consecutive
+    fixes show it moving on along the path after it: forward by more than GPS jitter (a vehicle
+    standing on a stand past the first stop is neither), and no further ahead of the timetable
+    than the start prior allows (a vehicle driving to its start over roads the trip takes
+    later, or rolling onto its stand, is not running half an hour early)."""
 
     first = plan.zones[0].departure_m if plan.zones else None
     after_m = plan.path.call_distances_m[0] if first is None else first
@@ -151,6 +182,13 @@ def at_origin_or_moving(
     now = candidates(plan.path, after.lon, after.lat, sigma, policy.reach_sigmas)
     if any(a.along_m <= after_m for a in now):
         return True
+    if before is not None and terminal_m > 0 and not now:
+        # Standing off the path near the first stop: a terminal's stand. (A stand on the path
+        # past the first stop is DUK-Q19's layover under the next trip: not started.)
+        here, then = (after.lon, after.lat), (before.lon, before.lat)
+        origin = point_at(plan.path, plan.path.call_distances_m[0])
+        if distance_m(here, then) <= policy.standing_m and distance_m(here, origin) <= terminal_m:
+            return True
     if before is None:
         return False
     then = candidates(plan.path, before.lon, before.lat, sigma, policy.reach_sigmas)
@@ -402,14 +440,22 @@ def _prune(extended: list[Hypothesis], policy: ProgressPolicy) -> tuple[Hypothes
     return tuple(kept)
 
 
-def _unmatched(track: Track | None, at: Instant, policy: ProgressPolicy) -> Step:
-    """A fix before any hypothesis exists that matches no segment: nothing to track yet."""
+def _unmatched(
+    track: Track | None,
+    at: Instant,
+    policy: ProgressPolicy,
+    fix: tuple[str, float, float],
+    stop: StopSeen | None,
+) -> Step:
+    """A fix before any hypothesis exists that matches no segment: nothing to track yet, but
+    where it is (the next fix's distance moved) and whether it stands at a terminal."""
 
     if track is None:
         track = Track((), 0.0)
     since = track.unmatched_since or at
     held = at - since >= timedelta(seconds=policy.off_route_hold_s)
-    return Step(replace(track, unmatched_since=since, seen_at=at), None, (), since, held)
+    kept = replace(track, unmatched_since=since, seen_at=at, fix=fix, at_stop=stop)
+    return Step(kept, None, (), since, held)
 
 
 # --- scoring -----------------------------------------------------------------------------------

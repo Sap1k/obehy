@@ -6,10 +6,10 @@
 # the distance driven followed where a shape misses the road, v11 hop running times learned
 # live, v12 one day of rt.observation, v13 hourly rt.observation, a history window and the disk
 # guard, v14 the raw archive window per source, v15 inferred history events, v16 one estimate
-# for every mode: the floor at now per mode).
+# for every mode: the floor at now per mode, v17 terminals: terminal_radius_m and standing_m).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "16"
+policy_version = "17"
 
 [time]
 # Date window of a keyed observation: [scheduled start - pre_trip, scheduled end + max_delay].
@@ -26,6 +26,10 @@ stale_after_s = { default = 300, rail = 900 }
 predict_without_data_s = { default = 1800, rail = 3600 }
 arrival_radius_m = 60
 departure_margin_m = 40
+# Bus stations and stands lie up to a few hundred metres from the coordinates the timetable
+# gives a first or last stop, often off the path: a vehicle standing within this of either is at
+# it (`timeline/stops.py`). Arriva Express parks about 320 m from its Prague terminus.
+terminal_radius_m = 400
 # A finished journey keeps its trip update (the calls it made) this long after its last call,
 # so consumers do not revert it to the timetable; a lost one keeps its calls made until forgotten.
 publish_finished_s = { default = 1800, rail = 3600 }
@@ -98,6 +102,8 @@ off_route_hold_s = 180
 move_sigma_m = 15
 move_slack_m = 50
 reckon_slack = 0.25
+# Fixes of one source closer than this are a vehicle standing (GPS drift on a stand).
+standing_m = 15
 
 [prediction]
 # Propagation (BASE_PLAN.md 20.5). A late vehicle recovers time only in a real timetabled dwell

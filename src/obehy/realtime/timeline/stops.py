@@ -17,7 +17,14 @@ over the departure trigger. So the fixes within the departure margin of a call's
   vehicle is seen away, so the shown departure is the one committed.
 
 Calls in a row at one point (a layover split into an arrival and a departure) are one dwell at
-the last of them. Rail runs are timed by their sources and keep the reading alone.
+the last of them.
+
+Terminals: bus stations and stands often lie hundreds of metres from the coordinates the
+timetable gives the first or last stop, off the path. There a fix within `terminal_radius_m`
+counts while the vehicle stands (it moved less than `standing_m` since its previous fix): the
+first stop's departure waits while it stands on the stand and is timed by the last standing fix
+and the first away; at the last stop, the start of the final standstill is its arrival when the
+journey ends without one (`core._arrived_unseen`).
 """
 
 from __future__ import annotations
@@ -34,12 +41,23 @@ AHEAD = 3  # calls looked at past the first one not yet left
 
 
 def _pending(plan: Plan, committed_m: float) -> int | None:
-    """The first call whose departure trigger is not committed yet."""
+    """The first call whose departure trigger is not committed yet; past the last one, the
+    terminus while its arrival is not."""
 
     for call, zone in enumerate(plan.zones):
         if zone.departure_m is not None and zone.departure_m > committed_m:
             return call
-    return None
+    last = len(plan.zones) - 1
+    arrival = plan.zones[last].arrival_m if plan.zones else None
+    return last if arrival is not None and arrival > committed_m else None
+
+
+def done_at(plan: Plan, call: int, committed_m: float) -> bool:
+    """Whether the call's last event (its departure; the terminus's arrival) is committed."""
+
+    zone = plan.zones[call]
+    trigger = zone.departure_m if zone.departure_m is not None else zone.arrival_m
+    return trigger is None or trigger <= committed_m
 
 
 def _last_at_point(plan: Plan, call: int) -> int:
@@ -50,19 +68,25 @@ def _last_at_point(plan: Plan, call: int) -> int:
 
 
 def at_call(
-    plan: Plan, committed_m: float, here: tuple[float, float], radius_m: float
+    plan: Plan,
+    committed_m: float,
+    here: tuple[float, float],
+    radius_m: float,
+    terminal_m: float = 0.0,
 ) -> int | None:
     """The call whose point the fix is within `radius_m` of, among the first calls not yet
-    left (the last one at its point); None elsewhere."""
+    left (the last one at its point); at the first and last call within `terminal_m` (a
+    vehicle standing on a terminal's stand, given only while it stands). None elsewhere."""
 
     first = _pending(plan, committed_m)
     if first is None:
         return None
     distances = plan.path.call_distances_m
     last = len(distances) - 1
-    for call in range(first, min(first + AHEAD, last)):
-        if distance_m(here, point_at(plan.path, distances[call])) <= radius_m:
-            return _last_at_point(plan, call)
+    for call in range(first, min(first + AHEAD, last + 1)):
+        reach = max(radius_m, terminal_m) if call in (0, last) else radius_m
+        if distance_m(here, point_at(plan.path, distances[call])) <= reach:
+            return _last_at_point(plan, call) if call < last else call
     return None
 
 
@@ -73,24 +97,28 @@ def seen(
     here: tuple[float, float],
     at: Instant,
     radius_m: float,
+    terminal_m: float = 0.0,
+    still_since: Instant | None = None,
 ) -> StopSeen | None:
     """The stop presence after a fix at `here`: kept, extended, ended (seen away) or begun at
-    another call. A presence whose departure has been committed is dropped."""
+    another call. A presence whose call is done is dropped. `terminal_m` is the reach at the
+    first and last call while the vehicle stands (0: it moves, or the source cannot tell);
+    standing began at `still_since`, the previous fix, which a new presence starts from."""
 
-    if previous is not None:
-        trigger = plan.zones[previous.call].departure_m
-        if trigger is None or trigger <= committed_m:
-            previous = None
-    call = at_call(plan, committed_m, here, radius_m)
+    if previous is not None and done_at(plan, previous.call, committed_m):
+        previous = None
+    call = at_call(plan, committed_m, here, radius_m, terminal_m)
     if call is None:
         if previous is not None and previous.away is None:
             return StopSeen(previous.call, previous.first, previous.last, at)
         return previous
     if previous is not None and previous.call == call:
+        if previous.away is not None and call == len(plan.zones) - 1:
+            return StopSeen(call, still_since or at, at)  # standing again short of it
         return StopSeen(call, previous.first, at)
     if previous is not None and call < previous.call:
         return previous  # back at a call already left: noise
-    return StopSeen(call, at, at)
+    return StopSeen(call, still_since or at, at)
 
 
 def holding(stop: StopSeen | None) -> int | None:

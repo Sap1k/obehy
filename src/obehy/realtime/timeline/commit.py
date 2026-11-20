@@ -106,10 +106,20 @@ def commit(
                 break  # back on the path past a stop it may pull back to
         reached = trigger.along_m
         if bracket is None:
-            # Crossed before anything was observed: nothing, except the origin's departure
-            # just before the first fix, inferred from the lateness there.
+            # Crossed before anything was observed: nothing, except the origin's departure:
+            # timed by the fixes on its stand if it was seen there (off the path, before any
+            # reading), else inferred from the lateness at the first fix just past it.
             first = deciding[0].history[0]
             origin = trigger.call == 0 and trigger.kind == "departure"
+            if origin and stop is not None and stop.call == 0 and stop.away is not None:
+                when = departure(plan, stop, dwell_s)
+                if crossed_at is not None and when < crossed_at:
+                    when = crossed_at
+                crossed_at = when
+                stood = Interval(stop.last, stop.away)
+                method = "progress" if stood.hi - stood.lo <= longest else "inferred"
+                crossed.append(Crossing(0, "departure", stood, when, method, stood))
+                continue
             inferred = _before_first(first, trigger, plan, policy) if origin else None
             if inferred is not None:
                 when = Instant(inferred.lo + (inferred.hi - inferred.lo) / 2)
@@ -251,8 +261,8 @@ def _inferred(
 def terminus(plan: Plan, history: tuple[Placement, ...], policy: ProgressPolicy) -> Interval | None:
     """When a vehicle last seen just short of its terminus arrived there: the scheduled arrival
     shifted by the lateness at its last fixes (their range), if the last is at most
-    `max_extrapolate_s` of timetable time before it and the lateness over the fixes kept (at
-    most `max_inferred_spread_s` apart). From the last fix on; None otherwise."""
+    `max_extrapolate_s` of timetable time before it and the lateness over its fixes on the final
+    leg kept (at most `max_inferred_spread_s` apart). From the last fix on; None otherwise."""
 
     last = len(plan.scheduled) - 1
     planned = plan.scheduled_time(last, "arrival")
@@ -262,7 +272,11 @@ def terminus(plan: Plan, history: tuple[Placement, ...], policy: ProgressPolicy)
     reached = plan.timetable.planned(fix.at, fix.along_m)
     if reached is None or (planned - reached).total_seconds() > policy.max_extrapolate_s:
         return None
-    lateness = [plan.timetable.lateness_s(p.at, p.along_m) for p in history]
+    # The lateness on the final leg only: standing at the call before it is not a change of
+    # pace on the way in (and would rule out every vehicle that dwelt there).
+    leg = plan.zones[last - 1].departure_m if last > 0 else None
+    driven = [p for p in history if leg is None or p.along_m >= leg] or [fix]
+    lateness = [plan.timetable.lateness_s(p.at, p.along_m) for p in driven]
     if max(lateness) - min(lateness) > policy.max_inferred_spread_s:
         return None
     lo = max(fix.at, planned + timedelta(seconds=min(lateness)))

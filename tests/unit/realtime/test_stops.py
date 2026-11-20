@@ -170,3 +170,52 @@ def test_a_predicted_departure_ahead_is_a_typical_dwell_after_its_arrival() -> N
     for call in instance.calls[1:3]:
         assert call.estimated_arrival is not None and call.estimated_departure is not None
         assert call.estimated_departure - call.estimated_arrival == dwell
+
+
+def test_a_bus_waiting_on_a_stand_off_the_path_leaves_its_first_stop_when_it_drives_off() -> None:
+    """The stand lies 250 m from where the timetable puts A, off the path: the departure is
+    when the bus stopped standing there, not when it was first placed on the path."""
+
+    run = Run().at("07:58:00", north_of(0, 250)).at("07:59:00", north_of(0, 250))
+    run.at("08:01:30", north_of(0, 251)).at("08:02:00", east(350)).at("08:03:00", east(700))
+    run.at("08:05:00", east(1000)).at("08:05:20", east(1100))
+    a = run.instance.calls[0]
+    assert a.passed_departure is not None
+    assert local("2026-10-08 08:01:30") <= a.passed_departure <= local("2026-10-08 08:02:00")
+
+
+def test_a_bus_parked_short_of_its_terminus_arrived_when_it_stopped() -> None:
+    """C's stand is 300 m short of where the timetable puts it; the bus parks there, keeps
+    reporting, then goes quiet: it arrived when it stopped."""
+
+    from obehy.realtime.core import refresh
+
+    run = to_b().at("08:05:00", east(1000)).at("08:05:30", east(1150)).at("08:08:00", east(1600))
+    run.at("08:09:00", east(1700))
+    for minute in range(10, 16):
+        run.at(f"08:{minute:02d}:00", east(1701))
+    for later in ("08:25:00", "08:30:00"):
+        now = local(f"2026-10-08 {later}")
+        run.effects.extend(refresh(run.state, now, run.ctx))
+    (instance,) = run.state.instances.values()
+    assert instance.lifecycle == "finished"
+    assert instance.calls[2].passed_arrival == local("2026-10-08 08:09:00")
+    assert event(run, "C", "arrival") == Interval(
+        local("2026-10-08 08:09:00"), local("2026-10-08 08:09:00")
+    )
+
+
+def test_a_bus_lost_just_short_of_its_terminus_after_a_long_stop_still_arrives() -> None:
+    """Five minutes at B, then on time over the last leg and lost 150 m short of C: its arrival
+    is inferred from the lateness on that leg, the dwell at B notwithstanding."""
+
+    from obehy.realtime.core import refresh
+
+    run = to_b().at("08:05:00", east(1000)).at("08:07:00", east(1000)).at("08:10:00", east(1000))
+    run.at("08:10:20", east(1150)).at("08:12:00", east(1500)).at("08:14:00", east(1850))
+    for later in ("08:20:00", "08:25:00"):
+        run.effects.extend(refresh(run.state, local(f"2026-10-08 {later}"), run.ctx))
+    (instance,) = run.state.instances.values()
+    assert instance.lifecycle == "finished"
+    arrival = event(run, "C", "arrival")
+    assert local("2026-10-08 08:14:00") <= arrival.lo <= local("2026-10-08 08:16:00")

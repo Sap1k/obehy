@@ -56,8 +56,10 @@ def advance(
     policy: Policy,
     plans: PlanCache,
     semantics: SourceSemantics,
+    before: Position | None = None,
 ) -> tuple[Instance, list[Effect]]:
-    """Apply one bound observation to its instance."""
+    """Apply one bound observation to its instance; `before` is the vehicle's previous fix
+    (a stand it waited on before the trip started, which the timeline never saw)."""
 
     track, previous, news = note_source(instance, observation, semantics)
     if not news:
@@ -94,8 +96,9 @@ def advance(
     # (`commit._crossing_time`); fixes precise enough to place the vehicle at a stop bound its
     # events there (`stops`).
     dwell_s = policy.prediction.dwell_credit_s(trip.mode)
-    margin = policy.lifecycle.departure_margin_m
-    radius_m = margin if sigma_m <= policy.progress.gps_sigma_m else 0.0
+    precise = sigma_m <= policy.progress.gps_sigma_m
+    radius_m = policy.lifecycle.departure_margin_m if precise else 0.0
+    terminal_m = policy.lifecycle.terminal_radius_m if precise else 0.0
     step = update(
         plan,
         instance.track,
@@ -106,6 +109,8 @@ def advance(
         progress_policy,
         dwell_s,
         stop_radius_m=radius_m,
+        terminal_m=terminal_m,
+        prior=before,
     )
     track = track.evolve(position_at=observation.at)
     calls, crossed = _cross(instance, step.crossed, source, policy)

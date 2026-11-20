@@ -83,7 +83,7 @@ describe("segmentDays", () => {
     const seconds = days.map((d) => [d.from, d.to, d.worst].map((x) => x.delayS));
     expect(days.map((d, i) => [d.day.service_date, ...seconds[i]!])).toEqual([
       ["2026-10-12", 60, 240, 360],
-      ["2026-10-11", null, 0, 60],
+      ["2026-10-11", 60, 0, 60], // nothing at B: its first measured delay, estimated
       ["2026-10-10", null, null, null],
     ]);
     expect(days[0]!.calls.map((c) => c.location_id)).toEqual(["B", "C", "D"]);
@@ -128,5 +128,40 @@ describe("delays in words", () => {
       "veryLate",
       "unknown",
     ]);
+  });
+});
+
+describe("a run lost near the segment's end", () => {
+  const lost = history([
+    day("2026-10-12", [
+      call("A", null, 0),
+      call("B", 600, 660),
+      call("C", 1800, 1800),
+      call("D", null, null),
+    ]),
+    day("2026-10-11", [call("A", null, 0), call("B", 0, 0), call("C", 0, 0), call("D", 0, null)]),
+  ]);
+
+  it("ends with its last measured delay, estimated, instead of dropping out", () => {
+    const [bad] = segmentDays(lost, 0, 3);
+    expect(bad!.to).toEqual({ delayS: 1800, estimated: true });
+  });
+
+  it("keeps the bad day in the summary", () => {
+    const summary = segmentSummary(segmentDays(lost, 0, 3));
+    expect(summary?.runs).toBe(2);
+    expect(summary?.onTime).toBe(0.5);
+  });
+
+  it("starts with the first measured delay when the first stop has none", () => {
+    const late = history([
+      day("2026-10-12", [
+        call("A", null, null),
+        call("B", 120, 120),
+        call("C", 120, 120),
+        call("D", 120, null),
+      ]),
+    ]);
+    expect(segmentDays(late, 0, 3)[0]!.from).toEqual({ delayS: 120, estimated: true });
   });
 });
