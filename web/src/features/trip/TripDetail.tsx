@@ -22,7 +22,9 @@ import classes from "./TripPanel.module.css";
 /** The delay chip's state at a call. */
 export function headTime(call: Trip["calls"][number], stale: boolean) {
   const { scheduled, estimated } = callTimes(call);
-  return scheduled ? timeState(scheduled, estimated, call.status, stale) : null;
+  return scheduled
+    ? timeState(scheduled, estimated, call.delay_min, call.punctuality, stale)
+    : null;
 }
 
 export function TripHeader({

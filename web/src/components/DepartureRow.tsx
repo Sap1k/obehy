@@ -22,8 +22,9 @@ export function DepartureRow({
   const state = timeState(
     departure.scheduled,
     departure.estimated,
-    departure.status,
-    Boolean(departure.stale) || offline,
+    departure.delay_min,
+    departure.punctuality,
+    offline,
   );
   const airConditioned = departure.vehicle?.traits?.air_conditioning === true;
   const access = stepFree(departure.wheelchair, departure.vehicle?.traits);

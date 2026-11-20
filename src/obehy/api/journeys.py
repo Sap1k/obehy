@@ -10,115 +10,73 @@ namespace, or, for a trip ID of an older timetable version, by the journey key h
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from typing import cast
 
 from fastapi import APIRouter, Response
 
 from obehy.api import schema
-from obehy.api.alerts import find_alerts, trip_alerts
-from obehy.api.codes import features, load_codes
-from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, trip_vehicle
+from obehy.api.common import LimitsDep, SnapshotDep, envelope, line
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
-from obehy.api.lookup_rules import can_ask
 from obehy.api.motis import Dataset, MotisTrip, datasets, parse_stop_id, parse_trip_id
 from obehy.api.params import ParameterError
-from obehy.api.trips import JOURNEY_NAMESPACES, trip_call, trip_realtime
+from obehy.api.resolve import TripOnDate, by_key, gone, trip_on
+from obehy.api.trips import assemble
 
 router = APIRouter(tags=["journeys"])
 
 
 @dataclass(frozen=True, slots=True)
-class _Found:
+class _Unresolved:
     outcome: schema.EnrichOutcome
-    trip_id: str | None = None
-    detail: str | None = None
+    detail: str | None
 
 
-def _by_key(snap: Snapshot, namespace: str, key: str, service_date: date) -> _Found:
-    """The one trip a source key names on the date, as `GET /trips/by-key` finds it."""
+def _resolve(snap: Snapshot, motis: MotisTrip, dataset: Dataset) -> _Unresolved | TripOnDate:
+    """The leg's running trip, or why there is none."""
 
-    rows = snap.all(
-        "trip_by_key", {"namespace": namespace, "key": key, "service_date": service_date}
-    )
-    if not rows:
-        return _Found("not_found", detail=f"no trip {namespace} {key} runs on {service_date}")
-    runs = {r["run_key"] for r in rows}
-    if len(rows) > 1 and (len(runs) > 1 or None in runs):
-        names = ", ".join(r["trip_id"] for r in rows)
-        return _Found(
-            "ambiguous", detail=f"{namespace} {key} names several trips on {service_date}: {names}"
-        )
-    return _Found("resolved", trip_id=rows[0]["trip_id"])
-
-
-def _resolve(snap: Snapshot, motis: MotisTrip, dataset: Dataset) -> _Found:
     if dataset.resolve == "source_key":
-        namespace = cast(str, dataset.trip_namespace)
-        return _by_key(snap, namespace, motis.trip_id, motis.service_date)
-    params = {
-        "trip_id": motis.trip_id,
-        "service_date": motis.service_date,
-        "release_id": snap.release_id,
-    }
-    row = snap.one("trip", params)
-    if row is not None:
-        if not row["runs"]:
-            return _Found(
-                "not_running", detail=f"{motis.trip_id} does not run on {motis.service_date}"
+        found = by_key(snap, cast(str, dataset.trip_namespace), motis.trip_id, motis.service_date)
+    else:
+        trip = trip_on(snap, motis.trip_id, motis.service_date)
+        if trip is not None:
+            if trip.runs:
+                return trip
+            return _Unresolved(
+                "not_running", f"{motis.trip_id} does not run on {motis.service_date}"
             )
-        return _Found("resolved", trip_id=motis.trip_id)
-    # MOTIS may run an older release than ours: its trip ID is then of an older timetable version.
-    gone = snap.one("trip_gone", params)
-    if gone is None:
-        return _Found("not_found", detail=f"no trip {motis.trip_id}")
-    return _by_key(snap, gone["key_namespace"], gone["key"], motis.service_date)
+        # MOTIS may run an older release than ours: its trip ID is then of an older timetable
+        # version.
+        journey = gone(snap, motis.trip_id, motis.service_date)
+        if journey is None:
+            return _Unresolved("not_found", f"no trip {motis.trip_id}")
+        found = by_key(snap, journey.namespace, journey.key, motis.service_date)
+    if found.trip_id is None:
+        return _Unresolved(found.outcome, found.detail)
+    trip = trip_on(snap, found.trip_id, motis.service_date)
+    assert trip is not None  # by_key found it running in the same snapshot
+    return trip
 
 
-def _trip(snap: Snapshot, limits: Limits, trip_id: str, service_date: date) -> schema.EnrichedLeg:
-    """A resolved trip as an enriched leg with all its calls (`trips.trip`'s reads)."""
+def _trip(snap: Snapshot, limits: Limits, trip: TripOnDate) -> schema.EnrichedLeg:
+    """A resolved trip as an enriched leg with all its calls (as a trip page shows it)."""
 
-    params = {"trip_id": trip_id, "service_date": service_date, "release_id": snap.release_id}
-    row = snap.one("trip", params)
-    assert row is not None  # resolved against the same snapshot
-    codes = load_codes()
-    journey = snap.one("trip_journey", params | {"namespaces": JOURNEY_NAMESPACES})
-    realtime = snap.one("trip_realtime", params)
-    stated = features(
-        codes,
-        snap.all(
-            "trip_features",
-            {"trip_id": trip_id, "route_id": row["route_id"], "service_id": row["service_id"]},
-        ),
-    )
-    seen_since = snap.now - timedelta(seconds=limits.vehicle_max_age_s)
-    vehicles = snap.all("trip_vehicles", params | {"trip_ids": [trip_id], "seen_since": seen_since})
-    calls = snap.all("trip_calls", params)
-    alerts = find_alerts(
-        snap,
-        limits,
-        routes=[row["route_id"]],
-        stops=sorted({c["location_id"] for c in calls}),
-        trips=[trip_id],
-    )
+    shown = assemble(snap, limits, trip)
     return schema.EnrichedLeg(
         motis_trip_id="",
         outcome="resolved",
-        trip=schema.TripRef(trip_id=trip_id, service_date=service_date),
-        journey=None if journey is None else schema.JourneyKey.model_validate(journey),
-        line=line(row),
-        agency=row["agency"],
-        trip_short_name=row["trip_short_name"],
-        headsign=row["headsign"],
-        realtime=None if realtime is None else trip_realtime(realtime),
-        vehicles=[trip_vehicle(v) for v in vehicles],
-        composition=can_ask(snap, "composition", trip_id, service_date),
-        calls=[
-            trip_call(c, stated, first=n == 0, last=n == len(calls) - 1)
-            for n, c in enumerate(calls)
-        ],
-        alerts=trip_alerts(alerts, route=row["route_id"], trip=trip_id),
+        trip=schema.TripRef(trip_id=trip.trip_id, service_date=trip.service_date),
+        journey=shown.journey,
+        line=line(shown.row),
+        agency=shown.row["agency"],
+        trip_short_name=shown.row["trip_short_name"],
+        headsign=shown.row["headsign"],
+        realtime=shown.realtime,
+        vehicles=shown.vehicles,
+        composition=shown.composition,
+        calls=shown.calls,
+        alerts=shown.alerts,
     )
 
 
@@ -205,16 +163,16 @@ def enrich(
             )
             continue
         found = _resolve(snap, motis, motis.dataset)
-        if found.trip_id is None:
+        if isinstance(found, _Unresolved):
             legs.append(
                 schema.EnrichedLeg(
                     motis_trip_id=asked.trip_id, outcome=found.outcome, detail=found.detail
                 )
             )
             continue
-        cached = (found.trip_id, motis.service_date)
+        cached = (found.trip_id, found.service_date)
         if cached not in trips:
-            trips[cached] = _trip(snap, limits, found.trip_id, motis.service_date)
+            trips[cached] = _trip(snap, limits, found)
         whole = trips[cached]
         span = leg_span(
             whole.calls,

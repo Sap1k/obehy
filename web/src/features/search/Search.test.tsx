@@ -28,7 +28,8 @@ const tram = (id: string, headsign: string, fleet: string): Vehicle => ({
   },
   trip_short_name: null,
   headsign,
-  delay_s: 0,
+  delay_min: 0,
+  punctuality: "on_time",
   traits: { fleet_number: fleet },
   sources: ["pid"],
 });

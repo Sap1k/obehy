@@ -25,8 +25,7 @@ journeys AS (
 SELECT j.vehicle_id, j.feed, j.source, j.source_vehicle_id, j.day, j.seq, j.chain_first_seen,
        j.chain_last_seen, j.key_namespace, j.key, j.service_date, j.first_seen, j.last_seen,
        s.trip_id, s.route_name, s.headsign,
-       ends.origin_id, ends.origin, ends.departure, ends.destination_id, ends.destination,
-       ends.arrival,
+       ends.origin, ends.departure, ends.destination, ends.arrival,
        coalesce(s.route_id, t.route_id) AS route_id,
        coalesce(r.short_name, s.route_name) AS short_name, r.long_name,
        coalesce(s.mode, r.mode) AS mode, r.color, r.text_color,
@@ -36,18 +35,15 @@ LEFT JOIN history.journey_latest s
     ON (s.feed, s.key_namespace, s.key, s.service_date)
         = (j.feed, j.key_namespace, j.key, j.service_date)
 LEFT JOIN LATERAL (
-    SELECT (array_agg(loc.value ORDER BY c.ordinal))[1] AS origin_id,
-           (array_agg(name.value ORDER BY c.ordinal))[1] AS origin,
+    SELECT (array_agg(name.value ORDER BY c.ordinal))[1] AS origin,
            control.obehy_instant_fast(
                j.service_date, (array_agg(c.scheduled_departure ORDER BY c.ordinal))[1]
            ) AS departure,
-           (array_agg(loc.value ORDER BY c.ordinal DESC))[1] AS destination_id,
            (array_agg(name.value ORDER BY c.ordinal DESC))[1] AS destination,
            control.obehy_instant_fast(
                j.service_date, (array_agg(c.scheduled_arrival ORDER BY c.ordinal DESC))[1]
            ) AS arrival
     FROM history.journey_call c
-    JOIN history.term loc ON loc.term_id = c.location_term
     JOIN history.term name ON name.term_id = c.name_term
     WHERE c.journey_id = s.journey_id AND c.service_date = j.service_date
         AND c.revision = s.latest_revision AND c.passenger_service

@@ -19,13 +19,5 @@ SELECT e.trip_id, e.short_name AS trip_short_name, e.headsign,
        control.obehy_instant_fast(%(service_date)s, e.last_s) AS last_arrival,
        s.lifecycle, s.delay_s
 FROM ends e
-LEFT JOIN LATERAL (
-    SELECT s.lifecycle, s.delay_s
-    FROM rt.trip_part_current p
-    JOIN rt.trip_state_current s USING (feed, key_namespace, key, service_date, release_id)
-    WHERE p.trip_id = e.trip_id AND p.service_date = %(service_date)s
-        AND p.release_id = %(release_id)s
-    ORDER BY s.updated_at DESC
-    LIMIT 1
-) s ON true
+LEFT JOIN LATERAL rt.trip_current(e.trip_id, %(service_date)s, %(release_id)s) s ON true
 ORDER BY e.first_s NULLS LAST, e.trip_id

@@ -1397,7 +1397,7 @@
             "title": "Alert Ids",
             "type": "array"
           },
-          "delay_s": {
+          "delay_min": {
             "anyOf": [
               {
                 "type": "integer"
@@ -1406,7 +1406,8 @@
                 "type": "null"
               }
             ],
-            "title": "Delay S"
+            "description": "Shown minutes late (expected less scheduled, each cut to the minute); null without a live estimate",
+            "title": "Delay Min"
           },
           "estimated": {
             "anyOf": [
@@ -1451,6 +1452,19 @@
             "description": "The scheduled platform, track or post code.",
             "title": "Platform"
           },
+          "punctuality": {
+            "description": "Its band (API limits `[punctuality]`): early, on_time, late, very_late; unknown without a live estimate or when stale; cancelled",
+            "enum": [
+              "early",
+              "on_time",
+              "late",
+              "very_late",
+              "unknown",
+              "cancelled"
+            ],
+            "title": "Punctuality",
+            "type": "string"
+          },
           "scheduled": {
             "format": "date-time",
             "title": "Scheduled",
@@ -1471,8 +1485,7 @@
               {
                 "enum": [
                   "gps",
-                  "source",
-                  "propagated"
+                  "source"
                 ],
                 "type": "string"
               },
@@ -1567,7 +1580,8 @@
           "headsign",
           "scheduled",
           "estimated",
-          "delay_s",
+          "delay_min",
+          "punctuality",
           "status",
           "source_class",
           "stale",
@@ -2221,16 +2235,8 @@
             "title": "Trip Id",
             "type": "string"
           },
-          "vehicles": {
-            "description": "The vehicles that worked it (`vehicle_id`)",
-            "items": {
-              "type": "string"
-            },
-            "title": "Vehicles",
-            "type": "array"
-          },
           "worked_by": {
-            "description": "The same, per source report, with what follows it to its oběh",
+            "description": "The vehicles that worked it, per source report (two reports of one vehicle share its `vehicle_id`), with what follows it to its oběh",
             "items": {
               "$ref": "#/components/schemas/HistoryVehicle"
             },
@@ -2242,7 +2248,6 @@
           "service_date",
           "trip_id",
           "cancelled",
-          "vehicles",
           "worked_by",
           "calls"
         ],
@@ -2251,6 +2256,18 @@
       },
       "HistoryDelay": {
         "properties": {
+          "delay_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "In shown minutes against the whole-minute schedule",
+            "title": "Delay Min"
+          },
           "delay_s": {
             "anyOf": [
               {
@@ -2266,10 +2283,25 @@
             "description": "Inferred rather than seen (passed out of sight, or the nearest delay measured inside the segment standing in for one missing at its start or end)",
             "title": "Estimated",
             "type": "boolean"
+          },
+          "punctuality": {
+            "description": "Its band; unknown when not measured",
+            "enum": [
+              "early",
+              "on_time",
+              "late",
+              "very_late",
+              "unknown",
+              "cancelled"
+            ],
+            "title": "Punctuality",
+            "type": "string"
           }
         },
         "required": [
           "delay_s",
+          "delay_min",
+          "punctuality",
           "estimated"
         ],
         "title": "HistoryDelay",
@@ -2281,6 +2313,18 @@
           "end_location_id": {
             "title": "End Location Id",
             "type": "string"
+          },
+          "median_delay_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The median in shown minutes",
+            "title": "Median Delay Min"
           },
           "median_delay_s": {
             "anyOf": [
@@ -2333,6 +2377,7 @@
           "runs",
           "on_time_share",
           "median_delay_s",
+          "median_delay_min",
           "p90_delay_s"
         ],
         "title": "HistorySegment",
@@ -2972,7 +3017,7 @@
       },
       "LineTrip": {
         "properties": {
-          "delay_s": {
+          "delay_min": {
             "anyOf": [
               {
                 "type": "integer"
@@ -2981,7 +3026,8 @@
                 "type": "null"
               }
             ],
-            "title": "Delay S"
+            "description": "How late it runs now, in shown minutes",
+            "title": "Delay Min"
           },
           "first_departure": {
             "anyOf": [
@@ -3021,6 +3067,13 @@
           "lifecycle": {
             "anyOf": [
               {
+                "enum": [
+                  "forecast",
+                  "pre_trip",
+                  "running",
+                  "finished",
+                  "cancelled"
+                ],
                 "type": "string"
               },
               {
@@ -3028,6 +3081,19 @@
               }
             ],
             "title": "Lifecycle"
+          },
+          "punctuality": {
+            "description": "Its band",
+            "enum": [
+              "early",
+              "on_time",
+              "late",
+              "very_late",
+              "unknown",
+              "cancelled"
+            ],
+            "title": "Punctuality",
+            "type": "string"
           },
           "service_date": {
             "format": "date",
@@ -3066,7 +3132,8 @@
           "first_departure",
           "last_arrival",
           "lifecycle",
-          "delay_s",
+          "delay_min",
+          "punctuality",
           "vehicles"
         ],
         "title": "LineTrip",
@@ -3509,17 +3576,6 @@
       "RealtimeSource": {
         "description": "A source the trip's realtime came from.",
         "properties": {
-          "delay_s": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delay S"
-          },
           "heard_at": {
             "anyOf": [
               {
@@ -3561,6 +3617,18 @@
             "description": "When it last gave a usable position",
             "title": "Position At"
           },
+          "reported_delay_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The delay it last reported itself",
+            "title": "Reported Delay S"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -3571,7 +3639,7 @@
           "label",
           "heard_at",
           "position_at",
-          "delay_s",
+          "reported_delay_s",
           "leads_position"
         ],
         "title": "RealtimeSource",
@@ -4781,6 +4849,18 @@
             "title": "Boarding",
             "type": "string"
           },
+          "delay_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "At the time a rider meets (its departure, at the last call its arrival): shown minutes late; null without a live estimate",
+            "title": "Delay Min"
+          },
           "estimated_arrival": {
             "anyOf": [
               {
@@ -4854,6 +4934,19 @@
             ],
             "title": "Platform"
           },
+          "punctuality": {
+            "description": "Its band, as a departure's",
+            "enum": [
+              "early",
+              "on_time",
+              "late",
+              "very_late",
+              "unknown",
+              "cancelled"
+            ],
+            "title": "Punctuality",
+            "type": "string"
+          },
           "scheduled_arrival": {
             "anyOf": [
               {
@@ -4887,8 +4980,7 @@
               {
                 "enum": [
                   "gps",
-                  "source",
-                  "propagated"
+                  "source"
                 ],
                 "type": "string"
               },
@@ -4926,7 +5018,9 @@
           "estimated_arrival",
           "estimated_departure",
           "status",
-          "source_class"
+          "source_class",
+          "delay_min",
+          "punctuality"
         ],
         "title": "TripCall",
         "type": "object"
@@ -5036,7 +5130,7 @@
       },
       "TripRealtime": {
         "properties": {
-          "delay_s": {
+          "delay_min": {
             "anyOf": [
               {
                 "type": "integer"
@@ -5045,16 +5139,36 @@
                 "type": "null"
               }
             ],
-            "title": "Delay S"
+            "description": "How late the journey runs now, the lateness its predictions start from, in shown minutes",
+            "title": "Delay Min"
           },
           "lifecycle": {
-            "description": "pre_trip, running, finished or cancelled",
+            "enum": [
+              "forecast",
+              "pre_trip",
+              "running",
+              "finished",
+              "cancelled"
+            ],
             "title": "Lifecycle",
             "type": "string"
           },
           "off_route": {
             "title": "Off Route",
             "type": "boolean"
+          },
+          "punctuality": {
+            "description": "Its band; unknown when stale",
+            "enum": [
+              "early",
+              "on_time",
+              "late",
+              "very_late",
+              "unknown",
+              "cancelled"
+            ],
+            "title": "Punctuality",
+            "type": "string"
           },
           "sources": {
             "items": {
@@ -5075,7 +5189,8 @@
         },
         "required": [
           "lifecycle",
-          "delay_s",
+          "delay_min",
+          "punctuality",
           "off_route",
           "stale",
           "updated_at",
@@ -5316,7 +5431,7 @@
             ],
             "title": "Bearing"
           },
-          "delay_s": {
+          "delay_min": {
             "anyOf": [
               {
                 "type": "integer"
@@ -5325,7 +5440,8 @@
                 "type": "null"
               }
             ],
-            "title": "Delay S"
+            "description": "How late its journey runs now, in shown minutes",
+            "title": "Delay Min"
           },
           "distance_m": {
             "anyOf": [
@@ -5403,6 +5519,19 @@
             ],
             "description": "The source time of the position: a client keeps a newer one it already has",
             "title": "Position At"
+          },
+          "punctuality": {
+            "description": "Its band",
+            "enum": [
+              "early",
+              "on_time",
+              "late",
+              "very_late",
+              "unknown",
+              "cancelled"
+            ],
+            "title": "Punctuality",
+            "type": "string"
           },
           "service_date": {
             "anyOf": [
@@ -5484,7 +5613,8 @@
           "service_date",
           "line",
           "headsign",
-          "delay_s"
+          "delay_min",
+          "punctuality"
         ],
         "title": "Vehicle",
         "type": "object"

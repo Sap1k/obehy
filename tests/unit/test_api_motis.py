@@ -86,6 +86,8 @@ def _call(sequence: int, location: str) -> TripCall:
         estimated_departure=None,
         status="scheduled",
         source_class=None,
+        delay_min=None,
+        punctuality="unknown",
     )
 
 

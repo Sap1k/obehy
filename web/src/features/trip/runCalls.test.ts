@@ -17,6 +17,8 @@ const call = (sequence: number, location_id: string, time: string): TripCall => 
   estimated_departure: null,
   status: "scheduled",
   source_class: null,
+  delay_min: null,
+  punctuality: "unknown",
 });
 
 const line = (route_id: string, short_name: string): Line => ({

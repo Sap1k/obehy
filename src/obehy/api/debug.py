@@ -13,7 +13,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Query
 from psycopg.rows import DictRow
 
-from obehy.api.common import LimitsDep, SnapshotDep, envelope
+from obehy.api.common import LimitsDep, SnapshotDep, envelope, seen_since
 
 router = APIRouter(prefix="/debug", tags=["debug"])
 
@@ -40,12 +40,12 @@ def station_pairing(snap: SnapshotDep) -> dict[str, Any]:
 @router.get("/realtime/sources", summary="Polls per source channel, and what each feeds now")
 def sources(snap: SnapshotDep, limits: LimitsDep, minutes: Minutes = None) -> dict[str, Any]:
     since = snap.now - timedelta(minutes=minutes or limits.debug_window_min)
-    seen_since = snap.now - timedelta(seconds=limits.vehicle_max_age_s)
+    oldest = seen_since(snap, limits)
     return envelope(snap) | {
         "since": since,
         "channels": snap.all("debug_sources", {"since": since}),
         "current": snap.all(
-            "debug_source_current", {"release_id": snap.release_id, "since": seen_since}
+            "debug_source_current", {"release_id": snap.release_id, "since": oldest}
         ),
     }
 

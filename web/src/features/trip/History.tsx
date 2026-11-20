@@ -5,13 +5,13 @@ import { useState } from "react";
 import { ApiError } from "../../api/client";
 import { BoardMessage } from "../../components/BoardStates";
 import {
-  delayTone,
   delayWords,
   type HistoryCall,
   type HistoryDay,
   type HistoryDelay,
   type TripHistory,
 } from "../../lib/history";
+import { toneOf } from "../../lib/punctuality";
 import { usePhone } from "../../lib/layout";
 import { useTripHistory, type HistorySegmentQuery } from "./queries";
 import classes from "./History.module.css";
@@ -132,8 +132,8 @@ function Days({
       </div>
       <p className={classes.summary}>
         {span}
-        {summary?.on_time_share != null && summary.median_delay_s != null
-          ? ` · v cíli včas ${Math.round(summary.on_time_share * 100)} % jízd · obvykle ${delayWords(summary.median_delay_s)}`
+        {summary?.on_time_share != null && summary.median_delay_min != null
+          ? ` · v cíli včas ${Math.round(summary.on_time_share * 100)} % jízd · obvykle ${delayWords(summary.median_delay_min)}`
           : ""}
         {history.cancelled > 0 ? ` · ${history.cancelled}× zrušeno` : ""}
       </p>
@@ -167,16 +167,16 @@ function Days({
 
 /** A delay; an inferred one (passed out of sight) marked "~", with a title saying so. */
 function Delay({ delay }: { delay: HistoryDelay | undefined }) {
-  const delayS = delay?.delay_s ?? null;
-  const mark = Boolean(delay?.estimated) && delayS !== null;
+  const delayMin = delay?.delay_min ?? null;
+  const mark = Boolean(delay?.estimated) && delayMin !== null;
   return (
     <span
       className={classes.delay}
-      data-tone={delayTone(delayS)}
+      data-tone={toneOf(delay?.punctuality ?? "unknown")}
       data-estimated={mark || undefined}
       title={mark ? "odhad: vůz tu nebyl vidět, ale před i za zastávkou jel stejně" : undefined}
     >
-      {delayS === null ? "–" : `${mark ? "~" : ""}${delayWords(delayS)}`}
+      {delayMin === null ? "–" : `${mark ? "~" : ""}${delayWords(delayMin)}`}
     </span>
   );
 }

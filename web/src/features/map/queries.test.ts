@@ -20,7 +20,8 @@ const vehicle = (
   service_date: null,
   line: null,
   headsign: null,
-  delay_s: null,
+  delay_min: null,
+  punctuality: "unknown",
 });
 
 describe("mergeVehicles", () => {
@@ -49,10 +50,10 @@ describe("mergeVehicles", () => {
     const held = mergeVehicles([[vehicle("a", "2026-10-22T14:00:10Z", 15.01)]]);
     // A stale copy of the cell, or its cached answer after a pan, comes in after the newer one.
     const again = mergeVehicles(
-      [[{ ...vehicle("a", "2026-10-22T14:00:00Z", 15.0), delay_s: 60 }]],
+      [[{ ...vehicle("a", "2026-10-22T14:00:00Z", 15.0), delay_min: 1 }]],
       held,
     );
-    expect(again.map((v) => [v.longitude, v.delay_s])).toEqual([[15.01, 60]]);
+    expect(again.map((v) => [v.longitude, v.delay_min])).toEqual([[15.01, 1]]);
     const next = mergeVehicles([[vehicle("a", "2026-10-22T14:00:20Z", 15.02)]], again);
     expect(next.map((v) => v.longitude)).toEqual([15.02]);
   });

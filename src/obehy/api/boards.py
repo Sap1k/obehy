@@ -3,13 +3,13 @@ feeds, with the vehicle on each trip and a cursor for the following rows."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from dataclasses import asdict
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from psycopg.rows import DictRow
 
-from obehy.api import schema
+from obehy.api import punctuality, schema
 from obehy.api.alerts import alert_ids, find_alerts
 from obehy.api.codes import tristate, wheelchair_of
 from obehy.api.common import (
@@ -18,7 +18,8 @@ from obehy.api.common import (
     envelope,
     line,
     realtime_cache,
-    traits,
+    seen_since,
+    trip_vehicle,
 )
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
@@ -56,22 +57,6 @@ def stop_places(snap: Snapshot, ids: list[str]) -> list[schema.Stop]:
     return list(found.values())
 
 
-def _vehicle(r: DictRow) -> schema.TripVehicle | None:
-    if r["vehicle_id"] is None:
-        return None
-    return schema.TripVehicle(
-        vehicle_id=r["vehicle_id"],
-        state=r["vehicle_state"],
-        last_seen=r["vehicle_seen"],
-        position_at=r["vehicle_position_at"],
-        latitude=r["vehicle_latitude"],
-        longitude=r["vehicle_longitude"],
-        bearing=r["vehicle_bearing"],
-        traits=traits(r),
-        sources=sorted(set(r["vehicle_sources"] or [])),
-    )
-
-
 def _board(
     snap: Snapshot,
     limits: Limits,
@@ -103,7 +88,7 @@ def _board(
         "start": begin,
         "until": until,
         "release_id": snap.release_id,
-        "seen_since": snap.now - timedelta(seconds=limits.vehicle_max_age_s),
+        "seen_since": seen_since(snap, limits),
         "after_expected": None if after is None else after.expected,
         "after_scheduled": None if after is None else after.scheduled,
         "after_trip": None if after is None else after.trip_id,
@@ -113,6 +98,18 @@ def _board(
         "limit": rows_wanted,
     }
     rows = snap.all("board", params)
+    # Each trip's vehicle as its trip page shows it: the first of `trip_vehicles.sql`.
+    vehicles: dict[tuple[str, date], schema.TripVehicle] = {}
+    for v in snap.all(
+        "trip_vehicles",
+        {
+            "trip_ids": [r["trip_id"] for r in rows],
+            "service_dates": [r["service_date"] for r in rows],
+            "release_id": snap.release_id,
+            "seen_since": params["seen_since"],
+        },
+    ):
+        vehicles.setdefault((v["trip_id"], v["service_date"]), trip_vehicle(v))
     board = [
         schema.Departure(
             trip_id=r["trip_id"],
@@ -124,12 +121,16 @@ def _board(
             headsign=r["headsign"],
             scheduled=r["scheduled"],
             estimated=r["estimated"],
-            delay_s=r["delay_s"],
+            **asdict(
+                punctuality.of_time(
+                    r["scheduled"], r["estimated"], r["status"], stale=bool(r["stale"])
+                )
+            ),
             status=r["status"],
             source_class=r["source_class"],
             stale=r["stale"],
             platform=r["platform"],
-            vehicle=_vehicle(r),
+            vehicle=vehicles.get((r["trip_id"], r["service_date"])),
             sources=list(r["sources"] or []),
             wheelchair=wheelchair_of(r["wheelchair_kinds"] or [], tristate(r["trip_wheelchair"])),
         )

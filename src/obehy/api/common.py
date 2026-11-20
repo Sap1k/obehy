@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any, cast
 
 from fastapi import Depends, Request, Response
@@ -12,7 +13,7 @@ from psycopg_pool import ConnectionPool
 from obehy.api import schema
 from obehy.api.db import Snapshot, snapshot
 from obehy.api.limits import Limits
-from obehy.realtime.times import PRAGUE
+from obehy.realtime.times import PRAGUE, local_date
 
 
 def _snapshot(request: Request) -> Iterator[Snapshot]:
@@ -25,6 +26,18 @@ def _limits(request: Request) -> Limits:
 
 SnapshotDep = Annotated[Snapshot, Depends(_snapshot)]
 LimitsDep = Annotated[Limits, Depends(_limits)]
+
+
+def today(snap: Snapshot) -> date:
+    """The Prague service date of the answer's moment: a request's default date."""
+
+    return local_date(snap.now)
+
+
+def seen_since(snap: Snapshot, limits: Limits) -> datetime:
+    """The oldest last sighting a vehicle shown now may have (`[vehicles] max_age_s`)."""
+
+    return snap.now - timedelta(seconds=limits.vehicle_max_age_s)
 
 
 def envelope(snap: Snapshot) -> dict[str, Any]:

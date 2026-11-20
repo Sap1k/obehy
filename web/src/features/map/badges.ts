@@ -1,6 +1,6 @@
 import type { Line } from "../../api/client";
 import { lineLabel } from "../../components/LineBadge";
-import { toneOf, type Tone } from "../../lib/punctuality";
+import { toneOf, type Punctuality, type Tone } from "../../lib/punctuality";
 
 // A vehicle at street zoom is a puck in its line's colours with the line's name, ringed by its
 // punctuality; under it, a pointer turns to its bearing. The pucks are drawn into one atlas
@@ -45,20 +45,15 @@ export function rgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** The punctuality band of a vehicle's delay, in whole minutes as the boards round it. */
-export function toneOfDelay(delayS: number | null | undefined): Tone {
-  return delayS === null || delayS === undefined ? "unknown" : toneOf(Math.round(delayS / 60));
-}
-
 export interface PuckSpec {
   line: Line | null;
-  delay_s: number | null;
+  punctuality: Punctuality;
 }
 
 /** The atlas key of a vehicle's puck. */
 export function puckKey(v: PuckSpec): string {
   const label = v.line ? lineLabel(v.line) : "?";
-  return `${label}|${hexColour(v.line?.color, INK)}|${hexColour(v.line?.text_color, WHITE)}|${toneOfDelay(v.delay_s)}`;
+  return `${label}|${hexColour(v.line?.color, INK)}|${hexColour(v.line?.text_color, WHITE)}|${toneOf(v.punctuality)}`;
 }
 
 export const ARROW_KEY = "arrow";

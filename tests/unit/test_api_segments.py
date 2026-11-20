@@ -5,10 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 from obehy.api import schema
-from obehy.api.limits import load_limits
 from obehy.api.segments import call_delay, run, summary
-
-LIMITS = load_limits()
+from obehy.api.segments import delay as segment_delay
 
 
 def call(location: str, arrival: int | None, departure: int | None) -> schema.HistoryCall:
@@ -31,14 +29,13 @@ def day(on: str, calls: list[schema.HistoryCall], cancelled: bool = False) -> sc
         service_date=date.fromisoformat(on),
         trip_id="t",
         cancelled=cancelled,
-        vehicles=[],
         worked_by=[],
         calls=calls,
     )
 
 
 def delay(seconds: int | None, estimated: bool = False) -> schema.HistoryDelay:
-    return schema.HistoryDelay(delay_s=seconds, estimated=estimated)
+    return segment_delay(seconds, estimated)
 
 
 def test_a_run_is_measured_from_where_the_rider_boards_to_where_they_get_off() -> None:
@@ -82,7 +79,15 @@ def test_the_summary_keeps_the_bad_day_and_uses_the_apis_on_time_band() -> None:
         day("2026-10-10", [], cancelled=True),
     ]
     days = [d.model_copy(update={"segment": run(d, "A", "C")}) for d in days]
-    result = summary(days, "A", "C", LIMITS)
+    result = summary(days, "A", "C")
     assert result.runs == 2
-    assert result.on_time_share == 0.5  # 170 s is within the band (up to 179 s late)
+    assert result.on_time_share == 0.5  # 170 s shows as +2 min: on time (up to +2)
     assert result.median_delay_s == 170 and result.p90_delay_s == 1800
+
+
+def test_a_measured_delay_carries_its_shown_minutes_and_band() -> None:
+    # Against a whole-minute schedule: 179 s reads +2 (on time), 180 s +3 (late), -61 s -2.
+    assert (delay(179).delay_min, delay(179).punctuality) == (2, "on_time")
+    assert (delay(180).delay_min, delay(180).punctuality) == (3, "late")
+    assert (delay(-61).delay_min, delay(-61).punctuality) == (-2, "early")
+    assert (delay(600).punctuality, delay(None).punctuality) == ("very_late", "unknown")

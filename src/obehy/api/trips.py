@@ -9,7 +9,8 @@ ID that journey had; its `circulation` the oběh it was part of (`circulations.p
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from dataclasses import asdict, dataclass
+from datetime import date, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -17,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from psycopg.rows import DictRow
 
-from obehy.api import schema
+from obehy.api import punctuality, schema
 from obehy.api.alerts import find_alerts, trip_alerts
 from obehy.api.codes import amenities, call_flags, features, load_codes, tristate
 from obehy.api.common import (
@@ -26,20 +27,18 @@ from obehy.api.common import (
     envelope,
     line,
     realtime_cache,
+    seen_since,
+    today,
     trip_vehicle,
 )
+from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
 from obehy.api.lookup_rules import can_ask
 from obehy.api.params import date_span
-from obehy.api.segments import percentile, run, summary
-from obehy.realtime.policy import load_policy
-from obehy.realtime.times import local_date
+from obehy.api.resolve import TripOnDate, by_key, gone, recorded_journey, trip_on
+from obehy.api.segments import on_time, percentile, run, summary
 
 router = APIRouter(tags=["trips"])
-
-# The journey key a trip is shown with, by preference: the national CIS key, PID's, the train.
-# A trip's journey key: the first of these it has (realtime policy `[journey]`).
-JOURNEY_NAMESPACES = list(load_policy().journey.namespaces)
 
 
 def trip_path(trip_id: str, service_date: date) -> str:
@@ -63,22 +62,14 @@ def by_key_path(namespace: str, key: str, service_date: date) -> str:
 def trip_by_key(
     snap: SnapshotDep, namespace: str, key: str, service_date: date
 ) -> RedirectResponse:
-    rows = snap.all(
-        "trip_by_key", {"namespace": namespace, "key": key, "service_date": service_date}
-    )
-    if not rows:
-        raise HTTPException(404, f"no trip {namespace} {key} runs on {service_date}")
-    runs = {r["run_key"] for r in rows}
-    if len(rows) > 1 and (len(runs) > 1 or None in runs):
-        names = ", ".join(r["trip_id"] for r in rows)
-        raise HTTPException(
-            409, f"{namespace} {key} names several trips on {service_date}: {names}"
-        )
-    return RedirectResponse(trip_path(rows[0]["trip_id"], service_date), status_code=308)
+    found = by_key(snap, namespace, key, service_date)
+    if found.trip_id is None:
+        raise HTTPException(404 if found.outcome == "not_found" else 409, found.detail)
+    return RedirectResponse(trip_path(found.trip_id, service_date), status_code=308)
 
 
 def trip_call(
-    row: DictRow, features: list[schema.Feature], *, first: bool, last: bool
+    row: DictRow, features: list[schema.Feature], *, first: bool, last: bool, stale: bool
 ) -> schema.TripCall:
     codes = load_codes()
     boarding = codes.boarding_of(row["pickup_type"])
@@ -100,6 +91,17 @@ def trip_call(
         estimated_departure=row["estimated_departure"],
         status=row["status"],
         source_class=row["source_class"],
+        **asdict(
+            punctuality.of_time(
+                *punctuality.rider_time(
+                    (row["scheduled_arrival"], row["estimated_arrival"]),
+                    (row["scheduled_departure"], row["estimated_departure"]),
+                    last=last,
+                ),
+                row["status"],
+                stale=stale,
+            )
+        ),
     )
 
 
@@ -107,12 +109,14 @@ def trip_realtime(row: DictRow) -> schema.TripRealtime:
     codes = load_codes()
     return schema.TripRealtime(
         lifecycle=row["lifecycle"],
-        delay_s=row["delay_s"],
+        **asdict(punctuality.of_seconds(row["delay_s"], stale=row["stale"])),
         off_route=row["off_route"],
         stale=row["stale"],
         updated_at=row["updated_at"],
         sources=[
-            schema.RealtimeSource.model_validate(s | {"label": codes.source(s["source"])})
+            schema.RealtimeSource.model_validate(
+                s | {"label": codes.source(s["source"]), "reported_delay_s": s["delay_s"]}
+            )
             for s in row["sources"]
         ],
     )
@@ -124,7 +128,7 @@ def _delay(actual: datetime | None, scheduled: datetime | None) -> int | None:
     return round((actual - scheduled).total_seconds())
 
 
-def _stops(days: list[schema.HistoryDay], limits: Limits) -> list[schema.HistoryStop]:
+def _stops(days: list[schema.HistoryDay]) -> list[schema.HistoryStop]:
     """Per stop, how late the journey was over the days: its departure, at its last call its
     arrival. Stops in the call order of the latest day that calls there."""
 
@@ -140,13 +144,13 @@ def _stops(days: list[schema.HistoryDay], limits: Limits) -> list[schema.History
     stops: list[schema.HistoryStop] = []
     for location_id, name in names.items():
         found = sorted(delays[location_id])
-        on_time = [d for d in found if limits.on_time_early_s <= d <= limits.on_time_late_s]
+        punctual = [d for d in found if on_time(d)]
         stops.append(
             schema.HistoryStop(
                 location_id=location_id,
                 name=name,
                 runs=len(found),
-                on_time_share=len(on_time) / len(found) if found else None,
+                on_time_share=len(punctual) / len(found) if found else None,
                 median_delay_s=percentile(found, 0.5) if found else None,
                 p90_delay_s=percentile(found, 0.9) if found else None,
                 max_delay_s=found[-1] if found else None,
@@ -186,17 +190,14 @@ def trip_history(
     start, end = date_span(
         since,
         until,
-        local_date(snap.now),
+        today(snap),
         limits.history_default_days,
         limits.history_max_days,
     )
     span = {"since": start, "until": end}
-    found = snap.one(
-        "trip_journey_key", span | {"trip_id": trip_id, "namespaces": JOURNEY_NAMESPACES}
-    )
-    if found is None:
+    journey = recorded_journey(snap, trip_id, start, end)
+    if journey is None:
         raise HTTPException(404, f"no journey of {trip_id} is known")
-    journey = schema.JourneyKey(namespace=found["namespace"], key=found["key"])
     keyed = span | {"namespace": journey.namespace, "key": journey.key}
     worked_by: defaultdict[date, list[schema.HistoryVehicle]] = defaultdict(list)
     for r in snap.all("journey_vehicles", keyed):
@@ -233,20 +234,19 @@ def trip_history(
             service_date=day,
             trip_id=trip,
             cancelled=cancelled,
-            vehicles=sorted({v.vehicle_id for v in worked_by.get(day, [])}),
             worked_by=worked_by.get(day, []),
             calls=calls[day],
         )
         for day, (trip, cancelled) in seen.items()
     ]
-    stops = _stops(days, limits)
+    stops = _stops(days)
     segment: schema.HistorySegment | None = None
     if stops:
         ids = [s.location_id for s in stops]
         first = board if board in ids[:-1] else ids[0]
         last = alight if alight in ids[ids.index(first) + 1 :] else ids[-1]
         days = [d.model_copy(update={"segment": run(d, first, last)}) for d in days]
-        segment = summary(days, first, last, limits)
+        segment = summary(days, first, last)
     return schema.TripHistory(
         **envelope(snap),
         trip_id=trip_id,
@@ -257,6 +257,82 @@ def trip_history(
         cancelled=sum(d.cancelled for d in days),
         stops=stops,
         segment=segment,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Assembled:
+    """What a trip on a date is shown with, read once for a trip page and an enriched leg."""
+
+    row: DictRow
+    journey: schema.JourneyKey | None
+    realtime: schema.TripRealtime | None
+    vehicles: list[schema.TripVehicle]
+    composition: bool
+    features: list[schema.Feature]
+    calls: list[schema.TripCall]
+    alerts: list[schema.Alert]
+
+
+def assemble(snap: Snapshot, limits: Limits, trip: TripOnDate) -> Assembled:
+    """A running trip of the active release as it is shown: its line, realtime, vehicles,
+    features, calls and alerts."""
+
+    params = {
+        "trip_id": trip.trip_id,
+        "service_date": trip.service_date,
+        "release_id": snap.release_id,
+    }
+    row = snap.one("trip", params)
+    assert row is not None  # resolved against the same snapshot
+    found = snap.one("trip_realtime", params)
+    realtime = None if found is None else trip_realtime(found)
+    stated = features(
+        load_codes(),
+        snap.all(
+            "trip_features",
+            {"trip_id": trip.trip_id, "route_id": row["route_id"], "service_id": row["service_id"]},
+        ),
+    )
+    oldest = seen_since(snap, limits)
+    vehicles = snap.all(
+        "trip_vehicles",
+        params
+        | {
+            "trip_ids": [trip.trip_id],
+            "service_dates": [trip.service_date],
+            "seen_since": oldest,
+        },
+    )
+    calls = snap.all("trip_calls", params)
+    return Assembled(
+        row=row,
+        journey=trip.journey,
+        realtime=realtime,
+        vehicles=[trip_vehicle(v) for v in vehicles],
+        composition=can_ask(snap, "composition", trip),
+        features=stated,
+        calls=[
+            trip_call(
+                c,
+                stated,
+                first=n == 0,
+                last=n == len(calls) - 1,
+                stale=realtime is not None and realtime.stale,
+            )
+            for n, c in enumerate(calls)
+        ],
+        alerts=trip_alerts(
+            find_alerts(
+                snap,
+                limits,
+                routes=[row["route_id"]],
+                stops=sorted({c["location_id"] for c in calls}),
+                trips=[trip.trip_id],
+            ),
+            route=row["route_id"],
+            trip=trip.trip_id,
+        ),
     )
 
 
@@ -275,43 +351,32 @@ def trip(
     include: Annotated[str | None, Query(description="`shape` adds the GeoJSON path")] = None,
 ) -> schema.Trip | JSONResponse:
     realtime_cache(response, limits)
-    params = {"trip_id": trip_id, "service_date": service_date, "release_id": snap.release_id}
-    row = snap.one("trip", params)
-    if row is None:
-        gone = snap.one("trip_gone", params)
-        if gone is None:
+    found = trip_on(snap, trip_id, service_date)
+    if found is None:
+        journey = gone(snap, trip_id, service_date)
+        if journey is None:
             raise HTTPException(404, f"no trip {trip_id}")
         body = schema.GoneTrip(
             title="Gone",
             status=410,
             detail=f"{trip_id} is from an older timetable version",
             service_date=service_date,
-            journey=schema.JourneyKey(namespace=gone["key_namespace"], key=gone["key"]),
-            by_key=by_key_path(gone["key_namespace"], gone["key"], service_date),
+            journey=journey,
+            by_key=by_key_path(journey.namespace, journey.key, service_date),
         )
         return JSONResponse(
             body.model_dump(mode="json"), status_code=410, media_type="application/problem+json"
         )
-    if not row["runs"]:
+    if not found.runs:
         raise HTTPException(404, f"{trip_id} does not run on {service_date}")
-    codes = load_codes()
-    journey_row = snap.one("trip_journey", params | {"namespaces": JOURNEY_NAMESPACES})
-    journey = None if journey_row is None else schema.JourneyKey.model_validate(journey_row)
-    realtime = snap.one("trip_realtime", params)
+    shown = assemble(snap, limits, found)
+    row, journey = shown.row, shown.journey
+    params = {"trip_id": trip_id, "service_date": service_date, "release_id": snap.release_id}
     parts = (
         snap.all("trip_parts", {"run_key": row["run_key"], "service_date": service_date})
         if row["run_key"] is not None
         else []
     )
-    stated = features(
-        codes,
-        snap.all(
-            "trip_features",
-            {"trip_id": trip_id, "route_id": row["route_id"], "service_id": row["service_id"]},
-        ),
-    )
-    seen_since = snap.now - timedelta(seconds=limits.vehicle_max_age_s)
-    vehicles = snap.all("trip_vehicles", params | {"trip_ids": [trip_id], "seen_since": seen_since})
     links = (
         []
         if journey is None
@@ -320,11 +385,10 @@ def trip(
             {"namespace": journey.namespace, "key": journey.key, "service_date": service_date},
         )
     )
-    calls = snap.all("trip_calls", params)
     shape = None
     if include == "shape" and row["shape_id"] is not None:
-        found = snap.one("trip_shape", {"shape_id": row["shape_id"]})
-        shape = None if found is None else found["geometry"]
+        geometry = snap.one("trip_shape", {"shape_id": row["shape_id"]})
+        shape = None if geometry is None else geometry["geometry"]
     return schema.Trip(
         **envelope(snap),
         trip_id=trip_id,
@@ -336,18 +400,15 @@ def trip(
         headsign=row["headsign"],
         wheelchair_accessible=tristate(row["wheelchair_accessible"]),
         bikes_allowed=tristate(row["bikes_allowed"]),
-        amenities=amenities(stated),
-        realtime=None if realtime is None else trip_realtime(realtime),
-        vehicles=[trip_vehicle(v) for v in vehicles],
+        amenities=amenities(shown.features),
+        realtime=shown.realtime,
+        vehicles=shown.vehicles,
         run_parts=[schema.TripPart.model_validate(p) for p in parts]
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
-        composition=can_ask(snap, "composition", trip_id, service_date),
-        calls=[
-            trip_call(c, stated, first=n == 0, last=n == len(calls) - 1)
-            for n, c in enumerate(calls)
-        ],
-        features=stated,
-        notes=[f.note for f in stated if f.note is not None],
+        composition=shown.composition,
+        calls=shown.calls,
+        features=shown.features,
+        notes=[f.note for f in shown.features if f.note is not None],
         connections=[
             schema.Connection(
                 direction=c["direction"],
@@ -372,16 +433,6 @@ def trip(
             )
             for k in links
         ],
-        alerts=trip_alerts(
-            find_alerts(
-                snap,
-                limits,
-                routes=[row["route_id"]],
-                stops=sorted({c["location_id"] for c in calls}),
-                trips=[trip_id],
-            ),
-            route=row["route_id"],
-            trip=trip_id,
-        ),
+        alerts=shown.alerts,
         shape=shape,
     )

@@ -69,7 +69,8 @@ describe("DepartureRow", () => {
       ...first,
       status: "predicted",
       estimated: at(first.scheduled, 4),
-      delay_s: 240,
+      delay_min: 4,
+      punctuality: "late",
     });
     expect(row.getByText("14:34")).toBeInTheDocument();
     expect(row.getByText("+4 min")).toBeInTheDocument();
@@ -78,14 +79,20 @@ describe("DepartureRow", () => {
   it("reads neutral and approximate offline", () => {
     const first = rows[0]!;
     const row = renderRow(
-      { ...first, status: "predicted", estimated: at(first.scheduled, 4), delay_s: 240 },
+      {
+        ...first,
+        status: "predicted",
+        estimated: at(first.scheduled, 4),
+        delay_min: 4,
+        punctuality: "late",
+      },
       true,
     );
     expect(row.getByText("≈ +4 min")).toBeInTheDocument();
   });
 
   it("strikes a cancelled departure", () => {
-    const row = renderRow({ ...rows[2]!, status: "cancelled" });
+    const row = renderRow({ ...rows[2]!, status: "cancelled", punctuality: "cancelled" });
     expect(row.getByText("Zrušeno")).toBeInTheDocument();
   });
 

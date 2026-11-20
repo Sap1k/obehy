@@ -10,15 +10,23 @@ named. This module only reads.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from dataclasses import asdict
 from typing import Annotated, Any, cast, get_args
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from psycopg.rows import DictRow
 
-from obehy.api import schema
+from obehy.api import punctuality, schema
 from obehy.api.codes import load_codes
-from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache, traits
+from obehy.api.common import (
+    LimitsDep,
+    SnapshotDep,
+    envelope,
+    line,
+    realtime_cache,
+    seen_since,
+    traits,
+)
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
 from obehy.api.params import ParameterError, parse_bbox, parse_near, search_words
@@ -33,7 +41,7 @@ OPTIONAL = {"unmatched", "not_in_service"}
 def _rows(snap: Snapshot, limits: Limits, **filters: Any) -> list[DictRow]:
     params: dict[str, Any] = {
         "release_id": snap.release_id,
-        "seen_since": snap.now - timedelta(seconds=limits.vehicle_max_age_s),
+        "seen_since": seen_since(snap, limits),
         "states": list(get_args(schema.VehicleState)),
         "west": None,
         "south": None,
@@ -66,7 +74,7 @@ def _vehicle(r: DictRow) -> schema.Vehicle:
         line=line(r) if on_trip else None,
         trip_short_name=r["trip_short_name"] if on_trip else None,
         headsign=r["headsign"],
-        delay_s=r["delay_s"],
+        **asdict(punctuality.of_seconds(r["delay_s"])),
         traits=traits(r),
         sources=sorted(set(r["sources"])),
         distance_m=None if r["distance_m"] is None else round(r["distance_m"]),

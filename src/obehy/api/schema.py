@@ -12,11 +12,14 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
 
+from obehy.api.punctuality import Punctuality
 from obehy.realtime.times import PRAGUE
 
 CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
 # Every time is answered in Prague time, whether read as a timestamp or from a stored instant.
 Time = Annotated[datetime, AfterValidator(lambda value: value.astimezone(PRAGUE))]
+# A journey's realtime lifecycle (the core's, `realtime/model.py`).
+Lifecycle = Literal["forecast", "pre_trip", "running", "finished", "cancelled"]
 SourceClass = Literal["gps", "source"]
 VehicleState = Literal["running", "positioning", "layover", "unmatched", "not_in_service"]
 Boarding = Literal["regular", "none", "phone", "ask_driver"]
@@ -289,7 +292,14 @@ class Departure(BaseModel):
     headsign: str | None
     scheduled: Time
     estimated: Time | None
-    delay_s: int | None
+    delay_min: int | None = Field(
+        description="Shown minutes late (expected less scheduled, each cut to the minute); "
+        "null without a live estimate"
+    )
+    punctuality: Punctuality = Field(
+        description="Its band (API limits `[punctuality]`): early, on_time, late, very_late; "
+        "unknown without a live estimate or when stale; cancelled"
+    )
     status: CallStatus
     source_class: SourceClass | None
     stale: bool | None
@@ -350,6 +360,11 @@ class TripCall(BaseModel):
     estimated_departure: Time | None
     status: CallStatus
     source_class: SourceClass | None
+    delay_min: int | None = Field(
+        description="At the time a rider meets (its departure, at the last call its arrival): "
+        "shown minutes late; null without a live estimate"
+    )
+    punctuality: Punctuality = Field(description="Its band, as a departure's")
 
 
 class RealtimeSource(BaseModel):
@@ -359,13 +374,17 @@ class RealtimeSource(BaseModel):
     label: Label | None
     heard_at: Time | None = Field(description="When it last brought anything new")
     position_at: Time | None = Field(description="When it last gave a usable position")
-    delay_s: int | None
+    reported_delay_s: int | None = Field(description="The delay it last reported itself")
     leads_position: bool = Field(description="Its positions drive the trip's progress")
 
 
 class TripRealtime(BaseModel):
-    lifecycle: str = Field(description="pre_trip, running, finished or cancelled")
-    delay_s: int | None
+    lifecycle: Lifecycle
+    delay_min: int | None = Field(
+        description="How late the journey runs now, the lateness its predictions start from, "
+        "in shown minutes"
+    )
+    punctuality: Punctuality = Field(description="Its band; unknown when stale")
     off_route: bool
     stale: bool
     updated_at: Time
@@ -606,7 +625,8 @@ class Vehicle(BaseModel):
     line: Line | None
     trip_short_name: str | None = Field(default=None, description="The train number (Os 6819)")
     headsign: str | None
-    delay_s: int | None
+    delay_min: int | None = Field(description="How late its journey runs now, in shown minutes")
+    punctuality: Punctuality = Field(description="Its band")
     traits: VehicleTraits = Field(default_factory=VehicleTraits)
     sources: list[str] = Field(default_factory=list, description="Sources reporting it now")
     distance_m: int | None = Field(
@@ -808,8 +828,9 @@ class LineTrip(BaseModel):
     headsign: str | None
     first_departure: Time | None
     last_arrival: Time | None
-    lifecycle: str | None
-    delay_s: int | None
+    lifecycle: Lifecycle | None
+    delay_min: int | None = Field(description="How late it runs now, in shown minutes")
+    punctuality: Punctuality = Field(description="Its band")
     vehicles: list[TripVehicle] = Field(description="The vehicles on it now")
 
 
@@ -854,6 +875,8 @@ class HistoryVehicle(BaseModel):
 
 class HistoryDelay(BaseModel):
     delay_s: int | None
+    delay_min: int | None = Field(description="In shown minutes against the whole-minute schedule")
+    punctuality: Punctuality = Field(description="Its band; unknown when not measured")
     estimated: bool = Field(
         description="Inferred rather than seen (passed out of sight, or the nearest delay "
         "measured inside the segment standing in for one missing at its start or end)"
@@ -883,6 +906,7 @@ class HistorySegment(BaseModel):
     runs: int = Field(description="Days with a delay at the segment's end")
     on_time_share: float | None = Field(description="Share within the on-time band of the limits")
     median_delay_s: int | None
+    median_delay_min: int | None = Field(description="The median in shown minutes")
     p90_delay_s: int | None = Field(description="Nine runs in ten were no later than this")
 
 
@@ -890,9 +914,9 @@ class HistoryDay(BaseModel):
     service_date: date
     trip_id: str
     cancelled: bool = Field(description="A source cancelled it and no vehicle was seen running it")
-    vehicles: list[str] = Field(description="The vehicles that worked it (`vehicle_id`)")
     worked_by: list[HistoryVehicle] = Field(
-        description="The same, per source report, with what follows it to its oběh"
+        description="The vehicles that worked it, per source report (two reports of one vehicle "
+        "share its `vehicle_id`), with what follows it to its oběh"
     )
     calls: list[HistoryCall]
     segment: HistorySegmentRun | None = Field(

@@ -32,8 +32,9 @@ class Limits:
     line_patterns: int
     history_max_days: int
     history_default_days: int
-    on_time_early_s: int
-    on_time_late_s: int
+    early_max_min: int
+    on_time_max_min: int
+    late_max_min: int
     alerts_limit: int
     composition_fresh_s: int
     composition_retry_after_s: int
@@ -64,6 +65,7 @@ def load_limits(path: Path = LIMITS) -> Limits:
     )
     lines, history, debug = table("lines"), table("history"), table("debug")
     alerts, compositions, journeys = table("alerts"), table("compositions"), table("journeys")
+    punctuality = table("punctuality")
     return Limits(
         version=str(document["api_version"]),
         search_min_chars=int(stops["search_min_chars"]),
@@ -85,8 +87,9 @@ def load_limits(path: Path = LIMITS) -> Limits:
         line_patterns=int(lines["patterns"]),
         history_max_days=int(history["max_days"]),
         history_default_days=int(history["default_days"]),
-        on_time_early_s=int(history["on_time_early_s"]),
-        on_time_late_s=int(history["on_time_late_s"]),
+        early_max_min=int(punctuality["early_max_min"]),
+        on_time_max_min=int(punctuality["on_time_max_min"]),
+        late_max_min=int(punctuality["late_max_min"]),
         alerts_limit=int(alerts["limit"]),
         composition_fresh_s=int(compositions["fresh_s"]),
         composition_retry_after_s=int(compositions["retry_after_s"]),

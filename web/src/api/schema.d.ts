@@ -1182,8 +1182,11 @@ export interface components {
              * @description The board's `alerts` informing its line, stop or trip
              */
             alert_ids?: string[];
-            /** Delay S */
-            delay_s: number | null;
+            /**
+             * Delay Min
+             * @description Shown minutes late (expected less scheduled, each cut to the minute); null without a live estimate
+             */
+            delay_min: number | null;
             /** Estimated */
             estimated: string | null;
             /** Headsign */
@@ -1200,6 +1203,12 @@ export interface components {
              */
             platform: string | null;
             /**
+             * Punctuality
+             * @description Its band (API limits `[punctuality]`): early, on_time, late, very_late; unknown without a live estimate or when stale; cancelled
+             * @enum {string}
+             */
+            punctuality: "early" | "on_time" | "late" | "very_late" | "unknown" | "cancelled";
+            /**
              * Scheduled
              * Format: date-time
              */
@@ -1215,7 +1224,7 @@ export interface components {
              */
             service_date: string;
             /** Source Class */
-            source_class: ("gps" | "source" | "propagated") | null;
+            source_class: ("gps" | "source") | null;
             /**
              * Sources
              * @description Where its realtime came from
@@ -1516,18 +1525,18 @@ export interface components {
             /** Trip Id */
             trip_id: string;
             /**
-             * Vehicles
-             * @description The vehicles that worked it (`vehicle_id`)
-             */
-            vehicles: string[];
-            /**
              * Worked By
-             * @description The same, per source report, with what follows it to its oběh
+             * @description The vehicles that worked it, per source report (two reports of one vehicle share its `vehicle_id`), with what follows it to its oběh
              */
             worked_by: components["schemas"]["HistoryVehicle"][];
         };
         /** HistoryDelay */
         HistoryDelay: {
+            /**
+             * Delay Min
+             * @description In shown minutes against the whole-minute schedule
+             */
+            delay_min: number | null;
             /** Delay S */
             delay_s: number | null;
             /**
@@ -1535,6 +1544,12 @@ export interface components {
              * @description Inferred rather than seen (passed out of sight, or the nearest delay measured inside the segment standing in for one missing at its start or end)
              */
             estimated: boolean;
+            /**
+             * Punctuality
+             * @description Its band; unknown when not measured
+             * @enum {string}
+             */
+            punctuality: "early" | "on_time" | "late" | "very_late" | "unknown" | "cancelled";
         };
         /**
          * HistorySegment
@@ -1543,6 +1558,11 @@ export interface components {
         HistorySegment: {
             /** End Location Id */
             end_location_id: string;
+            /**
+             * Median Delay Min
+             * @description The median in shown minutes
+             */
+            median_delay_min: number | null;
             /** Median Delay S */
             median_delay_s: number | null;
             /**
@@ -1801,8 +1821,11 @@ export interface components {
         };
         /** LineTrip */
         LineTrip: {
-            /** Delay S */
-            delay_s: number | null;
+            /**
+             * Delay Min
+             * @description How late it runs now, in shown minutes
+             */
+            delay_min: number | null;
             /** First Departure */
             first_departure: string | null;
             /** Headsign */
@@ -1810,7 +1833,13 @@ export interface components {
             /** Last Arrival */
             last_arrival: string | null;
             /** Lifecycle */
-            lifecycle: string | null;
+            lifecycle: ("forecast" | "pre_trip" | "running" | "finished" | "cancelled") | null;
+            /**
+             * Punctuality
+             * @description Its band
+             * @enum {string}
+             */
+            punctuality: "early" | "on_time" | "late" | "very_late" | "unknown" | "cancelled";
             /**
              * Service Date
              * Format: date
@@ -2011,8 +2040,6 @@ export interface components {
          * @description A source the trip's realtime came from.
          */
         RealtimeSource: {
-            /** Delay S */
-            delay_s: number | null;
             /**
              * Heard At
              * @description When it last brought anything new
@@ -2029,6 +2056,11 @@ export interface components {
              * @description When it last gave a usable position
              */
             position_at: string | null;
+            /**
+             * Reported Delay S
+             * @description The delay it last reported itself
+             */
+            reported_delay_s: number | null;
             /** Source */
             source: string;
         };
@@ -2494,6 +2526,11 @@ export interface components {
              * @enum {string}
              */
             boarding: "regular" | "none" | "phone" | "ask_driver";
+            /**
+             * Delay Min
+             * @description At the time a rider meets (its departure, at the last call its arrival): shown minutes late; null without a live estimate
+             */
+            delay_min: number | null;
             /** Estimated Arrival */
             estimated_arrival: string | null;
             /** Estimated Departure */
@@ -2513,6 +2550,12 @@ export interface components {
             name: string;
             /** Platform */
             platform: string | null;
+            /**
+             * Punctuality
+             * @description Its band, as a departure's
+             * @enum {string}
+             */
+            punctuality: "early" | "on_time" | "late" | "very_late" | "unknown" | "cancelled";
             /** Scheduled Arrival */
             scheduled_arrival: string | null;
             /** Scheduled Departure */
@@ -2520,7 +2563,7 @@ export interface components {
             /** Sequence */
             sequence: number;
             /** Source Class */
-            source_class: ("gps" | "source" | "propagated") | null;
+            source_class: ("gps" | "source") | null;
             /**
              * Status
              * @enum {string}
@@ -2583,15 +2626,24 @@ export interface components {
         };
         /** TripRealtime */
         TripRealtime: {
-            /** Delay S */
-            delay_s: number | null;
+            /**
+             * Delay Min
+             * @description How late the journey runs now, the lateness its predictions start from, in shown minutes
+             */
+            delay_min: number | null;
             /**
              * Lifecycle
-             * @description pre_trip, running, finished or cancelled
+             * @enum {string}
              */
-            lifecycle: string;
+            lifecycle: "forecast" | "pre_trip" | "running" | "finished" | "cancelled";
             /** Off Route */
             off_route: boolean;
+            /**
+             * Punctuality
+             * @description Its band; unknown when stale
+             * @enum {string}
+             */
+            punctuality: "early" | "on_time" | "late" | "very_late" | "unknown" | "cancelled";
             /** Sources */
             sources: components["schemas"]["RealtimeSource"][];
             /** Stale */
@@ -2689,8 +2741,11 @@ export interface components {
         Vehicle: {
             /** Bearing */
             bearing: number | null;
-            /** Delay S */
-            delay_s: number | null;
+            /**
+             * Delay Min
+             * @description How late its journey runs now, in shown minutes
+             */
+            delay_min: number | null;
             /**
              * Distance M
              * @description Metres from `near`, when a search gives it
@@ -2715,6 +2770,12 @@ export interface components {
              * @description The source time of the position: a client keeps a newer one it already has
              */
             position_at?: string | null;
+            /**
+             * Punctuality
+             * @description Its band
+             * @enum {string}
+             */
+            punctuality: "early" | "on_time" | "late" | "very_late" | "unknown" | "cancelled";
             /** Service Date */
             service_date: string | null;
             /** Source */

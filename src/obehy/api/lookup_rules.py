@@ -4,12 +4,12 @@ the web asks only where an answer can come."""
 
 from __future__ import annotations
 
-from datetime import date
 from functools import cache
 
+from obehy.api.common import today
 from obehy.api.db import Snapshot
+from obehy.api.resolve import TripOnDate
 from obehy.realtime.manifest import Lookup, declared_lookups
-from obehy.realtime.times import local_date
 
 
 @cache
@@ -17,22 +17,15 @@ def _lookups(kind: str) -> tuple[Lookup, ...]:
     return tuple(lookup for lookup in declared_lookups() if lookup.kind == kind)
 
 
-def can_ask(snap: Snapshot, kind: str, trip_id: str, service_date: date) -> bool:
-    """Whether a lookup of `kind` answers for the trip on the date."""
+def can_ask(snap: Snapshot, kind: str, trip: TripOnDate) -> bool:
+    """Whether a lookup of `kind` answers for the trip on its date."""
 
     lookups = _lookups(kind)
     if not lookups:
         return False
-    namespaces = sorted({ns for lookup in lookups for ns in lookup.applies.namespaces})
-    row = snap.one(
-        "trip_lookup_keys",
-        {"trip_id": trip_id, "service_date": service_date, "namespaces": namespaces},
-    )
-    if row is None:
-        return False
-    today = local_date(snap.now)
+    keys = {k.namespace: k.key for k in reversed(trip.keys)}  # the first of each namespace
+    on = today(snap)
     return any(
-        row["feed"] in lookup.feeds
-        and lookup.applies.refusal(row["keys"], service_date, today) is None
+        trip.feed in lookup.feeds and lookup.applies.refusal(keys, trip.service_date, on) is None
         for lookup in lookups
     )

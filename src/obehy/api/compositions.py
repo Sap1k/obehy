@@ -20,7 +20,7 @@ from obehy.api import schema
 from obehy.api.codes import load_codes
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, realtime_cache
 from obehy.api.db import request_lookup
-from obehy.realtime.policy import load_policy
+from obehy.api.resolve import running
 from obehy.reference.vocabulary import load_vocabulary
 
 CompositionStatus = Literal["fresh", "stale", "pending", "not_available"]
@@ -80,31 +80,26 @@ def composition(
         Query(alias="from", description="A call's location_id; default: the next passenger call"),
     ] = None,
 ) -> schema.Composition:
-    trip = snap.one(
-        "composition_trip",
-        {
-            "trip_id": trip_id,
-            "service_date": service_date,
-            "from": from_location,
-            "namespaces": list(load_policy().journey.namespaces),
-        },
-    )
-    if trip is None:
-        raise HTTPException(404, f"no trip {trip_id}")
-    if not trip["runs"]:
-        raise HTTPException(404, f"{trip_id} does not run on {service_date}")
-    if not trip["from_on_trip"]:
-        raise HTTPException(404, f"{from_location} is not a call of {trip_id}")
+    trip = running(snap, trip_id, service_date)
+    # Kept under the trip's journey key, as the lookup broker keeps them; a trip without one
+    # under its own ID.
+    key = trip.journey or schema.JourneyKey(namespace="trip_id", key=trip_id)
     journey = {
         "trip_id": trip_id,
-        "feed": trip["feed"],
-        "key_namespace": trip["key_namespace"],
-        "key": trip["key"],
+        "feed": trip.feed,
+        "key_namespace": key.namespace,
+        "key": key.key,
         "service_date": service_date,
     }
+    calls = {
+        r["sequence"]: schema.CompositionCall.model_validate(r)
+        for r in snap.all("composition_calls", journey)
+    }
+    if from_location is not None and from_location not in {c.location_id for c in calls.values()}:
+        raise HTTPException(404, f"{from_location} is not a call of {trip_id}")
     asked_params = {
         "kind": KIND,
-        "feed": trip["feed"],
+        "feed": trip.feed,
         "trip_id": trip_id,
         "service_date": service_date,
         "from_location": from_location or "",
@@ -117,10 +112,6 @@ def composition(
     )
     if not fresh and (asked is None or not asked["pending"]):
         request_lookup(cast(ConnectionPool[Any], request.app.state.requests), asked_params)
-    calls = {
-        r["sequence"]: schema.CompositionCall.model_validate(r)
-        for r in snap.all("composition_calls", journey)
-    }
     rows = snap.all("composition_units", journey)
     codes = load_codes()
     units = [

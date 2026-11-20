@@ -45,9 +45,14 @@ patterns = 20
 # The longest span of service dates one history or punctuality request covers.
 max_days = 21
 default_days = 7
-# A departure counts as on time from on_time_early_s before to on_time_late_s after schedule.
-on_time_early_s = -60
-on_time_late_s = 179
+
+[punctuality]
+# Bands of a delay in shown minutes (expected minus scheduled, each cut to the minute): early up
+# to early_max_min, on time up to on_time_max_min, late up to late_max_min, very late beyond.
+# Every answer's `punctuality` and history's on-time shares use them (api/punctuality.py).
+early_max_min = -2
+on_time_max_min = 2
+late_max_min = 9
 
 [alerts]
 # The most alerts one answer lists (a stop place, a line, a board, or all current ones).

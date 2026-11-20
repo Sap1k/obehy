@@ -17,6 +17,7 @@ from google.transit import gtfs_realtime_pb2 as rt
 from psycopg.rows import DictRow, dict_row
 
 from obehy.api.app import create_app
+from obehy.api.db import Snapshot
 from obehy.realtime import record
 from obehy.realtime.alerts import Alert, AlertEntity, Period
 from obehy.realtime.archive import ArchiveWriter, Poll
@@ -581,7 +582,8 @@ def test_departures_scheduled_and_late(client: TestClient) -> None:
     assert _times(late) == [
         ("jdf:trip:1", "2026-10-06T06:00:00+02:00", "2026-10-06T06:10:00+02:00", "predicted")
     ]
-    assert (late[0]["delay_s"], late[0]["source_class"], late[0]["stale"]) == (600, "gps", False)
+    assert (late[0]["delay_min"], late[0]["punctuality"]) == (10, "very_late")
+    assert (late[0]["source_class"], late[0]["stale"]) == ("gps", False)
     # Wednesday the 7th has no service; the 8th's state belongs to another release.
     assert _get(client, board, start="2026-10-07T05:50:00+02:00")["departures"] == []
     thursday = _get(client, board, start="2026-10-08T05:50:00+02:00")["departures"]
@@ -613,7 +615,7 @@ def test_a_rail_part_departs_with_the_run_realtime(client: TestClient) -> None:
     assert _times(board) == [
         ("czptt:trip:1:2", "2026-10-07T06:16:00+02:00", "2026-10-07T06:19:00+02:00", "predicted")
     ]
-    assert board[0]["delay_s"] == 180
+    assert (board[0]["delay_min"], board[0]["punctuality"]) == (3, "late")
 
 
 def test_a_trip_with_calls_realtime_features_and_journey_key(client: TestClient) -> None:
@@ -624,7 +626,12 @@ def test_a_trip_with_calls_realtime_features_and_journey_key(client: TestClient)
         (2, "2026-10-06T06:25:00+02:00", "predicted"),
     ]
     assert trip["calls"][0]["scheduled_departure"] == "2026-10-06T06:00:00+02:00"
-    assert trip["realtime"]["delay_s"] == 600
+    assert (trip["realtime"]["delay_min"], trip["realtime"]["punctuality"]) == (10, "very_late")
+    # Each call at the time a rider meets it: departures, at the last call the arrival.
+    assert [(c["delay_min"], c["punctuality"]) for c in trip["calls"]] == [
+        (10, "very_late"),
+        (10, "very_late"),
+    ]
     assert [n["text"] for n in trip["notes"]] == ["jede přes Sloup"]
     assert trip["run_parts"] == [{"trip_id": "jdf:trip:1", "run_part": None}]
     assert trip["shape"]["type"] == "LineString"
@@ -710,7 +717,7 @@ def test_motis_legs_resolve_to_trips_or_say_why_not(client: TestClient) -> None:
     first, pid, old = legs[:3]
     assert first["motis_trip_id"] == "20261006_06:00_jdf_jdf:trip:1"
     assert first["journey"] == {"namespace": "cis:line_trip", "key": "000001:1"}
-    assert first["realtime"]["delay_s"] == 600 and first["leg_calls"]
+    assert first["realtime"]["delay_min"] == 10 and first["leg_calls"]
     assert [(c["sequence"], c["estimated_departure"]) for c in first["calls"]] == [
         (1, "2026-10-06T06:10:00+02:00"),
         (2, "2026-10-06T06:25:00+02:00"),
@@ -759,7 +766,8 @@ def test_enrichment_takes_a_bounded_number_of_legs(client: TestClient) -> None:
 def test_vehicles_fresh_in_the_viewport_of_this_release(client: TestClient) -> None:
     box = "14.5,50.6,14.6,50.7"
     (bus,) = _get(client, "/vehicles", bbox=box)["vehicles"]
-    assert (bus["vehicle_id"], bus["trip_id"], bus["delay_s"]) == ("duk:1001", "jdf:trip:1", 600)
+    assert (bus["vehicle_id"], bus["trip_id"], bus["delay_min"]) == ("duk:1001", "jdf:trip:1", 10)
+    assert bus["punctuality"] == "very_late"
     assert bus["line"]["short_name"] == "1" and bus["headsign"] == "Nový Bor"
     shown = _get(client, "/vehicles", bbox=box, include="unmatched")["vehicles"]
     assert [(v["vehicle_id"], v["state"], v["line"]) for v in shown][1:] == [
@@ -996,10 +1004,10 @@ def test_a_line_overview_timetable_and_live_trips(client: TestClient) -> None:
     )
     trips = _get(client, "/lines/jdf:route:000001/trips", date="2026-10-06")["trips"]
     assert [
-        (t["trip_id"], t["lifecycle"], t["delay_s"], [v["vehicle_id"] for v in t["vehicles"]])
+        (t["trip_id"], t["lifecycle"], t["delay_min"], [v["vehicle_id"] for v in t["vehicles"]])
         for t in trips
     ] == [
-        ("jdf:trip:1", "running", 600, ["duk:1001"]),
+        ("jdf:trip:1", "running", 10, ["duk:1001"]),
         ("jdf:trip:2", "cancelled", None, []),
     ]
     _get(client, "/lines/jdf:route:nope", 404)
@@ -1029,7 +1037,6 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
     assert (day["service_date"], day["trip_id"]) == ("2026-10-06", "jdf:trip:old")
     assert day["cancelled"] is False  # cancelled, then seen running
     # MPVnet's report was the bus by its plate: one vehicle, two reports.
-    assert day["vehicles"] == ["duk:1001"]
     assert [
         (v["vehicle_id"], v["source"], v["source_vehicle_id"], v["fleet_number"], v["physical"])
         for v in day["worked_by"]
@@ -1056,10 +1063,13 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
     assert day["segment"] == {
         "first_call": 0,
         "last_call": 1,
-        "start": {"delay_s": 120, "estimated": False},
-        "end": {"delay_s": 60, "estimated": True},
-        "worst": {"delay_s": 120, "estimated": False},
-        "delays": [{"delay_s": 120, "estimated": False}, {"delay_s": 60, "estimated": True}],
+        "start": {"delay_s": 120, "delay_min": 2, "punctuality": "on_time", "estimated": False},
+        "end": {"delay_s": 60, "delay_min": 1, "punctuality": "on_time", "estimated": True},
+        "worst": {"delay_s": 120, "delay_min": 2, "punctuality": "on_time", "estimated": False},
+        "delays": [
+            {"delay_s": 120, "delay_min": 2, "punctuality": "on_time", "estimated": False},
+            {"delay_s": 60, "delay_min": 1, "punctuality": "on_time", "estimated": True},
+        ],
     }
     assert history["segment"] == {
         "start_location_id": "jdf:stop:1",
@@ -1067,6 +1077,7 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
         "runs": 1,
         "on_time_share": 1.0,
         "median_delay_s": 60,
+        "median_delay_min": 1,
         "p90_delay_s": 60,
     }
     # A start that is none of its stops falls back to the first.
@@ -1332,11 +1343,11 @@ def test_one_marker_per_journey_and_a_stable_trip_per_vehicle(
 def test_a_cancelled_trip_on_the_board_and_in_its_detail(client: TestClient) -> None:
     board = "/stop-places/jdf:stop:1/departures"
     (row,) = _get(client, board, start="2026-10-07T00:20:00+02:00")["departures"]
-    assert (row["trip_id"], row["status"], row["estimated"], row["delay_s"]) == (
+    assert (row["trip_id"], row["status"], row["estimated"], row["punctuality"]) == (
         "jdf:trip:2",
         "cancelled",
         None,
-        None,
+        "cancelled",
     )
     trip = _get(client, "/trips/jdf:trip:2/2026-10-06")
     assert trip["realtime"]["lifecycle"] == "cancelled"
@@ -1455,10 +1466,10 @@ def test_a_trip_says_whether_a_composition_can_be_asked(
     # ČD's train, but the API's today (the database's) is weeks after the 7th.
     assert _get(client, "/trips/czptt:trip:1:2/2026-10-07")["composition"] is False
 
-    def the_7th(_: Instant) -> date:
+    def the_7th(_: Snapshot) -> date:
         return date(2026, 10, 7)
 
-    monkeypatch.setattr("obehy.api.lookup_rules.local_date", the_7th)
+    monkeypatch.setattr("obehy.api.lookup_rules.today", the_7th)
     assert _get(client, "/trips/czptt:trip:1:2/2026-10-07")["composition"] is True
     # A bus: no composition source covers its feed.
     assert _get(client, "/trips/jdf:trip:1/2026-10-06")["composition"] is False

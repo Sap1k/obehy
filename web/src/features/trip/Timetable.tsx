@@ -201,7 +201,9 @@ function Stop({
   const key = `${item.tripId}/${item.call.sequence}`;
   const { call } = item;
   const { scheduled, estimated } = callTimes(call);
-  const time = scheduled ? timeState(scheduled, estimated, call.status, stale) : null;
+  const time = scheduled
+    ? timeState(scheduled, estimated, call.delay_min, call.punctuality, stale)
+    : null;
   const showScheduled = time && time.delayMin !== null && time.delayMin !== 0;
   const requestStop = call.flags.includes("request_stop");
   return (

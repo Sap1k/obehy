@@ -10,27 +10,39 @@ history, the native app), so it is decided here once:
   by the nearest delay measured inside the segment, flagged estimated (dropping it would leave
   out exactly the bad days);
 - the summary over the days: runs measured at the end, the share on time there by the API's
-  on-time band (`limits.on_time_*`), the median and the 90th percentile.
+  band (`punctuality.py`), the median and the 90th percentile.
 """
 
 from __future__ import annotations
 
 import math
+from dataclasses import asdict
 
-from obehy.api import schema
-from obehy.api.limits import Limits
+from obehy.api import punctuality, schema
 
-NONE = schema.HistoryDelay(delay_s=None, estimated=False)
+NONE = schema.HistoryDelay(delay_s=None, delay_min=None, punctuality="unknown", estimated=False)
+
+
+def delay(delay_s: int | None, estimated: bool) -> schema.HistoryDelay:
+    """A measured delay with its shown minutes and band."""
+
+    return schema.HistoryDelay(
+        delay_s=delay_s, **asdict(punctuality.of_seconds(delay_s)), estimated=estimated
+    )
+
+
+def on_time(delay_s: int) -> bool:
+    """Whether a delay in seconds is in the on-time band."""
+
+    return punctuality.of_seconds(delay_s).punctuality == "on_time"
 
 
 def call_delay(call: schema.HistoryCall, end: bool) -> schema.HistoryDelay:
     """A call's delay as the rider meets it: its departure, at the segment's end its arrival;
     the other one when that is missing."""
 
-    arrival = schema.HistoryDelay(delay_s=call.arrival_delay_s, estimated=call.arrival_estimated)
-    departure = schema.HistoryDelay(
-        delay_s=call.departure_delay_s, estimated=call.departure_estimated
-    )
+    arrival = delay(call.arrival_delay_s, call.arrival_estimated)
+    departure = delay(call.departure_delay_s, call.departure_estimated)
     first, second = (arrival, departure) if end else (departure, arrival)
     if first.delay_s is not None:
         return first
@@ -38,11 +50,11 @@ def call_delay(call: schema.HistoryCall, end: bool) -> schema.HistoryDelay:
 
 
 def _nearest(
-    delay: schema.HistoryDelay, fallback: schema.HistoryDelay | None
+    found: schema.HistoryDelay, fallback: schema.HistoryDelay | None
 ) -> schema.HistoryDelay:
-    if delay.delay_s is not None or fallback is None:
-        return delay
-    return schema.HistoryDelay(delay_s=fallback.delay_s, estimated=True)
+    if found.delay_s is not None or fallback is None:
+        return found
+    return delay(fallback.delay_s, True)
 
 
 def run(day: schema.HistoryDay, start: str, end: str) -> schema.HistorySegmentRun | None:
@@ -71,9 +83,7 @@ def run(day: schema.HistoryDay, start: str, end: str) -> schema.HistorySegmentRu
     )
 
 
-def summary(
-    days: list[schema.HistoryDay], start: str, end: str, limits: Limits
-) -> schema.HistorySegment:
+def summary(days: list[schema.HistoryDay], start: str, end: str) -> schema.HistorySegment:
     """How the segment usually ends over the days not cancelled."""
 
     ends = sorted(
@@ -81,13 +91,14 @@ def summary(
         for d in days
         if not d.cancelled and d.segment is not None and d.segment.end.delay_s is not None
     )
-    on_time = [x for x in ends if limits.on_time_early_s <= x <= limits.on_time_late_s]
+    punctual = [x for x in ends if on_time(x)]
     return schema.HistorySegment(
         start_location_id=start,
         end_location_id=end,
         runs=len(ends),
-        on_time_share=len(on_time) / len(ends) if ends else None,
+        on_time_share=len(punctual) / len(ends) if ends else None,
         median_delay_s=percentile(ends, 0.5) if ends else None,
+        median_delay_min=punctuality.of_seconds(percentile(ends, 0.5)).delay_min if ends else None,
         p90_delay_s=percentile(ends, 0.9) if ends else None,
     )
 

@@ -22,11 +22,11 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from obehy.api import schema
 from obehy.api.codes import load_codes
-from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
+from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache, today
 from obehy.api.db import Snapshot
 from obehy.api.params import ParameterError, date_span
+from obehy.api.resolve import trip_on
 from obehy.realtime.policy import load_policy
-from obehy.realtime.times import local_date
 
 router = APIRouter()
 
@@ -119,7 +119,7 @@ def vehicle_days(
     start, end = date_span(
         since,
         until,
-        local_date(snap.now),
+        today(snap),
         limits.history_default_days,
         limits.history_max_days,
     )
@@ -150,19 +150,16 @@ def trip_circulation(
     service_date: date,
 ) -> schema.Circulation:
     realtime_cache(response, limits)
-    row = snap.one(
-        "trip", {"trip_id": trip_id, "service_date": service_date, "release_id": snap.release_id}
-    )
-    if row is None or not row["runs"]:
+    found = trip_on(snap, trip_id, service_date)
+    if found is None or not found.runs:
         raise HTTPException(404, f"no trip {trip_id} runs on {service_date}")
-    keys = snap.all("trip_keys", {"trip_id": trip_id, "service_date": service_date})
-    wanted = {(k["namespace"], k["key"]) for k in keys}
+    wanted = {(k.namespace, k.key) for k in found.keys}
     sources = snap.all(
         "journey_sources",
         {
             "service_date": service_date,
-            "namespaces": [k["namespace"] for k in keys],
-            "keys": [k["key"] for k in keys],
+            "namespaces": [k.namespace for k in found.keys],
+            "keys": [k.key for k in found.keys],
         },
     )
     # A chain is dated by its first journey: one past midnight may start the day before.
@@ -223,7 +220,7 @@ def circulation_scopes(
     service_date: Annotated[date | None, Query(alias="date", description="Default today")] = None,
 ) -> schema.CirculationScopes:
     realtime_cache(response, limits)
-    day = service_date or local_date(snap.now)
+    day = service_date or today(snap)
     agencies: dict[str, schema.ScopeAgency] = {}
     asked = {"source": source, "service_date": day}
     rows = snap.all("circulation_scopes", asked) if source else []
@@ -281,7 +278,7 @@ def circulations(
     if mode and not agency_id:
         raise ParameterError("mode narrows agency_id")
     realtime_cache(response, limits)
-    day = service_date or local_date(snap.now)
+    day = service_date or today(snap)
     matched: dict[str, set[tuple[str, str]]] = {}
     for r in snap.all(
         "circulation_journeys",

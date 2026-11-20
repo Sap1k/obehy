@@ -42,11 +42,6 @@ export function dayKey(iso: string | Date | number): string {
   return dayKeyFormat.format(typeof iso === "string" ? Date.parse(iso) : iso);
 }
 
-/** Whole minutes between the two minutes shown. */
-export function minutesBetween(from: string, to: string): number {
-  return Math.round((minuteOf(to) - minuteOf(from)) / MINUTE);
-}
-
 function addDays(key: string, days: number): string {
   const [y, m, d] = key.split("-").map(Number) as [number, number, number];
   const date = new Date(Date.UTC(y, m - 1, d + days, 12));

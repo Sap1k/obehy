@@ -84,15 +84,6 @@ def schedule_spans(since: Instant, until: Instant) -> Spans:
     return spans
 
 
-def split_vehicle_id(vehicle_id: str) -> tuple[str, str]:
-    """`<source>:<source_vehicle_id>`; the source has no colon, the vehicle ID may."""
-
-    source, sep, rest = vehicle_id.partition(":")
-    if not sep or not source or not rest:
-        raise ParameterError("vehicle ID must be <source>:<source_vehicle_id>")
-    return source, rest
-
-
 @dataclass(frozen=True, slots=True)
 class Cursor:
     """Where a board page ended: the last row's expected and scheduled times and identity."""

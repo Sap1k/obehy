@@ -313,6 +313,20 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — The API decides once what clients worked out each on their own. One resolver
+  (`api/resolve.py`) maps trip + date to its feed and journey keys, source keys to a trip and
+  gone trip IDs to their journey (seven queries and three ambiguity checks before). One delay
+  rule (`api/punctuality.py`, bands in `api-v1.toml` `[punctuality]`): `delay_min` (shown
+  minutes) and `punctuality` on boards, trip calls, a trip's realtime, vehicles, line trips and
+  history (replacing `delay_s`; a source's own is `reported_delay_s`); history's on-time shares
+  use the same band. One trip assembly for a trip page and an enriched leg; boards take their
+  vehicle from `trip_vehicles.sql` like every other answer (so `physical`/`followed_as` are set
+  there too); `rt.trip_current` (migration 0028) is the one "trip's current realtime" for
+  boards, trips and line trips. `HistoryDay.vehicles` (a copy of `worked_by`) is gone. Web: tone
+  and wording only, its own bands and `minutesBetween` gone; app: reads `delay_min`, judges
+  MOTIS times by the API's bands (late from +3, was +1) in shown minutes. Validated: unit, DB
+  (108), web typecheck/lint/tests/build, app tests/lint/debug build. Not checked: the web in a
+  browser and the app on a phone (no dev data).
 - **2026-11-20** — One vehicle identity in history (migration 0027). The worker writes each
   assignment's `vehicle_id` as the live map names the report (registry key, stated plate,
   co-located partner; a rail run's unit, not its train), so a plate-bound bus's history and

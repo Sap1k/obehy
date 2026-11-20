@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
-from datetime import date, timedelta
+from dataclasses import asdict
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from psycopg.rows import DictRow
 
-from obehy.api import schema, timetable
+from obehy.api import punctuality, schema, timetable
 from obehy.api.codes import (
     Codes,
     amenities,
@@ -30,12 +31,13 @@ from obehy.api.common import (
     envelope,
     line,
     realtime_cache,
+    seen_since,
     static_cache,
+    today,
     trip_vehicle,
 )
 from obehy.api.db import Snapshot
 from obehy.api.params import ParameterError, search_words
-from obehy.realtime.times import local_date
 
 router = APIRouter(tags=["lines"])
 
@@ -136,7 +138,7 @@ def line_detail(
     cached = static_cache(request, response, snap, limits)
     if cached is not None:
         return cached
-    day = service_date or local_date(snap.now)
+    day = service_date or today(snap)
     found, agency, description = _line(snap, route_id)
     validity = snap.one("line_validity", {"route_id": route_id})
     assert validity is not None  # an aggregate: one row
@@ -262,7 +264,7 @@ def line_timetable(
     validity = snap.one("line_validity", {"route_id": route_id})
     assert validity is not None  # an aggregate: one row
     route = features(codes, snap.all("line_features", {"route_id": route_id}))
-    span = {"since": service_date or local_date(snap.now), "until": service_date or date.max}
+    span = {"since": service_date or today(snap), "until": service_date or date.max}
     trips = snap.all(
         "line_timetable", span | {"route_id": route_id, "dated": service_date is not None}
     )
@@ -352,15 +354,20 @@ def line_trips(
     service_date: DateParam = None,
 ) -> schema.LineTrips:
     realtime_cache(response, limits)
-    day = service_date or local_date(snap.now)
+    day = service_date or today(snap)
     found, _, _ = _line(snap, route_id)
     params = {"route_id": route_id, "service_date": day, "release_id": snap.release_id}
     rows = snap.all("line_trips", params)
-    seen_since = snap.now - timedelta(seconds=limits.vehicle_max_age_s)
+    oldest = seen_since(snap, limits)
     on_trips: dict[str, list[schema.TripVehicle]] = {}
     for v in snap.all(
         "trip_vehicles",
-        params | {"trip_ids": [r["trip_id"] for r in rows], "seen_since": seen_since},
+        params
+        | {
+            "trip_ids": [r["trip_id"] for r in rows],
+            "service_dates": [day] * len(rows),
+            "seen_since": oldest,
+        },
     ):
         on_trips.setdefault(v["trip_id"], []).append(trip_vehicle(v))
     return schema.LineTrips(
@@ -369,7 +376,9 @@ def line_trips(
         service_date=day,
         trips=[
             schema.LineTrip.model_validate(
-                r | {"service_date": day, "vehicles": on_trips.get(r["trip_id"], [])}
+                r
+                | asdict(punctuality.of_seconds(r["delay_s"]))
+                | {"service_date": day, "vehicles": on_trips.get(r["trip_id"], [])}
             )
             for r in rows
         ],

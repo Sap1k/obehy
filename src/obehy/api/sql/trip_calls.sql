@@ -1,20 +1,11 @@
--- A trip's passenger calls with their realtime state: the trip's slice of the current journey's
--- calls (a rail run's part), matched by sequence. Railway points are not public stops. A call is
--- placed at its post when the post's position is known exactly (not JrUtil's estimate), else at
--- its stop place.
-WITH state AS (
-    SELECT s.calls, p.first_call, p.last_call
-    FROM rt.trip_part_current p
-    JOIN rt.trip_state_current s USING (feed, key_namespace, key, service_date, release_id)
-    WHERE p.trip_id = %(trip_id)s AND p.service_date = %(service_date)s
-        AND p.release_id = %(release_id)s
-    ORDER BY s.updated_at DESC
-    LIMIT 1
-),
-live AS (
+-- A trip's passenger calls with their realtime state: the trip's slice of the current
+-- journey's calls (a rail run's part, rt.trip_current), matched by sequence. Railway points are
+-- not public stops. A call is placed at its post when the post's position is known exactly (not
+-- JrUtil's estimate), else at its stop place.
+WITH live AS (
     SELECT e.value AS call
-    FROM state, jsonb_array_elements(state.calls) WITH ORDINALITY AS e (value, n)
-    WHERE e.n - 1 BETWEEN state.first_call AND state.last_call
+    FROM rt.trip_current(%(trip_id)s, %(service_date)s, %(release_id)s) x,
+    jsonb_array_elements(x.calls) AS e (value)
 )
 SELECT c.sequence, c.location_id, l.name,
        CASE WHEN bp.coordinate_precision = 'exact' THEN bp.latitude ELSE l.latitude END AS latitude,

@@ -6,8 +6,8 @@
 -- `start`. A trip may call at one stop place twice (at two of its posts): its rows are told
 -- apart by the call's sequence. A cursor continues after the row it names. Realtime is found
 -- by the feed trip ID through rt.trip_part_current, in the active release; the part's slice of
--- the journey's calls holds the call by its sequence, with the sources it came from. The
--- vehicle is the freshest one on the trip, with its profile's traits. `wheelchair_kinds` are
+-- the journey's calls holds the call by its sequence, with the sources it came from (its
+-- vehicles are `trip_vehicles.sql`'s, read for the page's rows). `wheelchair_kinds` are
 -- what the timetable states for the whole trip (its, its route's and its service's
 -- assignments), evaluated for the page's rows only.
 WITH spans (service_date, lo, hi) AS (
@@ -60,35 +60,14 @@ running AS (
                          ELSE n.sequence > b.sequence END
         )
 ),
--- The realtime calls of the running trips: each trip's slice of its current journey's calls
--- (the freshest journey, should two hold the trip).
+-- The realtime calls of the running trips, as their trip pages show them (rt.trip_current).
 realtime AS (
-    SELECT DISTINCT ON (p.trip_id, p.service_date, (e.value ->> 'sequence')::integer)
-           p.trip_id, p.service_date, (e.value ->> 'sequence')::integer AS sequence,
-           e.value AS call, s.stale,
-           ARRAY(SELECT x ->> 'source' FROM jsonb_array_elements(s.sources) AS x) AS sources
-    FROM rt.trip_part_current p
-    JOIN rt.trip_state_current s USING (feed, key_namespace, key, service_date, release_id)
-    CROSS JOIN LATERAL jsonb_array_elements(s.calls) WITH ORDINALITY AS e (value, n)
-    WHERE p.release_id = %(release_id)s
-        AND (p.trip_id, p.service_date) IN (SELECT trip_id, service_date FROM running)
-        AND e.n - 1 BETWEEN p.first_call AND p.last_call
-    ORDER BY p.trip_id, p.service_date, (e.value ->> 'sequence')::integer, s.updated_at DESC
-),
-vehicles AS (
-    SELECT DISTINCT ON (r.trip_id, r.service_date) r.*
-    FROM (
-        SELECT v.trip_id, v.service_date, v.vehicle_id, v.status, v.last_seen, v.position_at,
-               v.latitude,
-               v.longitude, v.bearing, v.source, v.source_vehicle_id, v.represents,
-               array_agg(v.source) OVER (PARTITION BY v.trip_id, v.service_date, v.vehicle_id)
-                   AS vehicle_sources
-        FROM rt.vehicle_state_current v
-        WHERE v.release_id = %(release_id)s AND v.last_seen >= %(seen_since)s
-            AND (v.trip_id, v.service_date) IN (SELECT trip_id, service_date FROM running)
-    ) r
-    ORDER BY r.trip_id, r.service_date, r.represents DESC, r.last_seen DESC, r.source,
-        r.source_vehicle_id
+    SELECT r.trip_id, r.service_date, (e.value ->> 'sequence')::integer AS sequence,
+           e.value AS call, x.stale,
+           ARRAY(SELECT y ->> 'source' FROM jsonb_array_elements(x.sources) AS y) AS sources
+    FROM (SELECT DISTINCT trip_id, service_date FROM running) r
+    CROSS JOIN LATERAL rt.trip_current(r.trip_id, r.service_date, %(release_id)s) x
+    CROSS JOIN LATERAL jsonb_array_elements(x.calls) AS e (value)
 ),
 live AS (
     SELECT r.*, x.call, x.stale, x.sources,
@@ -107,11 +86,6 @@ SELECT l.trip_id, l.service_date, l.location_id, l.sequence, l.route_id, ro.shor
        extract(epoch FROM l.estimated - l.scheduled)::integer AS delay_s,
        coalesce(l.call ->> 'status', 'scheduled') AS status,
        l.call ->> 'source_class' AS source_class, l.stale, l.sources, bp.public_code AS platform,
-       v.vehicle_id, v.status AS vehicle_state, v.last_seen AS vehicle_seen,
-       v.position_at AS vehicle_position_at,
-       v.latitude AS vehicle_latitude, v.longitude AS vehicle_longitude,
-       v.bearing AS vehicle_bearing, v.vehicle_sources, vp.low_floor, vp.air_conditioning,
-       vp.wheelchair_accessible, vp.manufacturer, vp.model, vp.operator, vp.licence_plate, vp.fleet_number,
        l.trip_wheelchair,
        ARRAY(
            SELECT DISTINCT a.kind::text FROM active.assignment a
@@ -124,8 +98,6 @@ SELECT l.trip_id, l.service_date, l.location_id, l.sequence, l.route_id, ro.shor
 FROM rows l
 JOIN active.route ro ON ro.route_id = l.route_id
 LEFT JOIN posts bp ON bp.location_id = l.boarding_point_id
-LEFT JOIN vehicles v USING (trip_id, service_date)
-LEFT JOIN rt.vehicle_profile vp ON vp.vehicle_id = v.vehicle_id
 WHERE l.expected >= %(start)s AND l.expected < %(until)s
     AND (%(after_expected)s::timestamptz IS NULL
         OR (l.expected, l.scheduled, l.trip_id, l.service_date, l.location_id, l.sequence)

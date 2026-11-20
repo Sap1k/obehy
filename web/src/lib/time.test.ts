@@ -1,24 +1,10 @@
-import {
-  dayDividerLabel,
-  dayKey,
-  formatClock,
-  minutesBetween,
-  pragueInstant,
-  relativeDay,
-} from "./time";
+import { dayDividerLabel, dayKey, formatClock, pragueInstant, relativeDay } from "./time";
 
 describe("time", () => {
   it("shows Prague wall time cut to the minute", () => {
     expect(formatClock("2026-10-21T12:29:59Z")).toBe("14:29");
     expect(formatClock("2026-10-21T12:30:01Z")).toBe("14:30");
     expect(formatClock("2026-12-01T13:05:00Z")).toBe("14:05");
-  });
-
-  it("counts minutes between the minutes shown", () => {
-    // 14:29:59 → 14:30:01 is two seconds, but the shown minutes differ by one.
-    expect(minutesBetween("2026-10-21T12:29:59Z", "2026-10-21T12:30:01Z")).toBe(1);
-    expect(minutesBetween("2026-10-21T12:30:00Z", "2026-10-21T12:30:59Z")).toBe(0);
-    expect(minutesBetween("2026-10-21T12:30:00Z", "2026-10-21T12:28:00Z")).toBe(-2);
   });
 
   it("keys days by the Prague date", () => {

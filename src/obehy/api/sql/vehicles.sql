@@ -39,7 +39,7 @@ fix AS (
     ORDER BY r.vehicle_id, r.latitude IS NULL, r.represents DESC, r.position_at DESC NULLS LAST,
         r.last_seen DESC, r.source, r.source_vehicle_id, r.feed
 )
-SELECT b.vehicle_id, b.feed, b.source, b.source_vehicle_id, b.status, f.last_seen, f.position_at, f.latitude,
+SELECT b.vehicle_id, b.feed, b.source, b.status, f.last_seen, f.position_at, f.latitude,
        f.longitude, f.bearing, b.trip_id, b.service_date, t.route_id, ro.short_name,
        ro.long_name, ro.mode, ro.color, ro.text_color, t.short_name AS trip_short_name,
        t.headsign, s.delay_s, b.sources, p.low_floor, p.air_conditioning,

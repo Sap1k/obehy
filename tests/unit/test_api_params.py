@@ -16,7 +16,6 @@ from obehy.api.params import (
     parse_near,
     schedule_spans,
     search_words,
-    split_vehicle_id,
 )
 from obehy.api.trips import by_key_path, trip_path
 from obehy.realtime.times import ServiceTime
@@ -66,14 +65,6 @@ def test_the_window_holds_across_the_autumn_change() -> None:
     day = spans.dates.index(date(2026, 10, 25))
     assert spans.lo[day] <= 2 * 3600 + 1800 <= spans.hi[day]
     assert spans.lo[day] <= 3 * 3600 + 1800 <= spans.hi[day]
-
-
-def test_a_vehicle_id_is_source_and_source_vehicle_id() -> None:
-    assert split_vehicle_id("pid:service-3-1234") == ("pid", "service-3-1234")
-    assert split_vehicle_id("duk:a:b") == ("duk", "a:b")
-    for bad in ("pid", ":1", "pid:"):
-        with pytest.raises(ParameterError):
-            split_vehicle_id(bad)
 
 
 def test_trip_paths_escape_what_trip_ids_contain() -> None:

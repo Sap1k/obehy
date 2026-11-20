@@ -2210,6 +2210,13 @@ POST /api/v1/journeys/enrich                MOTIS legs (Transitous, motis.obehy.
 - **Punctuality is a journey's,** never a line's or a stop's: a line's journeys differ too
   much to share one figure. A trip's history gives, per stop, how its journey ran over the
   days as a distribution (on-time share, median, 90th percentile, worst).
+- **The API decides how late, once for every client** (`api/punctuality.py`): a delay is in
+  shown minutes (expected less scheduled, each cut to the minute; a delay known only in seconds
+  is floored), with a band from `api-v1.toml` `[punctuality]` (early ≤ −2, on time −1…+2, late
+  3…9, very late ≥ 10; unknown without a live estimate or when stale; cancelled). Boards, trip
+  calls (the time a rider meets: the departure, at the last call the arrival), vehicles, a
+  trip's realtime and history carry `delay_min` and `punctuality`; clients only colour and word
+  them. Which trip and journey a request means is decided once too (`api/resolve.py`).
 - **Trips are identified by the feed's `trip_id` and the service date;** vehicles by their
   vehicle ID. Source keys (`cis:line_trip`, `pid:gtfs_trip_id`, `czptt:train_number`, …) are
   lookup aliases only, answered with a redirect, and a trip's preferred journey key is an

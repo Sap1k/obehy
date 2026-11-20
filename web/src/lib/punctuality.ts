@@ -1,10 +1,13 @@
-import { minutesBetween } from "./time";
+import type { Schemas } from "../api/client";
 
 // How a time reads on a board or in a timetable (Figma 08, "Departure time"): the expected
-// time, coloured by punctuality, with the delay in words under it.
+// time, coloured by punctuality, with the delay in words under it. The API decides the delay
+// (shown minutes) and its band (`api/punctuality.py`); here it is only coloured and worded.
 
 export type CallStatus =
   "scheduled" | "predicted" | "actual" | "inferred" | "no_realtime" | "cancelled";
+
+export type Punctuality = Schemas["Departure"]["punctuality"];
 
 export type Tone = "early" | "onTime" | "late" | "veryLate" | "cancelled" | "unknown";
 
@@ -19,13 +22,18 @@ export interface TimeState {
   struck: boolean;
 }
 
-/** Bands in whole minutes of the shown times: early ≤ −2, on time −1…+2, late +3…+9, very
- * late ≥ +10. */
-export function toneOf(delayMin: number): Tone {
-  if (delayMin <= -2) return "early";
-  if (delayMin <= 2) return "onTime";
-  if (delayMin <= 9) return "late";
-  return "veryLate";
+const TONES: Record<Punctuality, Tone> = {
+  early: "early",
+  on_time: "onTime",
+  late: "late",
+  very_late: "veryLate",
+  unknown: "unknown",
+  cancelled: "cancelled",
+};
+
+/** The colour of the API's band. */
+export function toneOf(punctuality: Punctuality): Tone {
+  return TONES[punctuality];
 }
 
 export function delayText(delayMin: number): string {
@@ -33,15 +41,16 @@ export function delayText(delayMin: number): string {
   return delayMin > 0 ? `+${delayMin} min` : `−${-delayMin} min`;
 }
 
-const LIVE: ReadonlySet<string> = new Set(["predicted", "actual", "inferred"]);
-
+/** A time as the API judged it: `delayMin` and `punctuality` are the row's or call's own.
+ * `offline` (the page's data could not be refreshed) shows it as approximate, as a stale one. */
 export function timeState(
   scheduled: string,
   estimated: string | null | undefined,
-  status: string,
-  stale: boolean | null | undefined,
+  delayMin: number | null,
+  punctuality: Punctuality,
+  offline = false,
 ): TimeState {
-  if (status === "cancelled") {
+  if (punctuality === "cancelled") {
     return {
       shown: scheduled,
       scheduled,
@@ -51,7 +60,7 @@ export function timeState(
       struck: true,
     };
   }
-  if (!estimated || !LIVE.has(status)) {
+  if (delayMin === null || !estimated) {
     return {
       shown: scheduled,
       scheduled,
@@ -61,22 +70,15 @@ export function timeState(
       struck: false,
     };
   }
-  const delayMin = minutesBetween(scheduled, estimated);
   const words = delayText(delayMin);
-  if (stale) {
-    return {
-      shown: estimated,
-      scheduled,
-      tone: "unknown",
-      caption: `≈ ${delayMin === 0 ? "včas" : words}`,
-      delayMin,
-      struck: false,
-    };
+  if (offline || punctuality === "unknown") {
+    const caption = `≈ ${delayMin === 0 ? "včas" : words}`;
+    return { shown: estimated, scheduled, tone: "unknown", caption, delayMin, struck: false };
   }
   return {
     shown: estimated,
     scheduled,
-    tone: toneOf(delayMin),
+    tone: toneOf(punctuality),
     caption: words,
     delayMin,
     struck: false,
