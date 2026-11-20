@@ -10,6 +10,8 @@ Sampled every emit tick (`obehy rt replay --quality`), after estimates are broug
   arrival and departure events and how much of it the next leg recovers (the lateness at the
   departure minus the lateness on arrival at the next call). If the timetable minute absorbs
   the dwell, the recovery follows the dwell;
+- event and shown-time checks against the raw fixes, and departure accuracy
+  (`quality_checks`);
 - off-shape episodes (road vehicles on a real shape): stretches where the lead fix lies more
   than `OFF_SHAPE_M` from where the best reading places it, or the reading is held off the
   path. The bump is the peak measured lateness during the episode minus the lateness at the
@@ -26,6 +28,7 @@ from typing import Any
 from obehy.realtime.core import Context
 from obehy.realtime.geo import distance_m
 from obehy.realtime.model import FeedState, Instance, Interval, JourneyKey
+from obehy.realtime.quality_checks import Checks
 from obehy.realtime.timeline.path import point_at
 from obehy.realtime.timeline.plan import Plan, Scheduled
 from obehy.realtime.times import Instant
@@ -119,8 +122,10 @@ class QualityLog:
     bumps: dict[str, list[tuple[float, float]]] = field(
         default_factory=lambda: defaultdict[str, list[tuple[float, float]]](list)
     )  # (bump s, duration s)
+    checks: Checks = field(default_factory=Checks)
 
     def sample(self, state: FeedState, ctx: Context, at: Instant) -> None:
+        self.checks.sample(state, ctx, at)
         for journey, instance in state.instances.items():
             # A journey that has just finished is scored once more: its last call's arrival.
             finished = instance.lifecycle == "finished" and journey in self.pending
@@ -299,4 +304,5 @@ class QualityLog:
             "flicker": flicker,
             "dwell": dwell,
             "off_shape": shape,
+            "checks": self.checks.report(),
         }

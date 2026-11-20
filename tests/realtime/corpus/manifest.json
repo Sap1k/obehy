@@ -1,0 +1,1486 @@
+[
+ {
+  "name": "arriva-express-bus-long-157710-7AT9086",
+  "source": "arriva-express",
+  "stratum": "bus-long",
+  "key": [
+   "cis:line",
+   "157710"
+  ],
+  "vehicle": "7AT9086",
+  "service_date": "2026-10-12",
+  "route": "AEx",
+  "observations": 409,
+  "why": "sample"
+ },
+ {
+  "name": "arriva-express-bus-long-580916-6SA3598",
+  "source": "arriva-express",
+  "stratum": "bus-long",
+  "key": [
+   "cis:line",
+   "580916"
+  ],
+  "vehicle": "6SA3598",
+  "service_date": "2026-10-12",
+  "route": "AEx",
+  "observations": 416,
+  "why": "sample"
+ },
+ {
+  "name": "arriva-express-bus-long-580916-6SA3700",
+  "source": "arriva-express",
+  "stratum": "bus-long",
+  "key": [
+   "cis:line",
+   "580916"
+  ],
+  "vehicle": "6SA3700",
+  "service_date": "2026-10-12",
+  "route": "AEx",
+  "observations": 461,
+  "why": "sample"
+ },
+ {
+  "name": "arriva-express-bus-long-721341-2TL6293",
+  "source": "arriva-express",
+  "stratum": "bus-long",
+  "key": [
+   "cis:line",
+   "721341"
+  ],
+  "vehicle": "2TL6293",
+  "service_date": "2026-10-12",
+  "route": "AEx",
+  "observations": 555,
+  "why": "sample"
+ },
+ {
+  "name": "dpmd-bus-city-515202-514-846",
+  "source": "dpmd",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "515202:514"
+  ],
+  "vehicle": "846",
+  "service_date": "2026-10-12",
+  "route": "202",
+  "observations": 163,
+  "why": "sample"
+ },
+ {
+  "name": "dpmd-bus-city-515202-601-818",
+  "source": "dpmd",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "515202:601"
+  ],
+  "vehicle": "818",
+  "service_date": "2026-10-12",
+  "route": "202",
+  "observations": 111,
+  "why": "sample"
+ },
+ {
+  "name": "dpmd-bus-city-515204-413-853",
+  "source": "dpmd",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "515204:413"
+  ],
+  "vehicle": "853",
+  "service_date": "2026-10-12",
+  "route": "204",
+  "observations": 160,
+  "why": "sample"
+ },
+ {
+  "name": "dpmd-bus-city-515204-416-853",
+  "source": "dpmd",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "515204:416"
+  ],
+  "vehicle": "853",
+  "service_date": "2026-10-12",
+  "route": "204",
+  "observations": 206,
+  "why": "sample"
+ },
+ {
+  "name": "dpmd-bus-city-515209-415-847",
+  "source": "dpmd",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "515209:415"
+  ],
+  "vehicle": "847",
+  "service_date": "2026-10-12",
+  "route": "209",
+  "observations": 189,
+  "why": "sample"
+ },
+ {
+  "name": "dpmd-bus-city-515210-415-115",
+  "source": "dpmd",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "515210:415"
+  ],
+  "vehicle": "115",
+  "service_date": "2026-10-12",
+  "route": "210",
+  "observations": 173,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-250475-1010-9257",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "250475:1010"
+  ],
+  "vehicle": "9257",
+  "service_date": "2026-10-05",
+  "route": "475",
+  "observations": 212,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-522578-108-451",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "522578:108"
+  ],
+  "vehicle": "451",
+  "service_date": "2026-10-05",
+  "route": "578",
+  "observations": 133,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-522591-114-208",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "522591:114"
+  ],
+  "vehicle": "208",
+  "service_date": "2026-10-05",
+  "route": "591",
+  "observations": 116,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-552621-104-548",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "552621:104"
+  ],
+  "vehicle": "548",
+  "service_date": "2026-10-05",
+  "route": "621",
+  "observations": 94,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-552635-104-905",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "552635:104"
+  ],
+  "vehicle": "905",
+  "service_date": "2026-10-05",
+  "route": "635",
+  "observations": 349,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-562732-106-428",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "562732:106"
+  ],
+  "vehicle": "428",
+  "service_date": "2026-10-05",
+  "route": "732",
+  "observations": 401,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-562766-102-962",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "562766:102"
+  ],
+  "vehicle": "962",
+  "service_date": "2026-10-05",
+  "route": "766",
+  "observations": 209,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-582485-109-810",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "582485:109"
+  ],
+  "vehicle": "810",
+  "service_date": "2026-10-05",
+  "route": "485",
+  "observations": 260,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-585109-5-400315",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "585109:5"
+  ],
+  "vehicle": "400315",
+  "service_date": "2026-10-05",
+  "route": "109",
+  "observations": 170,
+  "why": "sample"
+ },
+ {
+  "name": "duk-bus-regional-592450-113-501",
+  "source": "duk",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "592450:113"
+  ],
+  "vehicle": "501",
+  "service_date": "2026-10-05",
+  "route": "450",
+  "observations": 147,
+  "why": "sample"
+ },
+ {
+  "name": "duk-rail-19607-20539",
+  "source": "duk",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "19607"
+  ],
+  "vehicle": "20539",
+  "service_date": "2026-10-05",
+  "route": "U21",
+  "observations": 134,
+  "why": "sample"
+ },
+ {
+  "name": "duk-rail-6104-20363",
+  "source": "duk",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "6104"
+  ],
+  "vehicle": "20363",
+  "service_date": "2026-10-05",
+  "route": "U11 (NAD)",
+  "observations": 524,
+  "why": "sample"
+ },
+ {
+  "name": "duk-rail-6405-20036",
+  "source": "duk",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "6405"
+  ],
+  "vehicle": "20036",
+  "service_date": "2026-10-05",
+  "route": "U32",
+  "observations": 314,
+  "why": "sample"
+ },
+ {
+  "name": "duk-rail-6437-20058",
+  "source": "duk",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "6437"
+  ],
+  "vehicle": "20058",
+  "service_date": "2026-10-05",
+  "route": "U32",
+  "observations": 87,
+  "why": "sample"
+ },
+ {
+  "name": "duk-rail-6755-20852",
+  "source": "duk",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "6755"
+  ],
+  "vehicle": "20852",
+  "service_date": "2026-10-05",
+  "route": "U12",
+  "observations": 168,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-city-325010-52-8C23333",
+  "source": "mpvnet",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "325010:52"
+  ],
+  "vehicle": "8C23333",
+  "service_date": "2026-10-12",
+  "route": "10",
+  "observations": 214,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-city-335075-62-1CE2766",
+  "source": "mpvnet",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "335075:62"
+  ],
+  "vehicle": "1CE2766",
+  "service_date": "2026-10-12",
+  "route": "75",
+  "observations": 64,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-city-395041-74-7C40063",
+  "source": "mpvnet",
+  "stratum": "bus-city",
+  "key": [
+   "cis:line_trip",
+   "395041:74"
+  ],
+  "vehicle": "7C40063",
+  "service_date": "2026-10-12",
+  "route": "41",
+  "observations": 111,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-360815-5-9C02704",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "360815:5"
+  ],
+  "vehicle": "9C02704",
+  "service_date": "2026-10-12",
+  "route": "815",
+  "observations": 123,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-802320-9-5Z96645",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "802320:9"
+  ],
+  "vehicle": "5Z96645",
+  "service_date": "2026-10-12",
+  "route": "320",
+  "observations": 103,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-802380-10-7Z50648",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "802380:10"
+  ],
+  "vehicle": "7Z50648",
+  "service_date": "2026-10-12",
+  "route": "380",
+  "observations": 189,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-805303-7-EL419EB",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "805303:7"
+  ],
+  "vehicle": "EL419EB",
+  "service_date": "2026-10-12",
+  "route": "303",
+  "observations": 88,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-823480-8-2TA3410",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "823480:8"
+  ],
+  "vehicle": "2TA3410",
+  "service_date": "2026-10-12",
+  "route": "480",
+  "observations": 75,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-871731-2-1TD8439",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "871731:2"
+  ],
+  "vehicle": "1TD8439",
+  "service_date": "2026-10-12",
+  "route": "731",
+  "observations": 155,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-876417-12-2TM5582",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "876417:12"
+  ],
+  "vehicle": "2TM5582",
+  "service_date": "2026-10-12",
+  "route": "417",
+  "observations": 136,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-947640-110-1TY6517",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "947640:110"
+  ],
+  "vehicle": "1TY6517",
+  "service_date": "2026-10-12",
+  "route": "640",
+  "observations": 144,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-bus-regional-948630-4-1TF5397",
+  "source": "mpvnet",
+  "stratum": "bus-regional",
+  "key": [
+   "cis:line_trip",
+   "948630:4"
+  ],
+  "vehicle": "1TF5397",
+  "service_date": "2026-10-12",
+  "route": "630",
+  "observations": 102,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-rail-18130-train-18130",
+  "source": "mpvnet",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "18130"
+  ],
+  "vehicle": "train:18130",
+  "service_date": "2026-10-12",
+  "route": "S8",
+  "observations": 330,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-rail-27907-train-27907",
+  "source": "mpvnet",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "27907"
+  ],
+  "vehicle": "train:27907",
+  "service_date": "2026-10-12",
+  "route": "S12",
+  "observations": 252,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-rail-5500-train-5500",
+  "source": "mpvnet",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "5500"
+  ],
+  "vehicle": "train:5500",
+  "service_date": "2026-10-11",
+  "route": "V50",
+  "observations": 452,
+  "why": "sample"
+ },
+ {
+  "name": "mpvnet-rail-8205-train-8205",
+  "source": "mpvnet",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "8205"
+  ],
+  "vehicle": "train:8205",
+  "service_date": "2026-10-12",
+  "route": "S2",
+  "observations": 600,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-108-2232-250818-3-2074",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "108_2232_250818"
+  ],
+  "vehicle": "3:2074",
+  "service_date": "2026-10-14",
+  "route": "108",
+  "observations": 74,
+  "why": "check example"
+ },
+ {
+  "name": "pid-bus-city-120-2441-260901-3-4192",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "120_2441_260901"
+  ],
+  "vehicle": "3:4192",
+  "service_date": "2026-10-14",
+  "route": "120",
+  "observations": 73,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-122-357-260901-3-4152",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "122_357_260901"
+  ],
+  "vehicle": "3:4152",
+  "service_date": "2026-10-14",
+  "route": "122",
+  "observations": 21,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-139-4143-260921-3-6918",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "139_4143_260921"
+  ],
+  "vehicle": "3:6918",
+  "service_date": "2026-10-14",
+  "route": "139",
+  "observations": 72,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-139-4217-260921-3-6919",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "139_4217_260921"
+  ],
+  "vehicle": "3:6919",
+  "service_date": "2026-10-14",
+  "route": "139",
+  "observations": 34,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-145-1264-260929-3-5543",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "145_1264_260929"
+  ],
+  "vehicle": "3:5543",
+  "service_date": "2026-10-14",
+  "route": "145",
+  "observations": 43,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-150-1732-260831-3-5068",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "150_1732_260831"
+  ],
+  "vehicle": "3:5068",
+  "service_date": "2026-10-14",
+  "route": "150",
+  "observations": 40,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-157-187-260831-3-4155",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "157_187_260831"
+  ],
+  "vehicle": "3:4155",
+  "service_date": "2026-10-14",
+  "route": "157",
+  "observations": 29,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-180-1569-260831-3-6899",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "180_1569_260831"
+  ],
+  "vehicle": "3:6899",
+  "service_date": "2026-10-14",
+  "route": "180",
+  "observations": 29,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-184-938-260831-3-6855",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "184_938_260831"
+  ],
+  "vehicle": "3:6855",
+  "service_date": "2026-10-14",
+  "route": "184",
+  "observations": 21,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-189-1521-260831-3-5518",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "189_1521_260831"
+  ],
+  "vehicle": "3:5518",
+  "service_date": "2026-10-14",
+  "route": "189",
+  "observations": 25,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-191-1386-260831-3-3704",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "191_1386_260831"
+  ],
+  "vehicle": "3:3704",
+  "service_date": "2026-10-14",
+  "route": "191",
+  "observations": 60,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-195-5348-260831-3-6784",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "195_5348_260831"
+  ],
+  "vehicle": "3:6784",
+  "service_date": "2026-10-14",
+  "route": "195",
+  "observations": 64,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-202-2564-260831-3-3992",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "202_2564_260831"
+  ],
+  "vehicle": "3:3992",
+  "service_date": "2026-10-14",
+  "route": "202",
+  "observations": 58,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-218-96-260817-3-2049",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "218_96_260817"
+  ],
+  "vehicle": "3:2049",
+  "service_date": "2026-10-14",
+  "route": "218",
+  "observations": 20,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-223-1823-260831-3-9288",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "223_1823_260831"
+  ],
+  "vehicle": "3:9288",
+  "service_date": "2026-10-14",
+  "route": "223",
+  "observations": 105,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-city-244-504-260901-3-3926",
+  "source": "pid",
+  "stratum": "bus-city",
+  "key": [
+   "pid:gtfs_trip_id",
+   "244_504_260901"
+  ],
+  "vehicle": "3:3926",
+  "service_date": "2026-10-14",
+  "route": "244",
+  "observations": 33,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-1782-330-260921-3-54976",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "1782_330_260921"
+  ],
+  "vehicle": "3:54976",
+  "service_date": "2026-10-14",
+  "route": "MHD 2",
+  "observations": 41,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-300-1483-260901-3-8967",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "300_1483_260901"
+  ],
+  "vehicle": "3:8967",
+  "service_date": "2026-10-14",
+  "route": "300",
+  "observations": 227,
+  "why": "check example"
+ },
+ {
+  "name": "pid-bus-regional-306-1924-260921-3-8809",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "306_1924_260921"
+  ],
+  "vehicle": "3:8809",
+  "service_date": "2026-10-14",
+  "route": "306",
+  "observations": 100,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-324-2160-261001-3-8897",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "324_2160_261001"
+  ],
+  "vehicle": "3:8897",
+  "service_date": "2026-10-14",
+  "route": "324",
+  "observations": 34,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-327-781-260901-3-4156",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "327_781_260901"
+  ],
+  "vehicle": "3:4156",
+  "service_date": "2026-10-14",
+  "route": "327",
+  "observations": 44,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-328-742-251119-3-1622",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "328_742_251119"
+  ],
+  "vehicle": "3:1622",
+  "service_date": "2026-10-14",
+  "route": "328",
+  "observations": 113,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-334-182-260901-3-7891",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "334_182_260901"
+  ],
+  "vehicle": "3:7891",
+  "service_date": "2026-10-14",
+  "route": "334",
+  "observations": 91,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-344-403-250901-3-8133",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "344_403_250901"
+  ],
+  "vehicle": "3:8133",
+  "service_date": "2026-10-14",
+  "route": "344",
+  "observations": 119,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-354-405-251110-3-8189",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "354_405_251110"
+  ],
+  "vehicle": "3:8189",
+  "service_date": "2026-10-14",
+  "route": "354",
+  "observations": 116,
+  "why": "check example"
+ },
+ {
+  "name": "pid-bus-regional-370-2323-260901-3-8196",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "370_2323_260901"
+  ],
+  "vehicle": "3:8196",
+  "service_date": "2026-10-14",
+  "route": "370",
+  "observations": 122,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-384-1051-260316-3-9867",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "384_1051_260316"
+  ],
+  "vehicle": "3:9867",
+  "service_date": "2026-10-14",
+  "route": "384",
+  "observations": 186,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-384-1103-260316-3-9886",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "384_1103_260316"
+  ],
+  "vehicle": "3:9886",
+  "service_date": "2026-10-14",
+  "route": "384",
+  "observations": 353,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-399-110-260901-3-1264",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "399_110_260901"
+  ],
+  "vehicle": "3:1264",
+  "service_date": "2026-10-14",
+  "route": "399",
+  "observations": 165,
+  "why": "check example"
+ },
+ {
+  "name": "pid-bus-regional-431-280-261014-3-1817",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "431_280_261014"
+  ],
+  "vehicle": "3:1817",
+  "service_date": "2026-10-14",
+  "route": "431",
+  "observations": 186,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-630-1230-260720-3-8834",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "630_1230_260720"
+  ],
+  "vehicle": "3:8834",
+  "service_date": "2026-10-14",
+  "route": "630",
+  "observations": 52,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-672-86-260901-3-1105",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "672_86_260901"
+  ],
+  "vehicle": "3:1105",
+  "service_date": "2026-10-14",
+  "route": "672",
+  "observations": 105,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-681-346-261005-3-1643",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "681_346_261005"
+  ],
+  "vehicle": "3:1643",
+  "service_date": "2026-10-14",
+  "route": "681",
+  "observations": 191,
+  "why": "sample"
+ },
+ {
+  "name": "pid-bus-regional-739-43-261008-3-9836",
+  "source": "pid",
+  "stratum": "bus-regional",
+  "key": [
+   "pid:gtfs_trip_id",
+   "739_43_261008"
+  ],
+  "vehicle": "3:9836",
+  "service_date": "2026-10-14",
+  "route": "739",
+  "observations": 84,
+  "why": "check example"
+ },
+ {
+  "name": "pid-metro-991-11729-260831-trip-991-11729-2",
+  "source": "pid",
+  "stratum": "metro",
+  "key": [
+   "pid:gtfs_trip_id",
+   "991_11729_260831"
+  ],
+  "vehicle": "trip:991_11729_260831",
+  "service_date": "2026-10-14",
+  "route": "A",
+  "observations": 131,
+  "why": "sample"
+ },
+ {
+  "name": "pid-metro-992-1222-260831-trip-992-1222-26",
+  "source": "pid",
+  "stratum": "metro",
+  "key": [
+   "pid:gtfs_trip_id",
+   "992_1222_260831"
+  ],
+  "vehicle": "trip:992_1222_260831",
+  "service_date": "2026-10-14",
+  "route": "B",
+  "observations": 199,
+  "why": "sample"
+ },
+ {
+  "name": "pid-metro-993-4168-260831-trip-993-4168-26",
+  "source": "pid",
+  "stratum": "metro",
+  "key": [
+   "pid:gtfs_trip_id",
+   "993_4168_260831"
+  ],
+  "vehicle": "trip:993_4168_260831",
+  "service_date": "2026-10-14",
+  "route": "C",
+  "observations": 255,
+  "why": "sample"
+ },
+ {
+  "name": "pid-rail-19404-train-19404",
+  "source": "pid",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "19404"
+  ],
+  "vehicle": "train:19404",
+  "service_date": "2026-10-14",
+  "route": "S23",
+  "observations": 168,
+  "why": "sample"
+ },
+ {
+  "name": "pid-rail-2518-train-2518",
+  "source": "pid",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "2518"
+  ],
+  "vehicle": "train:2518",
+  "service_date": "2026-10-14",
+  "route": "S9",
+  "observations": 141,
+  "why": "sample"
+ },
+ {
+  "name": "pid-rail-9727-train-9727",
+  "source": "pid",
+  "stratum": "rail",
+  "key": [
+   "czptt:train_number",
+   "9727"
+  ],
+  "vehicle": "train:9727",
+  "service_date": "2026-10-14",
+  "route": "S40",
+  "observations": 70,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-1-14498-260831-0-9282",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "1_14498_260831"
+  ],
+  "vehicle": "0:9282",
+  "service_date": "2026-10-14",
+  "route": "1",
+  "observations": 31,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-12-22297-261005-0-8329",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "12_22297_261005"
+  ],
+  "vehicle": "0:8329",
+  "service_date": "2026-10-14",
+  "route": "12",
+  "observations": 56,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-17-39237-261007-0-8386",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "17_39237_261007"
+  ],
+  "vehicle": "0:8386",
+  "service_date": "2026-10-14",
+  "route": "17",
+  "observations": 75,
+  "why": "check example"
+ },
+ {
+  "name": "pid-tram-21-7018-261005-0-8503",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "21_7018_261005"
+  ],
+  "vehicle": "0:8503",
+  "service_date": "2026-10-14",
+  "route": "21",
+  "observations": 60,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-22-33103-260831-0-8475",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "22_33103_260831"
+  ],
+  "vehicle": "0:8475",
+  "service_date": "2026-10-14",
+  "route": "22",
+  "observations": 52,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-22-40147-260831-0-8515",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "22_40147_260831"
+  ],
+  "vehicle": "0:8515",
+  "service_date": "2026-10-14",
+  "route": "22",
+  "observations": 44,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-3-16828-261007-0-9114",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "3_16828_261007"
+  ],
+  "vehicle": "0:9114",
+  "service_date": "2026-10-14",
+  "route": "3",
+  "observations": 57,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-30-5058-261012-0-8494",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "30_5058_261012"
+  ],
+  "vehicle": "0:8494",
+  "service_date": "2026-10-14",
+  "route": "30",
+  "observations": 43,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-31-1120-261012-0-8284",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "31_1120_261012"
+  ],
+  "vehicle": "0:8284",
+  "service_date": "2026-10-14",
+  "route": "31",
+  "observations": 33,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-37-2117-261012-0-9501",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "37_2117_261012"
+  ],
+  "vehicle": "0:9501",
+  "service_date": "2026-10-14",
+  "route": "37",
+  "observations": 16,
+  "why": "sample"
+ },
+ {
+  "name": "pid-tram-9-30513-261012-0-9381",
+  "source": "pid",
+  "stratum": "tram",
+  "key": [
+   "pid:gtfs_trip_id",
+   "9_30513_261012"
+  ],
+  "vehicle": "0:9381",
+  "service_date": "2026-10-14",
+  "route": "9",
+  "observations": 52,
+  "why": "sample"
+ },
+ {
+  "name": "pid-trolleybus-58-1773-260831-11-115",
+  "source": "pid",
+  "stratum": "trolleybus",
+  "key": [
+   "pid:gtfs_trip_id",
+   "58_1773_260831"
+  ],
+  "vehicle": "11:115",
+  "service_date": "2026-10-14",
+  "route": "58",
+  "observations": 49,
+  "why": "sample"
+ },
+ {
+  "name": "pid-trolleybus-58-1929-260831-11-103",
+  "source": "pid",
+  "stratum": "trolleybus",
+  "key": [
+   "pid:gtfs_trip_id",
+   "58_1929_260831"
+  ],
+  "vehicle": "11:103",
+  "service_date": "2026-10-14",
+  "route": "58",
+  "observations": 43,
+  "why": "sample"
+ },
+ {
+  "name": "pid-trolleybus-59-832-260831-11-416",
+  "source": "pid",
+  "stratum": "trolleybus",
+  "key": [
+   "pid:gtfs_trip_id",
+   "59_832_260831"
+  ],
+  "vehicle": "11:416",
+  "service_date": "2026-10-14",
+  "route": "59",
+  "observations": 19,
+  "why": "sample"
+ },
+ {
+  "name": "pid-water-1805-59-260321-4-304",
+  "source": "pid",
+  "stratum": "water",
+  "key": [
+   "pid:gtfs_trip_id",
+   "1805_59_260321"
+  ],
+  "vehicle": "4:304",
+  "service_date": "2026-10-14",
+  "route": "P5",
+  "observations": 19,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-Tr-1154-KASO-420501-00-2026-TR-1154-KASO-420",
+  "source": "sz-mapa",
+  "stratum": "rail",
+  "key": [
+   "czptt:tr",
+   "Tr:1154:KASO--420501:00:2026"
+  ],
+  "vehicle": "TR/1154/KASO--420501/00/2026/20261012",
+  "service_date": "2026-10-11",
+  "route": "S60",
+  "observations": 234,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-Tr-1154-KASO-474701-00-2026-TR-1154-KASO-474",
+  "source": "sz-mapa",
+  "stratum": "rail",
+  "key": [
+   "czptt:tr",
+   "Tr:1154:KASO--474701:00:2026"
+  ],
+  "vehicle": "TR/1154/KASO--474701/00/2026/20261012",
+  "service_date": "2026-10-12",
+  "route": "S8",
+  "observations": 120,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-Tr-1154-KASO-530201-00-2026-TR-1154-KASO-530",
+  "source": "sz-mapa",
+  "stratum": "rail",
+  "key": [
+   "czptt:tr",
+   "Tr:1154:KASO--530201:00:2026"
+  ],
+  "vehicle": "TR/1154/KASO--530201/00/2026/20261012",
+  "service_date": "2026-10-12",
+  "route": "S7",
+  "observations": 66,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-Tr-1154-KASO-728501-00-2026-TR-1154-KASO-728",
+  "source": "sz-mapa",
+  "stratum": "rail",
+  "key": [
+   "czptt:tr",
+   "Tr:1154:KASO--728501:00:2026"
+  ],
+  "vehicle": "TR/1154/KASO--728501/00/2026/20261012",
+  "service_date": "2026-10-11",
+  "route": "S3",
+  "observations": 43,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-long-Tr-1154-KASO-33701-00-2026-TR-1154-KASO-337",
+  "source": "sz-mapa",
+  "stratum": "rail-long",
+  "key": [
+   "czptt:tr",
+   "Tr:1154:KASO---33701:00:2026"
+  ],
+  "vehicle": "TR/1154/KASO---33701/00/2026/20261012",
+  "service_date": "2026-10-11",
+  "route": "R16",
+  "observations": 176,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-long-Tr-3189-KADR331758-00-2026-TR-3189-KADR3317",
+  "source": "sz-mapa",
+  "stratum": "rail-long",
+  "key": [
+   "czptt:tr",
+   "Tr:3189:--KADR331758:00:2026"
+  ],
+  "vehicle": "TR/3189/--KADR331758/00/2026/20261012",
+  "service_date": "2026-10-12",
+  "route": "R26 (NAD)",
+  "observations": 69,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-long-Tr-3189-KASO-4901-00-2026-TR-3189-KASO-490",
+  "source": "sz-mapa",
+  "stratum": "rail-long",
+  "key": [
+   "czptt:tr",
+   "Tr:3189:KASO----4901:00:2026"
+  ],
+  "vehicle": "TR/3189/KASO----4901/00/2026/20261012",
+  "service_date": "2026-10-11",
+  "route": "R14",
+  "observations": 104,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-long-Tr-3189-KASO-5001-00-2026-TR-3189-KASO-500",
+  "source": "sz-mapa",
+  "stratum": "rail-long",
+  "key": [
+   "czptt:tr",
+   "Tr:3189:KASO----5001:00:2026"
+  ],
+  "vehicle": "TR/3189/KASO----5001/00/2026/20261012",
+  "service_date": "2026-10-11",
+  "route": "R14",
+  "observations": 296,
+  "why": "sample"
+ },
+ {
+  "name": "sz-mapa-rail-long-Tr-3246-KADR000957-00-2026-TR-3246-KADR0009",
+  "source": "sz-mapa",
+  "stratum": "rail-long",
+  "key": [
+   "czptt:tr",
+   "Tr:3246:--KADR000957:00:2026"
+  ],
+  "vehicle": "TR/3246/--KADR000957/00/2026/20261012",
+  "service_date": "2026-10-12",
+  "route": "RJ 1001",
+  "observations": 360,
+  "why": "sample"
+ }
+]

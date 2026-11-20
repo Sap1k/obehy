@@ -313,6 +313,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — Replay and fixtures without a database. `obehy rt replay --from-files` reads a
+  fetched release's serving parquet (`realtime/index_files.py`, the same `IndexLoader` behind a
+  row source; recorded queries identical before and after, trips and calls equal to the SQL-built
+  trace fixtures). `--quality` adds checks against raw fixes (`realtime/quality_checks.py`:
+  departures while still at the stop, stood without dwell, shown departures moving, stops in a
+  row leaving together, lost near the end) and departure accuracy. `tests/realtime/corpus.py`
+  builds 106 real journeys (PID, DÚK, DPMD, MPVnet, SŽ map, Arriva; city, regional and
+  long-distance buses, trams, trolleybuses, metro, ferry, trains) in about 2 min and benches the
+  core over them in about 5 s; each runs as a unit test. PID peak baseline (06:45-09:00): bus
+  departures predicted −55…−62 s early, 1,678 of 86,420 timed while still at the stop. Known: one
+  SŽ train's minute point time lands 5 s before the previous crossing (xfail).
 - **2026-11-07** — Buses at stops without a timetabled dwell. With one fix at the stop, the
   departure was placed on that fix (the time not seen went all to the leg), early by the whole
   dwell, and the predicted departure was the fix too. Now a fix inside a stop's zone stands

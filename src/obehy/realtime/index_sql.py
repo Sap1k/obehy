@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, LiteralString, cast
+from typing import Any, LiteralString, Protocol, cast
 
 import psycopg
 
@@ -47,6 +47,9 @@ class IndexLoadError(RuntimeError):
 class ReleaseLoads:
     run_id: str
     load_ids: dict[Feed, int]
+    # A release directory read from its serving files instead of the database
+    # (`index_files`): replay on a machine without one.
+    files: Path | None = None
 
 
 def active_loads(connection: psycopg.Connection) -> ReleaseLoads:
@@ -70,6 +73,16 @@ def run_loads(connection: psycopg.Connection, run_id: str) -> ReleaseLoads | Non
     if set(found) != {"jdf", "czptt"}:
         return None
     return ReleaseLoads(run_id, {"jdf": found["jdf"], "czptt": found["czptt"]})
+
+
+def file_loads(release: Path) -> ReleaseLoads:
+    """A release directory to be read from its serving files, without a database."""
+
+    try:
+        document = json.loads((release / "release.json").read_text(encoding="utf-8"))
+    except OSError as error:
+        raise IndexLoadError(f"{release} is not a release directory: {error}") from error
+    return ReleaseLoads(cast(str, document["run_id"]), {}, release)
 
 
 def ensure_release(
@@ -98,12 +111,176 @@ def ensure_release(
     return loads
 
 
+Row = tuple[Any, ...]
+
+
+class Rows(Protocol):
+    """The static rows an `IndexLoader` asks for, of one feed of one release: from PostgreSQL
+    (`SqlRows`) or from a release directory's serving files (`index_files.FileRows`)."""
+
+    def keys(self, namespaces: list[str], identifiers: list[str]) -> list[Row]:
+        """(namespace, identifier, public_id, entity_kind, valid_from, valid_to) of each
+        (namespace, identifier) pair, ordered by key, public ID and validity."""
+        ...
+
+    def line_keys(self, namespace: str, lines: list[str]) -> list[Row]:
+        """(line, identifier) of the keys in `namespace` whose leading part is one of `lines`."""
+        ...
+
+    def trips(self, trip_ids: list[str]) -> list[Row]:
+        """(trip_id, route_id, route name, mode, service_id, headsign, shape_id, run_key,
+        run_part, agency_id, train number) per trip."""
+        ...
+
+    def calls(self, trip_ids: list[str]) -> list[Row]:
+        """(trip_id, sequence, location_id, visit number, passenger_service, arrival,
+        departure, on request, exactly placed post) per call, ordered by trip and sequence."""
+        ...
+
+    def run_parts(self, run_keys: list[str]) -> list[Row]:
+        """(run_key, trip_id) of each run's parts, in `run_part` order."""
+        ...
+
+    def station_keys(self, location_ids: list[str]) -> list[Row]:
+        """(sr70 code, location_id) of the locations, ordered."""
+        ...
+
+    def track_keys(self, codes: list[str]) -> list[Row]:
+        """(sr70:track key, location_id) of the tracks of the stations `codes`, ordered."""
+        ...
+
+    def locations(self, location_ids: list[str]) -> list[Row]:
+        """(location_id, name, longitude, latitude)."""
+        ...
+
+    def shape_points(self, shape_ids: list[str]) -> list[Row]:
+        """(shape_id, longitude, latitude), ordered by shape and sequence."""
+        ...
+
+    def service_dates(self, service_ids: list[str], days: list[date]) -> list[Row]:
+        """(service_id, service date) for the services running on any of `days`."""
+        ...
+
+
+class SqlRows:
+    """`Rows` from `static.*` of one load."""
+
+    def __init__(self, connection: psycopg.Connection, load_id: int) -> None:
+        self.connection = connection
+        self.load_id = load_id
+
+    def _rows_first(self, query: LiteralString, *params: Any) -> list[Row]:
+        # The load_id parameter goes last for queries that bind arrays first.
+        return self.connection.execute(query, (*params, self.load_id)).fetchall()
+
+    def keys(self, namespaces: list[str], identifiers: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT k.namespace, k.identifier, k.public_id, k.entity_kind, k.valid_from,"
+            " k.valid_to FROM static.source_key k"
+            " JOIN unnest(%s::text[], %s::text[]) AS w (namespace, identifier)"
+            " USING (namespace, identifier) WHERE k.load_id = %s"
+            " ORDER BY 1, 2, 3, 5",
+            namespaces,
+            identifiers,
+        )
+
+    def line_keys(self, namespace: str, lines: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT DISTINCT split_part(identifier, ':', 1), identifier"
+            " FROM static.source_key WHERE namespace = %s"
+            " AND split_part(identifier, ':', 1) = ANY(%s) AND load_id = %s",
+            namespace,
+            lines,
+        )
+
+    def trips(self, trip_ids: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT t.trip_id, t.route_id, coalesce(r.short_name, r.route_id), r.mode,"
+            " t.service_id, t.headsign, t.shape_id, t.run_key, t.run_part, r.agency_id,"
+            " (SELECT min(k.identifier) FROM static.source_key k"
+            "  WHERE k.load_id = t.load_id AND k.public_id = t.trip_id"
+            "  AND k.namespace = 'czptt:train_number')"
+            " FROM static.trip t JOIN static.route r"
+            " ON r.load_id = t.load_id AND r.route_id = t.route_id"
+            " WHERE t.trip_id = ANY(%s) AND t.load_id = %s",
+            trip_ids,
+        )
+
+    def calls(self, trip_ids: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT c.trip_id, c.sequence, c.location_id,"
+            " row_number() OVER (PARTITION BY c.trip_id, c.location_id ORDER BY c.sequence),"
+            " c.passenger_service, c.scheduled_arrival, c.scheduled_departure,"
+            " c.pickup_type = 3 OR c.dropoff_type = 3,"
+            " CASE WHEN p.coordinate_precision = 'exact' THEN p.location_id END"
+            " FROM static.trip_call c LEFT JOIN static.location p"
+            " ON p.load_id = c.load_id AND p.location_id = c.boarding_point_id"
+            " WHERE c.trip_id = ANY(%s) AND c.load_id = %s"
+            " ORDER BY c.trip_id, c.sequence",
+            trip_ids,
+        )
+
+    def run_parts(self, run_keys: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT run_key, trip_id FROM static.trip"
+            " WHERE run_key = ANY(%s) AND load_id = %s ORDER BY run_key, run_part, trip_id",
+            run_keys,
+        )
+
+    def station_keys(self, location_ids: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT identifier, public_id FROM static.source_key"
+            " WHERE entity_kind = 'location' AND namespace = 'sr70'"
+            " AND public_id = ANY(%s) AND load_id = %s ORDER BY 1, 2",
+            location_ids,
+        )
+
+    def track_keys(self, codes: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT identifier, public_id FROM static.source_key"
+            " WHERE entity_kind = 'location' AND namespace = 'sr70:track'"
+            " AND split_part(identifier, ':', 1) = ANY(%s) AND load_id = %s ORDER BY 1, 2",
+            codes,
+        )
+
+    def locations(self, location_ids: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT location_id, name, longitude, latitude FROM static.location"
+            " WHERE location_id = ANY(%s) AND load_id = %s",
+            location_ids,
+        )
+
+    def shape_points(self, shape_ids: list[str]) -> list[Row]:
+        return self._rows_first(
+            "SELECT shape_id, longitude, latitude FROM static.shape_point"
+            " WHERE shape_id = ANY(%s) AND load_id = %s ORDER BY shape_id, sequence",
+            shape_ids,
+        )
+
+    def service_dates(self, service_ids: list[str], days: list[date]) -> list[Row]:
+        return self._rows_first(
+            "SELECT service_id, service_date FROM static.service_date"
+            " WHERE service_id = ANY(%s) AND service_date = ANY(%s) AND load_id = %s",
+            service_ids,
+            days,
+        )
+
+
 class IndexLoader:
     """Loads one feed of one release into an `Index`, a batch of keys at a time."""
 
-    def __init__(self, connection: psycopg.Connection, loads: ReleaseLoads, feed: Feed) -> None:
-        self.connection = connection
-        self.load_id = loads.load_ids[feed]
+    def __init__(
+        self, connection: psycopg.Connection | None, loads: ReleaseLoads, feed: Feed
+    ) -> None:
+        self.rows: Rows
+        if loads.files is not None:
+            from obehy.realtime.index_files import FileRows
+
+            self.rows = FileRows(loads.files / feed / "serving")
+        elif connection is not None:
+            self.rows = SqlRows(connection, loads.load_ids[feed])
+        else:
+            raise IndexLoadError("neither a database nor a release directory to read")
         self.index = Index(loads.run_id, feed)
         # When an observation last named each key and line: what `sweep` keeps.
         self.used: dict[KeyRef, Instant] = {}
@@ -160,14 +337,8 @@ class IndexLoader:
         ordered = sorted(refs)
         found: dict[KeyRef, list[KeyEntry]] = defaultdict(list)
         kinds: dict[str, str] = {}
-        for namespace, identifier, public_id, kind, valid_from, valid_to in self._rows_first(
-            "SELECT k.namespace, k.identifier, k.public_id, k.entity_kind, k.valid_from,"
-            " k.valid_to FROM static.source_key k"
-            " JOIN unnest(%s::text[], %s::text[]) AS w (namespace, identifier)"
-            " USING (namespace, identifier) WHERE k.load_id = %s"
-            " ORDER BY 1, 2, 3, 5",
-            [ref[0] for ref in ordered],
-            [ref[1] for ref in ordered],
+        for namespace, identifier, public_id, kind, valid_from, valid_to in self.rows.keys(
+            [ref[0] for ref in ordered], [ref[1] for ref in ordered]
         ):
             found[(namespace, identifier)].append(KeyEntry(public_id, valid_from, valid_to))
             kinds[public_id] = kind
@@ -189,13 +360,7 @@ class IndexLoader:
         for namespace in sorted({namespace for namespace, _ in lines}):
             child = CHILD_NAMESPACE[namespace]
             values = sorted(line for ns, line in lines if ns == namespace)
-            for line, identifier in self._rows_first(
-                "SELECT DISTINCT split_part(identifier, ':', 1), identifier"
-                " FROM static.source_key WHERE namespace = %s"
-                " AND split_part(identifier, ':', 1) = ANY(%s) AND load_id = %s",
-                child,
-                values,
-            ):
+            for line, identifier in self.rows.line_keys(child, values):
                 found[(namespace, cast(str, line))].add(cast(str, identifier))
         keys: set[KeyRef] = set()
         for ref in lines:
@@ -204,22 +369,8 @@ class IndexLoader:
             keys |= {(CHILD_NAMESPACE[ref[0]], identifier) for identifier in identifiers}
         return keys
 
-    def _rows_first(self, query: LiteralString, *params: Any) -> list[tuple[Any, ...]]:
-        # The load_id parameter goes last for queries that bind arrays first.
-        return self.connection.execute(query, (*params, self.load_id)).fetchall()
-
     def _load_trips(self, trip_ids: list[str]) -> None:
-        heads = self._rows_first(
-            "SELECT t.trip_id, t.route_id, coalesce(r.short_name, r.route_id), r.mode,"
-            " t.service_id, t.headsign, t.shape_id, t.run_key, t.run_part, r.agency_id,"
-            " (SELECT min(k.identifier) FROM static.source_key k"
-            "  WHERE k.load_id = t.load_id AND k.public_id = t.trip_id"
-            "  AND k.namespace = 'czptt:train_number')"
-            " FROM static.trip t JOIN static.route r"
-            " ON r.load_id = t.load_id AND r.route_id = t.route_id"
-            " WHERE t.trip_id = ANY(%s) AND t.load_id = %s",
-            trip_ids,
-        )
+        heads = self.rows.trips(trip_ids)
         calls: dict[str, list[Call]] = defaultdict(list)
         locations: set[str] = set()
         for (
@@ -232,18 +383,7 @@ class IndexLoader:
             departure,
             on_request,
             point_id,
-        ) in self._rows_first(
-            "SELECT c.trip_id, c.sequence, c.location_id,"
-            " row_number() OVER (PARTITION BY c.trip_id, c.location_id ORDER BY c.sequence),"
-            " c.passenger_service, c.scheduled_arrival, c.scheduled_departure,"
-            " c.pickup_type = 3 OR c.dropoff_type = 3,"
-            " CASE WHEN p.coordinate_precision = 'exact' THEN p.location_id END"
-            " FROM static.trip_call c LEFT JOIN static.location p"
-            " ON p.load_id = c.load_id AND p.location_id = c.boarding_point_id"
-            " WHERE c.trip_id = ANY(%s) AND c.load_id = %s"
-            " ORDER BY c.trip_id, c.sequence",
-            trip_ids,
-        ):
+        ) in self.rows.calls(trip_ids):
             calls[trip_id].append(
                 Call(
                     sequence,
@@ -313,11 +453,7 @@ class IndexLoader:
         trip."""
 
         parts: dict[str, list[str]] = defaultdict(list)
-        for run_key, trip_id in self._rows_first(
-            "SELECT run_key, trip_id FROM static.trip"
-            " WHERE run_key = ANY(%s) AND load_id = %s ORDER BY run_key, run_part, trip_id",
-            run_keys,
-        ):
+        for run_key, trip_id in self.rows.run_parts(run_keys):
             parts[run_key].append(trip_id)
         for run_key in run_keys:
             self.index.runs[run_key] = tuple(parts.get(run_key, ()))
@@ -331,41 +467,23 @@ class IndexLoader:
         if not location_ids:
             return
         codes: set[str] = set()
-        for identifier, public_id in self._rows_first(
-            "SELECT identifier, public_id FROM static.source_key"
-            " WHERE entity_kind = 'location' AND namespace = 'sr70'"
-            " AND public_id = ANY(%s) AND load_id = %s ORDER BY 1, 2",
-            location_ids,
-        ):
+        for identifier, public_id in self.rows.station_keys(location_ids):
             self.index.add_location_key(public_id, "sr70", identifier)
             codes.add(identifier)
         if not codes:
             return
-        for identifier, public_id in self._rows_first(
-            "SELECT identifier, public_id FROM static.source_key"
-            " WHERE entity_kind = 'location' AND namespace = 'sr70:track'"
-            " AND split_part(identifier, ':', 1) = ANY(%s) AND load_id = %s ORDER BY 1, 2",
-            sorted(codes),
-        ):
+        for identifier, public_id in self.rows.track_keys(sorted(codes)):
             self.index.add_location_key(public_id, "sr70:track", identifier)
 
     def _load_locations(self, location_ids: list[str]) -> None:
         if not location_ids:
             return
-        for location_id, name, lon, lat in self._rows_first(
-            "SELECT location_id, name, longitude, latitude FROM static.location"
-            " WHERE location_id = ANY(%s) AND load_id = %s",
-            location_ids,
-        ):
+        for location_id, name, lon, lat in self.rows.locations(location_ids):
             self.index.locations[location_id] = Location(location_id, name, lon, lat)
 
     def _load_shapes(self, shape_ids: list[str]) -> None:
         points: dict[str, list[tuple[float, float]]] = defaultdict(list)
-        for shape_id, lon, lat in self._rows_first(
-            "SELECT shape_id, longitude, latitude FROM static.shape_point"
-            " WHERE shape_id = ANY(%s) AND load_id = %s ORDER BY shape_id, sequence",
-            shape_ids,
-        ):
+        for shape_id, lon, lat in self.rows.shape_points(shape_ids):
             points[shape_id].append((lon, lat))
         for shape_id in shape_ids:
             vertices = tuple(points.get(shape_id, ()))
@@ -376,12 +494,7 @@ class IndexLoader:
         ids = sorted(service_ids)
         running: dict[str, set[date]] = defaultdict(set)
         if ids:
-            for service_id, day in self._rows_first(
-                "SELECT service_id, service_date FROM static.service_date"
-                " WHERE service_id = ANY(%s) AND service_date = ANY(%s) AND load_id = %s",
-                ids,
-                sorted(days),
-            ):
+            for service_id, day in self.rows.service_dates(ids, sorted(days)):
                 running[service_id].add(day)
         for service_id in ids:
             self.index.service_dates[service_id] = self.index.service_dates.get(

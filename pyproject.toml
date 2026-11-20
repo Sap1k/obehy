@@ -87,6 +87,7 @@ source_modules = [
     "obehy.realtime.runs",
     "obehy.realtime.evaluate",
     "obehy.realtime.quality",
+    "obehy.realtime.quality_checks",
     "obehy.realtime.platforms",
     "obehy.realtime.compositions",
     "obehy.realtime.disk_guard",

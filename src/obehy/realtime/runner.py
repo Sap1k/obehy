@@ -112,7 +112,8 @@ def observation_days(observation: Observation) -> set[date]:
 
 @dataclass(slots=True)
 class Runner:
-    connection: psycopg.Connection
+    # None: a replay reading the release's serving files (`ReleaseLoads.files`).
+    connection: psycopg.Connection | None
     loads: ReleaseLoads
     policy: Policy
     feeds: tuple[Feed, ...]
@@ -271,7 +272,7 @@ class Runner:
                     emitter = self.emitters.setdefault(feed, FeedEmitter(self.policy.lifecycle))
                     alerts = (
                         []
-                        if self.alerts is None
+                        if self.alerts is None or self.connection is None
                         else self.alerts.entities(self.connection, feed, now)
                     )
                     write_feed(

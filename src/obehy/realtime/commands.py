@@ -102,6 +102,11 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
         action="store_true",
         help="estimate every tick; report prediction accuracy, flicker and dwell at stops",
     )
+    replayer.add_argument(
+        "--from-files",
+        action="store_true",
+        help="read the release directory's serving files; no database (and no history)",
+    )
     _database(replayer)
 
     bencher = rt.add_parser(
@@ -290,8 +295,11 @@ def _replay(args: argparse.Namespace) -> int:
         since=cast(Instant | None, args.since),
         until=cast(Instant | None, args.until),
     )
-    with psycopg.connect(_url(args), autocommit=True) as connection:
-        document = replay.replay(connection, options, load_policy())
+    if cast(bool, args.from_files):
+        document = replay.replay(None, options, load_policy())
+    else:
+        with psycopg.connect(_url(args), autocommit=True) as connection:
+            document = replay.replay(connection, options, load_policy())
     for line in replay.summary_lines(document):
         print(line)
     return 0

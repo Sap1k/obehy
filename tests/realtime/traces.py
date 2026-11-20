@@ -44,7 +44,12 @@ NAMESPACE = "cis:line_trip"
 
 
 def load(name: str) -> tuple[Index, list[Observation]]:
-    data: dict[str, Any] = json.loads((TRACES / f"{name}.json").read_text(encoding="utf-8"))
+    return from_json(json.loads((TRACES / f"{name}.json").read_text(encoding="utf-8")))
+
+
+def from_json(data: dict[str, Any]) -> tuple[Index, list[Observation]]:
+    """A trace's index and observations; rail traces also carry runs and location keys."""
+
     index = Index(data["release_id"], cast(Feed, data["feed"]))
     for ref, entries in data["keys"]:
         index.key_entries[(ref[0], ref[1])] = tuple(
@@ -62,7 +67,15 @@ def load(name: str) -> tuple[Index, list[Observation]]:
             t["headsign"],
             t["shape_id"],
             tuple(Call(*c) for c in t["calls"]),
+            run_key=t.get("run_key"),
+            run_part=t.get("run_part"),
+            train_number=t.get("train_number"),
+            agency_id=t.get("agency_id"),
         )
+    for run_key, parts in data.get("runs", []):
+        index.runs[run_key] = tuple(parts)
+    for location_id, namespace, identifier in data.get("location_keys", []):
+        index.add_location_key(location_id, namespace, identifier)
     for service, days in data["service_dates"].items():
         index.service_dates[service] = frozenset(date.fromisoformat(d) for d in days)
     index.loaded_dates = frozenset(date.fromisoformat(d) for d in data["loaded_dates"])
@@ -92,8 +105,7 @@ def load(name: str) -> tuple[Index, list[Observation]]:
 
 def _wanted(observation: Observation, key: str, plate: str | None) -> bool:
     if plate is None:
-        trip_key = observation.first(TripKey)
-        return trip_key is not None and trip_key.key == key
+        return any(trip_key.key == key for trip_key in observation.all(TripKey))
     vehicle, line = observation.first(VehicleKey), observation.first(LineRef)
     return (
         vehicle is not None
@@ -113,20 +125,19 @@ def extract(
     plate: str | None = None,
     source: str = "duk",
     release: str | None = None,
+    release_dir: Path | None = None,
 ) -> Path:
     """A trip key's observations, or with `plate` one keyless vehicle's observations of the
-    line `key`."""
-
-    import psycopg
+    line `key`. The static slice comes from the development database, or with `release_dir`
+    from that release's serving files."""
 
     from obehy.realtime.archive import iter_polls
-    from obehy.realtime.index_sql import IndexLoader, active_loads, run_loads
+    from obehy.realtime.index_sql import IndexLoader, active_loads, file_loads, run_loads
     from obehy.realtime.policy import load_policy
     from obehy.realtime.replay import DECODERS
-    from obehy.runtime_config import load_database_url
 
     policy = load_policy()
-    channel = "vehicles" if source == "duk" else "buses"
+    channel = "buses" if source == "arriva-express" else "vehicles"
     decode = DECODERS[(source, channel)]
     observations: list[Observation] = []
     for poll in iter_polls(corpus, source, channel, start.date(), end.date()):
@@ -142,29 +153,43 @@ def extract(
             continue
         observations.extend(o for o in decoded if _wanted(o, key, plate))
     days = {d for o in observations for d in candidate_service_dates(o.at)}
-    with psycopg.connect(load_database_url(), autocommit=True) as connection:
-        loads = active_loads(connection) if release is None else run_loads(connection, release)
-        if loads is None:
-            raise SystemExit(f"release {release} is not loaded")
-        loader = IndexLoader(connection, loads, "jdf")
-        if plate is None:
-            index = loader.ensure([(NAMESPACE, key)], days)
-        else:
-            index = loader.ensure([], days, [("cis:line", key)])
+    named = sorted({(k.namespace, k.key) for o in observations for k in o.all(TripKey)})
+    if release_dir is not None:
+        loader = IndexLoader(None, file_loads(release_dir), "jdf")
+        index = loader.ensure(named, days, [] if plate is None else [("cis:line", key)])
+    else:
+        import psycopg
+
+        from obehy.runtime_config import load_database_url
+
+        with psycopg.connect(load_database_url(), autocommit=True) as connection:
+            loads = active_loads(connection) if release is None else run_loads(connection, release)
+            if loads is None:
+                raise SystemExit(f"release {release} is not loaded")
+            loader = IndexLoader(connection, loads, "jdf")
+            if plate is None:
+                index = loader.ensure(named or [(NAMESPACE, key)], days)
+            else:
+                index = loader.ensure([], days, [("cis:line", key)])
     refs: list[KeyRef] = []
     lines: list[list[Any]] = []
     if plate is None:
-        refs.append((NAMESPACE, key))
-        parent = parent_ref((NAMESPACE, key))
-        if parent is not None:
-            refs.append(parent)
-        trips = [index.trip(e.public_id) for e in index.keys(NAMESPACE, key)]
+        refs.extend(named or [(NAMESPACE, key)])
+        for ref in list(refs):
+            parent = parent_ref(ref)
+            if parent is not None and parent not in refs:
+                refs.append(parent)
+        trips = [
+            index.trip(t)
+            for t in sorted({e.public_id for ref in refs for e in index.keys(*ref)})
+            if t in index.trips
+        ]
     else:
         trips, kept = _near(index, key, start, end)
         lines = [[["cis:line", key], kept]]
         refs.append(("cis:line", key))
         refs.extend((CHILD_NAMESPACE["cis:line"], k) for k in kept)
-    locations = {c.location_id for t in trips for c in t.calls}
+    locations = {place for t in trips for c in t.calls for place in (c.location_id, c.placed_at)}
     data = {
         "release_id": index.release_id,
         "feed": index.feed,
@@ -193,6 +218,8 @@ def extract(
                         c.passenger_service,
                         c.arrival,
                         c.departure,
+                        bool(c.on_request),
+                        c.point_id,
                     ]
                     for c in t.calls
                 ],
@@ -270,6 +297,7 @@ def main() -> None:
     parser.add_argument("--plate", help="a keyless vehicle; `key` is then its CIS line")
     parser.add_argument("--source", default="duk")
     parser.add_argument("--release", help="a loaded run ID (default: the active release)")
+    parser.add_argument("--release-dir", type=Path, help="a release directory; no database")
     args = parser.parse_args()
     out = extract(
         args.key,
@@ -280,6 +308,7 @@ def main() -> None:
         plate=args.plate,
         source=args.source,
         release=args.release,
+        release_dir=args.release_dir,
     )
     print(f"wrote {out}")
 

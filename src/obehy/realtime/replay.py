@@ -33,7 +33,7 @@ from obehy.realtime.core import CORE_VERSION, estimate_all
 from obehy.realtime.emit.db import Writer, clear_observations
 from obehy.realtime.emit.gtfs_rt import feed_message
 from obehy.realtime.evaluate import SAMPLE_EVERY, PredictorLog
-from obehy.realtime.index_sql import ReleaseLoads, ensure_release
+from obehy.realtime.index_sql import ReleaseLoads, ensure_release, file_loads
 from obehy.realtime.keyless_report import KeylessLog
 from obehy.realtime.model import (
     Derivation,
@@ -148,7 +148,7 @@ def _polls(options: ReplayOptions) -> Iterator[tuple[datetime, str, str, Archive
 
 
 def replay(
-    connection: psycopg.Connection,
+    connection: psycopg.Connection | None,
     options: ReplayOptions,
     policy: Policy,
     *,
@@ -158,8 +158,16 @@ def replay(
     for channel in options.channels:
         if channel not in DECODERS:
             raise ReplayError(f"no realtime connector decodes {channel[0]}/{channel[1]} yet")
-    loads = ensure_release(connection, options.release, report=report)
-    writer = _writer(connection, loads, options, policy) if options.write_history else None
+    writer: Writer | None = None
+    if connection is None:
+        # No database: the index is read from the release directory's serving files.
+        if options.write_history:
+            raise ReplayError("writing history needs a database")
+        loads = file_loads(Path(options.release))
+    else:
+        loads = ensure_release(connection, options.release, report=report)
+        if options.write_history:
+            writer = _writer(connection, loads, options, policy)
     if runner is None:
         runner = Runner(connection, loads, policy, options.feeds, writer)
     else:
