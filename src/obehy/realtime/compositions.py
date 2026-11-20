@@ -25,9 +25,6 @@ from typing import Literal
 
 from obehy.realtime.times import Instant
 
-# The journey key a composition is kept under: the first of these a trip has (stable across
-# timetable versions, unlike its trip ID), else `trip_id`. The API reads them by the same rule.
-JOURNEY_NAMESPACES = ("czptt:tr", "cis:line_trip", "pid:gtfs_trip_id")
 UnitKind = Literal["locomotive", "coach", "unit"]
 # What a unit is in the train; a source's own code with no home here is kept as `raw:<code>`.
 UnitRole = Literal["train", "attached", "pusher"]

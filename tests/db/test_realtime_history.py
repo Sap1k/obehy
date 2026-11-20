@@ -152,8 +152,8 @@ def _assign(writer: Writer, key: str, day: date, start: str, end: str) -> None:
     writer.write(
         [
             SnapshotJourney(journey, local(start), "run-a", f"jdf:{key}", "582492", None, ()),
-            AssignVehicle(vehicle, journey, local(start)),
-            AssignVehicle(vehicle, journey, local(end)),
+            AssignVehicle(vehicle, journey, local(start), "keyed"),
+            AssignVehicle(vehicle, journey, local(end), "keyed"),
         ]
     )
 

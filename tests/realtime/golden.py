@@ -111,7 +111,8 @@ def _passed(instance: Instance) -> int:
 def _final(instance: Instance) -> dict[str, Any]:
     return {
         "lifecycle": instance.lifecycle,
-        "delay_s": instance.delay_s,
+        "delay_s": instance.lateness_s,
+        "reported_delay_s": instance.reported_delay_s,
         "off_route": instance.off_route,
         "sources": {s.source: s.delay_s for s in instance.sources},
         "calls": [
@@ -138,7 +139,7 @@ def golden(name: str) -> dict[str, Any]:
     def tick(state: FeedState, now: Instant) -> None:
         for key, instance in sorted(state.instances.items(), key=lambda kv: journey_name(kv[0])):
             journey = journey_name(key)
-            value = (instance.lifecycle, instance.delay_s, _passed(instance))
+            value = (instance.lifecycle, instance.lateness_s, _passed(instance))
             if last.get(journey) != value:
                 last[journey] = value
                 timeline.setdefault(journey, []).append([now.isoformat(), *value])

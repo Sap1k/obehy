@@ -146,7 +146,7 @@ def test_duk_q14_source_delay_before_departure_is_ignored() -> None:
         {"at": "2026-10-09 22:30", "key": "582480:140", "state": "pre_trip", "delay": 1860},
     )
     instance = state.instances[JourneyKey("jdf", NS, "582480:140", D9)]
-    assert (instance.lifecycle, instance.delay_s) == ("pre_trip", None)
+    assert (instance.lifecycle, instance.reported_delay_s) == ("pre_trip", None)
 
 
 def test_duk_q15_pre_departure_key_after_the_scheduled_end_is_stale() -> None:
@@ -212,7 +212,7 @@ def test_a_channel_without_semantics_takes_its_facts_at_face_value() -> None:
     journey = JourneyKey("jdf", NS, "582480:140", D9)
     waiting = {"key": "582480:140", "state": "pre_trip", "delay": 300}
     state, _ = run(index.index(), {"at": "2026-10-09 21:50", **waiting}, semantics={})
-    assert state.instances[journey].delay_s == 300
+    assert state.instances[journey].reported_delay_s == 300
     _, effects = run(index.index(), {"at": "2026-10-09 22:50", **waiting}, semantics={})
     assert results(effects) == [(journey, None)]
     moved_on = {

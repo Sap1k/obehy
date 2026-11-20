@@ -19,7 +19,7 @@ the service date, whichever source key bound it; history and assignments go to i
 train-number journeys (`runs.py`). A source key that is ambiguous on its own (SZ-Q5: one TR,
 two timetables) falls back to the observation's further keys, in order. Any other journey is
 named by the key that bound it, except that a national key of the observation finding the same
-trip on the same day names it instead (`IDENTITY_NAMESPACES`): PID binds by its own GTFS trip
+trip on the same day names it instead (policy `[journey] shared`): PID binds by its own GTFS trip
 ID, DÚK by the CIS line and trip, and the bus both report is one journey.
 
 Cancellations (BASE_PLAN.md section 20.7): a source stating `TripCancelled` without a vehicle
@@ -44,7 +44,7 @@ from datetime import timedelta
 from obehy.realtime import timeline
 from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.infer import keyless
-from obehy.realtime.infer.keyed import IDENTITY_NAMESPACES, Match, bind, in_window, span
+from obehy.realtime.infer.keyed import Match, admissible, bind, running, span
 from obehy.realtime.infer.keyless.episode import advance
 from obehy.realtime.model import (
     AssignVehicle,
@@ -87,7 +87,7 @@ from obehy.realtime.timeline.estimate import (
     monotone,
     waiting_is_not_early,
 )
-from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, lead_of, with_lead
+from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, with_lead
 from obehy.realtime.timeline.plan import Plan, PlanCache
 from obehy.realtime.timeline.progress import at_origin_or_moving, past_first_stop
 from obehy.realtime.timeline.runtimes import forget, minimum_drives, record, running_extra
@@ -190,7 +190,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
             )
             effects.extend(_open(state, result, ctx, observation))
             effects.extend(
-                AssignVehicle(vehicle, journey, observation.at)
+                AssignVehicle(vehicle, journey, observation.at, "inferred")
                 for journey in state.instances[result.journey].public
             )
         binding = keyless.confirm(binding, episode, ctx.index, ctx.policy)
@@ -210,7 +210,7 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
         binding = Binding(vehicle, result.journey, result.trip.trip_id, "keyed", observation.at)
         effects.extend(_open(state, result, ctx, observation))
         effects.extend(
-            AssignVehicle(vehicle, journey, observation.at)
+            AssignVehicle(vehicle, journey, observation.at, "keyed")
             for journey in state.instances[result.journey].public
         )
 
@@ -262,7 +262,11 @@ def step(state: FeedState, observation: Observation, ctx: Context) -> list[Effec
     if instance.lifecycle == "finished":
         status = "layover"
     since = _set_vehicle(state, observation, vehicle, status, key, binding, None, episode)
-    effects.append(ObservationResult(observation, binding.journey, None, instance.public, since))
+    effects.append(
+        ObservationResult(
+            observation, binding.journey, None, instance.public, since, binding.method
+        )
+    )
     return effects
 
 
@@ -307,10 +311,10 @@ def _bind(observation: Observation, ctx: Context, at: Instant | None = None) -> 
             result = found
         if result is not Reason.AMBIGUOUS:
             break
-    if not isinstance(result, Match) or result.journey.namespace in IDENTITY_NAMESPACES:
+    if not isinstance(result, Match) or result.journey.namespace in ctx.policy.journey.shared:
         return result
     for key in observation.all(TripKey):
-        if key.namespace not in IDENTITY_NAMESPACES:
+        if key.namespace not in ctx.policy.journey.shared:
             continue
         found = bind(key, at or observation.at, ctx.index, ctx.policy, day and day.day)
         if (
@@ -340,6 +344,10 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
         # sources give (a point delay or a predicted next stop only where a source has them).
         current = waiting_is_not_early(instance, plan, current_lateness(instance))
         current = dwell_credit(instance, trip, plan, current, policy)
+        lateness = current[0]
+        instance = instance.evolve(
+            lateness_s=None if lateness is None else round(lateness.total_seconds())
+        )
         estimated = estimate(
             instance,
             plan.scheduled,
@@ -475,12 +483,13 @@ def _arrived_unseen(instance: Instance, ctx: Context) -> tuple[Instance, WriteEv
         interval = None
     if interval is None:
         return None
-    at = Instant(interval.lo + (interval.hi - interval.lo) / 2)
+    at = interval.mid
     calls = (*instance.calls[:last], replace(call, passed_arrival=at))
     journey, visit = instance.public_call(last, "arrival")
     source = instance.track_source or ""
     event = WriteEvent(journey, call.location_id, visit, "arrival", interval, "inferred", source)
-    return instance.evolve(calls=calls, lifecycle="finished"), event
+    instance = instance.evolve(calls=calls)
+    return instance.evolve(lifecycle=instance.settled_lifecycle()), event
 
 
 def _leads(
@@ -491,7 +500,7 @@ def _leads(
     (a fix that old no longer leads a position either). One source never mixes two vehicles'
     fixes (DUK-Q11); different sources are fused (`timeline.fusion`)."""
 
-    lead = lead_of(instance, vehicle.source)
+    lead = instance.lead_for(vehicle.source)
     if lead is None or lead.vehicle == vehicle:
         return True
     return observation.at - lead.seen > timedelta(seconds=policy.rail.position_fresh_s)
@@ -510,9 +519,10 @@ def _continued(
     instance = state.instances.get(binding.journey)
     if instance is None:
         return None
+    if not admissible(binding, observation.at, ctx.index, ctx.policy):
+        return None
     trip = ctx.index.trip(binding.trip_id)
-    match = Match(binding.journey, trip, *span(trip, binding.journey))
-    if not in_window(match, observation.at, ctx.policy) or _stale(match, observation, ctx):
+    if _stale(Match(binding.journey, trip, *span(trip, binding.journey)), observation, ctx):
         return None
     return binding
 
@@ -783,10 +793,6 @@ def rebase(state: FeedState, index: IndexView) -> list[Effect]:
 def resolve(journey: JourneyKey, index: IndexView) -> Trip | None:
     """The (run) trip a journey's key names on its service date, if it runs."""
 
-    for entry in index.keys(journey.namespace, journey.key):
-        if not entry.valid_on(journey.service_date):
-            continue
-        trip = index.trip(entry.public_id)
-        if index.runs_on(trip.service_id, journey.service_date):
-            return index.run(trip, journey.service_date)
+    for day, trip in running(index, journey.namespace, journey.key, (journey.service_date,)):
+        return index.run(trip, day)
     return None

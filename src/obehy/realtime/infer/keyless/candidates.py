@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from obehy.realtime.index import CHILD_NAMESPACE, IndexView, Trip
-from obehy.realtime.infer.keyed import Match, span
+from obehy.realtime.infer.keyed import Match, running, span
 from obehy.realtime.infer.keyless.episode import same_name
 from obehy.realtime.model import JourneyKey, LineRef, Reason
 from obehy.realtime.policy import KeylessPolicy
@@ -36,17 +36,14 @@ def candidates(
     if not keys:
         return Reason.NO_TRIP
     window = timedelta(seconds=policy.candidate_window_s)
-    running = False
+    any_running = False
     found: list[Match] = []
     for day in candidate_service_dates(at):
         for key in keys:
-            for entry in index.keys(namespace, key):
-                if not entry.valid_on(day):
+            for _, trip in running(index, namespace, key, (day,)):
+                if trip.run_key is not None:
                     continue
-                trip = index.trip(entry.public_id)
-                if trip.run_key is not None or not index.runs_on(trip.service_id, day):
-                    continue
-                running = True
+                any_running = True
                 last = destination_of(trip, index)
                 if last is None or not same_name(last, destination):
                     continue
@@ -55,5 +52,5 @@ def candidates(
                 if start - window <= at <= end + window:
                     found.append(Match(journey, trip, start, end))
     if not found:
-        return Reason.NOT_IN_SERVICE if running else Reason.NOT_ACTIVE
+        return Reason.NOT_IN_SERVICE if any_running else Reason.NOT_ACTIVE
     return sorted(found, key=lambda match: match.journey)

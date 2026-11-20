@@ -27,7 +27,7 @@ from typing import Any
 
 from obehy.realtime.core import Context
 from obehy.realtime.geo import distance_m
-from obehy.realtime.model import FeedState, Instance, Interval, JourneyKey
+from obehy.realtime.model import FeedState, Instance, JourneyKey
 from obehy.realtime.quality_checks import Checks
 from obehy.realtime.timeline.path import point_at
 from obehy.realtime.timeline.plan import Plan, Scheduled
@@ -37,10 +37,6 @@ HORIZON = 3
 SIGNIFICANT = 30.0  # seconds
 DWELL_BUCKETS = (15, 30, 45, 60, 90)  # upper bounds in seconds; beyond the last is the rest
 OFF_SHAPE_M = 60.0  # about 2 sigma of GPS error and shape trust combined
-
-
-def _middle(interval: Interval) -> Instant:
-    return Instant(interval.lo + (interval.hi - interval.lo) / 2)
 
 
 @dataclass(slots=True)
@@ -221,7 +217,7 @@ class QualityLog:
                 continue  # passed without an arrival event (a reception gap): nothing to score
             interval = instance.calls[i].arrival
             assert interval is not None
-            actual = _middle(interval)
+            actual = interval.mid
             for horizon, made, predicted, delay, (where, age) in call.samples:
                 if made < actual:
                     error = (predicted - actual).total_seconds()
@@ -292,10 +288,10 @@ class QualityLog:
             next_arrival = calls[j].arrival
             assert next_arrival is not None and following is not None
             self.dwell_seen.add((journey, i))
-            arrived, left = _middle(call.arrival), _middle(call.departure)
+            arrived, left = call.arrival.mid, call.departure.mid
             dwell = (left - arrived).total_seconds()
             leaving = (left - departure).total_seconds()
-            reaching = (_middle(next_arrival) - following).total_seconds()
+            reaching = (next_arrival.mid - following).total_seconds()
             self.dwells[instance.mode].append(dwell)
             self.recovery[(instance.mode, _bucket(dwell))].append(leaving - reaching)
 

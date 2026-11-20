@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
 
-from obehy.realtime.index import IndexView, Trip
+from obehy.realtime.index import IndexView, Trip, calls_at_station
 from obehy.realtime.infer.keyed import Match
 from obehy.realtime.model import (
     Effect,
@@ -35,11 +35,8 @@ Binder = Callable[[Observation], Match | Reason]
 
 
 def _call(trip: Trip, day: date, fact: PlatformAssignment, index: IndexView) -> int | None:
-    for i, call in enumerate(trip.calls):
-        if not call.passenger_service:
-            continue
-        if index.location_key(call.location_id, "sr70") != fact.station:
-            continue
+    for i in calls_at_station(trip, index, (fact.station,), passenger=True):
+        call = trip.calls[i]
         seconds = call.arrival if fact.kind == "arrival" else call.departure
         if seconds is None:
             continue

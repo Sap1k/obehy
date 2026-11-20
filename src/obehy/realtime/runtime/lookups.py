@@ -36,7 +36,6 @@ from psycopg.types.json import Jsonb
 
 from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.compositions import (
-    JOURNEY_NAMESPACES,
     NotAvailable,
     Subject,
     TripView,
@@ -46,6 +45,7 @@ from obehy.realtime.compositions import (
 )
 from obehy.realtime.emit.compositions import write_composition
 from obehy.realtime.manifest import Channel, Lookup, Rate
+from obehy.realtime.policy import load_policy
 from obehy.realtime.sources import cd
 from obehy.realtime.times import PRAGUE, Instant, instant, local_date
 
@@ -53,8 +53,9 @@ LOOKUP_CHANNEL = "obehy_lookup"
 SWEEP_S = 5.0
 BATCH = 50
 SQL = Path(__file__).resolve().parent.parent / "sql"
-# The keys lookups plan with.
-TRIP_NAMESPACES = ("czptt:train_number", *JOURNEY_NAMESPACES)
+# The keys lookups plan with: the journey keys, and the CZPTT train ID (TR) the ČD requests
+# and their `applies` read.
+TRIP_NAMESPACES = (*load_policy().journey.namespaces, "czptt:tr")
 LOCATION_NAMESPACES = ("sr70",)
 
 Plan = Callable[[Subject, TripView], UpstreamRequest | NotAvailable]

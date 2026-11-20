@@ -98,6 +98,7 @@ def update(
             here,
             at,
             stop_radius_m,
+            policy.stop_ahead_calls,
             terminal_m if standing else 0.0,
             track.seen_at if standing and track is not None else None,
         )
@@ -176,8 +177,7 @@ def at_origin_or_moving(
     than the start prior allows (a vehicle driving to its start over roads the trip takes
     later, or rolling onto its stand, is not running half an hour early)."""
 
-    first = plan.zones[0].departure_m if plan.zones else None
-    after_m = plan.path.call_distances_m[0] if first is None else first
+    after_m = plan.departure_m
     sigma = _sigma(policy)
     now = candidates(plan.path, after.lon, after.lat, sigma, policy.reach_sigmas)
     if any(a.along_m <= after_m for a in now):
@@ -205,8 +205,7 @@ def at_origin_or_moving(
 def past_first_stop(plan: Plan, position: Position, policy: ProgressPolicy) -> bool:
     """Whether the fix lies on the path after the first stop's departure trigger."""
 
-    first = plan.zones[0].departure_m if plan.zones else None
-    after = plan.path.call_distances_m[0] if first is None else first
+    after = plan.departure_m
     found = candidates(plan.path, position.lon, position.lat, _sigma(policy), policy.reach_sigmas)
     return any(candidate.along_m > after for candidate in found)
 
@@ -434,7 +433,7 @@ def _prune(extended: list[Hypothesis], policy: ProgressPolicy) -> tuple[Hypothes
     for h in ordered:
         if top - h.log_p > policy.prune or len(kept) >= policy.beam:
             break
-        if any(abs(h.along_m - k.along_m) < 1.0 for k in kept):
+        if any(abs(h.along_m - k.along_m) < policy.merge_m for k in kept):
             continue
         kept.append(h.evolve(log_p=h.log_p - top))
     return tuple(kept)

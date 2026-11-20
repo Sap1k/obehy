@@ -1,7 +1,7 @@
 -- What the lookup broker knows of a trip on a date (realtime/compositions.py, TripView): its
 -- calls in order with their location keys (SR70) and whether the train has left them (the
--- journey's current state, through the part the trip publishes), and the trip's keys, in the
--- namespaces lookups plan with. No row: the trip is not in the active release.
+-- core's `passed`, Instance.left_index, in the journey's current state through the part the
+-- trip publishes), and the trip's keys, in the namespaces lookups plan with. No row: the trip is not in the active release.
 WITH trip AS (
     SELECT t.trip_id,
            CASE WHEN t.load_id = p.jdf_load_id THEN 'jdf' ELSE 'czptt' END AS feed,
@@ -40,12 +40,7 @@ SELECT trip.feed,
                     'location_id', c.location_id,
                     'visit_n', c.visit_n,
                     'passenger', c.passenger,
-                    'left', coalesce(
-                        live.call ->> 'status' = 'actual'
-                        AND coalesce(live.call ->> 'estimated_departure',
-                                     live.call ->> 'estimated_arrival')::timestamptz
-                            <= statement_timestamp(),
-                        false),
+                    'left', coalesce((live.call ->> 'passed')::boolean, false),
                     'keys', (SELECT coalesce(jsonb_object_agg(k.namespace, k.identifier), '{}')
                              FROM active.source_key k
                              WHERE k.public_id = c.location_id

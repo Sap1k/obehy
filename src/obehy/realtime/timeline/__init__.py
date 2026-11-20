@@ -61,7 +61,8 @@ def advance(
     """Apply one bound observation to its instance; `before` is the vehicle's previous fix
     (a stand it waited on before the trip started, which the timeline never saw)."""
 
-    track, previous, news = note_source(instance, observation, semantics)
+    usable = usable_delay(instance, observation, policy, semantics)
+    track, previous, news = note_source(instance, observation, semantics, usable)
     if not news:
         return instance, []  # SZ-Q6: an unchanged entry says nothing new
     position = observation.first(Position)
@@ -70,16 +71,19 @@ def advance(
     # while payloads keep coming) is no new information: it never moves progress, so event
     # intervals always run forward in time, and it does not keep the journey fresh.
     repeated = position is not None and seen is not None and observation.at <= seen
-    freshness, delay_s = _note(instance, observation, policy, semantics, fresh=not repeated)
+    freshness = _heard(instance, observation, fresh=not repeated)
+    delay_s = instance.reported_delay_s if usable is None else usable
     # The instance is rebuilt once per fix: what the source said goes in with the rest.
     effects: list[Effect] = []
     if observation.first(PointEvent) is not None and instance.lifecycle != "finished":
-        instance = with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s)
+        instance = with_track(instance, track).evolve(freshness=freshness, reported_delay_s=delay_s)
         plan = plans.plan(trip, instance.journey.service_date, index, policy)
         instance, effects = apply_point(instance, trip, plan, observation, previous, index, policy)
         track = instance.source_track(observation.source) or track
     if instance.lifecycle != "running" or position is None or repeated:
-        return with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s), effects
+        return with_track(instance, track).evolve(
+            freshness=freshness, reported_delay_s=delay_s
+        ), effects
     source = observation.source
     # Every vehicle is tracked alike; only how far a source's fixes may be off differs (the SŽ
     # map's are coarse), and with it whether a fix can say the vehicle is at a stop.
@@ -90,7 +94,7 @@ def advance(
         instance, source, observation.at, policy
     ):
         # A lagging fix (the SŽ map's, a feed's late copy) while a better source is fresh.
-        instance = with_track(instance, track).evolve(freshness=freshness, delay_s=delay_s)
+        instance = with_track(instance, track).evolve(freshness=freshness, reported_delay_s=delay_s)
         return instance, [*effects, Unresolved(observation, "behind", source)]
     # An unseen dwell at a stop without a timetabled one is the typical one
     # (`commit._crossing_time`); fixes precise enough to place the vehicle at a stop bound its
@@ -114,7 +118,6 @@ def advance(
     )
     track = track.evolve(position_at=observation.at)
     calls, crossed = _cross(instance, step.crossed, source, policy)
-    finished = any(c.kind == "arrival" and c.call == len(calls) - 1 for c in step.crossed)
     progress = step.progress
     held = instance.progress
     anchored = any(t.point is not None for t in instance.sources)
@@ -130,12 +133,12 @@ def advance(
         track=step.track,
         off_route_since=step.off_route_since,
         off_route=step.off_route,
-        lifecycle="finished" if finished else instance.lifecycle,
         track_source=source,
         freshness=freshness,
-        delay_s=delay_s,
+        reported_delay_s=delay_s,
         sources=tracks_with(instance.sources, track),
     )
+    instance = instance.evolve(lifecycle=instance.settled_lifecycle())
     shown_source = _shown(instance, source, observation.at, policy)
     published = instance.published
     if source == shown_source or published is None:
@@ -209,30 +212,31 @@ def _source_progress(policy: ProgressPolicy, gps_sigma_m: float) -> ProgressPoli
     return replace(policy, gps_sigma_m=gps_sigma_m)
 
 
-def _note(
-    instance: Instance,
-    observation: Observation,
-    policy: Policy,
-    semantics: SourceSemantics,
-    *,
-    fresh: bool,
-) -> tuple[Freshness, int | None]:
-    """The observation's time and source delay; only new information keeps it fresh.
+def usable_delay(
+    instance: Instance, observation: Observation, policy: Policy, semantics: SourceSemantics
+) -> int | None:
+    """The delay the observation reports, if usable; the one rule for every source's delay.
 
-    A source whose pre-trip delay is the time since the scheduled departure (DÚK: growing while
-    the vehicle stands in the depot, DUK-Q14) has it ignored before departure and while it still
-    reports a pre-trip state (DUK-Q18)."""
+    Not below `delay_discard_below_s`; and a source whose pre-trip delay is the time since the
+    scheduled departure (DÚK: growing while the vehicle stands in the depot, DUK-Q14) has it
+    ignored before departure and while it still reports a pre-trip state (DUK-Q18)."""
 
     delay = observation.first(Delay)
+    if delay is None or delay.seconds <= policy.delay_discard_below_s:
+        return None
     source = observation.first(SourceState)
     before = instance.lifecycle == "pre_trip" or (source is not None and source.code == "pre_trip")
-    elapsed = semantics.pre_trip_delay_is_elapsed and before
-    delay_s = instance.delay_s
-    if delay is not None and not elapsed and delay.seconds > policy.delay_discard_below_s:
-        delay_s = delay.seconds
+    if semantics.pre_trip_delay_is_elapsed and before:
+        return None
+    return delay.seconds
+
+
+def _heard(instance: Instance, observation: Observation, *, fresh: bool) -> Freshness:
+    """The observation's time; only new information keeps the journey fresh."""
+
     old = instance.freshness
     heard_at = observation.received_at if fresh else old.heard_at
-    return Freshness(observation.at, heard_at, old.stale, old.lost), delay_s
+    return Freshness(observation.at, heard_at, old.stale, old.lost)
 
 
 def _cross(

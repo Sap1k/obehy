@@ -8,7 +8,9 @@ journey and its own part: nothing here applies to it.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date
+from functools import lru_cache
 from itertools import pairwise
 
 from obehy.realtime.index import IndexView, Trip
@@ -22,6 +24,7 @@ from obehy.realtime.model import (
     PartSpan,
     ScheduledCall,
     SnapshotJourney,
+    visit_numbers,
 )
 from obehy.realtime.times import Instant
 
@@ -72,7 +75,7 @@ def current_part(instance: Instance) -> str:
     """The trip part the vehicle is on: the one holding the next call to reach."""
 
     parts = published_parts(instance)
-    reached = instance.progress.call_index if instance.progress is not None else -1
+    reached = instance.left_index()
     for part in parts:
         if reached < part.last:
             return part.trip_id
@@ -85,9 +88,23 @@ def current_train(instance: Instance) -> str | None:
 
     if not instance.journeys:
         return None
-    reached = instance.progress.call_index if instance.progress is not None else -1
+    reached = instance.left_index()
     span = next((s for s in instance.journeys if reached < s.last), instance.journeys[-1])
     return span.journey.key if span.journey.namespace == TRAIN_NAMESPACE else None
+
+
+def run_vehicle_id(instance: Instance) -> str:
+    """A rail run's vehicle ID, whichever unit or source reports it, in the API and GTFS-RT
+    alike: the train its current number names, else an opaque ID of the run's day."""
+
+    number = current_train(instance)
+    return TRAIN_PREFIX + number if number is not None else _opaque(instance.journey)
+
+
+@lru_cache(maxsize=8192)  # bounded: the worker runs for weeks
+def _opaque(journey: JourneyKey) -> str:
+    identity = f"{journey.feed}|{journey.namespace}|{journey.key}|{journey.service_date}"
+    return "train-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
 
 
 def snapshots(
@@ -127,15 +144,15 @@ def _snapshot(
     at: Instant,
     run_key: str | None,
 ) -> SnapshotJourney:
-    visits: dict[str, int] = {}
+    span = trip.calls[first : last + 1]
+    visits = visit_numbers(call.location_id for call in span)
     calls: list[ScheduledCall] = []
-    for ordinal, call in enumerate(trip.calls[first : last + 1], start=1):
-        visits[call.location_id] = visits.get(call.location_id, 0) + 1
+    for ordinal, (call, visit) in enumerate(zip(span, visits, strict=True), start=1):
         calls.append(
             ScheduledCall(
                 ordinal,
                 call.location_id,
-                visits[call.location_id],
+                visit,
                 call.passenger_service,
                 call.arrival,
                 call.departure,

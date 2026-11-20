@@ -37,8 +37,6 @@ from obehy.realtime.timeline.path import point_at
 from obehy.realtime.timeline.plan import Plan
 from obehy.realtime.times import Instant
 
-AHEAD = 3  # calls looked at past the first one not yet left
-
 
 def _pending(plan: Plan, committed_m: float) -> int | None:
     """The first call whose departure trigger is not committed yet; past the last one, the
@@ -55,8 +53,7 @@ def _pending(plan: Plan, committed_m: float) -> int | None:
 def done_at(plan: Plan, call: int, committed_m: float) -> bool:
     """Whether the call's last event (its departure; the terminus's arrival) is committed."""
 
-    zone = plan.zones[call]
-    trigger = zone.departure_m if zone.departure_m is not None else zone.arrival_m
+    trigger = plan.leaving_m(call)
     return trigger is None or trigger <= committed_m
 
 
@@ -72,10 +69,11 @@ def at_call(
     committed_m: float,
     here: tuple[float, float],
     radius_m: float,
+    ahead: int,
     terminal_m: float = 0.0,
 ) -> int | None:
-    """The call whose point the fix is within `radius_m` of, among the first calls not yet
-    left (the last one at its point); at the first and last call within `terminal_m` (a
+    """The call whose point the fix is within `radius_m` of, among the first `ahead` calls not
+    yet left (the last one at its point); at the first and last call within `terminal_m` (a
     vehicle standing on a terminal's stand, given only while it stands). None elsewhere."""
 
     first = _pending(plan, committed_m)
@@ -83,7 +81,7 @@ def at_call(
         return None
     distances = plan.path.call_distances_m
     last = len(distances) - 1
-    for call in range(first, min(first + AHEAD, last + 1)):
+    for call in range(first, min(first + ahead, last + 1)):
         reach = max(radius_m, terminal_m) if call in (0, last) else radius_m
         if distance_m(here, point_at(plan.path, distances[call])) <= reach:
             return _last_at_point(plan, call) if call < last else call
@@ -97,6 +95,7 @@ def seen(
     here: tuple[float, float],
     at: Instant,
     radius_m: float,
+    ahead: int,
     terminal_m: float = 0.0,
     still_since: Instant | None = None,
 ) -> StopSeen | None:
@@ -107,7 +106,7 @@ def seen(
 
     if previous is not None and done_at(plan, previous.call, committed_m):
         previous = None
-    call = at_call(plan, committed_m, here, radius_m, terminal_m)
+    call = at_call(plan, committed_m, here, radius_m, ahead, terminal_m)
     if call is None:
         if previous is not None and previous.away is None:
             return StopSeen(previous.call, previous.first, previous.last, at)

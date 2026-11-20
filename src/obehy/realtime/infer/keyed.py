@@ -13,20 +13,16 @@ makes it the only candidate.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 
 from obehy.realtime.index import IndexView, Trip, parent_ref
-from obehy.realtime.model import JourneyKey, Reason, TripKey
+from obehy.realtime.model import Binding, JourneyKey, Reason, TripKey
 from obehy.realtime.policy import Policy, TimePolicy
 from obehy.realtime.runs import run_journey
 from obehy.realtime.times import Instant, ServiceTime, candidate_service_dates
-
-# Keys that name a journey whichever source reported it: the CIS line and trip, which DÚK, MPV
-# net and DPMD send and PID gives beside its own GTFS trip ID. One trip bound by several sources'
-# keys is then one journey (core `_bind`).
-IDENTITY_NAMESPACES = frozenset({"cis:line_trip"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +60,31 @@ def in_window(match: Match, at: Instant, policy: Policy) -> bool:
     return lo <= at <= hi
 
 
+def admissible(binding: Binding, at: Instant, index: IndexView, policy: Policy) -> bool:
+    """Whether `at` is still in the window of the journey `binding` holds (section 19.5): what
+    keeps a binding, keyed or inferred, from one observation to the next."""
+
+    trip = index.trip(binding.trip_id)
+    return in_window(Match(binding.journey, trip, *span(trip, binding.journey)), at, policy)
+
+
+def running(
+    index: IndexView, namespace: str, key: str, days: Iterable[date]
+) -> Iterator[tuple[date, Trip]]:
+    """The feed trips a key names that run, on each of `days` in turn: the key valid on the
+    day and the trip's service running it. A rail part is yielded as itself (`IndexView.run`
+    joins it into its run)."""
+
+    entries = index.keys(namespace, key)
+    for day in days:
+        for entry in entries:
+            if not entry.valid_on(day):
+                continue
+            trip = index.trip(entry.public_id)
+            if index.runs_on(trip.service_id, day):
+                yield day, trip
+
+
 def _distance(match: Match, at: Instant) -> timedelta:
     if at < match.start:
         return match.start - at
@@ -81,32 +102,27 @@ def bind(
         if parent is not None and not index.keys(*parent):
             return Reason.NO_LINE
         return Reason.NO_TRIP
-    running: list[Match] = []
+    found: list[Match] = []
     seen: set[JourneyKey] = set()
-    for candidate in candidate_service_dates(at) if day is None else (day,):
-        for entry in entries:
-            if not entry.valid_on(candidate):
-                continue
-            trip = index.trip(entry.public_id)
-            if not index.runs_on(trip.service_id, candidate):
-                continue
-            if trip.run_key is not None:
-                trip = index.run(trip, candidate)
-                if not trip.parts:
-                    return Reason.AMBIGUOUS  # two versions of a part run that day
-                journey = run_journey(index.feed, trip, candidate)
-                if journey in seen:
-                    continue  # another part of the same run
-                seen.add(journey)
-            else:
-                journey = JourneyKey(index.feed, key.namespace, key.key, candidate)
-            running.append(Match(journey, trip, *span(trip, journey)))
-    if not running:
+    days = candidate_service_dates(at) if day is None else (day,)
+    for candidate, trip in running(index, key.namespace, key.key, days):
+        if trip.run_key is not None:
+            trip = index.run(trip, candidate)
+            if not trip.parts:
+                return Reason.AMBIGUOUS  # two versions of a part run that day
+            journey = run_journey(index.feed, trip, candidate)
+            if journey in seen:
+                continue  # another part of the same run
+            seen.add(journey)
+        else:
+            journey = JourneyKey(index.feed, key.namespace, key.key, candidate)
+        found.append(Match(journey, trip, *span(trip, journey)))
+    if not found:
         return Reason.NOT_ACTIVE
-    admissible = [match for match in running if in_window(match, at, policy)]
-    if not admissible:
+    window = [match for match in found if in_window(match, at, policy)]
+    if not window:
         return Reason.NOT_IN_SERVICE
-    admissible.sort(key=lambda match: (_distance(match, at), match.journey.service_date))
-    if len(admissible) > 1 and _distance(admissible[0], at) == _distance(admissible[1], at):
+    window.sort(key=lambda match: (_distance(match, at), match.journey.service_date))
+    if len(window) > 1 and _distance(window[0], at) == _distance(window[1], at):
         return Reason.AMBIGUOUS
-    return admissible[0]
+    return window[0]

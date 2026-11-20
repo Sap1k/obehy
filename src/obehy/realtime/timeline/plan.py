@@ -45,15 +45,6 @@ class Window:
     earliest: Instant | None
     latest: Instant | None
 
-    def lateness_s(self, at: Instant) -> float:
-        """Seconds behind (positive) or ahead of the window; 0 inside it."""
-
-        if self.earliest is not None and at < self.earliest:
-            return (at - self.earliest).total_seconds()
-        if self.latest is not None and at > self.latest:
-            return (at - self.latest).total_seconds()
-        return 0.0
-
     def clamp(self, at: Instant) -> Instant:
         """The timetable time of being here at `at`: `at` clamped into the window."""
 
@@ -168,11 +159,11 @@ class Timetable:
     def lateness_s(self, at: Instant, along_m: float) -> float:
         """Seconds behind (positive) or ahead of the timetable at a place; 0 inside a dwell."""
 
-        window = self.window(along_m)
-        return 0.0 if window is None else window.lateness_s(at)
+        return self.lateness_us(micros(at), along_m)
 
     def lateness_us(self, at_us: int, along_m: float) -> float:
-        """`lateness_s` with the time in microseconds (`times.micros`); bit-identical."""
+        """`lateness_s` with the time in microseconds (`times.micros`), for the tracker's inner
+        loop: the one implementation of the rule."""
 
         spans = self._spans
         if not spans:
@@ -203,6 +194,14 @@ class Timetable:
         return None if window is None else window.clamp(at)
 
 
+def no_timetabled_dwell(scheduled: tuple[Instant | None, Instant | None]) -> bool:
+    """A call the timetable gives no dwell: arrival and departure in the same minute. The
+    vehicle stands there for a typical dwell (`dwell_credit_s`) the minute does not show."""
+
+    arrival, departure = scheduled
+    return arrival is not None and arrival == departure
+
+
 @dataclass(frozen=True, slots=True)
 class Plan:
     """A journey's path with its timetable laid on it."""
@@ -221,13 +220,27 @@ class Plan:
         last = bisect_right(self.trigger_distances, upto_m)
         return self.triggers[first:last]
 
+    @property
+    def departure_m(self) -> float:
+        """Where the vehicle has left the first stop: its departure trigger, else the stop."""
+
+        first = self.zones[0].departure_m if self.zones else None
+        return self.path.call_distances_m[0] if first is None else first
+
+    def leaving_m(self, call: int) -> float | None:
+        """Where the vehicle has left the call: its departure trigger (the last call's: its
+        arrival trigger)."""
+
+        zone = self.zones[call]
+        return zone.departure_m if zone.departure_m is not None else zone.arrival_m
+
     def call_index_at(self, along_m: float) -> int:
-        """The last call the vehicle has left: its departure trigger (or, for the last call,
-        its arrival trigger) is at or behind `along_m`; -1 before the first departure."""
+        """The last call the vehicle has left at `along_m` (`leaving_m` at or behind it); -1
+        before the first departure."""
 
         index = -1
-        for i, zone in enumerate(self.zones):
-            trigger = zone.departure_m if zone.departure_m is not None else zone.arrival_m
+        for i in range(len(self.zones)):
+            trigger = self.leaving_m(i)
             if trigger is not None and trigger <= along_m:
                 index = i
         return index
@@ -252,8 +265,7 @@ class Plan:
             if zone.arrival_m is not None and along_m < zone.arrival_m:
                 return None
             if zone.departure_m is None or along_m < zone.departure_m:
-                arrival, departure = self.scheduled[call]
-                return call if arrival is not None and arrival == departure else None
+                return call if no_timetabled_dwell(self.scheduled[call]) else None
         return None
 
     def scheduled_time(self, call: int, kind: EventKind) -> Instant | None:
@@ -326,7 +338,7 @@ class PlanCache:
         if value is None:
             path = self.paths.get(trip.trip_id)
             if path is None:
-                path = build_path(trip, index)
+                path = build_path(trip, index, policy.progress)
                 self.paths[trip.trip_id] = path
             value = build_plan(path, scheduled_instants(trip, day), policy)
             if len(self.plans) > 50_000:

@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from obehy.realtime.index import IndexView
-from obehy.realtime.infer.keyed import Match, in_window, span
+from obehy.realtime.infer.keyed import Match, admissible, span
 from obehy.realtime.infer.keyless.candidates import candidates
 from obehy.realtime.infer.keyless.score import place, position_residual
 from obehy.realtime.model import (
@@ -119,9 +119,7 @@ def continued(
     binding = previous.binding
     if binding.journey not in instances:
         return None
-    trip = index.trip(binding.trip_id)
-    match = Match(binding.journey, trip, *span(trip, binding.journey))
-    return binding if in_window(match, at, policy) else None
+    return binding if admissible(binding, at, index, policy) else None
 
 
 def confirm(binding: Binding, episode: KeylessEpisode, index: IndexView, policy: Policy) -> Binding:

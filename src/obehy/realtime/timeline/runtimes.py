@@ -20,17 +20,10 @@ import math
 from collections import deque
 from datetime import timedelta
 
-from obehy.realtime.model import CallState, HopKey, Instance, Interval, Traversal
+from obehy.realtime.model import CallState, HopKey, Instance, Traversal
 from obehy.realtime.policy import PredictionPolicy
 from obehy.realtime.timeline.plan import Plan, Scheduled
 from obehy.realtime.times import Instant
-
-# Traversals older than this many decay times weigh under 5 % and are dropped.
-KEEP_DECAYS = 3
-
-
-def _middle(interval: Interval) -> Instant:
-    return Instant(interval.lo + (interval.hi - interval.lo) / 2)
 
 
 def _previous_passenger(calls: tuple[CallState, ...], i: int) -> int | None:
@@ -52,7 +45,7 @@ def record(
     """Add the hops `instance` completed since its calls were `before`: each passenger call with
     a newly recorded arrival, timed from the previous passenger call's recorded event."""
 
-    window = timedelta(seconds=KEEP_DECAYS * policy.runtime_decay_s)
+    window = timedelta(seconds=policy.runtime_keep_decays * policy.runtime_decay_s)
     calls = instance.calls
     for b, (old, new) in enumerate(zip(before, calls, strict=True)):
         if not new.passenger or new.arrival is None or old.arrival is not None:
@@ -65,8 +58,8 @@ def record(
         planned_end = scheduled[b][0] or scheduled[b][1]
         if start is None or planned_start is None or planned_end is None:
             continue
-        end = _middle(new.arrival)
-        taken = (end - _middle(start)).total_seconds()
+        end = new.arrival.mid
+        taken = (end - start.mid).total_seconds()
         planned = (planned_end - planned_start).total_seconds()
         if taken <= 0 or planned <= 0:
             continue
@@ -91,7 +84,7 @@ def ratio(
     total, weight = policy.runtime_prior_weight, policy.runtime_prior_weight
     for end, taken, planned in traversals:
         age = (now - end).total_seconds()
-        if age < 0 or age > KEEP_DECAYS * decay:
+        if age < 0 or age > policy.runtime_keep_decays * decay:
             continue
         w = math.exp(-age / decay)
         total += w * min(most, max(1.0 / most, taken / planned))
@@ -102,7 +95,7 @@ def ratio(
 def forget(hops: dict[HopKey, deque[Traversal]], now: Instant, policy: PredictionPolicy) -> None:
     """Drop hops with no traversal in the window."""
 
-    since = now - timedelta(seconds=KEEP_DECAYS * policy.runtime_decay_s)
+    since = now - timedelta(seconds=policy.runtime_keep_decays * policy.runtime_decay_s)
     for key in [k for k, v in hops.items() if not v or v[-1][0] < since]:
         del hops[key]
 

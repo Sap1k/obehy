@@ -18,6 +18,7 @@ from shapely.geometry import LineString
 
 from obehy.realtime.geo import EARTH_RADIUS_M, cumulative_m
 from obehy.realtime.index import IndexView, Trip
+from obehy.realtime.policy import ProgressPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,20 +58,35 @@ def _plane(lat0: float) -> tuple[float, float]:
     return rad * math.cos(math.radians(lat0)), rad
 
 
+def _onto(
+    segment: tuple[float, float, float, float], lon: float, lat: float, kx: float, ky: float
+) -> tuple[float, float, float, float]:
+    """A point's projection onto one segment (start lon/lat, its dlon/dlat) in the plane of
+    scale `kx`, `ky`: (fraction along it, lateral metres, the segment's x and y in metres)."""
+
+    ax, ay, dx, dy = segment
+    ux, uy = dx * kx, dy * ky
+    px, py = (lon - ax) * kx, (lat - ay) * ky
+    length2 = ux * ux + uy * uy
+    t = 0.0 if length2 == 0 else max(0.0, min(1.0, (px * ux + py * uy) / length2))
+    return t, math.hypot(px - t * ux, py - t * uy), ux, uy
+
+
+def _segments(
+    points: tuple[tuple[float, float], ...],
+) -> tuple[tuple[float, float, float, float], ...]:
+    return tuple((ax, ay, bx - ax, by - ay) for (ax, ay), (bx, by) in pairwise(points))
+
+
 def project_all(path: Path, lon: float, lat: float) -> list[Projection]:
     """The point's projection onto every segment of the path."""
 
     kx, ky = _plane(lat)
     out: list[Projection] = []
-    for i in range(len(path.points) - 1):
-        (ax, ay), (bx, by) = path.points[i], path.points[i + 1]
-        ux, uy = (bx - ax) * kx, (by - ay) * ky
-        px, py = (lon - ax) * kx, (lat - ay) * ky
-        length2 = ux * ux + uy * uy
-        t = 0.0 if length2 == 0 else max(0.0, min(1.0, (px * ux + py * uy) / length2))
-        dx, dy = px - t * ux, py - t * uy
+    for i, segment in enumerate(path.segments):
+        t, lateral, _, _ = _onto(segment, lon, lat, kx, ky)
         start, end = path.distances_m[i], path.distances_m[i + 1]
-        out.append(Projection(start + t * (end - start), math.hypot(dx, dy), end - start))
+        out.append(Projection(start + t * (end - start), lateral, end - start))
     return out
 
 
@@ -102,8 +118,7 @@ def make_path(
     *,
     shaped: bool = False,
 ) -> Path:
-    segments = tuple((ax, ay, bx - ax, by - ay) for (ax, ay), (bx, by) in pairwise(points))
-    return Path(points, distances, call_distances, segments, shaped)
+    return Path(points, distances, call_distances, _segments(points), shaped)
 
 
 def candidates(
@@ -126,12 +141,7 @@ def candidates(
         last = min(last, bisect_right(distances, window[1]))
     out: list[Candidate] = []
     for i in range(first, last):
-        ax, ay, dx, dy = segments[i]
-        ux, uy = dx * kx, dy * ky
-        px, py = (lon - ax) * kx, (lat - ay) * ky
-        length2 = ux * ux + uy * uy
-        t = 0.0 if length2 == 0 else max(0.0, min(1.0, (px * ux + py * uy) / length2))
-        lateral = math.hypot(px - t * ux, py - t * uy)
+        t, lateral, ux, uy = _onto(segments[i], lon, lat, kx, ky)
         start, end = distances[i], distances[i + 1]
         segment = end - start
         s = sigma(path, segment)
@@ -141,34 +151,26 @@ def candidates(
     return out
 
 
-# A stop farther than this from every part of the shape is left unplaced (its distance is then
-# interpolated by schedule time) rather than pinned somewhere it is not.
-OFF_SHAPE_M = 500.0
-
-
 def _stop_candidates(
     path_points: tuple[tuple[float, float], ...],
     distances: tuple[float, ...],
     lon: float,
     lat: float,
+    off_m: float,
 ) -> list[tuple[float, float]]:
     """Where a stop may lie on the path: (along, lateral) of each local minimum of its distance
-    from the shape within OFF_SHAPE_M. A road driven out and back gives one per leg."""
+    from the shape within `off_m`. A road driven out and back gives one per leg."""
 
     kx, ky = _plane(lat)
     projected: list[tuple[float, float]] = []
-    for i in range(len(path_points) - 1):
-        (ax, ay), (bx, by) = path_points[i], path_points[i + 1]
-        ux, uy = (bx - ax) * kx, (by - ay) * ky
-        px, py = (lon - ax) * kx, (lat - ay) * ky
-        length2 = ux * ux + uy * uy
-        t = 0.0 if length2 == 0 else max(0.0, min(1.0, (px * ux + py * uy) / length2))
+    for i, segment in enumerate(_segments(path_points)):
+        t, lateral, _, _ = _onto(segment, lon, lat, kx, ky)
         start, end = distances[i], distances[i + 1]
-        projected.append((start + t * (end - start), math.hypot(px - t * ux, py - t * uy)))
+        projected.append((start + t * (end - start), lateral))
     out: list[tuple[float, float]] = []
     last = len(projected) - 1
     for i, (along, lateral) in enumerate(projected):
-        if lateral > OFF_SHAPE_M:
+        if lateral > off_m:
             continue
         if i > 0 and projected[i - 1][1] < lateral:
             continue
@@ -182,15 +184,16 @@ def _place_stops(
     path_points: tuple[tuple[float, float], ...],
     distances: tuple[float, ...],
     located: list[tuple[float, float] | None],
+    off_m: float,
 ) -> list[float | None]:
     """Each stop's distance along the path, chosen for all stops at once: in call order, as
     close to the shape as possible in total. Choosing stop by stop (the nearest after the last)
     goes wrong where a road is driven out and back: a stop a metre nearer the far lane takes
     the return visit's place, and every later stop is pushed past where it belongs. A stop is
-    left unplaced, at the cost OFF_SHAPE_M, when no candidate fits."""
+    left unplaced, at the cost `off_m`, when no candidate fits."""
 
     stops = [
-        (i, _stop_candidates(path_points, distances, point[0], point[1]))
+        (i, _stop_candidates(path_points, distances, point[0], point[1], off_m))
         for i, point in enumerate(located)
         if point is not None
     ]
@@ -201,21 +204,21 @@ def _place_stops(
         row: list[tuple[float, float, tuple[int, int] | None]] = []
         for along, lateral in candidates:
             choice: tuple[float, float, tuple[int, int] | None] = (
-                lateral + k * OFF_SHAPE_M,
+                lateral + k * off_m,
                 along,
                 None,
             )
             for j in range(k):
-                skipped = (k - j - 1) * OFF_SHAPE_M
+                skipped = (k - j - 1) * off_m
                 for c, (cost, before, _) in enumerate(best[j]):
                     if before <= along and (cost + skipped + lateral, along) < choice[:2]:
                         choice = (cost + skipped + lateral, along, (j, c))
             row.append(choice)
         best.append(row)
-    end: tuple[float, tuple[int, int] | None] = (len(stops) * OFF_SHAPE_M, None)
+    end: tuple[float, tuple[int, int] | None] = (len(stops) * off_m, None)
     for k, row in enumerate(best):
         for c, (cost, _, _) in enumerate(row):
-            total = cost + (len(stops) - k - 1) * OFF_SHAPE_M
+            total = cost + (len(stops) - k - 1) * off_m
             if total < end[0]:
                 end = (total, (k, c))
     out: list[float | None] = [None] * len(located)
@@ -236,19 +239,16 @@ def _straight(
     return [None if point is None else next(vertices) for point in located]
 
 
-# About 5 m: far below any off-route tolerance, and dense shapes shrink to a few dozen vertices.
-SIMPLIFY_DEGREES = 0.00005
-
-
 def simplify(
-    points: tuple[tuple[float, float], ...], distances: tuple[float, ...]
+    points: tuple[tuple[float, float], ...], distances: tuple[float, ...], tolerance_deg: float
 ) -> tuple[tuple[tuple[float, float], ...], tuple[float, ...]]:
-    """Drop vertices within ~5 m of the line through their neighbours. Kept vertices keep their
-    original along-path distances, so call distances and progress stay on the same scale."""
+    """Drop vertices within `tolerance_deg` of the line through their neighbours. Kept vertices
+    keep their original along-path distances, so call distances and progress stay on the same
+    scale."""
 
     if len(points) <= 2:
         return points, distances
-    kept = shapely.simplify(LineString(points), SIMPLIFY_DEGREES, preserve_topology=False)
+    kept = shapely.simplify(LineString(points), tolerance_deg, preserve_topology=False)
     coordinates = [(float(x), float(y)) for x, y in kept.coords]
     chosen: list[int] = []
     cursor = 0
@@ -264,7 +264,7 @@ def simplify(
     return tuple(points[i] for i in chosen), tuple(distances[i] for i in chosen)
 
 
-def build_path(trip: Trip, index: IndexView) -> Path:
+def build_path(trip: Trip, index: IndexView, policy: ProgressPolicy) -> Path:
     located: list[tuple[float, float] | None] = []
     for call in trip.calls:
         location = index.location(call.placed_at)
@@ -273,13 +273,17 @@ def build_path(trip: Trip, index: IndexView) -> Path:
     shape = index.shape(trip.shape_id) if trip.shape_id is not None else None
     shaped = shape is not None and len(shape.points) >= 2
     if shape is not None and shaped:
-        points, distances = simplify(shape.points, shape.distances_m)
+        points, distances = simplify(shape.points, shape.distances_m, policy.shape_simplify_deg)
     else:
         points = tuple(point for point in located if point is not None)
         distances = cumulative_m(points)
     if len(points) < 2:
         return make_path(points, distances, tuple(0.0 for _ in trip.calls))
-    known = _place_stops(points, distances, located) if shaped else _straight(located, distances)
+    known = (
+        _place_stops(points, distances, located, policy.stop_off_shape_m)
+        if shaped
+        else _straight(located, distances)
+    )
     times = [call.time for call in trip.calls]
     return make_path(points, distances, _fill(known, times, distances[-1]), shaped=shaped)
 

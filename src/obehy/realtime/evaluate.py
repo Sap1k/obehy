@@ -12,16 +12,12 @@ from datetime import timedelta
 from typing import Any
 
 from obehy.realtime.index import IndexView
-from obehy.realtime.model import FeedState, Interval, JourneyKey
+from obehy.realtime.model import FeedState, JourneyKey
 from obehy.realtime.policy import PREDICTORS
 from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness
 from obehy.realtime.times import Instant, ServiceTime
 
 Call = tuple[JourneyKey, int]
-
-
-def _middle(interval: Interval) -> Instant:
-    return Instant(interval.lo + (interval.hi - interval.lo) / 2)
 
 
 @dataclass(slots=True)
@@ -39,7 +35,7 @@ class PredictorLog:
             trip = index.trip(instance.trip_id)
             for i, call in enumerate(instance.calls):
                 if call.arrival is not None:
-                    self.actual.setdefault((journey, i), _middle(call.arrival))
+                    self.actual.setdefault((journey, i), call.arrival.mid)
             own, _ = current_lateness(instance)
             for predictor in PREDICTORS:
                 if predictor == "propagate":

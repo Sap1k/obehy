@@ -65,7 +65,13 @@ def test_lateness_in_microseconds_matches_the_timetable() -> None:
         at = instant(base + timedelta(seconds=97 * step, microseconds=step))
         for share in (0.0, 0.13, 0.25, 0.5, 0.77, 1.0, 1.2):
             along = -10.0 + share * total
-            assert timetable_.lateness_us(micros(at), along) == timetable_.lateness_s(at, along)
+            window = timetable_.window(along)
+            expected = 0.0
+            if window is not None and window.earliest is not None and at < window.earliest:
+                expected = (at - window.earliest).total_seconds()
+            elif window is not None and window.latest is not None and at > window.latest:
+                expected = (at - window.latest).total_seconds()
+            assert timetable_.lateness_us(micros(at), along) == expected
 
 
 def test_fact_lookup_by_type() -> None:
@@ -87,11 +93,15 @@ def test_evolve_equals_replace() -> None:
         "running",
         (),
         Freshness(at, at),
-        delay_s=60,
+        reported_delay_s=60,
+        lateness_s=75,
         track_source="duk",
     )
     lead = Lead(VehicleId("duk", "1"), at)
-    assert instance.evolve(lead=lead, delay_s=None) == replace(instance, lead=lead, delay_s=None)
+    assert instance.evolve(lead=lead, reported_delay_s=None) == replace(
+        instance, lead=lead, reported_delay_s=None
+    )
+    assert instance.evolve(lateness_s=None) == replace(instance, lateness_s=None)
     assert instance.evolve() == instance
     track = SourceTrack("duk", at, delay_s=5)
     assert track.evolve(position_at=at, delay_s=None) == replace(

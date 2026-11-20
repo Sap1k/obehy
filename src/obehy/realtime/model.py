@@ -9,7 +9,7 @@ every value stored in them is immutable, so a state can be snapshotted by copyin
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum, StrEnum
@@ -130,6 +130,18 @@ class JourneyKey:
     namespace: str
     key: str
     service_date: date
+
+
+def visit_numbers(location_ids: Iterable[str]) -> list[int]:
+    """Each call's visit number within a sequence of calls: 1 at a location's first call, 2 at
+    its second... The scope is the caller's: a feed trip, a rail run, a public journey."""
+
+    seen: dict[str, int] = {}
+    out: list[int] = []
+    for location_id in location_ids:
+        seen[location_id] = seen.get(location_id, 0) + 1
+        out.append(seen[location_id])
+    return out
 
 
 class Reason(StrEnum):
@@ -414,7 +426,8 @@ class SourceTrack:
 
     source: str
     heard_at: Instant  # reception time of the last observation bringing anything new
-    fingerprint: int | None = None  # of the last observation's facts (SZ-Q6)
+    # The last observation's facts, where an unchanged entry is no news (SZ-Q6).
+    facts: tuple[Fact, ...] | None = None
     next_point: NextPoint | None = None
     delay_s: int | None = None
     delay_at: Instant | None = None
@@ -430,7 +443,7 @@ class SourceTrack:
         self,
         *,
         heard_at: Instant | Keep = KEEP,
-        fingerprint: int | None | Keep = KEEP,
+        facts: tuple[Fact, ...] | None | Keep = KEEP,
         next_point: NextPoint | None | Keep = KEEP,
         delay_s: int | None | Keep = KEEP,
         delay_at: Instant | None | Keep = KEEP,
@@ -445,7 +458,7 @@ class SourceTrack:
         return SourceTrack(
             self.source,
             self.heard_at if heard_at is KEEP else heard_at,
-            self.fingerprint if fingerprint is KEEP else fingerprint,
+            self.facts if facts is KEEP else facts,
             self.next_point if next_point is KEEP else next_point,
             self.delay_s if delay_s is KEEP else delay_s,
             self.delay_at if delay_at is KEEP else delay_at,
@@ -482,7 +495,12 @@ class Instance:
     freshness: Freshness
     progress: Progress | None = None
     track: Track | None = None
-    delay_s: int | None = None
+    # The last delay a source reported that is usable (`timeline.usable_delay`): an input of
+    # the timeline, never published as such.
+    reported_delay_s: int | None = None
+    # The journey's delay: the lateness its estimates start from at the vehicle's position
+    # (`core.estimate_all`). What the state tables publish; None before the first estimate.
+    lateness_s: int | None = None
     off_route_since: Instant | None = None
     off_route: bool = False
     lead: Lead | None = None
@@ -508,7 +526,8 @@ class Instance:
         freshness: Freshness | Keep = KEEP,
         progress: Progress | None | Keep = KEEP,
         track: Track | None | Keep = KEEP,
-        delay_s: int | None | Keep = KEEP,
+        reported_delay_s: int | None | Keep = KEEP,
+        lateness_s: int | None | Keep = KEEP,
         off_route_since: Instant | None | Keep = KEEP,
         off_route: bool | Keep = KEEP,
         lead: Lead | None | Keep = KEEP,
@@ -531,7 +550,8 @@ class Instance:
             self.freshness if freshness is KEEP else freshness,
             self.progress if progress is KEEP else progress,
             self.track if track is KEEP else track,
-            self.delay_s if delay_s is KEEP else delay_s,
+            self.reported_delay_s if reported_delay_s is KEEP else reported_delay_s,
+            self.lateness_s if lateness_s is KEEP else lateness_s,
             self.off_route_since if off_route_since is KEEP else off_route_since,
             self.off_route if off_route is KEEP else off_route,
             self.lead if lead is KEEP else lead,
@@ -550,6 +570,50 @@ class Instance:
                 return track
         return None
 
+    def settled_lifecycle(self, *, placed: bool = False) -> Lifecycle:
+        """The lifecycle once the calls' events have changed: finished when the last call has
+        been arrived at; a pre-trip journey running when a source has `placed` it at a call
+        (an observed departure). The other transitions, from source states and fixes, are
+        `core._lifecycle`'s."""
+
+        arrived = bool(self.calls) and self.calls[-1].passed_arrival is not None
+        if arrived and self.lifecycle in ("pre_trip", "running"):
+            return "finished"
+        if placed and self.lifecycle == "pre_trip":
+            return "running"
+        return self.lifecycle
+
+    def left_index(self) -> int:
+        """The last call the vehicle has left; -1 before it left the first. The one rule for
+        whether a call is passed: the tracker's progress, or a later call with a crossing or
+        event (a call departed from was left; one only arrived at, every call before it)."""
+
+        left = self.progress.call_index if self.progress is not None else -1
+        for i, call in enumerate(self.calls):
+            if call.passed_departure is not None:
+                left = max(left, i)
+            elif call.passed_arrival is not None:
+                left = max(left, i - 1)
+        return left
+
+    def reached_index(self) -> int:
+        """The last call the vehicle has reached (arrived at or left); -1 before the first."""
+
+        reached = self.progress.call_index if self.progress is not None else -1
+        for i, call in enumerate(self.calls):
+            if call.passed_arrival is not None or call.passed_departure is not None:
+                reached = max(reached, i)
+        return reached
+
+    def lead_for(self, source: str) -> Lead | None:
+        """The vehicle leading one source's contributions (DUK-Q11 within a source): the
+        instance's own lead is the first source's, the others' are on their tracks."""
+
+        if self.lead is not None and self.lead.vehicle.source == source:
+            return self.lead
+        track = self.source_track(source)
+        return None if track is None else track.lead
+
     def public_call(self, index: int, kind: EventKind) -> tuple[JourneyKey, int]:
         """The public journey and visit number of call `index` for an event of `kind`: at a
         call shared by two journeys the arrival is the earlier one's, the rest the later's."""
@@ -559,10 +623,8 @@ class Instance:
         if not spans:
             return self.journey, call.visit_n
         span = spans[0] if kind == "arrival" else spans[-1]
-        visit = sum(
-            1 for c in self.calls[span.first : index + 1] if c.location_id == call.location_id
-        )
-        return span.journey, visit
+        visits = visit_numbers(c.location_id for c in self.calls[span.first : index + 1])
+        return span.journey, visits[-1]
 
     @property
     def public(self) -> tuple[JourneyKey, ...]:
@@ -685,6 +747,7 @@ class AssignVehicle:
     vehicle: VehicleId
     journey: JourneyKey
     at: Instant
+    method: BindingMethod
 
 
 @dataclass(frozen=True, slots=True)
@@ -707,6 +770,8 @@ class ObservationResult:
     public: tuple[JourneyKey, ...] = ()
     # The vehicle's `VehicleState.since` after this observation; None without a vehicle.
     state_since: Instant | None = None
+    # How the observation was bound to `journey`: by its key, or inferred (keyless).
+    method: BindingMethod = "keyed"
 
 
 @dataclass(frozen=True, slots=True)

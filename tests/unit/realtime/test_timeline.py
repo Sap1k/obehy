@@ -172,7 +172,7 @@ def test_without_any_delay_the_measured_lateness_still_predicts() -> None:
 
 def test_duk_q6_garbage_negative_delay_is_discarded() -> None:
     run = Run().at("08:01", east(0), delay=120).at("08:02", east(100), delay=-3600)
-    assert run.instance.delay_s == 120
+    assert run.instance.reported_delay_s == 120
 
 
 def test_predictions_never_precede_the_last_fix() -> None:

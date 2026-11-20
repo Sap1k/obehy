@@ -14,12 +14,12 @@ non-passenger points without any time. It is synthetic (`run:<PA>:<parts>`) and 
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Protocol
 
-from obehy.realtime.model import Feed
+from obehy.realtime.model import Feed, visit_numbers
 
 KeyRef = tuple[str, str]  # (namespace, identifier)
 
@@ -320,6 +320,27 @@ class Index:
         return cached
 
 
+def calls_at_station(
+    trip: Trip,
+    index: IndexView,
+    codes: Iterable[str],
+    *,
+    start: int = 0,
+    passenger: bool = False,
+) -> Iterator[int]:
+    """The indexes of `trip`'s calls from `start` at a station whose SR70 code is one of
+    `codes`, in call order; only passenger calls with `passenger`. How a rail source's station
+    (a point, a prediction, a board row) is placed on a run."""
+
+    wanted = set(codes)
+    for i in range(max(start, 0), len(trip.calls)):
+        call = trip.calls[i]
+        if passenger and not call.passenger_service:
+            continue
+        if index.location_key(call.location_id, "sr70") in wanted:
+            yield i
+
+
 def _timed(call: Call) -> bool:
     return call.passenger_service or call.arrival is not None or call.departure is not None
 
@@ -356,15 +377,14 @@ def run_trip(run_id: str, run_key: str, parts: list[Trip]) -> Trip:
                 first = index
         if first is not None:
             spans.append(TripPart(part.trip_id, part.train_number, first, len(calls) - 1))
-    visits: dict[str, int] = {}
+    visits = visit_numbers(call.location_id for call in calls)
     numbered: list[Call] = []
-    for call in calls:
-        visits[call.location_id] = visits.get(call.location_id, 0) + 1
+    for call, visit in zip(calls, visits, strict=True):
         numbered.append(
             Call(
                 call.sequence,
                 call.location_id,
-                visits[call.location_id],
+                visit,
                 call.passenger_service,
                 call.arrival,
                 call.departure,

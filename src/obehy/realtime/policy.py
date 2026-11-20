@@ -1,14 +1,15 @@
-"""Versioned realtime policy (`data/realtime/policy-v17.toml`); a missing value is a load error."""
+"""Versioned realtime policy (`data/realtime/policy-v18.toml`); a missing value is a load error."""
 
 from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, fields
 from datetime import timedelta
+from functools import cache
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v17.toml"
+POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v18.toml"
 
 
 class PolicyError(ValueError):
@@ -27,6 +28,21 @@ class ByMode:
             if name == mode:
                 return value
         return self.default
+
+
+@dataclass(frozen=True, slots=True)
+class JourneyPolicy:
+    namespaces: tuple[str, ...]  # a trip's journey key: the first of these it has
+    shared: frozenset[str]  # keys naming one journey whichever source reports them
+
+    def key_of(self, keys: dict[str, str]) -> tuple[str, str] | None:
+        """(namespace, key) of the journey of a trip with these keys (namespace → key)."""
+
+        for namespace in self.namespaces:
+            key = keys.get(namespace)
+            if key is not None:
+                return namespace, key
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +99,10 @@ class ProgressPolicy:
     move_slack_m: float
     reckon_slack: float
     standing_m: float  # consecutive fixes closer than this: the vehicle stands
+    stop_ahead_calls: int  # a fix at a stop is matched among this many calls not yet left
+    stop_off_shape_m: float  # a stop farther than this from its shape is left unplaced
+    shape_simplify_deg: float  # shape vertices this close to their neighbours' line drop
+    merge_m: float  # hypotheses closer than this along the path are one
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +114,7 @@ class PredictionPolicy:
     runtime_decay_s: int  # a hop traversal's weight falls by e every this many seconds
     runtime_prior_weight: float  # the timetable's weight, as traversals just made
     runtime_ratio_max: float  # a traversal's ratio to the timetable is clipped to [1/max, max]
+    runtime_keep_decays: int  # traversals older than this many decay times are dropped
     publish_deadband_s: ByMode  # a published prediction moves only by at least this much
     floor_fresh_s: (
         ByMode  # with a fix this recent, a call not seen reached is not reached before now
@@ -190,6 +211,7 @@ class KeylessPolicy:
 @dataclass(frozen=True, slots=True)
 class Policy:
     version: str
+    journey: JourneyPolicy
     time: TimePolicy
     lifecycle: LifecyclePolicy
     progress: ProgressPolicy
@@ -312,10 +334,33 @@ def _lifecycle(table: _Table) -> LifecyclePolicy:
     return lifecycle
 
 
+def _names(table: _Table, key: str) -> tuple[str, ...]:
+    value = table.data.get(key)
+    if (
+        not isinstance(value, list)
+        or not value
+        or not all(isinstance(v, str) and v for v in cast(list[object], value))
+    ):
+        raise PolicyError(f"{table.path}{key} must be a non-empty list of names")
+    return tuple(cast(list[str], value))
+
+
+def _journey(table: _Table) -> JourneyPolicy:
+    unknown = sorted(set(table.data) - {"namespaces", "shared"})
+    if unknown:
+        raise PolicyError(f"unknown {table.path}{unknown[0]}")
+    namespaces = _names(table, "namespaces")
+    shared = frozenset(_names(table, "shared"))
+    if not shared <= set(namespaces):
+        raise PolicyError(f"{table.path}shared must be journey namespaces")
+    return JourneyPolicy(namespaces, shared)
+
+
 def parse_policy(document: dict[str, Any]) -> Policy:
     root = _Table(document, "")
     return Policy(
         version=root.text("policy_version"),
+        journey=_journey(root.table("journey")),
         time=root.section("time", TimePolicy),
         lifecycle=_lifecycle(root),
         progress=root.section("progress", ProgressPolicy),
@@ -336,6 +381,9 @@ def parse_policy(document: dict[str, Any]) -> Policy:
     )
 
 
+@cache
 def load_policy(path: Path = POLICY) -> Policy:
+    """The policy file, read once (a `Policy` is immutable)."""
+
     with path.open("rb") as stream:
         return parse_policy(tomllib.load(stream))

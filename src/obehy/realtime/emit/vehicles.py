@@ -28,9 +28,10 @@ from obehy.realtime.model import (
     JourneyKey,
     ObservationResult,
     VehicleAttribute,
+    VehicleId,
     VehicleKey,
 )
-from obehy.realtime.runs import TRAIN_PREFIX, current_train
+from obehy.realtime.runs import run_vehicle_id
 from obehy.realtime.times import Instant, local_date
 from obehy.reference.precedence import Profile, Statement, profile
 from obehy.reference.registry import REGISTRY_CHANNEL as REGISTRY_CHANNEL
@@ -124,7 +125,7 @@ class VehicleBook:
     def _resolve(self, report: Report, day: date) -> tuple[str, BoundBy | None]:
         train = self.trains.get(report)
         if train is not None:
-            return TRAIN_PREFIX + train, "train"
+            return train, "train"
         bound = self.registry.bound(report[0], report[1], self._stated(report), day)
         if bound is not None:
             return bound
@@ -163,10 +164,8 @@ class VehicleBook:
                 self.clock = max(self.clock or current.last_seen, current.last_seen)
                 instance = state.instances.get(current.binding.journey)
                 if instance is not None and instance.journeys:
-                    train = current_train(instance)
-                    if train is not None:
-                        trains[report] = train
-                    continue  # the train number, not co-location, makes a run's reports one
+                    trains[report] = run_vehicle_id(instance)
+                    continue  # the run, not co-location, makes a run's reports one
                 if current.position is not None and current.status == "running":
                     at = current.position_at or current.last_seen
                     position = current.position
@@ -185,6 +184,13 @@ class VehicleBook:
         moved = self.pairings.observe(fixes, now)
         for report in sorted({m for r in moved for m in self.pairings.cluster(r)}):
             self.identify(report, local_date(now))
+
+    def vehicle_id(self, vehicle: VehicleId) -> str:
+        """The vehicle a source's report is, as the state tables last wrote it (`identify`), so
+        GTFS-RT names vehicles as the API does; a report not identified yet by its source form."""
+
+        found = self.identity.get((vehicle.source, vehicle.source_vehicle_id))
+        return str(vehicle) if found is None else found[0]
 
     def identify(self, report: Report, day: date) -> tuple[str, BoundBy | None]:
         """Which vehicle a report is on `day`: the train of the rail run it is on, else by a

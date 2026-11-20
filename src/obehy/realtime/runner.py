@@ -29,7 +29,7 @@ from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.gtfs_rt import FeedEmitter, write_feed
 from obehy.realtime.index import KeyRef
 from obehy.realtime.index_sql import IndexLoader, ReleaseLoads
-from obehy.realtime.infer.keyed import Match, in_window, span
+from obehy.realtime.infer.keyed import admissible
 from obehy.realtime.manifest import semantics_by_channel
 from obehy.realtime.model import (
     Effect,
@@ -236,9 +236,7 @@ class Runner:
             ):
                 raise InvariantError(f"committed progress of {new.journey} went back")
         elif old.journey.namespace == new.journey.namespace and old.journey.key == new.journey.key:
-            trip = runtime.ctx.index.trip(old.trip_id)
-            match = Match(old.journey, trip, *span(trip, old.journey))
-            if in_window(match, observation.at, self.policy):
+            if admissible(old, observation.at, runtime.ctx.index, self.policy):
                 raise InvariantError(f"{old.journey} was re-dated while still admissible")
         return effects
 
@@ -262,12 +260,22 @@ class Runner:
                 self.sweep(now)
             self.next_sweep = instant(now + timedelta(seconds=self.policy.sweep_index_every_s))
         effects: list[Effect] = []
-        for feed, runtime in sorted(self.runtimes.items()):
+        for _, runtime in sorted(self.runtimes.items()):
             with self.phases.time("refresh"):
                 effects.extend(refresh(runtime.state, now, runtime.ctx))
             with self.phases.time("estimate"):
                 estimate_all(runtime.state, runtime.ctx, now)
-            if emit and self.gtfs_rt_dir is not None:
+        if self.writer is not None and effects:
+            with self.phases.time("write"):
+                self.writer.write(effects)
+        if emit and self.writer is not None:
+            # Before GTFS-RT: the state write settles who each report is (`VehicleBook`), and
+            # the feed names vehicles as the state tables do.
+            with self.phases.time("state"):
+                self.writer.write_state({feed: r.state for feed, r in self.runtimes.items()})
+        if emit and self.gtfs_rt_dir is not None:
+            identity = str if self.writer is None else self.writer.vehicles.vehicle_id
+            for feed, runtime in sorted(self.runtimes.items()):
                 with self.phases.time("gtfs_rt"):
                     emitter = self.emitters.setdefault(feed, FeedEmitter(self.policy.lifecycle))
                     alerts = (
@@ -277,14 +285,8 @@ class Runner:
                     )
                     write_feed(
                         self.gtfs_rt_dir / f"{feed}.pb",
-                        emitter.serialize(runtime.state, now, alerts),
+                        emitter.serialize(runtime.state, now, alerts, identity),
                     )
-        if self.writer is not None and effects:
-            with self.phases.time("write"):
-                self.writer.write(effects)
-        if emit and self.writer is not None:
-            with self.phases.time("state"):
-                self.writer.write_state({feed: r.state for feed, r in self.runtimes.items()})
         return effects
 
     def _compaction_after(self, now: Instant) -> Instant:

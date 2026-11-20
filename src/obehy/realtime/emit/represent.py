@@ -13,28 +13,51 @@ bound to no journey, or to one without an instance, stands for itself.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import timedelta
+from typing import Literal
 
 from obehy.realtime.model import (
     FeedState,
     Instance,
     JourneyKey,
-    Lead,
     Published,
     VehicleId,
     VehicleState,
 )
+from obehy.realtime.policy import LifecyclePolicy
+from obehy.realtime.times import Instant
+
+LIVE = ("pre_trip", "running")
+MADE = ("actual", "inferred")  # calls with an observed or inferred crossing
+
+Publication = Literal["live", "lost", "finished", "cancelled"]
+
+
+def publication(instance: Instance, now: Instant, policy: LifecyclePolicy) -> Publication | None:
+    """Whether and how a journey is published at `now`, in GTFS-RT and the state tables alike:
+    live (or lost: no news for long), cancelled, or finished for `publish_finished_s` after
+    its last observed call; None: not (yet, or any more)."""
+
+    if instance.lifecycle in LIVE:
+        return "lost" if instance.freshness.lost else "live"
+    if instance.lifecycle == "cancelled":
+        return "cancelled"
+    if instance.lifecycle != "finished":
+        return None
+    made = [
+        t
+        for c in instance.calls
+        if c.status in MADE
+        for t in (c.estimated_arrival, c.estimated_departure)
+        if t is not None
+    ]
+    end = max(made, default=instance.freshness.updated_at)
+    keep = timedelta(seconds=policy.publish_finished_s(instance.mode))
+    return "finished" if now - end <= keep else None
 
 
 def _shown_source(instance: Instance) -> str | None:
     return instance.shown_source or instance.track_source
-
-
-def _lead(instance: Instance, source: str) -> Lead | None:
-    lead = instance.lead
-    if lead is None or lead.vehicle.source != source:
-        track = instance.source_track(source)
-        lead = track.lead if track is not None else None
-    return lead
 
 
 def shown(instance: Instance | None, vehicle: VehicleId) -> Published | None:
@@ -46,7 +69,7 @@ def shown(instance: Instance | None, vehicle: VehicleId) -> Published | None:
         return None
     if vehicle.source != _shown_source(instance):
         return None
-    lead = _lead(instance, vehicle.source)
+    lead = instance.lead_for(vehicle.source)
     return instance.published if lead is None or lead.vehicle == vehicle else None
 
 
@@ -57,7 +80,7 @@ def run_position(instance: Instance, bound: list[VehicleState]) -> VehicleState 
     placed = [v for v in bound if v.position is not None]
     source = _shown_source(instance)
     if source is not None:
-        lead = _lead(instance, source)
+        lead = instance.lead_for(source)
         for candidate in placed:
             if lead is not None and candidate.vehicle == lead.vehicle:
                 return candidate

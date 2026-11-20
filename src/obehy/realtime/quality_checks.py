@@ -27,7 +27,7 @@ from typing import Any
 
 from obehy.realtime.core import Context
 from obehy.realtime.geo import distance_m
-from obehy.realtime.model import FeedState, Instance, Interval, JourneyKey
+from obehy.realtime.model import FeedState, Instance, JourneyKey
 from obehy.realtime.timeline.path import point_at
 from obehy.realtime.timeline.plan import Plan
 from obehy.realtime.times import Instant
@@ -45,10 +45,6 @@ NEAR_END_M = 500.0
 NEAR_START_M = 1000.0  # first seen this close to its first stop: it was seen starting
 
 CallKey = tuple[JourneyKey, int]
-
-
-def _middle(interval: Interval) -> Instant:
-    return Instant(interval.lo + (interval.hi - interval.lo) / 2)
 
 
 @dataclass(slots=True)
@@ -235,7 +231,7 @@ class Checks:
         departure = instance.calls[i].departure
         if not samples or departure is None:
             return  # left without a departure event (a reception gap): nothing to score
-        actual = _middle(departure)
+        actual = departure.mid
         for horizon, made, predicted in samples:
             if made < actual:
                 error = (predicted - actual).total_seconds()

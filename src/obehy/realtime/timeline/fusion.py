@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
-from obehy.realtime.index import IndexView, Trip
+from obehy.realtime.index import IndexView, Trip, calls_at_station
 from obehy.realtime.model import (
     CallState,
     Delay,
@@ -68,16 +68,6 @@ def tracks_with(sources: tuple[SourceTrack, ...], track: SourceTrack) -> tuple[S
     return (*sources, track)
 
 
-def lead_of(instance: Instance, source: str) -> Lead | None:
-    """The vehicle leading one source's contributions (DUK-Q11 within a source)."""
-
-    lead = instance.lead
-    if lead is not None and lead.vehicle.source == source:
-        return lead
-    track = instance.source_track(source)
-    return None if track is None else track.lead
-
-
 def with_lead(instance: Instance, vehicle: VehicleId, observation: Observation) -> Instance:
     lead = Lead(vehicle, observation.at)
     if instance.lead is None or instance.lead.vehicle.source == vehicle.source:
@@ -89,24 +79,28 @@ def with_lead(instance: Instance, vehicle: VehicleId, observation: Observation) 
 
 
 def note_source(
-    instance: Instance, observation: Observation, semantics: SourceSemantics
+    instance: Instance,
+    observation: Observation,
+    semantics: SourceSemantics,
+    delay_s: int | None,
 ) -> tuple[SourceTrack, SourceTrack | None, bool]:
     """What the source says: its new track, its previous one, and False for an unchanged
-    entry of a source where that is no news (SZ-Q6)."""
+    entry of a source where that is no news (SZ-Q6). `delay_s` is the observation's usable
+    delay (`timeline.usable_delay`)."""
 
     previous = instance.source_track(observation.source)
-    fingerprint = hash(observation.facts) if semantics.unchanged_entry_is_no_news else None
-    if fingerprint is not None and previous is not None and previous.fingerprint == fingerprint:
+    facts = observation.facts if semantics.unchanged_entry_is_no_news else None
+    if facts is not None and previous is not None and previous.facts == facts:
         return previous, previous, False
     track = previous or SourceTrack(observation.source, observation.received_at)
-    delay = observation.first(Delay)
+    delay = observation.first(Delay) if delay_s is not None else None
     track = track.evolve(
         heard_at=observation.received_at,
-        fingerprint=fingerprint,
+        facts=facts,
         next_point=observation.first(NextPoint) or track.next_point,
         prediction=observation.first(NextStopPrediction) or track.prediction,
-        delay_s=track.delay_s if delay is None else delay.seconds,
-        delay_at=track.delay_at if delay is None else observation.at,
+        delay_s=track.delay_s if delay_s is None else delay_s,
+        delay_at=track.delay_at if delay_s is None else observation.at,
         delay_reference=(
             POINT if delay is not None and delay.reference == POINT else track.delay_reference
         ),
@@ -144,20 +138,6 @@ def merge(
     return Interval(lo, hi) if lo <= hi else point
 
 
-def _middle(interval: Interval) -> Instant:
-    return Instant(interval.lo + (interval.hi - interval.lo) / 2)
-
-
-def _frontier(instance: Instance) -> int:
-    """The first call a new point may be: the last one with any realtime, or progress."""
-
-    reached = instance.progress.call_index if instance.progress is not None else 0
-    for i, call in enumerate(instance.calls):
-        if call.arrival or call.departure or call.passed_arrival or call.passed_departure:
-            reached = max(reached, i)
-    return max(reached, 0)
-
-
 def _start(instance: Instance, previous: SourceTrack | None) -> int:
     """Where a source's point may lie: from the call it placed the train at last (it repeats a
     point while other fields of its entry change), else one call behind the run's frontier (a
@@ -165,7 +145,7 @@ def _start(instance: Instance, previous: SourceTrack | None) -> int:
 
     if previous is not None and previous.point is not None:
         return previous.point
-    return max(0, _frontier(instance) - 1)
+    return max(0, instance.reached_index() - 1)
 
 
 def _resolve(
@@ -181,9 +161,7 @@ def _resolve(
     time; with codes found but none fitting, (None, True)."""
 
     found = False
-    for i in range(start, len(trip.calls)):
-        if index.location_key(trip.calls[i].location_id, "sr70") not in codes:
-            continue
+    for i in calls_at_station(trip, index, codes, start=start):
         found = True
         if _consistent(instance, i, actual, policy):
             return i, False
@@ -259,12 +237,12 @@ def apply_point(
     before = state.arrival if kind == "arrival" else state.departure
     if kind == "arrival":
         merged = merge(state.arrival, event.actual, new_is_point=True, policy=policy)
-        state = replace(state, arrival=merged, passed_arrival=_middle(merged))
+        state = replace(state, arrival=merged, passed_arrival=merged.mid)
     else:
         merged = merge(state.departure, event.actual, new_is_point=True, policy=policy)
-        state = replace(state, departure=merged, passed_departure=_middle(merged))
+        state = replace(state, departure=merged, passed_departure=merged.mid)
         if kind == "passage" and state.arrival is None:
-            state = replace(state, passed_arrival=_middle(merged))
+            state = replace(state, passed_arrival=merged.mid)
     calls[i] = state
     zone = plan.zones[i]
     along = zone.arrival_m if kind == "arrival" else zone.departure_m
@@ -273,18 +251,11 @@ def apply_point(
     progress = instance.progress
     if progress is None or along > progress.distance_m:
         progress = Progress(along, plan.call_index_at(along), event.actual.lo)
-    lifecycle = instance.lifecycle
-    if lifecycle == "pre_trip":
-        lifecycle = "running"
-    if kind == "arrival" and i == last:
-        lifecycle = "finished"
     track = instance.source_track(observation.source)
     instance = instance.evolve(
-        calls=tuple(calls),
-        progress=progress,
-        track=anchor(instance.track, along, policy),
-        lifecycle=lifecycle,
+        calls=tuple(calls), progress=progress, track=anchor(instance.track, along, policy)
     )
+    instance = instance.evolve(lifecycle=instance.settled_lifecycle(placed=True))
     if track is not None:
         instance = with_track(instance, track.evolve(point=i))
     if merged == before:
@@ -321,8 +292,8 @@ def current_lateness(instance: Instance) -> tuple[timedelta | None, SourceClass 
         return timedelta(seconds=round(track.lateness_s)), "gps"
     if point is not None and point.delay_s is not None:
         return timedelta(seconds=point.delay_s), "source"
-    if instance.delay_s is not None:
-        return timedelta(seconds=instance.delay_s), "source"
+    if instance.reported_delay_s is not None:
+        return timedelta(seconds=instance.reported_delay_s), "source"
     return None, None
 
 
@@ -346,12 +317,7 @@ def anchor_prediction(
         return None
     reached = instance.progress.call_index if instance.progress is not None else -1
     target = next(
-        (
-            i
-            for i in range(max(reached + 1, 0), len(trip.calls))
-            if trip.calls[i].passenger_service
-            and index.location_key(trip.calls[i].location_id, "sr70") == prediction.sr70
-        ),
+        calls_at_station(trip, index, (prediction.sr70,), start=reached + 1, passenger=True),
         None,
     )
     if target is None:

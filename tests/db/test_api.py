@@ -223,6 +223,8 @@ def _call(sequence: int, location: str, status: str, at: str | None) -> dict[str
         "location_id": location,
         "visit_n": 0,
         "status": status,
+        # As the core writes it: a call with a crossing or event has been left.
+        "passed": status in ("actual", "inferred"),
         "estimated_arrival": stamp,
         "estimated_departure": stamp,
         "source_class": "gps" if status not in ("scheduled", "cancelled") else None,

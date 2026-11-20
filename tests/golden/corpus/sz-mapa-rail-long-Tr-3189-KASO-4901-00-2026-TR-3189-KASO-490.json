@@ -1,6 +1,6 @@
 {
  "effects": [
-  ["AssignVehicle",{"at":"2026-10-12T06:08:24+00:00","journey":{"feed":"czptt","key":"1065","namespace":"czptt:train_number","service_date":"2026-10-12","type":"JourneyKey"},"vehicle":{"source":"sz-mapa","source_vehicle_id":"TR/3189/KASO----4901/00/2026/20261012","type":"VehicleId"}}],
+  ["AssignVehicle",{"at":"2026-10-12T06:08:24+00:00","journey":{"feed":"czptt","key":"1065","namespace":"czptt:train_number","service_date":"2026-10-12","type":"JourneyKey"},"method":"keyed","vehicle":{"source":"sz-mapa","source_vehicle_id":"TR/3189/KASO----4901/00/2026/20261012","type":"VehicleId"}}],
   ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54212",1,"departure","2026-10-12T06:05:00+00:00","2026-10-12T06:05:59+00:00","source","sz-mapa"],
   ["observed","2026-10-12T06:08:24.810737+00:00","sz-mapa",99,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
   ["observed","2026-10-12T06:08:55.557743+00:00","sz-mapa",99,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
@@ -477,6 +477,7 @@
     "delay_s": 90,
     "lifecycle": "running",
     "off_route": false,
+    "reported_delay_s": 90,
     "sources": {
      "sz-mapa": 90
     }

@@ -33,12 +33,14 @@ from obehy.api.lookup_rules import can_ask
 from obehy.api.params import date_span
 from obehy.api.physical import is_physical
 from obehy.api.segments import percentile, run, summary
+from obehy.realtime.policy import load_policy
 from obehy.realtime.times import local_date
 
 router = APIRouter(tags=["trips"])
 
 # The journey key a trip is shown with, by preference: the national CIS key, PID's, the train.
-JOURNEY_NAMESPACES = ["cis:line_trip", "pid:gtfs_trip_id", "czptt:train_number"]
+# A trip's journey key: the first of these it has (realtime policy `[journey]`).
+JOURNEY_NAMESPACES = list(load_policy().journey.namespaces)
 
 
 def trip_path(trip_id: str, service_date: date) -> str:

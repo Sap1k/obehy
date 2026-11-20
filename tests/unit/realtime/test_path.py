@@ -6,6 +6,7 @@ from datetime import date
 
 from obehy.realtime.geo import cumulative_m
 from obehy.realtime.index import Shape
+from obehy.realtime.policy import load_policy
 from obehy.realtime.timeline.path import build_path
 from tests.realtime.builder import timetable
 
@@ -41,6 +42,6 @@ def test_a_zavlek_stop_nearer_the_return_lane_keeps_its_outbound_visit() -> None
     )
     index.shapes[trip.shape_id] = Shape(trip.shape_id, points, cumulative_m(points))
 
-    placed = build_path(trip, index).call_distances_m
+    placed = build_path(trip, index, load_policy().progress).call_distances_m
     expected = [0, 1200, 2000, 3002.5, 4005, 4805, 7000]
     assert [round(d) for d in placed] == [round(e) for e in expected]

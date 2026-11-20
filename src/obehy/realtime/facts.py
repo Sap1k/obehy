@@ -25,6 +25,12 @@ class Interval:
     lo: Instant
     hi: Instant
 
+    @property
+    def mid(self) -> Instant:
+        """The middle of the interval: the one instant that stands for it."""
+
+        return Instant(self.lo + (self.hi - self.lo) / 2)
+
 
 # --- observations -----------------------------------------------------------------------------
 

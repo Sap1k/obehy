@@ -20,7 +20,7 @@ from obehy.api import schema
 from obehy.api.codes import load_codes
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, realtime_cache
 from obehy.api.db import request_lookup
-from obehy.realtime.compositions import JOURNEY_NAMESPACES
+from obehy.realtime.policy import load_policy
 from obehy.reference.vocabulary import load_vocabulary
 
 CompositionStatus = Literal["fresh", "stale", "pending", "not_available"]
@@ -86,7 +86,7 @@ def composition(
             "trip_id": trip_id,
             "service_date": service_date,
             "from": from_location,
-            "namespaces": list(JOURNEY_NAMESPACES),
+            "namespaces": list(load_policy().journey.namespaces),
         },
     )
     if trip is None:

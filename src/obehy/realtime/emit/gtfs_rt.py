@@ -29,34 +29,37 @@ source's fixes (`represent.shown`), else at its own fix.
 
 from __future__ import annotations
 
-import hashlib
-from collections.abc import Sequence
-from datetime import timedelta
-from functools import lru_cache
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Literal
 
 from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.pipeline.files import atomic_output_path
-from obehy.realtime.emit.represent import one_source, run_position, shown, vehicles_by_journey
+from obehy.realtime.emit.represent import (
+    LIVE,
+    MADE,
+    Publication,
+    one_source,
+    publication,
+    run_position,
+    shown,
+    vehicles_by_journey,
+)
 from obehy.realtime.model import (
     CallState,
     FeedState,
     Instance,
     JourneyKey,
     PartSpan,
+    VehicleId,
     VehicleState,
 )
 from obehy.realtime.policy import LifecyclePolicy
-from obehy.realtime.runs import TRAIN_PREFIX, current_part, current_train, published_parts
+from obehy.realtime.runs import current_part, current_train, published_parts, run_vehicle_id
 from obehy.realtime.times import Instant
 
-LIVE = ("pre_trip", "running")
 TIMED = ("actual", "inferred", "predicted")
-MADE = ("actual", "inferred")  # calls with an observed or inferred crossing
-
-Publication = Literal["live", "lost", "finished", "cancelled"]
+Identity = Callable[[VehicleId], str]
 
 
 def _epoch(value: Instant) -> int:
@@ -82,41 +85,6 @@ def _entity_id(instance: Instance, part: PartSpan) -> str:
 
 def _mapped(call: CallState) -> str | None:
     return call.platform.boarding_point_id if call.platform is not None else None
-
-
-def run_vehicle_id(instance: Instance) -> str:
-    """A rail run's public vehicle ID, whichever unit or source reports it: the train its
-    current number names (emit/vehicles.py), else an opaque ID of the run's day."""
-
-    number = current_train(instance)
-    return TRAIN_PREFIX + number if number is not None else _opaque(instance.journey)
-
-
-@lru_cache(maxsize=8192)  # bounded: the worker runs for weeks
-def _opaque(journey: JourneyKey) -> str:
-    identity = f"{journey.feed}|{journey.namespace}|{journey.key}|{journey.service_date}"
-    return "train-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
-
-
-def publication(instance: Instance, now: Instant, policy: LifecyclePolicy) -> Publication | None:
-    """How a journey's TripUpdate is published at `now`, if at all."""
-
-    if instance.lifecycle in LIVE:
-        return "lost" if instance.freshness.lost else "live"
-    if instance.lifecycle == "cancelled":
-        return "cancelled"
-    if instance.lifecycle != "finished":
-        return None
-    made = [
-        t
-        for c in instance.calls
-        if c.status in MADE
-        for t in (c.estimated_arrival, c.estimated_departure)
-        if t is not None
-    ]
-    end = max(made, default=instance.freshness.updated_at)
-    keep = timedelta(seconds=policy.publish_finished_s(instance.mode))
-    return "finished" if now - end <= keep else None
 
 
 def _vehicle_position(instance: Instance, current: VehicleState, vehicle_id: str) -> bytes:
@@ -231,9 +199,16 @@ class FeedEmitter:
         self.trips: dict[JourneyKey, tuple[Instance, str | None, tuple[bytes, ...]]] = {}
         self.positions: dict[str, tuple[Instance, VehicleState, bytes]] = {}
 
-    def serialize(self, state: FeedState, now: Instant, alerts: Sequence[bytes] = ()) -> bytes:
+    def serialize(
+        self,
+        state: FeedState,
+        now: Instant,
+        alerts: Sequence[bytes] = (),
+        identity: Identity = str,
+    ) -> bytes:
         """The feed's message: its trip updates, its vehicle positions, then `alerts` (the
-        feed's serialized `Alert` entities, `emit/alerts.py`)."""
+        feed's serialized `Alert` entities, `emit/alerts.py`). `identity` names a road vehicle
+        as the API does (`VehicleBook.vehicle_id`); without a registry, by its source form."""
 
         header = rt.FeedHeader()
         header.gtfs_realtime_version = "2.0"
@@ -257,7 +232,7 @@ class FeedEmitter:
             if published == "live" and instance.parts:
                 vehicle_id = run_vehicle_id(instance)
             elif published == "live" and vehicles_of.get(journey):
-                vehicle_id = str(vehicles_of[journey][0])
+                vehicle_id = identity(vehicles_of[journey][0])
             cached = self.trips.get(journey)
             if cached is None or cached[0] is not instance or cached[1] != vehicle_id:
                 updates = _trip_updates(instance, vehicle_id, published)
@@ -277,7 +252,9 @@ class FeedEmitter:
                 if lead is not None:
                     chosen.append((run_vehicle_id(instance), instance, lead))
                 continue
-            chosen.extend((str(v.vehicle), instance, v) for v in bound if v.position is not None)
+            chosen.extend(
+                (identity(v.vehicle), instance, v) for v in bound if v.position is not None
+            )
         positions: dict[str, tuple[Instance, VehicleState, bytes]] = {}
         for vehicle_id, instance, current in sorted(chosen, key=lambda p: p[0]):
             hit = self.positions.get(vehicle_id)

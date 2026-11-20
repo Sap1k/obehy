@@ -12,7 +12,7 @@ from tests.realtime.builder import timetable, with_unknown
 
 def test_policy_loads_and_resolves_modes() -> None:
     policy = load_policy()
-    assert policy.version == "17"
+    assert policy.version == "18"
     assert policy.warm_replay_mode == "vehicles"
     assert policy.time.max_delay_s("rail") == 14400
     assert policy.time.max_delay_s("bus") == 7200
@@ -109,3 +109,13 @@ def test_facts_round_trip_through_json() -> None:
     assert facts_from_json(stored) == facts
     # Version 2 only added fact types: warm replay still reads facts stored as version 1.
     assert facts_from_json({**stored, "v": 1, "facts": stored["facts"][:2]}) == facts[:2]
+
+
+def test_a_trips_journey_key_is_the_first_journey_namespace_it_has() -> None:
+    journey = load_policy().journey
+    rail = {"czptt:tr": "Tr:1154:--KADR000607:00:2026", "czptt:train_number": "607"}
+    assert journey.key_of(rail) == ("czptt:train_number", "607")
+    pid = {"pid:gtfs_trip_id": "22_101_260901", "cis:line_trip": "100022:101"}
+    assert journey.key_of(pid) == ("cis:line_trip", "100022:101")
+    assert journey.key_of({"czptt:tr": "Tr:1"}) is None
+    assert journey.shared == {"cis:line_trip"}

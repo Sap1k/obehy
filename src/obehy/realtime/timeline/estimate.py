@@ -46,12 +46,8 @@ from datetime import timedelta
 from obehy.realtime.index import Trip
 from obehy.realtime.model import CallState, CallStatus, Instance, Interval, SourceClass
 from obehy.realtime.policy import PredictionPolicy
-from obehy.realtime.timeline.plan import Plan, Scheduled
+from obehy.realtime.timeline.plan import Plan, Scheduled, no_timetabled_dwell
 from obehy.realtime.times import Instant
-
-
-def _middle(interval: Interval) -> Instant:
-    return Instant(interval.lo + (interval.hi - interval.lo) / 2)
 
 
 def _call(
@@ -114,11 +110,6 @@ def last_fix_at_stop(instance: Instance, plan: Plan) -> tuple[int, Instant] | No
     return call, fix.at
 
 
-def _zero_dwell(scheduled: tuple[Instant | None, Instant | None]) -> bool:
-    arrival, departure = scheduled
-    return arrival is not None and arrival == departure
-
-
 def _standing(lateness: timedelta, arrived: timedelta, credit: timedelta) -> timedelta:
     """The lateness carried on from a vehicle standing at a call without a timetabled dwell:
     standing up to `credit` beyond its arrival (or beyond the timetable, arriving early) is the
@@ -142,7 +133,7 @@ def dwell_credit(
         return current
     i = progress.call_index
     state = instance.calls[i]
-    if not state.passenger or not _zero_dwell(plan.scheduled[i]):
+    if not state.passenger or not no_timetabled_dwell(plan.scheduled[i]):
         return current
     scheduled = plan.scheduled[i][1]
     left = _passed(state.passed_departure, state.departure)
@@ -177,22 +168,12 @@ def dwell_credit(
     return lateness - credited * (1.0 - share), source_class
 
 
-def own_lateness(instance: Instance) -> Lateness:
-    track = instance.track
-    lateness = track.lateness_s if track is not None else None
-    if lateness is not None:
-        return timedelta(seconds=round(lateness)), "gps"
-    if instance.delay_s is not None:
-        return timedelta(seconds=instance.delay_s), "source"
-    return None, None
-
-
 def estimate(
     instance: Instance,
     scheduled: Scheduled,
     policy: PredictionPolicy,
     *,
-    current: Lateness | None = None,
+    current: Lateness,
     anchor: tuple[int, timedelta] | None = None,
     extra: tuple[timedelta, ...] | None = None,
     now: Instant | None = None,
@@ -223,15 +204,10 @@ def estimate(
 
     lateness: timedelta | None
     delay_class: SourceClass | None
-    lateness, delay_class = current if current is not None else own_lateness(instance)
+    lateness, delay_class = current
     if instance.lifecycle == "pre_trip" and lateness is not None and lateness < timedelta(0):
         lateness = timedelta(0)  # not departed: an early departure is observed, never assumed
-    reached = instance.progress.call_index if instance.progress is not None else -1
-    # A call with a crossing means every earlier call was passed, observed or not.
-    for i, state in enumerate(instance.calls):
-        passed = state.passed_arrival is not None or state.passed_departure is not None
-        if passed and i > reached:
-            reached = i - 1 if state.passed_departure is None else i
+    reached = instance.left_index()
     latest_event = max(
         (
             i
@@ -277,7 +253,7 @@ def estimate(
                     and delay_class == "gps"
                     and est_arr is not None
                     and sched_arr is not None
-                    and _zero_dwell((sched_arr, sched_dep))
+                    and no_timetabled_dwell((sched_arr, sched_dep))
                 ):
                     credit = timedelta(seconds=policy.dwell_credit_s(instance.mode))
                     lateness = _standing(lateness, est_arr - sched_arr, credit)
@@ -353,7 +329,7 @@ def estimate(
                 and state.passenger
                 and est_arr is not None
                 and est_dep is not None
-                and _zero_dwell((sched_arr, sched_dep))
+                and no_timetabled_dwell((sched_arr, sched_dep))
                 and i < last
             ):
                 est_dep = max(est_dep, Instant(est_arr + credit))
@@ -425,7 +401,7 @@ def _leaves_by_fixes(
     )
     if leaves is None:
         return None
-    if passenger and arrival is not None and _zero_dwell((sched_arr, sched_dep)):
+    if passenger and arrival is not None and no_timetabled_dwell((sched_arr, sched_dep)):
         leaves = max(leaves, Instant(arrival + timedelta(seconds=policy.dwell_credit_s(mode))))
     return leaves if seen is None else max(leaves, seen)
 
@@ -530,7 +506,7 @@ def _within(
 def _passed(when: Instant | None, recorded: Interval | None) -> Instant | None:
     if when is not None:
         return when
-    return None if recorded is None else _middle(recorded)
+    return None if recorded is None else recorded.mid
 
 
 def _shifted(scheduled: Instant | None, delay: timedelta, floor: Instant | None) -> Instant | None:

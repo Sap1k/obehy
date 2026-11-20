@@ -1,6 +1,6 @@
 {
  "effects": [
-  ["AssignVehicle",{"at":"2026-10-15T06:08:58+00:00","journey":{"feed":"jdf","key":"1805_59_260321","namespace":"pid:gtfs_trip_id","service_date":"2026-10-15","type":"JourneyKey"},"vehicle":{"source":"pid","source_vehicle_id":"4:304","type":"VehicleId"}}],
+  ["AssignVehicle",{"at":"2026-10-15T06:08:58+00:00","journey":{"feed":"jdf","key":"1805_59_260321","namespace":"pid:gtfs_trip_id","service_date":"2026-10-15","type":"JourneyKey"},"method":"keyed","vehicle":{"source":"pid","source_vehicle_id":"4:304","type":"VehicleId"}}],
   ["observed","2026-10-15T06:10:23.976293+00:00","pid",1128,"jdf/pid:gtfs_trip_id/1805_59_260321/2026-10-15",null,["jdf/pid:gtfs_trip_id/1805_59_260321/2026-10-15"],"2026-10-15T06:10:23.976293+00:00"],
   ["observed","2026-10-15T06:38:34.906234+00:00","pid",1739,"jdf/pid:gtfs_trip_id/1805_59_260321/2026-10-15",null,["jdf/pid:gtfs_trip_id/1805_59_260321/2026-10-15"],"2026-10-15T06:10:23.976293+00:00"],
   ["observed","2026-10-15T06:38:55.068501+00:00","pid",1009,"jdf/pid:gtfs_trip_id/1805_59_260321/2026-10-15",null,["jdf/pid:gtfs_trip_id/1805_59_260321/2026-10-15"],"2026-10-15T06:10:23.976293+00:00"],
@@ -53,6 +53,7 @@
     "delay_s": 101,
     "lifecycle": "finished",
     "off_route": false,
+    "reported_delay_s": 101,
     "sources": {
      "pid": 101
     }

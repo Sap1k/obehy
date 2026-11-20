@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from obehy.realtime.emit.pairing import Fix, Pairings
 from obehy.realtime.emit.vehicles import VehicleBook
-from obehy.realtime.model import JourneyKey
+from obehy.realtime.model import JourneyKey, VehicleId
 from obehy.reference.registry import Registry
 from obehy.reference.vocabulary import load_vocabulary
 from tests.realtime.observations import local
@@ -100,3 +100,6 @@ def test_a_co_located_vehicle_keeps_its_id_as_reports_join_and_leave() -> None:
             for m in pairings.cluster(r):
                 book.identify(m, day)
     assert {book.identify(r, day) for r in (DUK, MPV, DPMD)} == {("dpmd:301", "co_located")}
+    # GTFS-RT names the vehicle as the state tables do.
+    assert book.vehicle_id(VehicleId(*DUK)) == "dpmd:301"
+    assert book.vehicle_id(VehicleId("duk", "999")) == "duk:999"

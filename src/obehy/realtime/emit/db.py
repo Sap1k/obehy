@@ -276,7 +276,7 @@ class Writer:
                         self.terms[e.location_id],
                         e.visit_n,
                         e.kind,
-                        e.interval.lo + (e.interval.hi - e.interval.lo) / 2,
+                        e.interval.mid,
                         e.interval.lo,
                         e.interval.hi,
                         self.terms[e.method],
@@ -291,32 +291,31 @@ class Writer:
     def _assignments(
         self, results: Sequence[ObservationResult], assigned: Sequence[AssignVehicle]
     ) -> None:
-        seen: dict[tuple[str, str, JourneyKey], tuple[datetime, datetime]] = {}
+        seen: dict[tuple[str, str, JourneyKey], tuple[datetime, datetime, str]] = {}
+
+        def note(key: tuple[str, str, JourneyKey], at: datetime, method: str) -> None:
+            lo, hi, first = seen.get(key, (at, at, method))
+            seen[key] = (min(lo, at), max(hi, at), first)
+
         for result in results:
             vehicle = result.observation.first(VehicleKey)
             if result.journey is None or vehicle is None:
                 continue
-            at = result.observation.at
             # History is keyed by public journeys (rail: train numbers), not by the run.
             for journey in result.public or (result.journey,):
                 key = (result.observation.source, vehicle.source_vehicle_id, journey)
-                lo, hi = seen.get(key, (at, at))
-                seen[key] = (min(lo, at), max(hi, at))
+                note(key, result.observation.at, result.method)
         for assignment in assigned:
-            key = (
-                assignment.vehicle.source,
-                assignment.vehicle.source_vehicle_id,
-                assignment.journey,
-            )
-            lo, hi = seen.get(key, (assignment.at, assignment.at))
-            seen[key] = (min(lo, assignment.at), max(hi, assignment.at))
+            vehicle_id = assignment.vehicle
+            key = (vehicle_id.source, vehicle_id.source_vehicle_id, assignment.journey)
+            note(key, assignment.at, assignment.method)
         if not seen:
             return
         with self.connection.cursor() as cursor:
             cursor.executemany(
                 "INSERT INTO history.vehicle_assignment (feed, source, source_vehicle_id,"
                 " key_namespace, key, service_date, first_seen, last_seen, method,"
-                " derivation_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'keyed', %s)"
+                " derivation_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (feed, source, source_vehicle_id, key_namespace, key,"
                 " service_date) DO UPDATE SET"
                 " first_seen = least(history.vehicle_assignment.first_seen, excluded.first_seen),"
@@ -331,9 +330,10 @@ class Writer:
                         journey.service_date,
                         lo,
                         hi,
+                        method,
                         self.derivation_id,
                     )
-                    for (source, vehicle, journey), (lo, hi) in sorted(
+                    for (source, vehicle, journey), (lo, hi, method) in sorted(
                         seen.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])
                     )
                 ],
@@ -453,7 +453,10 @@ class Writer:
                     for journey, instance in state.instances.items():
                         calls = None if before is None else before.calls.get(journey)
                         if calls is None or calls[0] is not instance.calls:
-                            encoded = json.dumps([_call_json(c) for c in instance.calls])
+                            left = instance.left_index()
+                            encoded = json.dumps(
+                                [_call_json(c, i <= left) for i, c in enumerate(instance.calls)]
+                            )
                             calls = (instance.calls, encoded)
                         now.calls[journey] = calls
                         now.trips[_key(journey)] = _trip_row(instance, calls[1])
@@ -685,7 +688,7 @@ def _trip_row(i: Instance, calls: str) -> tuple[Any, ...]:
         i.release_id,
         i.trip_id,
         i.lifecycle,
-        i.delay_s,
+        i.lateness_s,
         i.off_route,
         i.freshness.stale,
         i.freshness.updated_at,
@@ -713,12 +716,15 @@ def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
 
 
-def _call_json(call: CallState) -> dict[str, Any]:
+def _call_json(call: CallState, passed: bool) -> dict[str, Any]:
+    """A call's current state; `passed`: the vehicle has left it (`Instance.left_index`)."""
+
     return {
         "sequence": call.sequence,
         "location_id": call.location_id,
         "visit_n": call.visit_n,
         "status": call.status,
+        "passed": passed,
         "estimated_arrival": _iso(call.estimated_arrival),
         "estimated_departure": _iso(call.estimated_departure),
         "source_class": call.source_class,

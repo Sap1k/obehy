@@ -14,7 +14,8 @@ import psycopg
 from psycopg.rows import DictRow
 from psycopg.types.json import Jsonb
 
-from obehy.realtime.compositions import JOURNEY_NAMESPACES, TripView, Unit, ViewCall
+from obehy.realtime.compositions import TripView, Unit, ViewCall
+from obehy.realtime.policy import load_policy
 from obehy.realtime.times import Instant
 
 
@@ -42,11 +43,12 @@ def _unit_row(unit: Unit) -> dict[str, Any]:
 
 
 def journey_of(view: TripView) -> tuple[str, str, str, date]:
-    for namespace in JOURNEY_NAMESPACES:
-        key = view.keys.get(namespace)
-        if key is not None:
-            return view.feed, namespace, key, view.service_date
-    return view.feed, "trip_id", view.trip_id, view.service_date
+    """The journey a composition is kept under: the trip's journey key (policy `[journey]`),
+    else its trip ID."""
+
+    found = load_policy().journey.key_of(dict(view.keys))
+    namespace, key = found if found is not None else ("trip_id", view.trip_id)
+    return view.feed, namespace, key, view.service_date
 
 
 _INSERT_UNIT: LiteralString = (

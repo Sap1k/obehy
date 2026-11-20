@@ -7,7 +7,7 @@ from collections import deque
 
 from obehy.realtime.model import HopKey, Traversal
 from obehy.realtime.policy import load_policy
-from obehy.realtime.timeline.runtimes import KEEP_DECAYS, forget, ratio
+from obehy.realtime.timeline.runtimes import forget, ratio
 from tests.realtime.observations import local
 
 POLICY = load_policy().prediction
@@ -47,4 +47,4 @@ def test_a_wild_traversal_is_clipped_and_a_future_one_ignored() -> None:
 def test_hops_not_driven_for_a_while_are_forgotten() -> None:
     hops = _hops(("06:00", 60.0, 60.0))
     forget(hops, NOW, POLICY)
-    assert hops == {} and KEEP_DECAYS * POLICY.runtime_decay_s < 7200
+    assert hops == {} and POLICY.runtime_keep_decays * POLICY.runtime_decay_s < 7200

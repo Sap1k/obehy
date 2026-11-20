@@ -122,7 +122,7 @@ def commit(
                 continue
             inferred = _before_first(first, trigger, plan, policy) if origin else None
             if inferred is not None:
-                when = Instant(inferred.lo + (inferred.hi - inferred.lo) / 2)
+                when = inferred.mid
                 if crossed_at is not None and when < crossed_at:
                     when = crossed_at
                 crossed_at = when
