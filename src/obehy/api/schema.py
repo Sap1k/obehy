@@ -10,14 +10,17 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, computed_field
 
+from obehy.api import labels
 from obehy.api.punctuality import Punctuality
 from obehy.realtime.times import PRAGUE
 
 CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
 # Every time is answered in Prague time, whether read as a timestamp or from a stored instant.
 Time = Annotated[datetime, AfterValidator(lambda value: value.astimezone(PRAGUE))]
+Colour = Annotated[str, AfterValidator(lambda value: labels.colour(value) or value)]
+Plate = Annotated[str, AfterValidator(lambda value: labels.plate(value) or value)]
 # A journey's realtime lifecycle (the core's, `realtime/model.py`).
 Lifecycle = Literal["forecast", "pre_trip", "running", "finished", "cancelled"]
 SourceClass = Literal["gps", "source"]
@@ -242,8 +245,8 @@ class Line(BaseModel):
     short_name: str | None
     long_name: str | None
     mode: str
-    color: str | None
-    text_color: str | None
+    color: Colour | None = Field(description="`#RRGGBB`")
+    text_color: Colour | None = Field(description="`#RRGGBB`")
 
 
 class StopPlace(Envelope):
@@ -265,7 +268,7 @@ class VehicleTraits(BaseModel):
     manufacturer: str | None = None
     model: str | None = Field(default=None, description="Without the manufacturer")
     operator: str | None = None
-    licence_plate: str | None = None
+    licence_plate: Plate | None = None
     fleet_number: str | None = None
 
 
@@ -351,6 +354,9 @@ class Departures(Envelope):
     departures: list[Departure]
     next: str | None = Field(description="Cursor for the following rows (`cursor=`)")
     alerts: list[Alert] = Field(description="Current alerts of the stops and the rows' lines")
+    stop_alerts: list[str] = Field(
+        description="Of `alerts`, those informing the board's stop places: shown above the rows"
+    )
 
 
 class Arrivals(Envelope):
@@ -361,6 +367,7 @@ class Arrivals(Envelope):
     arrivals: list[Departure]
     next: str | None
     alerts: list[Alert]
+    stop_alerts: list[str]
 
 
 class JourneyKey(BaseModel):
@@ -395,6 +402,10 @@ class TripCall(BaseModel):
     passed: bool = Field(
         description="The vehicle has left it: as realtime says, else once its expected time is "
         "behind (`[trips] passed_after_s`); a cancelled call never is"
+    )
+    label: str = Field(
+        default="",
+        description="Its name as the trip's map labels it: the trip's home town left out",
     )
 
 
@@ -968,6 +979,11 @@ class HistoryVehicle(BaseModel):
         "that day can be followed (`/circulations?source_vehicle_id=`)"
     )
 
+    @computed_field(description="Its fleet number, else the registry's label, else the source's ID")
+    @property
+    def display_name(self) -> str:
+        return labels.vehicle_name(self.fleet_number, self.public_label, self.source_vehicle_id)
+
 
 class HistoryDelay(BaseModel):
     delay_s: int | None
@@ -1081,6 +1097,11 @@ class VehicleChain(BaseModel):
     first_seen: Time
     last_seen: Time
     journeys: list[ChainJourney]
+
+    @computed_field(description="Its fleet number, else the registry's label, else the source's ID")
+    @property
+    def display_name(self) -> str:
+        return labels.vehicle_name(self.fleet_number, self.public_label, self.source_vehicle_id)
 
 
 class VehicleDay(BaseModel):

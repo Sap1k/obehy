@@ -8,9 +8,10 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Response
+from psycopg.rows import DictRow
 
 from obehy.api import punctuality, schema
-from obehy.api.alerts import alert_ids, find_alerts
+from obehy.api.alerts import alert_ids, find_alerts, stop_alert_ids
 from obehy.api.codes import step_free, tristate, wheelchair_of
 from obehy.api.common import (
     LimitsDep,
@@ -72,32 +73,43 @@ def _board(
         begin = instant(start if start is not None else snap.now)
     except TimeError:
         raise ParameterError("from needs a UTC offset") from None
-    window = min(minutes or limits.departures_minutes, limits.departures_minutes_max)
-    until = instant(begin + timedelta(minutes=window))
     since = instant(begin - timedelta(minutes=limits.lookback_min))
     rows_wanted = min(limit or limits.departures_limit, limits.departures_limit_max)
     after = None if cursor is None else decode_cursor(cursor)
-    spans = schedule_spans(since, until)
-    params: dict[str, Any] = {
-        "locations": [s.location_id for s in stops],
-        "arrivals": arrivals,
-        "dates": spans.dates,
-        "lo": spans.lo,
-        "hi": spans.hi,
-        "since": since,
-        "start": begin,
-        "until": until,
-        "release_id": snap.release_id,
-        "seen_since": seen_since(snap, limits),
-        "after_expected": None if after is None else after.expected,
-        "after_scheduled": None if after is None else after.scheduled,
-        "after_trip": None if after is None else after.trip_id,
-        "after_date": None if after is None else after.service_date,
-        "after_location": None if after is None else after.location_id,
-        "after_sequence": None if after is None else after.sequence,
-        "limit": rows_wanted,
-    }
-    rows = snap.all("board", params)
+    # Asked for a window, that one; else the short one, and the long one when the short one
+    # does not fill the page (a quiet stop's next departures are hours away).
+    windows = (
+        [min(minutes, limits.departures_minutes_max)]
+        if minutes
+        else [limits.departures_minutes, limits.departures_minutes_max]
+    )
+    rows: list[DictRow] = []
+    until = begin
+    for window in windows:
+        until = instant(begin + timedelta(minutes=window))
+        spans = schedule_spans(since, until)
+        params: dict[str, Any] = {
+            "locations": [s.location_id for s in stops],
+            "arrivals": arrivals,
+            "dates": spans.dates,
+            "lo": spans.lo,
+            "hi": spans.hi,
+            "since": since,
+            "start": begin,
+            "until": until,
+            "release_id": snap.release_id,
+            "seen_since": seen_since(snap, limits),
+            "after_expected": None if after is None else after.expected,
+            "after_scheduled": None if after is None else after.scheduled,
+            "after_trip": None if after is None else after.trip_id,
+            "after_date": None if after is None else after.service_date,
+            "after_location": None if after is None else after.location_id,
+            "after_sequence": None if after is None else after.sequence,
+            "limit": rows_wanted,
+        }
+        rows = snap.all("board", params)
+        if len(rows) >= rows_wanted:
+            break
     # Each trip's vehicle as its trip page shows it: the first of `trip_vehicles.sql`.
     vehicles: dict[tuple[str, date], schema.TripVehicle] = {}
     for v in snap.all(
@@ -106,7 +118,7 @@ def _board(
             "trip_ids": [r["trip_id"] for r in rows],
             "service_dates": [r["service_date"] for r in rows],
             "release_id": snap.release_id,
-            "seen_since": params["seen_since"],
+            "seen_since": seen_since(snap, limits),
         },
     ):
         vehicles.setdefault((v["trip_id"], v["service_date"]), trip_vehicle(v))
@@ -211,6 +223,7 @@ def _respond(
         "arrivals" if arrivals else "departures": rows,
         "next": following,
         "alerts": alerts,
+        "stop_alerts": stop_alert_ids(alerts, [s.location_id for s in stops]),
     }
 
 

@@ -35,9 +35,9 @@ const RING: Record<Tone, string> = {
 const INK = "#153438";
 const WHITE = "#ffffff";
 
+/** A line's colour (the API's `#RRGGBB`), else `fallback`. */
 export function hexColour(colour: string | null | undefined, fallback: string): string {
-  if (!colour) return fallback;
-  return colour.startsWith("#") ? colour : `#${colour}`;
+  return colour || fallback;
 }
 
 export function rgb(hex: string): [number, number, number] {

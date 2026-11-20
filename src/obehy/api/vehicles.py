@@ -16,7 +16,7 @@ from typing import Annotated, Any, cast, get_args
 from fastapi import APIRouter, HTTPException, Query, Response
 from psycopg.rows import DictRow
 
-from obehy.api import punctuality, schema
+from obehy.api import labels, punctuality, schema
 from obehy.api.codes import load_codes
 from obehy.api.common import (
     LimitsDep,
@@ -180,6 +180,9 @@ def vehicle(
                 | {
                     "label": None if known is None else {"cs": known.cs, "en": known.en},
                     "icon": None if known is None else known.icon,
+                    "value": labels.plate(a["value"])
+                    if a["attribute"] == "licence_plate"
+                    else a["value"],
                 }
             )
         )

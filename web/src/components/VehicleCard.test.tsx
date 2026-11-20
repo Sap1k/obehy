@@ -20,7 +20,7 @@ describe("VehicleCard", () => {
       model: "Crossway LE CITY 12M",
       fleet_number: "7621",
       operator: "ARRIVA",
-      licence_plate: "1TD8408",
+      licence_plate: "1TD 8408",
     });
     expect(screen.getByText("Iveco Crossway LE CITY 12M")).toBeInTheDocument();
     expect(screen.getByText("č. 7621 · ARRIVA")).toBeInTheDocument();
@@ -31,7 +31,7 @@ describe("VehicleCard", () => {
   });
 
   it("is named by its plate without a model, which links from the title", () => {
-    card({ fleet_number: "7621", licence_plate: "1TD8408" });
+    card({ fleet_number: "7621", licence_plate: "1TD 8408" });
     const title = screen.getByRole("link", { name: /1TD 8408/ });
     expect(title).toHaveTextContent("1TD 8408");
     expect(screen.queryByText(/SPZ/)).not.toBeInTheDocument();

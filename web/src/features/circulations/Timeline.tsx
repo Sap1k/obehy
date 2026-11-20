@@ -18,7 +18,6 @@ import {
 } from "../../api/client";
 import { LineBadge, lineLabel } from "../../components/LineBadge";
 import { usePhone } from "../../lib/layout";
-import { plateText } from "../../lib/plates";
 import { formatClock } from "../../lib/time";
 import { useVehicleDetail } from "./queries";
 import {
@@ -31,7 +30,6 @@ import {
   shortRoute,
   tickStep,
   vehicleModel,
-  vehicleName,
   windowOf,
   ZOOM_PX,
   zoomAround,
@@ -48,11 +46,6 @@ const ZOOM_KEY = "obehy.hourPx";
 const ROW_PX = 44;
 const AXIS_PX = 24;
 const SPARE_ROWS = 8;
-
-function hex(colour: string | null | undefined): string | undefined {
-  if (!colour) return undefined;
-  return colour.startsWith("#") ? colour : `#${colour}`;
-}
 
 export function journeyTitle(j: ChainJourney): string {
   const line = j.line ? lineLabel(j.line) : (j.route_name ?? "?");
@@ -335,8 +328,8 @@ export function Timeline({
                       style={{
                         left: `${left}%`,
                         width: `${width}%`,
-                        background: hex(line?.color),
-                        color: hex(line?.text_color),
+                        background: line?.color ?? undefined,
+                        color: line?.text_color ?? undefined,
                       }}
                       title={selected === key ? undefined : journeyTitle(bar.journey)}
                       onClick={() => onSelect(selected === key ? null : key)}
@@ -443,7 +436,7 @@ function VehicleLabel({
   sourceLabel: string;
 }) {
   const { chain } = row;
-  const name = vehicleName(chain);
+  const name = chain.display_name;
   const model = vehicleModel(chain);
   const label = (
     <button
@@ -508,7 +501,7 @@ const IN_HEAD = new Set(["fleet_number", "manufacturer", "model"]);
 function attributeValue(a: VehicleAttributeValue): string {
   if (a.value === "true") return "ano";
   if (a.value === "false") return "ne";
-  return a.attribute === "licence_plate" ? plateText(a.value) : a.value;
+  return a.value;
 }
 
 /** A vehicle opened on the timeline: what the row says of its day, then what the registry and
@@ -557,7 +550,7 @@ function VehicleCard({
     <section className={classes.card} aria-label="Vozidlo">
       <div className={classes.cardHead}>
         <span className={classes.cardTitle}>
-          <span className={classes.cardRoute}>{vehicleName(chain)}</span>
+          <span className={classes.cardRoute}>{chain.display_name}</span>
           {model && <span className={classes.cardModel}>{model}</span>}
         </span>
         <ActionIcon variant="subtle" color="gray" size="sm" onClick={onClose} aria-label="Zavřít">

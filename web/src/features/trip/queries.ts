@@ -1,10 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, unwrap, type Trip } from "../../api/client";
 import { POLL_MS } from "../board/queries";
-import { addDays, dayKey } from "../../lib/time";
-
-/** The days history keeps (policy `retention.history_days`, the API's `history.max_days`). */
-const HISTORY_DAYS = 21;
 
 // One query per trip, polled, shared by everything that shows it (a board's trip panel, the
 // map's vehicle panel, the map's path and stops). Its path is a query of its own, asked once:
@@ -124,14 +120,10 @@ export function useTripHistory(tripId: string, enabled: boolean, segment: Histor
     queryFn: async ({ signal }) =>
       unwrap(
         await api.GET("/api/v1/trips/{trip_id}/history", {
-          // Every day history keeps (21), not the API's default week.
+          // Every day history keeps: the API's default.
           params: {
             path: { trip_id: tripId },
-            query: {
-              since: addDays(dayKey(new Date()), -(HISTORY_DAYS - 1)),
-              from: segment.from,
-              to: segment.to,
-            },
+            query: { from: segment.from, to: segment.to },
           },
           signal,
         }),

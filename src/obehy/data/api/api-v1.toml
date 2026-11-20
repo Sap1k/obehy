@@ -19,7 +19,9 @@ near_limit = 50
 # A departure scheduled up to this long before `from` stays on the board while it is still to
 # come (a late bus).
 lookback_min = 90
-minutes = 60
+# A board without a window asked looks this far ahead, and up to minutes_max when that does not
+# fill its page (a quiet stop's next departures are hours away).
+minutes = 90
 minutes_max = 360
 limit = 40
 limit_max = 200
@@ -44,7 +46,8 @@ patterns = 20
 [history]
 # The longest span of service dates one history or punctuality request covers.
 max_days = 21
-default_days = 7
+# By default all of it: as long as history keeps (realtime policy `[retention] history_days`).
+default_days = 21
 
 [trips]
 # A call without realtime saying so counts as passed this long after its (expected) time.

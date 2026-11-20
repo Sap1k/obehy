@@ -16,7 +16,6 @@ import { DepartureRow, rowClasses } from "../../components/DepartureRow";
 import { ModeIcons, modesWord } from "../../components/ModeIcon";
 import { Panel } from "../../components/Panel";
 import { TimeSelect } from "../../components/TimeSelect";
-import { stopAlerts } from "../../lib/alerts";
 import { useFlip } from "../../lib/flip";
 import { ago, useNow } from "../../lib/hooks";
 import { usePhone } from "../../lib/layout";
@@ -143,11 +142,7 @@ export function BoardPage() {
             />
           )}
 
-          {data &&
-            stopAlerts(
-              data.alerts,
-              data.stops.map((s) => s.location_id),
-            ).map((a) => <AlertBanner key={a.alert_id} alert={a} now={now} />)}
+          {data && data.stopAlerts.map((a) => <AlertBanner key={a.alert_id} alert={a} now={now} />)}
 
           <BoardBody
             stopId={stopId}

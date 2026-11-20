@@ -1,11 +1,6 @@
 import type { Line } from "../api/client";
 import classes from "./LineBadge.module.css";
 
-function hex(colour: string | null | undefined): string | undefined {
-  if (!colour) return undefined;
-  return colour.startsWith("#") ? colour : `#${colour}`;
-}
-
 /** The line's name; a train without a line is named after itself ("Os 6658"), and then only
  * its category shows, the number being printed beside it. */
 export function lineLabel(
@@ -32,7 +27,7 @@ export function LineBadge({
     <span className={`${classes.container} ${sizeClass ?? ""}`}>
       <span
         className={classes.badge}
-        style={{ background: hex(line.color), color: hex(line.text_color) }}
+        style={{ background: line.color ?? undefined, color: line.text_color ?? undefined }}
       >
         {lineLabel(line, tripShortName)}
       </span>

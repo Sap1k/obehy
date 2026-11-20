@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from psycopg.rows import DictRow
 
-from obehy.api import punctuality, schema
+from obehy.api import labels, punctuality, schema
 from obehy.api.alerts import find_alerts, trip_alerts
 from obehy.api.codes import amenities, call_flags, features, load_codes, note_groups, tristate
 from obehy.api.common import (
@@ -355,6 +355,7 @@ def assemble(snap: Snapshot, limits: Limits, trip: TripOnDate) -> Assembled:
         },
     )
     calls = snap.all("trip_calls", params)
+    names = labels.stop_labels([c["name"] for c in calls])
     return Assembled(
         row=row,
         journey=trip.journey,
@@ -372,7 +373,7 @@ def assemble(snap: Snapshot, limits: Limits, trip: TripOnDate) -> Assembled:
                 passed=_passed(
                     c, n == len(calls) - 1, snap.now, timedelta(seconds=limits.passed_after_s)
                 ),
-            )
+            ).model_copy(update={"label": names[n]})
             for n, c in enumerate(calls)
         ],
         alerts=trip_alerts(

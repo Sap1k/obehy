@@ -6,7 +6,7 @@ import {
   IconWheelchair,
 } from "@tabler/icons-react";
 import type { TripVehicle } from "../api/client";
-import { plateText, plateUrl } from "../lib/plates";
+import { plateUrl } from "../lib/plates";
 import classes from "./VehicleCard.module.css";
 
 const RAIL_MODES = new Set([
@@ -36,7 +36,7 @@ export function VehicleCard({
   const fleet = traits.fleet_number ?? null;
   // The model with its maker ("Iveco Crossway LE LINE 13M"); the API gives them apart.
   const model = traits.model ? [traits.manufacturer, traits.model].filter(Boolean).join(" ") : null;
-  const title = model ?? (plate ? plateText(plate) : (fleet ?? vehicle.vehicle_id));
+  const title = model ?? plate ?? fleet ?? vehicle.vehicle_id;
   // The identifier, unless it is the title already.
   const identifier = fleet ? (title === fleet ? null : `č. ${fleet}`) : null;
   const meta = [identifier, traits.operator].filter(Boolean).join(" · ");
@@ -72,7 +72,7 @@ export function VehicleCard({
           {meta && <span className={classes.meta}>{meta}</span>}
           {plate && !titleIsPlate && (
             <a className={classes.plate} href={plateUrl(plate)} target="_blank" rel="noreferrer">
-              SPZ {plateText(plate)}
+              SPZ {plate}
               <IconExternalLink size={12} stroke={2} aria-label="na seznam-autobusu.cz" />
             </a>
           )}

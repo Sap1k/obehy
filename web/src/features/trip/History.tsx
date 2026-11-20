@@ -185,8 +185,7 @@ function DayRow({ day, open, onToggle }: { day: HistoryDay; open: boolean; onTog
   const run = day.segment;
   const calls = run ? day.calls.slice(run.first_call, run.last_call + 1) : [];
   const vehicle = day.worked_by.find((v) => v.physical) ?? day.worked_by[0];
-  const name =
-    vehicle && (vehicle.fleet_number ?? vehicle.public_label ?? vehicle.source_vehicle_id);
+  const name = vehicle?.display_name;
   return (
     <li className={classes.day} data-open={open || undefined}>
       <UnstyledButton

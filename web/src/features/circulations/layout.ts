@@ -36,12 +36,6 @@ export interface Span {
 const HOUR = 3600;
 const BY_ID = new Intl.Collator("cs-CZ", { numeric: true });
 
-/** A row's vehicle as its operator numbers it (the registry's fleet number or label), else as
- * its source does. */
-export function vehicleName(chain: ScopedChain): string {
-  return chain.fleet_number ?? chain.public_label ?? chain.source_vehicle_id;
-}
-
 /** "Iveco Crossway LE LINE 13M", when the registry knows it. */
 export function vehicleModel(chain: ScopedChain): string | null {
   return [chain.manufacturer, chain.model].filter(Boolean).join(" ") || null;
@@ -102,7 +96,7 @@ export function rowsOf(
       breaks,
     };
   });
-  return rows.sort((a, b) => BY_ID.compare(vehicleName(a.chain), vehicleName(b.chain)));
+  return rows.sort((a, b) => BY_ID.compare(a.chain.display_name, b.chain.display_name));
 }
 
 /** Whole hours from the earliest bar's start to the latest bar's end. */

@@ -77,6 +77,18 @@ def alert_ids(alerts: Sequence[schema.Alert], *, route: str, stop: str, trip: st
     return [a.alert_id for a in alerts if any(informs(t) for t in a.informs)]
 
 
+def stop_alert_ids(alerts: Sequence[schema.Alert], stops: Sequence[str]) -> list[str]:
+    """The alerts informing any of a board's stop places (its posts too): shown above the
+    rows."""
+
+    wanted = set(stops)
+    return [
+        a.alert_id
+        for a in alerts
+        if any(t.kind == "stop" and {t.id, t.stop_place} & wanted for t in a.informs)
+    ]
+
+
 def trip_alerts(alerts: Sequence[schema.Alert], *, route: str, trip: str) -> list[schema.Alert]:
     """A trip's alerts among those of its line, its stops and itself: its own and its line's,
     and of its stops' only the severe ones (a stop's others belong on that stop's board)."""

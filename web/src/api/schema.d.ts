@@ -791,6 +791,8 @@ export interface components {
              */
             since: string;
             stop: components["schemas"]["Stop"];
+            /** Stop Alerts */
+            stop_alerts: string[];
             /** Stops */
             stops: components["schemas"]["Stop"][];
             /**
@@ -1317,6 +1319,11 @@ export interface components {
             since: string;
             stop: components["schemas"]["Stop"];
             /**
+             * Stop Alerts
+             * @description Of `alerts`, those informing the board's stop places: shown above the rows
+             */
+            stop_alerts: string[];
+            /**
              * Stops
              * @description Every stop place of a multi-stop board
              */
@@ -1681,6 +1688,11 @@ export interface components {
          * @description A source's report of a vehicle that worked the journey that day.
          */
         HistoryVehicle: {
+            /**
+             * Display Name
+             * @description Its fleet number, else the registry's label, else the source's ID
+             */
+            readonly display_name: string;
             /** Fleet Number */
             fleet_number: string | null;
             /**
@@ -1738,7 +1750,10 @@ export interface components {
         };
         /** Line */
         Line: {
-            /** Color */
+            /**
+             * Color
+             * @description `#RRGGBB`
+             */
             color: string | null;
             /** Long Name */
             long_name: string | null;
@@ -1748,7 +1763,10 @@ export interface components {
             route_id: string;
             /** Short Name */
             short_name: string | null;
-            /** Text Color */
+            /**
+             * Text Color
+             * @description `#RRGGBB`
+             */
             text_color: string | null;
         };
         /**
@@ -1995,6 +2013,11 @@ export interface components {
         /** ObservedCirculation */
         ObservedCirculation: {
             /**
+             * Display Name
+             * @description Its fleet number, else the registry's label, else the source's ID
+             */
+            readonly display_name: string;
+            /**
              * First Seen
              * Format: date-time
              */
@@ -2236,6 +2259,11 @@ export interface components {
         };
         /** ScopedChain */
         ScopedChain: {
+            /**
+             * Display Name
+             * @description Its fleet number, else the registry's label, else the source's ID
+             */
+            readonly display_name: string;
             /**
              * First Seen
              * Format: date-time
@@ -2677,6 +2705,12 @@ export interface components {
              * @description request_stop, on_request, conditional, exit_only, boarding_only, not_stopping, border_control_only
              */
             flags: string[];
+            /**
+             * Label
+             * @description Its name as the trip's map labels it: the trip's home town left out
+             * @default
+             */
+            label: string;
             /** Latitude */
             latitude: number | null;
             /** Location Id */
@@ -2999,6 +3033,11 @@ export interface components {
          * @description An oběh as observed: the journeys one vehicle worked in a row, split at long gaps.
          */
         VehicleChain: {
+            /**
+             * Display Name
+             * @description Its fleet number, else the registry's label, else the source's ID
+             */
+            readonly display_name: string;
             /**
              * First Seen
              * Format: date-time

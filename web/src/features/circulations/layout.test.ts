@@ -10,7 +10,6 @@ import {
   spanOf,
   tickStep,
   vehicleModel,
-  vehicleName,
   windowOf,
   zoomAround,
   zoomed,
@@ -46,6 +45,7 @@ function chain(id: string, journeys: ChainJourney[], matched: number[]): ScopedC
     source_vehicle_id: id,
     fleet_number: null,
     public_label: null,
+    display_name: id,
     manufacturer: null,
     model: null,
     first_seen: journeys[0]!.first_seen,
@@ -89,7 +89,7 @@ describe("rowsOf", () => {
   });
 
   it("orders rows by vehicle ID, numbers as numbers, and filters by vehicle", () => {
-    const nine = { ...early, vehicle_id: "duk:999", source_vehicle_id: "999" };
+    const nine = { ...early, vehicle_id: "duk:999", source_vehicle_id: "999", display_name: "999" };
     expect(
       rowsOf([early, late, nine], "2026-10-06", {}).map((r) => r.chain.source_vehicle_id),
     ).toEqual(["999", "1001", "1002"]);
@@ -149,13 +149,13 @@ describe("the vehicle column", () => {
     ...late,
     source_vehicle_id: "3:9753",
     fleet_number: "9753",
+    display_name: "9753",
     manufacturer: "Škoda",
     model: "15T",
   };
 
-  it("names a vehicle by its fleet number, and finds it by it", () => {
-    expect([vehicleName(known), vehicleModel(known)]).toEqual(["9753", "Škoda 15T"]);
-    expect([vehicleName(early), vehicleModel(early)]).toEqual(["1002", null]);
+  it("names a vehicle's model, and finds it by its fleet number", () => {
+    expect([vehicleModel(known), vehicleModel(early)]).toEqual(["Škoda 15T", null]);
     expect(rowsOf([known, early], "2026-10-06", { vehicle: "9753" })).toHaveLength(1);
   });
 });

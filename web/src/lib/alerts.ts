@@ -25,13 +25,3 @@ export function periodText(alert: Alert, now: number): string {
   }
   return current.end ? `do ${shortDate.format(Date.parse(current.end))}` : "";
 }
-
-/** Alerts informing any of the board's stop places (shown as banners above the rows). */
-export function stopAlerts(alerts: readonly Alert[], stopIds: readonly string[]): Alert[] {
-  const ids = new Set(stopIds);
-  return alerts.filter((a) =>
-    a.informs.some(
-      (t) => t.kind === "stop" && (ids.has(t.id) || (t.stop_place && ids.has(t.stop_place))),
-    ),
-  );
-}

@@ -416,6 +416,13 @@
           "stop": {
             "$ref": "#/components/schemas/Stop"
           },
+          "stop_alerts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stop Alerts",
+            "type": "array"
+          },
           "stops": {
             "items": {
               "$ref": "#/components/schemas/Stop"
@@ -438,7 +445,8 @@
           "until",
           "arrivals",
           "next",
-          "alerts"
+          "alerts",
+          "stop_alerts"
         ],
         "title": "Arrivals",
         "type": "object"
@@ -1716,6 +1724,14 @@
           "stop": {
             "$ref": "#/components/schemas/Stop"
           },
+          "stop_alerts": {
+            "description": "Of `alerts`, those informing the board's stop places: shown above the rows",
+            "items": {
+              "type": "string"
+            },
+            "title": "Stop Alerts",
+            "type": "array"
+          },
           "stops": {
             "description": "Every stop place of a multi-stop board",
             "items": {
@@ -1739,7 +1755,8 @@
           "until",
           "departures",
           "next",
-          "alerts"
+          "alerts",
+          "stop_alerts"
         ],
         "title": "Departures",
         "type": "object"
@@ -2582,6 +2599,12 @@
       "HistoryVehicle": {
         "description": "A source's report of a vehicle that worked the journey that day.",
         "properties": {
+          "display_name": {
+            "description": "Its fleet number, else the registry's label, else the source's ID",
+            "readOnly": true,
+            "title": "Display Name",
+            "type": "string"
+          },
           "fleet_number": {
             "anyOf": [
               {
@@ -2628,7 +2651,8 @@
           "source_vehicle_id",
           "fleet_number",
           "public_label",
-          "physical"
+          "physical",
+          "display_name"
         ],
         "title": "HistoryVehicle",
         "type": "object"
@@ -2753,6 +2777,7 @@
                 "type": "null"
               }
             ],
+            "description": "`#RRGGBB`",
             "title": "Color"
           },
           "long_name": {
@@ -2794,6 +2819,7 @@
                 "type": "null"
               }
             ],
+            "description": "`#RRGGBB`",
             "title": "Text Color"
           }
         },
@@ -3409,6 +3435,12 @@
       },
       "ObservedCirculation": {
         "properties": {
+          "display_name": {
+            "description": "Its fleet number, else the registry's label, else the source's ID",
+            "readOnly": true,
+            "title": "Display Name",
+            "type": "string"
+          },
           "first_seen": {
             "format": "date-time",
             "title": "First Seen",
@@ -3500,7 +3532,8 @@
           "first_seen",
           "last_seen",
           "journeys",
-          "position"
+          "position",
+          "display_name"
         ],
         "title": "ObservedCirculation",
         "type": "object"
@@ -4039,6 +4072,12 @@
       },
       "ScopedChain": {
         "properties": {
+          "display_name": {
+            "description": "Its fleet number, else the registry's label, else the source's ID",
+            "readOnly": true,
+            "title": "Display Name",
+            "type": "string"
+          },
           "first_seen": {
             "format": "date-time",
             "title": "First Seen",
@@ -4133,7 +4172,8 @@
           "first_seen",
           "last_seen",
           "journeys",
-          "matched"
+          "matched",
+          "display_name"
         ],
         "title": "ScopedChain",
         "type": "object"
@@ -5163,6 +5203,12 @@
             "title": "Flags",
             "type": "array"
           },
+          "label": {
+            "default": "",
+            "description": "Its name as the trip's map labels it: the trip's home town left out",
+            "title": "Label",
+            "type": "string"
+          },
           "latitude": {
             "anyOf": [
               {
@@ -6022,6 +6068,12 @@
       "VehicleChain": {
         "description": "An oběh as observed: the journeys one vehicle worked in a row, split at long gaps.",
         "properties": {
+          "display_name": {
+            "description": "Its fleet number, else the registry's label, else the source's ID",
+            "readOnly": true,
+            "title": "Display Name",
+            "type": "string"
+          },
           "first_seen": {
             "format": "date-time",
             "title": "First Seen",
@@ -6107,7 +6159,8 @@
           "model",
           "first_seen",
           "last_seen",
-          "journeys"
+          "journeys",
+          "display_name"
         ],
         "title": "VehicleChain",
         "type": "object"
