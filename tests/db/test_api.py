@@ -1184,14 +1184,7 @@ def test_a_sources_oběhy_scoped_by_company_and_mode_or_by_route(client: TestCli
     (bus,) = row["chains"]
     # The whole day, the journey outside the release (no company) included but not matched.
     assert (bus["vehicle_id"], len(bus["journeys"]), bus["matched"]) == ("duk:1001", 2, [0])
-    # Its bars in seconds from the service date's noon less 12 h: as scheduled, 6:00 to 6:15,
-    # then the journey without a schedule as it was seen, 6:30 to 7:00.
-    assert by_agency["origin"] == "2026-10-06T00:00:00+02:00"
-    assert [(b["start_s"], b["end_s"], b["in_scope"]) for b in row["bars"]] == [
-        (6 * 3600, 6 * 3600 + 15 * 60, True),
-        (6 * 3600 + 30 * 60, 7 * 3600, False),
-    ]
-    assert (row["display_name"], row["breaks"]) == ("1001", [])
+    assert row["display_name"] == "1001"
     by_route = _get(client, "/circulations", source="duk", route_id="jdf:route:000001", **day)
     assert by_route["rows"] == by_agency["rows"]
     plates = _get(client, "/circulations", source="mpvnet", route_id="jdf:route:000001", **day)

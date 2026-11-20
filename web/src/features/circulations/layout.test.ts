@@ -79,59 +79,59 @@ const early = chain(
   [0],
 );
 
-// The API lays the rows out (`circulations.rows_of`, tested in
-// tests/unit/test_api_circulation_rows.py); here only how the timeline takes them.
-function row(theirs: ScopedChain[], bars: [number, number, number, number, boolean][]) {
-  return {
-    vehicle_id: theirs[0]!.vehicle_id,
-    display_name: theirs[0]!.display_name,
-    chains: theirs,
-    bars: bars.map(([chain, journey, start_s, end_s, in_scope]) => ({
-      chain,
-      journey,
-      start_s,
-      end_s,
-      in_scope,
-    })),
-    breaks: [],
-  };
-}
-
+// The API groups the rows per vehicle (`circulations.rows_of`); they are laid out here.
+const row = (theirs: ScopedChain[]) => ({
+  vehicle_id: theirs[0]!.vehicle_id,
+  display_name: theirs[0]!.display_name,
+  chains: theirs,
+});
 const DAY = "2026-10-06";
-const LATE = row(
-  [late],
-  [
-    [0, 0, 21 * 3600, 21.5 * 3600, true],
-    [0, 1, 24 * 3600 + 600, 24 * 3600 + 2400, false],
-  ],
-);
-const EARLY = row([early], [[0, 0, 5 * 3600, 5 * 3600 + 1200, true]]);
 
 describe("rowsOf", () => {
-  it("takes the API's bars, each with its journey", () => {
-    const [shown] = rowsOf({ rows: [LATE], service_date: DAY }, {});
+  it("lays bars out from the service date's noon less 12 h, past 24:00", () => {
+    const [shown] = rowsOf({ rows: [row([late])], service_date: DAY }, {});
     expect(shown!.key).toBe("duk:1001@2026-10-06");
-    expect(shown!.bars.map((b) => [b.journey.trip_id, b.start, b.end, b.inScope])).toEqual([
-      ["t1", 21 * 3600, 21.5 * 3600, true],
-      [null, 24 * 3600 + 600, 24 * 3600 + 2400, false],
+    expect(shown!.bars.map((b) => [b.start, b.end, b.inScope])).toEqual([
+      [21 * 3600, 21.5 * 3600, true],
+      [24 * 3600 + 600, 24 * 3600 + 2400, false],
     ]);
   });
 
   it("filters by vehicle, any of its names", () => {
-    const rows = { rows: [LATE, EARLY], service_date: DAY };
+    const rows = { rows: [row([late]), row([early])], service_date: DAY };
     expect(rowsOf(rows, { vehicle: "DUK:1001" })).toHaveLength(1);
     expect(rowsOf(rows, { vehicle: "100" })).toHaveLength(2);
   });
 
+  it("keeps the break between a vehicle's chains", () => {
+    const evening = {
+      ...early,
+      journeys: [
+        journey("t3", "2026-10-06T15:00:00+02:00", "2026-10-06T15:40:00+02:00", [
+          "2026-10-06T14:58:00+02:00",
+          "2026-10-06T15:41:00+02:00",
+        ]),
+      ],
+      first_seen: "2026-10-06T14:58:00+02:00",
+      last_seen: "2026-10-06T15:41:00+02:00",
+    };
+    const [shown] = rowsOf({ rows: [row([early, evening])], service_date: DAY }, {});
+    expect(shown!.bars.map((b) => [b.start, b.part])).toEqual([
+      [5 * 3600, 0],
+      [15 * 3600, 1],
+    ]);
+    expect(shown!.breaks).toEqual([{ start: 5 * 3600 + 1200, end: 15 * 3600 }]);
+  });
+
   it("marks the trip the page was opened from", () => {
-    const [shown] = rowsOf({ rows: [LATE], service_date: DAY }, { tripId: "t1" });
+    const [shown] = rowsOf({ rows: [row([late])], service_date: DAY }, { tripId: "t1" });
     expect(shown!.bars.map((b) => b.highlighted)).toEqual([true, false]);
   });
 });
 
 describe("the axis", () => {
   it("spans whole hours over every row", () => {
-    const span = spanOf(rowsOf({ rows: [LATE, EARLY], service_date: DAY }, {}))!;
+    const span = spanOf(rowsOf({ rows: [row([late]), row([early])], service_date: DAY }, {}))!;
     expect(span).toEqual({ start: 5 * 3600, end: 25 * 3600 });
     expect(hourTicks(span).slice(-3).map(hourLabel)).toEqual(["23", "0", "1"]);
     expect(percent(15 * 3600, span)).toBe(50);
@@ -160,7 +160,7 @@ describe("the vehicle column", () => {
 
   it("names a vehicle's model, and finds it by its fleet number", () => {
     expect([vehicleModel(known), vehicleModel(early)]).toEqual(["Škoda 15T", null]);
-    const rows = { rows: [row([known], [[0, 0, 0, 60, true]]), EARLY], service_date: DAY };
+    const rows = { rows: [row([known]), row([early])], service_date: DAY };
     expect(rowsOf(rows, { vehicle: "9753" })).toHaveLength(1);
   });
 });

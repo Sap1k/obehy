@@ -2221,10 +2221,10 @@ POST /api/v1/journeys/enrich                MOTIS legs (Transitous, motis.obehy.
   same way is the API's: which calls are passed and the next one, a rail run's merged calls and
   the alerts it shows (`include=run`), a composition's stretches, cab ends and where the rider is
   (`api/formations.py`), notes grouped in print order with how each sign shows (`codes-v1.toml`
-  `[signs]`), step-free boarding, a board that fills its page, oběhy rows per vehicle on a
-  timeline from the service date's noon less 12 h, which MOTIS stop is which call (by stop key),
-  colours, plates, vehicle and stop labels (`api/labels.py`). The web and the app keep wording,
-  tone, layout, animation and what ticks with the clock.
+  `[signs]`), step-free boarding, a board that fills its page, oběhy rows per vehicle, which
+  MOTIS stop is which call (by stop key), colours, plates and vehicle names (`api/labels.py`).
+  The web and the app keep wording, tone, layout (a timeline's bars, a map's labels), animation
+  and what ticks with the clock: the API answers with facts and rules, not one screen's drawing.
 - **Trips are identified by the feed's `trip_id` and the service date;** vehicles by their
   vehicle ID. Source keys (`cis:line_trip`, `pid:gtfs_trip_id`, `czptt:train_number`, …) are
   lookup aliases only, answered with a redirect, and a trip's preferred journey key is an

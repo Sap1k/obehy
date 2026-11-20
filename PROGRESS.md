@@ -319,9 +319,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   ends, partial vehicles and where the rider is (`api/formations.py`; the web's and the app's
   copies gone). Notes come grouped in print order (`codes-v1.toml` `[signs]`, from the web's
   pictogram table), boards with `step_free` and their banner alerts, and fill their page from
-  90 up to 360 minutes; history defaults to every kept day. Oběhy come as rows per vehicle on a
-  timeline from noon less 12 h, companies grouped, the top source picked. Colours `#RRGGBB`,
-  plates as written, vehicle display names and trip stop map labels (`api/labels.py`). Enrich
+  90 up to 360 minutes; history defaults to every kept day. Oběhy come as rows per vehicle,
+  companies grouped, the top source picked (the web lays the bars out from the service date's
+  noon less 12 h, so a clock-change day lines up). Colours `#RRGGBB`, plates as written,
+  vehicle display names (`api/labels.py`); map labels and timeline bars stay the web's. Enrich
   says which MOTIS stop is which call by stop key (the app's matching by name gone). Each moved
   rule's web tests were ported to Python. Validated: Python unit and DB (910), web
   typecheck/lint/tests/build, app tests/lint/debug build. Not checked in a browser or on a

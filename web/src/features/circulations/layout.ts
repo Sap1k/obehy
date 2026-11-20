@@ -1,8 +1,10 @@
 import type { ChainJourney, Circulations, ScopedChain, ScopeRoute } from "../../api/client";
+import { serviceDayOrigin } from "../../lib/time";
 
-// The oběhy page's day timeline: the API's rows (one per vehicle, its chains one after another,
-// each journey a bar in seconds from the service date's noon less 12 h, so a chain past midnight
-// runs on past 24:00) as the timeline draws them. Pure.
+// The oběhy page's day timeline laid out: the API's rows (one per vehicle, its chains in the order
+// they start), each journey a bar from its scheduled departure to its arrival (where the vehicle
+// was seen when history has no schedule), in seconds from the service date's noon less 12 h, so a
+// chain past midnight runs on past 24:00. Pure.
 
 export interface TimelineBar {
   journey: ChainJourney;
@@ -38,12 +40,18 @@ export function vehicleModel(chain: ScopedChain): string | null {
   return [chain.manufacturer, chain.model].filter(Boolean).join(" ") || null;
 }
 
+function secondsFrom(origin: number, iso: string): number {
+  return Math.round((Date.parse(iso) - origin) / 1000);
+}
+
 /** The API's rows whose vehicle matches `vehicle` (its IDs, fleet number or name, any part,
- * any case), with the trip the page was opened from marked. */
+ * any case), laid out: each journey a bar (at least a minute wide), where the vehicle stood
+ * between its chains, the trip the page was opened from marked. */
 export function rowsOf(
   data: Pick<Circulations, "rows" | "service_date">,
   { vehicle, tripId }: { vehicle?: string; tripId?: string },
 ): TimelineRow[] {
+  const origin = serviceDayOrigin(data.service_date);
   const wanted = vehicle?.trim().toLocaleLowerCase("cs-CZ");
   return data.rows
     .filter(
@@ -55,23 +63,37 @@ export function rowsOf(
           ),
         ),
     )
-    .map((row) => ({
-      key: `${row.vehicle_id}@${data.service_date}`,
-      chain: row.chains[0]!,
-      chains: row.chains,
-      bars: row.bars.map((b) => {
-        const journey = row.chains[b.chain]!.journeys[b.journey]!;
-        return {
-          journey,
-          start: b.start_s,
-          end: b.end_s,
-          inScope: b.in_scope,
-          highlighted: tripId !== undefined && journey.trip_id === tripId,
-          part: b.chain,
-        };
-      }),
-      breaks: row.breaks.map((b) => ({ start: b.start_s, end: b.end_s })),
-    }));
+    .map((row) => {
+      const bars = row.chains.flatMap((chain, part) => {
+        const matched = new Set(chain.matched);
+        return chain.journeys.map((journey, i) => {
+          const start = secondsFrom(origin, journey.departure ?? journey.first_seen);
+          const end = secondsFrom(origin, journey.arrival ?? journey.last_seen);
+          return {
+            journey,
+            start,
+            end: Math.max(end, start + 60),
+            inScope: matched.has(i),
+            highlighted: tripId !== undefined && journey.trip_id === tripId,
+            part,
+          };
+        });
+      });
+      const breaks: Span[] = [];
+      for (let i = 1; i < bars.length; i++) {
+        const [before, after] = [bars[i - 1]!, bars[i]!];
+        if (after.part !== before.part && after.start > before.end) {
+          breaks.push({ start: before.end, end: after.start });
+        }
+      }
+      return {
+        key: `${row.vehicle_id}@${data.service_date}`,
+        chain: row.chains[0]!,
+        chains: row.chains,
+        bars,
+        breaks,
+      };
+    });
 }
 
 /** Whole hours from the earliest bar's start to the latest bar's end. */
@@ -133,9 +155,9 @@ export function percent(seconds: number, span: Span): number {
   return ((seconds - span.start) / (span.end - span.start)) * 100;
 }
 
-/** `now` in the rows' seconds (from the API's `origin`). */
-export function secondsOfDay(origin: string, now: number): number {
-  return Math.round((now - Date.parse(origin)) / 1000);
+/** `now` in the bars' seconds (from the service date's noon less 12 h). */
+export function secondsOfDay(serviceDate: string, now: number): number {
+  return Math.round((now - serviceDayOrigin(serviceDate)) / 1000);
 }
 
 /** A journey's ends cut for a bar, as a headsign would put them (JDF names run town, part,

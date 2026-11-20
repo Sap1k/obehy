@@ -805,23 +805,8 @@
         "type": "object"
       },
       "CirculationRow": {
-        "description": "A vehicle's day: its chains one after another, where it stood between them.",
+        "description": "A vehicle's day: its chains one after another.",
         "properties": {
-          "bars": {
-            "items": {
-              "$ref": "#/components/schemas/RowBar"
-            },
-            "title": "Bars",
-            "type": "array"
-          },
-          "breaks": {
-            "description": "Where it stood between its chains",
-            "items": {
-              "$ref": "#/components/schemas/RowSpan"
-            },
-            "title": "Breaks",
-            "type": "array"
-          },
           "chains": {
             "description": "In the order they start",
             "items": {
@@ -842,9 +827,7 @@
         "required": [
           "vehicle_id",
           "display_name",
-          "chains",
-          "bars",
-          "breaks"
+          "chains"
         ],
         "title": "CirculationRow",
         "type": "object"
@@ -938,12 +921,6 @@
             "title": "Modes",
             "type": "array"
           },
-          "origin": {
-            "description": "What the rows' seconds count from: the service date's noon less 12 h",
-            "format": "date-time",
-            "title": "Origin",
-            "type": "string"
-          },
           "release_id": {
             "description": "The active release the answer was read from.",
             "title": "Release Id",
@@ -998,7 +975,6 @@
           "modes",
           "route_id",
           "source_vehicle_id",
-          "origin",
           "rows"
         ],
         "title": "Circulations",
@@ -3963,63 +3939,6 @@
         "title": "RegistryEntry",
         "type": "object"
       },
-      "RowBar": {
-        "description": "A journey of a vehicle's row on the day's timeline.",
-        "properties": {
-          "chain": {
-            "description": "Its chain's place in the row's `chains`",
-            "title": "Chain",
-            "type": "integer"
-          },
-          "end_s": {
-            "description": "Its arrival (else last sighting); at least a minute long",
-            "title": "End S",
-            "type": "integer"
-          },
-          "in_scope": {
-            "description": "Of the scope asked for; the others are its day's rest",
-            "title": "In Scope",
-            "type": "boolean"
-          },
-          "journey": {
-            "description": "Its place in that chain's `journeys`",
-            "title": "Journey",
-            "type": "integer"
-          },
-          "start_s": {
-            "description": "Its scheduled departure (else first sighting), from `origin`",
-            "title": "Start S",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "chain",
-          "journey",
-          "start_s",
-          "end_s",
-          "in_scope"
-        ],
-        "title": "RowBar",
-        "type": "object"
-      },
-      "RowSpan": {
-        "properties": {
-          "end_s": {
-            "title": "End S",
-            "type": "integer"
-          },
-          "start_s": {
-            "title": "Start S",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "start_s",
-          "end_s"
-        ],
-        "title": "RowSpan",
-        "type": "object"
-      },
       "RunAlert": {
         "description": "An alert a run shows: its parts' own and their lines', and the severe ones of its stops\nstill ahead (a stop's others are on its board).",
         "properties": {
@@ -5338,12 +5257,6 @@
             },
             "title": "Flags",
             "type": "array"
-          },
-          "label": {
-            "default": "",
-            "description": "Its name as the trip's map labels it: the trip's home town left out",
-            "title": "Label",
-            "type": "string"
           },
           "latitude": {
             "anyOf": [

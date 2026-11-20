@@ -25,6 +25,32 @@ export interface TripOverlay {
 /** Name ranks: the board's stop and the next stop, then the ends, then the rest. */
 export const RANK = { focus: 0, end: 1, other: 2 } as const;
 
+/** A trip mostly in one town (more than this share of its stops) is that town's line. */
+const HOME_TOWN_SHARE = 0.5;
+
+/** JDF names read "Town,Part,Place" ("Praha,Můstek", "Nový Bor,,nám."). When more than half of
+ * the trip's stops are in one town, that town is left out of their names ("Můstek"), the rest
+ * starting with a capital ("Nám."); other towns' stops keep the whole name ("Kolín, Zálabí").
+ * Names without a comma (trains, villages) stay as they are. */
+export function stopLabels(names: readonly string[]): string[] {
+  const parts = names.map((n) =>
+    n
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean),
+  );
+  const counts = new Map<string, number>();
+  for (const p of parts) if (p.length > 1) counts.set(p[0]!, (counts.get(p[0]!) ?? 0) + 1);
+  let home: string | undefined;
+  for (const [town, n] of counts) if (n > names.length * HOME_TOWN_SHARE) home = town;
+  return parts.map((p, i) => {
+    if (p.length <= 1) return p[0] ?? names[i]!;
+    if (p[0] !== home) return p.join(", ");
+    const rest = p.slice(1).join(", ");
+    return rest.charAt(0).toLocaleUpperCase("cs") + rest.slice(1);
+  });
+}
+
 export function tripFeatures(trip: TripOverlay | null): FeatureCollection<Geometry> {
   if (!trip) return { type: "FeatureCollection", features: [] };
   return {

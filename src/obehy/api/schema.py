@@ -403,10 +403,6 @@ class TripCall(BaseModel):
         description="The vehicle has left it: as realtime says, else once its expected time is "
         "behind (`[trips] passed_after_s`); a cancelled call never is"
     )
-    label: str = Field(
-        default="",
-        description="Its name as the trip's map labels it: the trip's home town left out",
-    )
 
 
 class RunCall(BaseModel):
@@ -1202,29 +1198,12 @@ class ScopedChain(VehicleChain):
     matched: list[int] = Field(description="The places in `journeys` in the scope, from 0")
 
 
-class RowBar(BaseModel):
-    """A journey of a vehicle's row on the day's timeline."""
-
-    chain: int = Field(description="Its chain's place in the row's `chains`")
-    journey: int = Field(description="Its place in that chain's `journeys`")
-    start_s: int = Field(description="Its scheduled departure (else first sighting), from `origin`")
-    end_s: int = Field(description="Its arrival (else last sighting); at least a minute long")
-    in_scope: bool = Field(description="Of the scope asked for; the others are its day's rest")
-
-
-class RowSpan(BaseModel):
-    start_s: int
-    end_s: int
-
-
 class CirculationRow(BaseModel):
-    """A vehicle's day: its chains one after another, where it stood between them."""
+    """A vehicle's day: its chains one after another."""
 
     vehicle_id: str
     display_name: str
     chains: list[ScopedChain] = Field(description="In the order they start")
-    bars: list[RowBar]
-    breaks: list[RowSpan] = Field(description="Where it stood between its chains")
 
 
 class Circulations(Envelope):
@@ -1237,9 +1216,6 @@ class Circulations(Envelope):
     modes: list[str]
     route_id: str | None
     source_vehicle_id: str | None
-    origin: Time = Field(
-        description="What the rows' seconds count from: the service date's noon less 12 h"
-    )
     rows: list[CirculationRow] = Field(
         description="A row per vehicle, by its name (numbers as numbers)"
     )

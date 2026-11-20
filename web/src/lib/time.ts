@@ -98,6 +98,12 @@ export function pragueInstant(day: string, time: string): Date {
   return new Date(guess);
 }
 
+/** What a service date's timeline counts from: noon less twelve hours, as GTFS counts
+ * schedule times, so noon is 12:00 on a day the clocks change too. */
+export function serviceDayOrigin(day: string): number {
+  return pragueInstant(day, "12:00").getTime() - 12 * 3_600_000;
+}
+
 /** The ISO 8601 form with an offset the API asks for. */
 export function toApiInstant(date: Date): string {
   return date.toISOString();

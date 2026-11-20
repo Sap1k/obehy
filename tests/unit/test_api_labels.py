@@ -4,7 +4,7 @@ here."""
 from __future__ import annotations
 
 from obehy.api import schema
-from obehy.api.labels import colour, plate, stop_labels, vehicle_name
+from obehy.api.labels import colour, plate, vehicle_name
 
 
 def test_czech_plates_read_as_they_are_written() -> None:
@@ -35,24 +35,3 @@ def test_a_vehicle_reads_by_its_fleet_number_else_label_else_source_id() -> None
     assert vehicle_name("1001", "A", "x") == "1001"
     assert vehicle_name(None, "A", "x") == "A"
     assert vehicle_name(None, None, "x") == "x"
-
-
-def test_the_town_most_of_the_trip_runs_in_is_left_out() -> None:
-    assert stop_labels(["Praha,Zličín", "Praha,Můstek"]) == ["Zličín", "Můstek"]
-    assert stop_labels(["Nový Bor,,nám.", "Nový Bor,,žel.st."]) == ["Nám.", "Žel.st."]
-    # A city line reaching past the boundary: only the city's own stops lose its name.
-    city = ["Praha,Černý Most", "Praha,Rajská zahrada", "Praha,Lehovec", "Zeleneč,náves"]
-    assert stop_labels(city) == ["Černý Most", "Rajská zahrada", "Lehovec", "Zeleneč, náves"]
-
-
-def test_whole_names_when_no_town_has_most_of_the_stops() -> None:
-    mixed = ["Kolín,Karlovo náměstí", "Kolín,Zálabí", "Nová Ves I", "Nový Bor,,nám."]
-    assert stop_labels(mixed) == [
-        "Kolín, Karlovo náměstí",
-        "Kolín, Zálabí",
-        "Nová Ves I",
-        "Nový Bor, nám.",
-    ]
-    two = ["Praha,Černý Most", "Brandýs n.L.-St.Bol.,Brandýs,Zámek"]
-    assert stop_labels(two) == ["Praha, Černý Most", "Brandýs n.L.-St.Bol., Brandýs, Zámek"]
-    assert stop_labels(["Praha hlavní nádraží", "Kolín"]) == ["Praha hlavní nádraží", "Kolín"]

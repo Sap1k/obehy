@@ -13,10 +13,9 @@ History keeps each source report with the vehicle the worker resolved it as
 
 from __future__ import annotations
 
-import itertools
 import re
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from functools import cache
 from typing import Annotated, Any
 
@@ -29,7 +28,6 @@ from obehy.api.db import Snapshot
 from obehy.api.params import ParameterError, date_span
 from obehy.api.resolve import trip_on
 from obehy.realtime.policy import load_policy
-from obehy.realtime.times import Instant, service_day_origin
 
 router = APIRouter()
 
@@ -112,50 +110,22 @@ def _natural(name: str) -> tuple[tuple[int, int | str], ...]:
     )
 
 
-def rows_of(chains: list[schema.ScopedChain], origin: Instant) -> list[schema.CirculationRow]:
-    """A row per vehicle: its chains in the order they start, each journey a bar from its
-    scheduled departure to its arrival (where it was seen when history has no schedule), at
-    least a minute long, in seconds from `origin`; where it stood between its chains. Rows by
-    the vehicle's name, numbers as numbers."""
-
-    def seconds(at: datetime) -> int:
-        return round((at - origin).total_seconds())
+def rows_of(chains: list[schema.ScopedChain]) -> list[schema.CirculationRow]:
+    """A row per vehicle, its chains in the order they start; rows by the vehicle's name,
+    numbers as numbers."""
 
     by_vehicle: dict[str, list[schema.ScopedChain]] = {}
     for chain in chains:
         by_vehicle.setdefault(chain.vehicle_id, []).append(chain)
-    rows: list[schema.CirculationRow] = []
-    for vehicle_id, theirs in by_vehicle.items():
-        ordered = sorted(theirs, key=lambda c: c.first_seen)
-        bars: list[schema.RowBar] = []
-        for part, chain in enumerate(ordered):
-            matched = set(chain.matched)
-            for n, journey in enumerate(chain.journeys):
-                start = seconds(journey.departure or journey.first_seen)
-                end = seconds(journey.arrival or journey.last_seen)
-                bars.append(
-                    schema.RowBar(
-                        chain=part,
-                        journey=n,
-                        start_s=start,
-                        end_s=max(end, start + 60),
-                        in_scope=n in matched,
-                    )
-                )
-        breaks = [
-            schema.RowSpan(start_s=before.end_s, end_s=after.start_s)
-            for before, after in itertools.pairwise(bars)
-            if after.chain != before.chain and after.start_s > before.end_s
-        ]
-        rows.append(
-            schema.CirculationRow(
-                vehicle_id=vehicle_id,
-                display_name=ordered[0].display_name,
-                chains=ordered,
-                bars=bars,
-                breaks=breaks,
-            )
+    rows = [
+        schema.CirculationRow(
+            vehicle_id=vehicle_id,
+            display_name=ordered[0].display_name,
+            chains=ordered,
         )
+        for vehicle_id, theirs in by_vehicle.items()
+        for ordered in [sorted(theirs, key=lambda c: c.first_seen)]
+    ]
     return sorted(rows, key=lambda r: (_natural(r.display_name), r.vehicle_id))
 
 
@@ -373,7 +343,6 @@ def circulations(
         ]
         if places:
             vehicles.append(schema.ScopedChain(**chain.model_dump(), matched=places))
-    origin = service_day_origin(day)
     return schema.Circulations(
         **envelope(snap),
         source=source,
@@ -382,6 +351,5 @@ def circulations(
         modes=sorted(mode or []),
         route_id=route_id,
         source_vehicle_id=source_vehicle_id,
-        origin=origin,
-        rows=rows_of(vehicles, origin),
+        rows=rows_of(vehicles),
     )

@@ -301,11 +301,7 @@ export function CirculationsPage() {
             busy={loading}
             rows={rows}
             span={span}
-            now={
-              date === today && circulations.data
-                ? secondsOfDay(circulations.data.origin, now)
-                : null
-            }
+            now={date === today ? secondsOfDay(date, now) : null}
             today={date === today}
             sourceLabel={sourceName}
             selected={selected}

@@ -20,7 +20,6 @@ const call = (sequence: number, location_id: string, time: string): TripCall => 
   delay_min: null,
   punctuality: "unknown",
   passed: false,
-  label: location_id,
 });
 
 const line = (route_id: string, short_name: string): Line => ({

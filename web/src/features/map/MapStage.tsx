@@ -13,7 +13,7 @@ import type { Bounds } from "./grid";
 import { mergeVehicles, useVehiclesIn } from "./queries";
 import { useSelection } from "./selection";
 import { unfollow, useMapStore } from "./store";
-import { RANK, type TripOverlay } from "./tripLayer";
+import { RANK, stopLabels, type TripOverlay } from "./tripLayer";
 import classes from "./MapPage.module.css";
 
 /** A failing map is rebuilt at most this often. */
@@ -66,11 +66,12 @@ export function MapStage({ hidden = false }: { hidden?: boolean }) {
     const calls = tripData.calls.filter(
       (c) => c.latitude !== null && c.longitude !== null && c.boarding !== "none",
     );
+    const names = stopLabels(calls.map((c) => c.name));
     const next = calls.findIndex((c) => !c.passed);
     const stops = calls.map((c, i) => ({
       id: c.location_id,
       position: [c.longitude!, c.latitude!] as [number, number],
-      name: c.label,
+      name: names[i]!,
       passed: c.passed,
       rank:
         c.location_id === boardStop || i === next

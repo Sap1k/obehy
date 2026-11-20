@@ -929,16 +929,9 @@ export interface components {
         };
         /**
          * CirculationRow
-         * @description A vehicle's day: its chains one after another, where it stood between them.
+         * @description A vehicle's day: its chains one after another.
          */
         CirculationRow: {
-            /** Bars */
-            bars: components["schemas"]["RowBar"][];
-            /**
-             * Breaks
-             * @description Where it stood between its chains
-             */
-            breaks: components["schemas"]["RowSpan"][];
             /**
              * Chains
              * @description In the order they start
@@ -1006,12 +999,6 @@ export interface components {
             generated_at: string;
             /** Modes */
             modes: string[];
-            /**
-             * Origin
-             * Format: date-time
-             * @description What the rows' seconds count from: the service date's noon less 12 h
-             */
-            origin: string;
             /**
              * Release Id
              * @description The active release the answer was read from.
@@ -2226,44 +2213,6 @@ export interface components {
             vehicle_id: string;
         };
         /**
-         * RowBar
-         * @description A journey of a vehicle's row on the day's timeline.
-         */
-        RowBar: {
-            /**
-             * Chain
-             * @description Its chain's place in the row's `chains`
-             */
-            chain: number;
-            /**
-             * End S
-             * @description Its arrival (else last sighting); at least a minute long
-             */
-            end_s: number;
-            /**
-             * In Scope
-             * @description Of the scope asked for; the others are its day's rest
-             */
-            in_scope: boolean;
-            /**
-             * Journey
-             * @description Its place in that chain's `journeys`
-             */
-            journey: number;
-            /**
-             * Start S
-             * @description Its scheduled departure (else first sighting), from `origin`
-             */
-            start_s: number;
-        };
-        /** RowSpan */
-        RowSpan: {
-            /** End S */
-            end_s: number;
-            /** Start S */
-            start_s: number;
-        };
-        /**
          * RunAlert
          * @description An alert a run shows: its parts' own and their lines', and the severe ones of its stops
          *     still ahead (a stop's others are on its board).
@@ -2785,12 +2734,6 @@ export interface components {
              * @description request_stop, on_request, conditional, exit_only, boarding_only, not_stopping, border_control_only
              */
             flags: string[];
-            /**
-             * Label
-             * @description Its name as the trip's map labels it: the trip's home town left out
-             * @default
-             */
-            label: string;
             /** Latitude */
             latitude: number | null;
             /** Location Id */
