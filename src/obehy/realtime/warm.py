@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable, Generator, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable
 from datetime import datetime, timedelta
 
-from obehy.realtime.model import Observation
+from obehy.realtime.facts import Observation
 from obehy.realtime.phases import Phases
 from obehy.realtime.policy import Policy
-from obehy.realtime.runner import Runner
-from obehy.realtime.times import Instant, next_multiple
+from obehy.realtime.runner import Runner, Ticks
+from obehy.realtime.times import Instant
 
 PROGRESS_EVERY_S = 30.0
 
@@ -35,40 +35,6 @@ def warm_window(policy: Policy, until: Instant) -> tuple[datetime, datetime, dat
     return since, until, until - timedelta(seconds=alive_s)
 
 
-class _Ticks:
-    """The replay clock's housekeeping ticks."""
-
-    def __init__(self, runner: Runner) -> None:
-        self.runner = runner
-        self.every_s = runner.policy.emit_tick_s
-        self.next: Instant | None = None
-
-    def due(self, at: Instant) -> bool:
-        return self.next is not None and self.next <= at
-
-    def advance(self, at: Instant) -> None:
-        """Run every tick up to and including `at`."""
-
-        if self.next is None:
-            self.next = next_multiple(at, self.every_s)
-        while self.next <= at:
-            self.runner.tick(self.next, emit=False)
-            self.next = next_multiple(self.next, self.every_s)
-
-    def split(self, chunk: list[Observation]) -> Iterator[list[Observation]]:
-        """The chunk in runs between ticks; the ticks between them are run on the way."""
-
-        start = 0
-        for i, observation in enumerate(chunk):
-            if self.next is None or self.due(observation.received_at):
-                if i > start:
-                    yield chunk[start:i]
-                start = i
-                self.advance(observation.received_at)
-        if start < len(chunk):
-            yield chunk[start:]
-
-
 def warm_start(
     runner: Runner,
     chunks: Iterable[list[Observation]],
@@ -80,7 +46,7 @@ def warm_start(
     side effects, with ticks up to `until`; returns how many. Stops early when `stop` is set."""
 
     writer, runner.writer = runner.writer, None
-    ticks = _Ticks(runner)
+    ticks = Ticks(runner)
     phases = runner.phases  # read here, index and core in the runner: one line
     count = 0
     started = last = time.monotonic()

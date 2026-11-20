@@ -27,6 +27,7 @@ from obehy.realtime.compositions import (
     UpstreamRequest,
     start_call,
 )
+from obehy.realtime.sources.decoding import PayloadError, load_json
 
 SOURCE = "cd"
 COMPOSITION = "composition"
@@ -53,10 +54,6 @@ SERVICES = {
     "business": "business_compartment",
     "damy": "ladies_compartment",
 }
-
-
-class PayloadError(ValueError):
-    """An answer that does not have the documented shape."""
 
 
 def plan(subject: Subject, view: TripView) -> UpstreamRequest | NotAvailable:
@@ -89,10 +86,7 @@ def _json(body: bytes) -> dict[str, Any]:
         text = text[:-1]
     if text.startswith("(") and text.endswith(")"):
         text = text[1:-1]  # CD-Q2
-    try:
-        document = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise PayloadError(f"not JSON: {error}") from error
+    document = load_json(text)
     inner = cast(dict[str, Any], document).get("d") if isinstance(document, dict) else None
     if not isinstance(inner, dict):
         raise PayloadError("no 'd' object")

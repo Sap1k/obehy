@@ -17,7 +17,7 @@ from obehy.realtime.times import PRAGUE
 CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
 # Every time is answered in Prague time, whether read as a timestamp or from a stored instant.
 Time = Annotated[datetime, AfterValidator(lambda value: value.astimezone(PRAGUE))]
-SourceClass = Literal["gps", "source", "propagated"]
+SourceClass = Literal["gps", "source"]
 VehicleState = Literal["running", "positioning", "layover", "unmatched", "not_in_service"]
 Boarding = Literal["regular", "none", "phone", "ask_driver"]
 WheelchairAmenity = Literal["booking_required", "booking_recommended", "accessible", "partly"]

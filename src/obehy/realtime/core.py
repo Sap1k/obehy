@@ -42,6 +42,20 @@ from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
 from obehy.realtime import timeline
+from obehy.realtime.facts import (
+    Interval,
+    LineRef,
+    Observation,
+    PlatformAssignment,
+    Position,
+    ServiceDay,
+    SourceDeparture,
+    SourceSemantics,
+    SourceState,
+    TripCancelled,
+    TripKey,
+    VehicleKey,
+)
 from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.infer import keyless
 from obehy.realtime.infer.keyed import Match, admissible, bind, running, span
@@ -54,24 +68,12 @@ from obehy.realtime.model import (
     FeedState,
     Freshness,
     Instance,
-    Interval,
     JourneyKey,
     KeylessEpisode,
-    LineRef,
-    Observation,
     ObservationResult,
-    PlatformAssignment,
-    Position,
     Reason,
     RecordCancellation,
-    ServiceDay,
-    SourceDeparture,
-    SourceSemantics,
-    SourceState,
-    TripCancelled,
-    TripKey,
     VehicleId,
-    VehicleKey,
     VehicleState,
     VehicleStatus,
     WriteEvent,
@@ -92,7 +94,7 @@ from obehy.realtime.timeline.plan import Plan, PlanCache
 from obehy.realtime.timeline.progress import at_origin_or_moving, past_first_stop
 from obehy.realtime.timeline.runtimes import forget, minimum_drives, record, running_extra
 from obehy.realtime.timeline.stops import departure
-from obehy.realtime.times import PRAGUE, Instant
+from obehy.realtime.times import Instant, local_wall
 
 CORE_VERSION = "r1.0"
 
@@ -656,7 +658,7 @@ def _missed_departure(
     position = observation.first(Position)
     if planned is None or position is None or observation.at < start:
         return False
-    later, scheduled = planned.at.astimezone(PRAGUE), start.astimezone(PRAGUE)
+    later, scheduled = local_wall(planned.at), local_wall(start)
     if later.date() <= scheduled.date() or later.time() != scheduled.time():
         return False
     plan = ctx.plans.plan(trip, instance.journey.service_date, ctx.index, ctx.policy)

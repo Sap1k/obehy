@@ -20,19 +20,19 @@ import json
 from datetime import timedelta
 from typing import Any, cast
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Destination,
     Fact,
     LineRef,
     NextStopName,
     Observation,
-    Position,
     RawRef,
     VehicleAttribute,
     VehicleKey,
 )
-from obehy.realtime.times import Instant, read_local, within_skew
+from obehy.realtime.sources.decoding import PayloadError, fix, fresh, integer, load_json, number
+from obehy.realtime.times import Instant, read_digits_as_local
 
 SOURCE = "arriva-express"
 CHANNEL = "buses"
@@ -41,17 +41,39 @@ DECODER_VERSION = 2
 EXPRESS = "ARRIVA EXPRESS"  # `mainType` (ARRIVA-Q7)
 
 
-class PayloadError(ValueError):
-    """A successful poll whose body does not have the documented shape."""
+def recorded(body: bytes) -> tuple[bytes, int, int]:
+    """The poll as archived (ARRIVA-Q7): only `mainType = "ARRIVA EXPRESS"` vehicles of the
+    GraphQL batch response; with the counts kept and dropped."""
+
+    document = load_json(body)
+    if not isinstance(document, list):
+        raise PayloadError("expected a GraphQL batch (JSON array)")
+    kept = dropped = 0
+    for item in cast(list[object], document):
+        data = cast(dict[str, Any], item).get("data") if isinstance(item, dict) else None
+        if not isinstance(data, dict):
+            raise PayloadError("batch item without a data object")
+        vehicles = cast(dict[str, Any], data).get("busesCurrentLocations")
+        if not isinstance(vehicles, list):
+            raise PayloadError("data.busesCurrentLocations is not a list")
+        entries = cast(list[object], vehicles)
+        express: list[object] = [
+            vehicle
+            for vehicle in entries
+            if isinstance(vehicle, dict)
+            and cast(dict[str, Any], vehicle).get("mainType") == EXPRESS
+        ]
+        kept += len(express)
+        dropped += len(entries) - len(express)
+        cast(dict[str, Any], data)["busesCurrentLocations"] = express
+    encoded = json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return encoded, kept, dropped
 
 
 def decode(
     body: bytes, sha256: str, received_at: Instant, max_clock_skew: timedelta
 ) -> list[Observation]:
-    try:
-        document = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise PayloadError(f"not JSON: {error}") from error
+    document = load_json(body)
     if not isinstance(document, list) or not document:
         raise PayloadError("payload is not a GraphQL batch")
     first = cast(list[object], document)[0]
@@ -82,9 +104,7 @@ def _entry(
     destination = _text(entry.get("destinationName"))
     if not plate or not line or not destination:
         return None
-    observed = _time(entry.get("updated"), received_at)
-    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
-        observed = None
+    observed = fresh(_time(entry.get("updated"), received_at), received_at, max_clock_skew)
     facts: list[Fact] = [
         VehicleKey(plate),
         VehicleAttribute("licence_plate", plate),
@@ -94,11 +114,12 @@ def _entry(
     following = _text(entry.get("lastStopName"))  # ARRIVA-Q2: the next stop
     if following:
         facts.append(NextStopName(following))
-    lat, lon = _number(entry.get("latitude")), _number(entry.get("longitude"))
+    lat, lon = number(entry.get("latitude")), number(entry.get("longitude"))
     # A position without a trustworthy time cannot place events in time: it is dropped.
-    if observed is not None and lat is not None and lon is not None and lat != 0 and lon != 0:
-        facts.append(Position(lat=lat, lon=lon, bearing=_number(entry.get("angle"))))
-    minutes = _integer(entry.get("delay"))
+    position = fix(lat, lon, number(entry.get("angle")))
+    if observed is not None and position is not None:
+        facts.append(position)
+    minutes = integer(entry.get("delay"))
     if minutes is not None:
         facts.append(Delay(minutes * 60, "departure"))  # ARRIVA-Q3
     return Observation(
@@ -117,29 +138,12 @@ def _text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""  # ARRIVA-Q5
 
 
-def _number(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
-
-
-def _integer(value: object) -> int | None:
-    try:
-        return int(value) if isinstance(value, str | int) and not isinstance(value, bool) else None
-    except ValueError:
-        return None
-
-
 def _time(value: object, received_at: Instant) -> Instant | None:
     """ARRIVA-Q1: `2026-10-05T21:23:31.000+00:00` is 21:23:31 Prague time."""
 
-    if not isinstance(value, str) or len(value) < 19:
+    if not isinstance(value, str):
         return None
-    return read_local(value[:19], "%Y-%m-%dT%H:%M:%S", received_at)
+    try:
+        return read_digits_as_local(value, received_at)
+    except ValueError:
+        return None

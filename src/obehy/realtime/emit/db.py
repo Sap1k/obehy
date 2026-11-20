@@ -25,12 +25,12 @@ from obehy.realtime.emit.storage import (
     hour_of,
 )
 from obehy.realtime.emit.vehicles import VehicleBook
+from obehy.realtime.facts import Feed, VehicleKey
 from obehy.realtime.model import (
     AssignVehicle,
     CallState,
     Derivation,
     Effect,
-    Feed,
     FeedState,
     Instance,
     JourneyKey,
@@ -41,7 +41,6 @@ from obehy.realtime.model import (
     RecordPlatform,
     SnapshotJourney,
     VehicleId,
-    VehicleKey,
     VehicleState,
     WriteEvent,
 )

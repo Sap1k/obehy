@@ -217,8 +217,22 @@ def test_the_history_window_drops_whole_days(connection: psycopg.Connection) -> 
     writer.write(effects)
     _assign(writer, "582492:2", D9, "2026-10-09 06:00", "2026-10-09 07:00")
     assert history_days(connection) == [D8, D9]
+    for day in (D8, D9):
+        connection.execute(
+            "WITH m AS (INSERT INTO rt.composition (feed, key_namespace, key, service_date,"
+            " source, from_location, from_visit, digest, first_seen, observed_at, fetch_id)"
+            " VALUES ('czptt', 'czptt:train_number', '6402', %s, 'cd', 'L1', 1, 'd', now(),"
+            " now(), 1) RETURNING composition_id)"
+            " INSERT INTO rt.composition_unit (composition_id, sequence, kind, role, classes,"
+            " features, texts, details) SELECT composition_id, 1, 'unit', 'train', '{}', '{}',"
+            " '{}', '{}' FROM m",
+            (day,),
+        )
 
     assert drop_history(connection, D9) == [D8]
+    # Compositions are kept as long as history.
+    assert _scalar(connection, "SELECT count(*) FROM rt.composition") == 1
+    assert _scalar(connection, "SELECT count(*) FROM rt.composition_unit") == 1
     assert history_days(connection) == [D9]
     assert _scalar(connection, "SELECT count(*) FROM history.actual_stop_event") == 0
     assert _scalar(connection, "SELECT count(*) FROM history.journey") == 1
@@ -298,7 +312,8 @@ def test_state_written_by_changes_matches_a_full_rewrite(connection: psycopg.Con
 
 
 def test_vehicle_attributes_are_written_when_they_change(connection: psycopg.Connection) -> None:
-    from obehy.realtime.model import ObservationResult, VehicleAttribute
+    from obehy.realtime.facts import VehicleAttribute
+    from obehy.realtime.model import ObservationResult
 
     writer = _writer(connection)
 

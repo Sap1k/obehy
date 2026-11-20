@@ -19,7 +19,8 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Protocol
 
-from obehy.realtime.model import Feed, visit_numbers
+from obehy.realtime.facts import Feed
+from obehy.realtime.model import visit_numbers
 
 KeyRef = tuple[str, str]  # (namespace, identifier)
 

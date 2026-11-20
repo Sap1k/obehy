@@ -26,11 +26,6 @@ capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 auth = { header = "X-Access-Token", secret = "golemio" }
 cursor = { header = "x-last-modified", param = "updatedSince", max_age_s = 120 }
 
-[channel.semantics]
-clock = "source"
-delay_reference = "unknown"
-key_namespaces = { jdf = "pid:gtfs_trip_id", czptt = "czptt:train_number" }
-
 [channel.request]
 method = "GET"
 url = "https://api.golemio.cz/v2/vehiclepositions?limit=10000&includeNotTracking=true"

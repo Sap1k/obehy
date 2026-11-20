@@ -21,9 +21,9 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
+from obehy.realtime.facts import Feed
 from obehy.realtime.geo import cumulative_m
 from obehy.realtime.index import Call, Index, KeyEntry, Location, Shape, Trip, parent_ref
-from obehy.realtime.model import Feed
 
 ORIGIN = (14.0, 50.0)
 STEP_LON = 0.014  # about 1 km at 50° N

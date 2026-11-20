@@ -7,9 +7,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from obehy.realtime import record
-from obehy.realtime.model import Delay, Observation, Position, TripKey, VehicleKey
-from obehy.realtime.replay import DECODERS
+from obehy.realtime.facts import Delay, Observation, Position, TripKey, VehicleKey
 from obehy.realtime.sources import mpvnet
+from obehy.realtime.sources.registry import DECODERS
 from obehy.realtime.times import instant
 
 RECEIVED = instant(datetime(2026, 10, 11, 15, 27, 55, tzinfo=UTC))  # 17:27:55 CEST

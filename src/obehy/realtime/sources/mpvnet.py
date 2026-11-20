@@ -13,23 +13,22 @@ so it is read as `unknown`, a weak constraint; GPS progress decides.
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import timedelta
 from typing import Any, cast
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Fact,
     Feed,
     Observation,
-    Position,
     RawRef,
     TripKey,
     VehicleAttribute,
     VehicleKey,
 )
-from obehy.realtime.times import Instant, read_local, within_skew
+from obehy.realtime.sources.decoding import PayloadError, fix, fresh, line_trip, load_json, number
+from obehy.realtime.times import Instant, read_local
 
 SOURCE = "mpvnet"
 CHANNELS = ("idol", "jikord", "odis", "zlin")
@@ -43,17 +42,10 @@ BEARING = re.compile(r"^a_(\d{1,3})\.png$")  # `a_stoji.png` is standing: no bea
 CIS_LINE = re.compile(r"^\d{6}$")
 
 
-class PayloadError(ValueError):
-    """A successful poll whose body does not have the documented shape."""
-
-
 def decode(
     body: bytes, sha256: str, received_at: Instant, max_clock_skew: timedelta, channel: str
 ) -> list[Observation]:
-    try:
-        document = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise PayloadError(f"not JSON: {error}") from error
+    document = load_json(body)
     entries = (
         cast(dict[str, Any], document).get("transmitters") if isinstance(document, dict) else None
     )
@@ -91,7 +83,7 @@ def _entry(
             return None
         feed = "jdf"
         vehicle = plate
-        key = TripKey("cis:line_trip", f"{fields[0]}:{fields[2]}")
+        key = line_trip(fields[0], fields[2])
         delay = _seconds(fields[6])  # MPVNET-Q9
     elif kind == TRAIN and len(fields) == TRAIN_FIELDS:
         if not fields[2].isdigit():
@@ -103,16 +95,15 @@ def _entry(
         delay = _delay(entry.get("ds"))
     else:
         return None
-    observed = _time(entry, received_at)
-    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
-        observed = None
+    observed = fresh(_time(entry, received_at), received_at, max_clock_skew)
     facts: list[Fact] = [VehicleKey(vehicle), key]
     if feed == "jdf":
         facts.append(VehicleAttribute("licence_plate", vehicle))
-    lat, lon = _number(entry.get("x")), _number(entry.get("y"))  # MPVNET-Q5
+    lat, lon = number(entry.get("x")), number(entry.get("y"))  # MPVNET-Q5
     # A position without a trustworthy time cannot place events in time: it is dropped.
-    if observed is not None and lat is not None and lon is not None and lat != 0 and lon != 0:
-        facts.append(Position(lat=lat, lon=lon, bearing=_bearing(entry.get("ico"))))
+    position = fix(lat, lon, _bearing(entry.get("ico")))
+    if observed is not None and position is not None:
+        facts.append(position)
     if delay is not None:
         facts.append(Delay(delay, "unknown"))
     return Observation(
@@ -125,12 +116,6 @@ def _entry(
         decoder_version=DECODER_VERSION,
         facts=tuple(facts),
     )
-
-
-def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return float(value)
 
 
 def _time(entry: dict[str, Any], received_at: Instant) -> Instant | None:

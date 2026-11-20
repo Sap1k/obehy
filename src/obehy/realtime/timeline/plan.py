@@ -12,8 +12,8 @@ from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import date
 
+from obehy.realtime.facts import EventKind
 from obehy.realtime.index import IndexView, Trip
-from obehy.realtime.model import EventKind
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.path import Path, build_path
 from obehy.realtime.times import Instant, ServiceTime, micros, scaled_micros

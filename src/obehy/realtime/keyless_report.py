@@ -17,16 +17,9 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from obehy.realtime.facts import Destination, LineRef, NextStopName, TripKey, VehicleKey
 from obehy.realtime.infer.keyless.episode import same_name
-from obehy.realtime.model import (
-    Destination,
-    Effect,
-    LineRef,
-    NextStopName,
-    ObservationResult,
-    TripKey,
-    VehicleKey,
-)
+from obehy.realtime.model import Effect, ObservationResult
 from obehy.realtime.times import Instant
 
 

@@ -15,10 +15,12 @@ from obehy.realtime.times import (
     TimeError,
     candidate_service_dates,
     instant,
+    local_wall,
     read_digits_as_local,
     read_unless_offset_twice,
     resolve_clock,
     resolve_local,
+    wall_instant,
     within_skew,
 )
 
@@ -134,3 +136,18 @@ def test_candidate_service_dates_follow_the_local_calendar() -> None:
 def test_naive_datetimes_are_rejected() -> None:
     with pytest.raises(TimeError):
         instant(datetime(2026, 10, 8, 12))  # noqa: DTZ001
+
+
+def test_a_command_line_wall_time_is_prague_and_the_first_of_a_repeated_hour() -> None:
+    # 2026-10-25: 02:30 happens twice; the first is 00:30Z.
+    assert wall_instant(datetime.fromisoformat("2026-10-25T02:30")) == instant(
+        datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
+    )
+    assert wall_instant(datetime(2026, 10, 12, 4, 0, tzinfo=UTC)) == instant(
+        datetime(2026, 10, 12, 4, 0, tzinfo=UTC)
+    )
+
+
+def test_an_instants_wall_time_is_its_prague_time_of_day() -> None:
+    at = instant(datetime(2026, 7, 1, 22, 30, tzinfo=UTC))
+    assert local_wall(at) == datetime.fromisoformat("2026-07-02T00:30")

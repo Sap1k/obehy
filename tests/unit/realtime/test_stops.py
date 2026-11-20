@@ -9,7 +9,8 @@ import random
 from datetime import timedelta
 
 from obehy.realtime.core import estimate_all
-from obehy.realtime.model import Interval, WriteEvent
+from obehy.realtime.facts import Interval
+from obehy.realtime.model import WriteEvent
 from tests.realtime.observations import local
 from tests.unit.realtime.test_timeline import POLICY, Run, east, north_of
 

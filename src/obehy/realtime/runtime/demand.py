@@ -26,7 +26,7 @@ import csv
 import statistics
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import psycopg
@@ -35,7 +35,7 @@ from obehy.realtime.archive import Poll
 from obehy.realtime.manifest import Channel
 from obehy.realtime.policy import BoardPolicy
 from obehy.realtime.runtime.scheduler import BLOCKED, BLOCKED_STEPS, fetch_guarded
-from obehy.realtime.times import Instant, instant, local_date
+from obehy.realtime.times import Instant, instant, local_date, now
 
 CATALOGUE = Path(__file__).resolve().parents[2] / "data" / "realtime" / "sr70-name20.csv"
 
@@ -201,10 +201,6 @@ class StationDemand:
 # --- the loop ----------------------------------------------------------------------------------
 
 
-def _now() -> Instant:
-    return instant(datetime.now(UTC))
-
-
 async def run_demand(
     channel: Channel,
     stop: asyncio.Event,
@@ -213,7 +209,7 @@ async def run_demand(
     on_poll: OnDemandPoll,
     policy: BoardPolicy,
     *,
-    clock: Callable[[], Instant] = _now,
+    clock: Callable[[], Instant] = now,
     log: ReadLog | None = None,
     once: bool = False,
 ) -> ReadLog:

@@ -25,16 +25,16 @@ import re
 from datetime import timedelta
 from typing import Any, cast
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Fact,
     Observation,
     Position,
     RawRef,
-    TripKey,
     VehicleAttribute,
     VehicleKey,
 )
+from obehy.realtime.sources.decoding import PayloadError, fresh, line_trip
 from obehy.realtime.times import Instant, read_local, within_skew
 
 SOURCE = "dpmd"
@@ -57,10 +57,6 @@ COORDS = re.compile(r"^(\d+(?:\.\d+)?)N, (\d+(?:\.\d+)?)E$")
 MINUTES = re.compile(r"^(\d+) min\.$")
 SPEED = re.compile(r"^(\d+) km/h$")
 TIME_LAYOUT = "%d.%m.%Y %H:%M:%S"
-
-
-class PayloadError(ValueError):
-    """The body is not the JavaScript shape the map page reads."""
 
 
 class _Reader:
@@ -267,12 +263,11 @@ def _bus(
     line, trip = labels.get("Linka", "").strip(), labels.get("Spoj", "").strip()
     if not line.isdigit() or not trip.isdigit():
         return None  # not on a trip
-    observed = read_local(labels.get("Čas", "").strip(), TIME_LAYOUT, received_at)  # DPMD-Q1
-    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
-        observed = None
+    local = read_local(labels.get("Čas", "").strip(), TIME_LAYOUT, received_at)  # DPMD-Q1
+    observed = fresh(local, received_at, max_clock_skew)
     facts: list[Fact] = [
         VehicleKey(vehicle),
-        TripKey("cis:line_trip", f"{CIS_PREFIX}{int(line):03d}:{int(trip)}"),
+        line_trip(f"{CIS_PREFIX}{int(line):03d}", trip),
     ]
     coords = COORDS.match(bus.get("coords", "")) if isinstance(bus.get("coords"), str) else None
     # A position without a trustworthy time cannot place events in time: it is dropped.

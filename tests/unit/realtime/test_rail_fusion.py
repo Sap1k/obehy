@@ -9,16 +9,10 @@ from obehy.realtime.core import Context, estimate_all, refresh, step
 from obehy.realtime.emit.gtfs_rt import feed_message
 from obehy.realtime.emit.represent import representing
 from obehy.realtime.emit.vehicles import VehicleBook
-from obehy.realtime.index import Index
-from obehy.realtime.manifest import semantics_by_channel
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
-    Effect,
     Fact,
-    FeedState,
-    Instance,
     Interval,
-    JourneyKey,
     NextPoint,
     NextStopPrediction,
     Observation,
@@ -27,9 +21,17 @@ from obehy.realtime.model import (
     RawRef,
     ServiceDay,
     TripKey,
+    VehicleKey,
+)
+from obehy.realtime.index import Index
+from obehy.realtime.manifest import semantics_by_channel
+from obehy.realtime.model import (
+    Effect,
+    FeedState,
+    Instance,
+    JourneyKey,
     Unresolved,
     VehicleId,
-    VehicleKey,
     WriteEvent,
 )
 from obehy.realtime.policy import load_policy
@@ -323,10 +325,11 @@ def _predicted_c(predictor: str) -> object:
 
 
 def test_predictors_anchor_change_sz_and_propagate() -> None:
-    # SŽ: 1 min late now, 4 min late at C; own anchor here is SŽ's point delay too (no GPS).
+    # SŽ: 1 min late now (a floored minute: 1.5 min, SZ-Q12), 4 min late at C; own anchor here
+    # is SŽ's point delay too (no GPS), so the anchor's change is SŽ's prediction.
     assert _predicted_c("anchor_change") == local("2026-10-08 08:24")
     assert _predicted_c("sz") == local("2026-10-08 08:24")
-    assert _predicted_c("propagate") == local("2026-10-08 08:21")
+    assert _predicted_c("propagate") == local("2026-10-08 08:21:30")
 
 
 def test_sz_q10_a_repeated_point_changes_nothing_and_a_late_one_still_places() -> None:

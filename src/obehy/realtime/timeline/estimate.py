@@ -43,8 +43,9 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
+from obehy.realtime.facts import Interval
 from obehy.realtime.index import Trip
-from obehy.realtime.model import CallState, CallStatus, Instance, Interval, SourceClass
+from obehy.realtime.model import CallState, CallStatus, Instance, SourceClass
 from obehy.realtime.policy import PredictionPolicy
 from obehy.realtime.timeline.plan import Plan, Scheduled, no_timetabled_dwell
 from obehy.realtime.times import Instant

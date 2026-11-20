@@ -15,20 +15,23 @@ from __future__ import annotations
 from dataclasses import replace
 from functools import lru_cache
 
-from obehy.realtime.index import IndexView, Trip
-from obehy.realtime.model import (
-    CallState,
+from obehy.realtime.facts import (
+    FLOORED_MINUTE_MIDDLE_S,
     Delay,
-    Effect,
-    Freshness,
-    Instance,
     Interval,
     Observation,
     PointEvent,
     Position,
-    Published,
     SourceSemantics,
     SourceState,
+)
+from obehy.realtime.index import IndexView, Trip
+from obehy.realtime.model import (
+    CallState,
+    Effect,
+    Freshness,
+    Instance,
+    Published,
     Unresolved,
     WriteEvent,
 )
@@ -228,6 +231,8 @@ def usable_delay(
     before = instance.lifecycle == "pre_trip" or (source is not None and source.code == "pre_trip")
     if semantics.pre_trip_delay_is_elapsed and before:
         return None
+    if semantics.delay_floor_minute:  # whole minutes rounded down: the minute's middle
+        return delay.seconds + FLOORED_MINUTE_MIDDLE_S
     return delay.seconds
 
 

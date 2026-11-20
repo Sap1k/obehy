@@ -17,7 +17,7 @@ from __future__ import annotations
 import heapq
 import json
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from itertools import batched
@@ -27,71 +27,26 @@ from typing import Any, cast
 import psycopg
 
 from obehy.pipeline.files import atomic_output_path
-from obehy.realtime.alerts import Alert
-from obehy.realtime.archive import ArchivedPoll, iter_polls
+from obehy.realtime.archive import ArchivedPoll, iter_polls, succeeded
 from obehy.realtime.core import CORE_VERSION, estimate_all
 from obehy.realtime.emit.db import Writer, clear_observations
 from obehy.realtime.emit.gtfs_rt import feed_message
 from obehy.realtime.evaluate import SAMPLE_EVERY, PredictorLog
+from obehy.realtime.facts import Feed, Observation, SourceState, TripKey, VehicleKey
 from obehy.realtime.index_sql import ReleaseLoads, ensure_release, file_loads
 from obehy.realtime.keyless_report import KeylessLog
-from obehy.realtime.model import (
-    Derivation,
-    Effect,
-    Feed,
-    Observation,
-    ObservationResult,
-    SourceState,
-    TripKey,
-    Unresolved,
-    VehicleKey,
-)
+from obehy.realtime.manifest import Channel, semantics_by_channel
+from obehy.realtime.model import Derivation, Effect, ObservationResult, Unresolved
 from obehy.realtime.policy import Policy
 from obehy.realtime.quality import QualityLog
-from obehy.realtime.runner import Runner
-from obehy.realtime.sources import (
-    arriva_express,
-    dpmd,
-    duk,
-    mpvnet,
-    pid,
-    pid_alerts,
-    sz,
-    sz_tabule,
-)
+from obehy.realtime.runner import Runner, Ticks
+from obehy.realtime.sources import duk, mpvnet, pid
+from obehy.realtime.sources.registry import DECODERS
 from obehy.realtime.times import Instant, instant, local_date, next_multiple
 
 REPORT_SCHEMA_VERSION = 2
 LOOKAHEAD_POLLS = 40
 SOURCES = ("duk", "sz-mapa", "sz-tabule")
-
-# body, payload sha256, reception time, clock skew, the request's context (`Poll.request`)
-Decoder = Callable[[bytes, str, Instant, timedelta, Mapping[str, Any]], list[Observation]]
-DECODERS: dict[tuple[str, str], Decoder] = {
-    (duk.SOURCE, duk.CHANNEL): lambda body, sha, at, skew, _: duk.decode(body, sha, at, skew),
-    (sz.SOURCE, sz.CHANNEL): lambda body, sha, at, skew, _: sz.decode(body, sha, at, skew),
-    (sz_tabule.SOURCE, sz_tabule.CHANNEL): sz_tabule.decode,
-    (dpmd.SOURCE, dpmd.CHANNEL): lambda body, sha, at, skew, _: dpmd.decode(body, sha, at, skew),
-    (pid.SOURCE, pid.CHANNEL): lambda body, sha, at, skew, _: pid.decode(body, sha, at, skew),
-    (arriva_express.SOURCE, arriva_express.CHANNEL): (
-        lambda body, sha, at, skew, _: arriva_express.decode(body, sha, at, skew)
-    ),
-    **{
-        (mpvnet.SOURCE, name): (
-            lambda body, sha, at, skew, _, name=name: mpvnet.decode(body, sha, at, skew, name)
-        )
-        for name in mpvnet.CHANNELS
-    },
-}
-
-
-# Alert channels (BASE_PLAN.md section 25): body, reception time. Never replayed: alerts do
-# not pass through the core.
-AlertDecoder = Callable[[bytes, Instant], list[Alert]]
-ALERT_DECODERS: dict[tuple[str, str], AlertDecoder] = {
-    (pid_alerts.SOURCE, pid_alerts.ALERTS): pid_alerts.decode_alerts,
-    (pid_alerts.SOURCE, pid_alerts.INFOTEXTS): pid_alerts.decode_infotexts,
-}
 
 
 class ReplayError(RuntimeError):
@@ -104,7 +59,8 @@ class ReplayOptions:
     archive: Path
     start: date
     end: date
-    channels: Sequence[tuple[str, str]]
+    # The manifests' channels: what to decode, and how the core reads them (semantics).
+    channels: Sequence[Channel]
     out: Path
     feeds: tuple[Feed, ...] = ("jdf",)
     write_history: bool = False
@@ -113,6 +69,9 @@ class ReplayOptions:
     until: Instant | None = None
     # Estimate every tick and log prediction accuracy, flicker and dwell (`quality`).
     quality: bool = False
+    # Process every feed the channels decode, also those not live yet (`live_feeds`): to check
+    # a connector on recorded days before it goes live. Off: exactly what the worker processes.
+    all_feeds: bool = False
 
 
 @dataclass(slots=True)
@@ -143,8 +102,22 @@ def merged_polls(
     return heapq.merge(*streams, key=lambda item: (item[0], item[1], item[2]))
 
 
+def named_channels(pairs: Sequence[tuple[str, str]]) -> list[Channel]:
+    """The shipped manifests' channels named by `(source, channel)` (a pinned corpus's)."""
+
+    from obehy.realtime.record import load_channels
+
+    wanted = set(pairs)
+    found = [c for c in load_channels() if (c.source, c.channel) in wanted]
+    missing = wanted - {(c.source, c.channel) for c in found}
+    if missing:
+        raise ReplayError(f"no shipped channel {sorted(missing)[0]}")
+    return found
+
+
 def _polls(options: ReplayOptions) -> Iterator[tuple[datetime, str, str, ArchivedPoll]]:
-    return merged_polls(options.archive, options.channels, options.start, options.end)
+    keys = [(c.source, c.channel) for c in options.channels]
+    return merged_polls(options.archive, keys, options.start, options.end)
 
 
 def replay(
@@ -156,8 +129,8 @@ def replay(
     report: Callable[[str], None] = print,
 ) -> dict[str, Any]:
     for channel in options.channels:
-        if channel not in DECODERS:
-            raise ReplayError(f"no realtime connector decodes {channel[0]}/{channel[1]} yet")
+        if (channel.source, channel.channel) not in DECODERS:
+            raise ReplayError(f"no realtime connector decodes {channel.name} yet")
     writer: Writer | None = None
     if connection is None:
         # No database: the index is read from the release directory's serving files.
@@ -169,7 +142,14 @@ def replay(
         if options.write_history:
             writer = _writer(connection, loads, options, policy)
     if runner is None:
-        runner = Runner(connection, loads, policy, options.feeds, writer)
+        runner = Runner(
+            connection,
+            loads,
+            policy,
+            options.feeds,
+            writer,
+            semantics=semantics_by_channel(options.channels),
+        )
     else:
         runner.writer = writer
     stats: dict[str, _Stats] = defaultdict(_Stats)
@@ -179,7 +159,7 @@ def replay(
     keyless = KeylessLog(policy.keyless.episode_gap_s)
     predictors = PredictorLog() if "czptt" in runner.runtimes else None
     quality = QualityLog() if options.quality else None
-    clock = _Clock(runner, options, policy.emit_tick_s, predictors, quality)
+    clock = _Clock(runner, options, predictors, quality)
     last: Instant | None = None
     for chunk in batched(_decoded(options, policy, stats), LOOKAHEAD_POLLS, strict=False):
         # Load the static data of the next polls' keys in one round trip set.
@@ -211,48 +191,46 @@ def replay(
 
 
 class _Clock:
-    """The simulated clock: emit ticks every `tick_s` and GTFS-RT snapshots every
-    `gtfs_rt_every_s`, on round multiples, run before the first observation after them."""
+    """The simulated clock: the runner's ticks (`Ticks`), and with them GTFS-RT snapshots
+    every `gtfs_rt_every_s` and the samplers, on round multiples."""
 
     def __init__(
         self,
         runner: Runner,
         options: ReplayOptions,
-        tick_s: int,
         predictors: PredictorLog | None = None,
         quality: QualityLog | None = None,
     ) -> None:
         self.runner = runner
         self.options = options
-        self.tick_s = tick_s
         self.predictors = predictors
         self.quality = quality
-        self.next_tick: Instant | None = None
+        self.ticks = Ticks(runner, on_tick=self._ticked)
         self.next_snapshot: Instant | None = None
         self.next_sample: Instant | None = None
 
     def advance(self, at: Instant) -> None:
         every = self.options.gtfs_rt_every_s
-        if self.next_tick is None:
-            self.next_tick = next_multiple(at, self.tick_s)
+        if self.ticks.next is None:
             if every:
                 self.next_snapshot = next_multiple(at, every)
             if self.predictors is not None:
                 self.next_sample = next_multiple(at, int(SAMPLE_EVERY.total_seconds()))
-        while self.next_tick <= at:
-            self.runner.tick(self.next_tick, emit=False)
-            if self.quality is not None:
-                for _, runtime in sorted(self.runner.runtimes.items()):
-                    self.quality.sample(runtime.state, runtime.ctx, self.next_tick)
-            if self.next_sample is not None and self.next_sample <= self.next_tick:
-                rail = self.runner.runtimes["czptt"]
-                assert self.predictors is not None
-                self.predictors.sample(rail.state, rail.ctx.index, self.next_sample)
-                self.next_sample = instant(self.next_sample + SAMPLE_EVERY)
-            if self.next_snapshot is not None and self.next_snapshot <= self.next_tick:
-                _snapshot(self.options, self.runner, self.next_snapshot)
-                self.next_snapshot = instant(self.next_snapshot + timedelta(seconds=every or 0))
-            self.next_tick = instant(self.next_tick + timedelta(seconds=self.tick_s))
+        self.ticks.advance(at)
+
+    def _ticked(self, at: Instant) -> None:
+        if self.quality is not None:
+            for _, runtime in sorted(self.runner.runtimes.items()):
+                self.quality.sample(runtime.state, runtime.ctx, at)
+        if self.next_sample is not None and self.next_sample <= at:
+            rail = self.runner.runtimes["czptt"]
+            assert self.predictors is not None
+            self.predictors.sample(rail.state, rail.ctx.index, self.next_sample)
+            self.next_sample = instant(self.next_sample + SAMPLE_EVERY)
+        if self.next_snapshot is not None and self.next_snapshot <= at:
+            every = self.options.gtfs_rt_every_s or 0
+            _snapshot(self.options, self.runner, self.next_snapshot)
+            self.next_snapshot = instant(self.next_snapshot + timedelta(seconds=every))
 
 
 def _finish(runner: Runner, last: Instant, writer: Writer | None) -> None:
@@ -268,6 +246,7 @@ def _decoded(
 ) -> Iterator[tuple[Instant, list[Observation] | None]]:
     """Each poll in the window, decoded; None for a failed or undecodable poll."""
 
+    channels = {(c.source, c.channel): c for c in options.channels}
     for received, source, channel, poll in _polls(options):
         at = instant(received)
         if options.until is not None and at >= options.until:
@@ -277,8 +256,7 @@ def _decoded(
         name = f"{source}/{channel}"
         stats[name].polls += 1
         body = poll.body()
-        status = poll.entry.get("status")
-        if body is None or poll.entry.get("error") or not isinstance(status, int) or status >= 300:
+        if body is None or not succeeded(poll.entry.get("status"), poll.entry.get("error")):
             stats[name].failed_polls += 1
             yield at, None
             continue
@@ -295,6 +273,8 @@ def _decoded(
             stats[name].bad_payloads += 1
             yield at, None
             continue
+        if not options.all_feeds:
+            observations = channels[(source, channel)].live_only(observations)
         stats[name].observations += len(observations)
         yield at, observations
 
@@ -308,7 +288,7 @@ def _writer(
         policy,
         options.start,
         options.end,
-        sorted({source for source, _ in options.channels}),
+        sorted({channel.source for channel in options.channels}),
     )
 
 

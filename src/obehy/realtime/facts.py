@@ -7,7 +7,7 @@ Frozen and slotted; a fact's JSON form for `rt.observation` is in `model_json.py
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal, cast
 
 from obehy.realtime.times import Instant
@@ -15,9 +15,10 @@ from obehy.realtime.times import Instant
 Feed = Literal["jdf", "czptt"]
 FEEDS: tuple[Feed, ...] = ("jdf", "czptt")
 
-FACT_SCHEMA_VERSION = 4
-# Stored facts of these versions still read: a new version only adds fact types.
-READABLE_FACT_SCHEMAS = (1, 2, 3, 4)
+FACT_SCHEMA_VERSION = 5
+# Stored facts of these versions still read. v5 dropped facts no connector produced
+# (stop_event, next_stop).
+READABLE_FACT_SCHEMAS = (4, 5)
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -89,8 +90,14 @@ class SourceSemantics:
     pre_trip_after_end_is_stale: bool = False
     # A vehicle's entry repeated unchanged is no news: no fix, no event, no freshness (SZ-Q6).
     unchanged_entry_is_no_news: bool = False
-    # The delay is whole minutes rounded down: `d` means `[d, d + 59 s]` (ARRIVA-Q3).
+    # The delay is whole minutes rounded down: `d` means `[d, d + 59 s]` (ARRIVA-Q3, SZ-Q12);
+    # as a value it stands for the minute's middle (`floored_minute_middle`).
     delay_floor_minute: bool = False
+
+
+# A time or delay a source gives in whole minutes rounded down spans this beyond its value.
+FLOORED_MINUTE = timedelta(seconds=59)
+FLOORED_MINUTE_MIDDLE_S = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,18 +108,6 @@ class SourceDeparture:
 
 
 EventKind = Literal["arrival", "departure", "passage"]
-
-
-@dataclass(frozen=True, slots=True)
-class StopEvent:
-    call_ref: str
-    kind: EventKind
-    at: Instant
-
-
-@dataclass(frozen=True, slots=True)
-class NextStop:
-    call_ref: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +184,10 @@ class VehicleAttribute:
 
 @dataclass(frozen=True, slots=True)
 class TripStatus:
+    """SŽ's replacement-bus and diversion flags. Nothing reads them as such, but they are part
+    of the entry SZ-Q6 compares: a flag flipping is SŽ refreshing a train it has no new point
+    for, and the train is seen still there (2026-10-06, train 6402 standing at Mělník)."""
+
     replacement_bus: bool
     diverted: bool
 
@@ -224,8 +223,6 @@ Fact = (
     | Delay
     | SourceState
     | SourceDeparture
-    | StopEvent
-    | NextStop
     | ServiceDay
     | PointEvent
     | NextPoint

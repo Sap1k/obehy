@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from obehy.realtime import record
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Destination,
     LineRef,
@@ -20,8 +20,8 @@ from obehy.realtime.model import (
     TripKey,
     VehicleKey,
 )
-from obehy.realtime.replay import DECODERS
 from obehy.realtime.sources import arriva_express
+from obehy.realtime.sources.registry import DECODERS
 from obehy.realtime.times import instant
 
 RECEIVED = instant(datetime(2026, 10, 5, 19, 58, 0, tzinfo=UTC))  # 21:58 CEST

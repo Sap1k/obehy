@@ -10,18 +10,10 @@ from pathlib import Path
 from obehy.realtime.archive import Poll
 from obehy.realtime.core import Context, estimate_all, step
 from obehy.realtime.emit.gtfs_rt import feed_message
+from obehy.realtime.facts import Observation, PlatformAssignment, RawRef, TripKey
 from obehy.realtime.index import Index
 from obehy.realtime.manifest import Channel
-from obehy.realtime.model import (
-    FeedState,
-    JourneyKey,
-    Observation,
-    PlatformAssignment,
-    RawRef,
-    RecordPlatform,
-    TripKey,
-    Unresolved,
-)
+from obehy.realtime.model import FeedState, JourneyKey, RecordPlatform, Unresolved
 from obehy.realtime.policy import load_policy
 from obehy.realtime.runner import observation_days
 from obehy.realtime.runtime.demand import Pace, ReadLog, plan_reads, run_demand

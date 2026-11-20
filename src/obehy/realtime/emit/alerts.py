@@ -22,7 +22,7 @@ import psycopg
 from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.realtime.alerts import Alert, Texts
-from obehy.realtime.model import Feed
+from obehy.realtime.facts import Feed
 from obehy.realtime.times import Instant, instant
 
 SQL = Path(__file__).resolve().parent.parent / "sql"

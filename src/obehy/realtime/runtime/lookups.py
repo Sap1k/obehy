@@ -25,7 +25,7 @@ import asyncio
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, LiteralString, cast
 from urllib.parse import quote
@@ -44,10 +44,11 @@ from obehy.realtime.compositions import (
     ViewCall,
 )
 from obehy.realtime.emit.compositions import write_composition
+from obehy.realtime.logs import log
 from obehy.realtime.manifest import Channel, Lookup, Rate
 from obehy.realtime.policy import load_policy
 from obehy.realtime.sources import cd
-from obehy.realtime.times import PRAGUE, Instant, instant, local_date
+from obehy.realtime.times import Instant, ServiceTime, instant, local_date, now
 
 LOOKUP_CHANNEL = "obehy_lookup"
 SWEEP_S = 5.0
@@ -66,14 +67,6 @@ Clock = Callable[[], Instant]
 CONNECTORS: dict[tuple[str, str], tuple[Plan, Decode]] = {
     (cd.SOURCE, cd.COMPOSITION): (cd.plan, cd.decode),
 }
-
-
-def _now() -> Instant:
-    return instant(datetime.now(UTC))
-
-
-def _log(message: str) -> None:
-    print(f"{datetime.now(UTC).isoformat(timespec='seconds')} {message}", flush=True)
 
 
 @dataclass
@@ -145,9 +138,9 @@ class LookupBroker:
     lookups: Sequence[Lookup]
     fetcher: Fetcher
     archive: ArchiveWriter
-    clock: Clock = _now
+    clock: Clock = now
     monotonic: Callable[[], float] = time.monotonic
-    log: Callable[[str], None] = _log
+    log: Callable[[str], None] = log
     buckets: dict[str, Bucket] = field(default_factory=dict[str, Bucket])
     spent: dict[str, tuple[date, int]] = field(default_factory=dict[str, tuple[date, int]])
 
@@ -251,7 +244,7 @@ class LookupBroker:
         today = local_date(now)
         day, spent = self.spent.get(lookup.qualified, (None, 0))
         if day != today:
-            midnight = datetime.combine(today, datetime.min.time(), PRAGUE)
+            midnight = ServiceTime(today, 0).instant()  # local midnight
             row = self.connection.execute(
                 "SELECT count(*) AS n FROM rt.lookup_fetch"
                 " WHERE source = %s AND lookup = %s AND requested_at >= %s",

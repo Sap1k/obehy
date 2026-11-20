@@ -21,6 +21,7 @@ from typing import Any, LiteralString, Protocol, cast
 
 import psycopg
 
+from obehy.realtime.facts import Feed
 from obehy.realtime.geo import cumulative_m
 from obehy.realtime.index import (
     CHILD_NAMESPACE,
@@ -33,7 +34,6 @@ from obehy.realtime.index import (
     Trip,
     parent_ref,
 )
-from obehy.realtime.model import Feed
 from obehy.realtime.times import Instant
 from obehy.release.contract import load_contract
 from obehy.release.load import load_release

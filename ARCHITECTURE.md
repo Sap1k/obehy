@@ -89,7 +89,7 @@ implements scheduling, rate limits, budgets or caching itself.
 ```text
 [[channel]]            polled
   name, poll = interval | service_hours | adaptive, backoff, timeout
-  feed routing, capabilities = [...], semantics = {...}   (time, delay, namespaces)
+  feed routing, capabilities = [...], semantics = {...}   (SourceSemantics flags only)
 
 [[lookup]]             lazy: details fetched only when needed
   kind = "composition" (later: "vehicle_detail", "trip_detail", ...)

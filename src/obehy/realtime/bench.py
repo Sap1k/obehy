@@ -31,12 +31,12 @@ import psycopg
 
 from obehy.pipeline.files import atomic_output_path
 from obehy.realtime.archive import ArchivedPoll, ArchiveWriter, Poll
+from obehy.realtime.facts import Feed
 from obehy.realtime.index_sql import ensure_release
 from obehy.realtime.manifest import Channel, semantics_by_channel
-from obehy.realtime.model import Feed
 from obehy.realtime.policy import Policy
 from obehy.realtime.replay import merged_polls
-from obehy.realtime.runner import Runner
+from obehy.realtime.runner import Runner, Ticks
 from obehy.realtime.times import Instant, instant
 from obehy.realtime.worker import PollHandler
 
@@ -159,9 +159,8 @@ class _Bench:
         self.runner = runner
         self.handler = handler
         self.options = options
-        self.tick = timedelta(seconds=runner.policy.emit_tick_s)
+        self.ticks = Ticks(runner, emit=True)  # the worker's ticks write GTFS-RT
         self.first: Instant | None = None
-        self.next_tick: Instant | None = None
         self.next_sample: Instant | None = None
         self.samples: list[dict[str, Any]] = []
         self.polls = 0
@@ -169,12 +168,9 @@ class _Bench:
     def advance(self, at: Instant) -> None:
         if self.first is None:
             self.first = at
-            self.next_tick = instant(at + self.tick)
             self.next_sample = instant(at + SAMPLE_EVERY)
-        assert self.next_tick is not None and self.next_sample is not None
-        while self.next_tick <= at:
-            self.runner.tick(self.next_tick)
-            self.next_tick = instant(self.next_tick + self.tick)
+        assert self.next_sample is not None
+        self.ticks.advance(at)
         if self.next_sample <= at:
             self.sample(self.next_sample)
             self.next_sample = instant(self.next_sample + SAMPLE_EVERY)

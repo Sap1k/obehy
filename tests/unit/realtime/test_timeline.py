@@ -10,14 +10,8 @@ from datetime import date, timedelta
 from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.realtime.core import Context, estimate_all, step
-from obehy.realtime.model import (
-    Effect,
-    FeedState,
-    Instance,
-    Interval,
-    VehicleId,
-    WriteEvent,
-)
+from obehy.realtime.facts import Interval
+from obehy.realtime.model import Effect, FeedState, Instance, VehicleId, WriteEvent
 from obehy.realtime.policy import load_policy
 from obehy.realtime.times import Instant
 from tests.realtime.builder import ORIGIN, STEP_LON, timetable, with_unknown
@@ -482,7 +476,7 @@ def test_a_bus_reported_by_two_sources_is_one_vehicle_in_gtfs_rt() -> None:
 def test_pid_and_duk_on_one_trip_are_one_journey_in_gtfs_rt() -> None:
     from obehy.realtime.core import refresh
     from obehy.realtime.emit.gtfs_rt import feed_message
-    from obehy.realtime.model import Observation, TripKey
+    from obehy.realtime.facts import Observation, TripKey
 
     def pid(clock: str, where: tuple[float, float]) -> Observation:
         # PID names its GTFS trip first, the CIS line and trip after it (PID-Q3).

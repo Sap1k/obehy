@@ -12,20 +12,10 @@ from datetime import date, datetime
 from itertools import pairwise
 
 from obehy.realtime.core import Context, estimate_all, refresh, step
+from obehy.realtime.facts import Observation, Position, RawRef, SourceState, TripKey, VehicleKey
 from obehy.realtime.geo import cumulative_m
 from obehy.realtime.index import Index, Shape
-from obehy.realtime.model import (
-    Effect,
-    FeedState,
-    Instance,
-    Observation,
-    Position,
-    RawRef,
-    SourceState,
-    TripKey,
-    VehicleKey,
-    WriteEvent,
-)
+from obehy.realtime.model import Effect, FeedState, Instance, WriteEvent
 from obehy.realtime.policy import load_policy
 from obehy.realtime.times import PRAGUE, Instant, instant
 from tests.realtime.builder import ORIGIN, CallSpec, timetable

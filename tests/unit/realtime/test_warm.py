@@ -13,7 +13,8 @@ import pytest
 from obehy.realtime.core import Context, step
 from obehy.realtime.emit import stored
 from obehy.realtime.emit.stored import stream_observations, whole_instants
-from obehy.realtime.model import FeedState, Observation, ObservationResult, VehicleKey
+from obehy.realtime.facts import Observation, VehicleKey
+from obehy.realtime.model import FeedState, ObservationResult
 from obehy.realtime.phases import Phases
 from obehy.realtime.policy import load_policy
 from obehy.realtime.runner import Runner, shipped_semantics

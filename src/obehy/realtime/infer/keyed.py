@@ -18,8 +18,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 
+from obehy.realtime.facts import TripKey
 from obehy.realtime.index import IndexView, Trip, parent_ref
-from obehy.realtime.model import Binding, JourneyKey, Reason, TripKey
+from obehy.realtime.model import Binding, JourneyKey, Reason
 from obehy.realtime.policy import Policy, TimePolicy
 from obehy.realtime.runs import run_journey
 from obehy.realtime.times import Instant, ServiceTime, candidate_service_dates

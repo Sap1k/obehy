@@ -11,18 +11,18 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
+    FLOORED_MINUTE,
     Delay,
-    Departure,
     Destination,
     Interval,
-    KeylessEpisode,
     LineRef,
     NextStopName,
     Observation,
     Position,
     SourceSemantics,
 )
+from obehy.realtime.model import Departure, KeylessEpisode
 from obehy.realtime.policy import KeylessPolicy
 
 MAX_DEPARTURES = 40  # longer than any trip's stop list; older ones no longer decide anything
@@ -94,5 +94,5 @@ def _scheduled(observation: Observation, semantics: SourceSemantics) -> Interval
         return None
     hi = observation.at - timedelta(seconds=delay.seconds)
     if semantics.delay_floor_minute:  # d minutes means d to d + 59 s late
-        return Interval(hi - timedelta(seconds=59), hi)
+        return Interval(hi - FLOORED_MINUTE, hi)
     return Interval(hi, hi)

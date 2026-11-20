@@ -8,7 +8,7 @@ from typing import Any
 
 from pyproj import Transformer
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Interval,
     NextPoint,
@@ -75,7 +75,7 @@ def test_keys_service_day_and_vehicle() -> None:
         TripKey("czptt:train_number", "16001"),  # SZ-Q5: only a fallback
     )
     assert obs.first(ServiceDay) == ServiceDay(date(2026, 10, 5))
-    assert obs.first(Delay) == Delay(450, "point")  # SZ-Q12
+    assert obs.first(Delay) == Delay(420, "point")  # SZ-Q12: minutes, as the source says
     assert obs.first(TripStatus) == TripStatus(False, False)
 
 
@@ -122,11 +122,12 @@ def test_sz_q7_a_next_point_without_a_code() -> None:
     assert obs.first(NextPoint) == NextPoint("vl. v km 2,847", None)
 
 
-def test_sz_q12_a_delay_and_a_predicted_time_are_their_minutes_middle() -> None:
-    # `de` = `cr` - `cp` in whole minutes and `nsp` a minute, both truncated: on average half a
-    # minute more than they say, as `cr` stands for its whole minute.
+def test_sz_q12_a_delay_is_whole_minutes_and_a_predicted_time_its_minutes_middle() -> None:
+    # `de` = `cr` - `cp` in whole minutes and `nsp` a minute, both truncated. The delay is kept
+    # as said; the manifest declares it floored (`delay_floor_minute`), and the core reads it as
+    # its minute's middle (`timeline.usable_delay`). The predicted time is its minute's middle.
     (obs,) = _decode(_feature())
-    assert obs.first(Delay) == Delay(7 * 60 + 30, "point")
+    assert obs.first(Delay) == Delay(7 * 60, "point")
     prediction = obs.first(NextStopPrediction)
     assert prediction is not None and prediction.predicted is not None
     assert prediction.predicted.second == 30

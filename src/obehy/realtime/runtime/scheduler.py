@@ -17,10 +17,10 @@ import math
 import sys
 import traceback
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
 
 from obehy.realtime.archive import Poll
 from obehy.realtime.manifest import Channel
+from obehy.realtime.times import now
 
 FetchFn = Callable[[Channel], Poll]
 BLOCKED = 403
@@ -32,7 +32,7 @@ OnPoll = Callable[[Channel, Poll], Awaitable[None]]
 async def fetch_guarded(fetcher: Callable[..., Poll], channel: Channel, *args: object) -> Poll:
     """`fetcher(channel, *args)` in a thread; any error it raises is a failed poll."""
 
-    requested_at = datetime.now(UTC)
+    requested_at = now()
     try:
         return await asyncio.to_thread(fetcher, channel, *args)
     except Exception as error:
@@ -41,7 +41,7 @@ async def fetch_guarded(fetcher: Callable[..., Poll], channel: Channel, *args: o
         sys.stderr.flush()
         return Poll(
             requested_at=requested_at,
-            received_at=datetime.now(UTC),
+            received_at=now(),
             status=None,
             body=None,
             error=f"{type(error).__name__}: {error}",

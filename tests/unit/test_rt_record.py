@@ -12,8 +12,8 @@ import pytest
 from obehy import cli
 from obehy.realtime import record
 from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls, prune
+from obehy.realtime.facts import SourceSemantics
 from obehy.realtime.manifest import physical_vehicles
-from obehy.realtime.model import SourceSemantics
 from obehy.realtime.runtime import fetch
 from obehy.realtime.runtime.scheduler import run_channel
 
@@ -97,14 +97,15 @@ def test_shipped_manifests_load() -> None:
     assert idol.is_live("jdf") and not idol.is_live("czptt")
     assert (duk.interval_s, duk.backoff_after, duk.max_backoff_s) == (15.0, 5, 300.0)
     assert duk.feeds == ("jdf", "czptt")
-    assert duk.semantics["key_namespaces"]["jdf"] == "cis:line_trip"
     # DUK-Q14 and Q15 are DÚK's readings; most other sources take their facts at face value.
     assert duk.core_semantics == SourceSemantics(
         pre_trip_delay_is_elapsed=True, pre_trip_after_end_is_stale=True
     )
     assert arriva.core_semantics == SourceSemantics(delay_floor_minute=True)  # ARRIVA-Q3
     assert arriva.live_feeds == ("jdf",) and arriva.is_live("jdf")
-    assert sz.core_semantics == SourceSemantics(unchanged_entry_is_no_news=True)  # SZ-Q6
+    assert sz.core_semantics == SourceSemantics(  # SZ-Q6, SZ-Q12
+        unchanged_entry_is_no_news=True, delay_floor_minute=True
+    )
 
 
 CHANNEL = (

@@ -313,6 +313,20 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — Realtime core cleaned for the Rust port: one rule per concept (policy v18).
+  The published journey delay is the lateness the predictions start from (was the source's
+  reported delay: an Arriva bus 44 min late by GPS showed +5); "passed" is one rule
+  (`Instance.left_index`), stored per call and read by the lookup view; one journey-key rule
+  (`[journey]`, compositions now keyed by train number like history); GTFS-RT names vehicles as
+  the API; assignments record keyed/inferred; connectors share their decoding (one CIS key
+  form) and declare floored minutes in the manifest (SŽ, Arriva); replay processes only live
+  feeds unless `--all-feeds`, with the manifests' semantics; one simulated clock. Validated: unit
+  tests; 106-journey corpus goldens (new, `tests/golden/corpus`): no history event, lifecycle or
+  binding changed, published delay moved in 103 (median 20 s); file replays 2026-10-15 PID and
+  2026-10-06 DÚK/SŽ/Arriva 07-08 against the old core: GTFS-RT identical but one Arriva trip
+  (+30 s). Compositions now leave with their history day (nightly and the disk guard), which
+  also clears the rows of the old `czptt:tr` key. DB tests not run (no test database). Next: DB
+  contract (migration 0027).
 - **2026-11-20** — Delay history over a segment is the API's (`api/segments.py`):
   `/trips/{id}/history?from=&to=` gives each day's run (start, end, worst and every call's delay
   as the rider meets it, a run lost near either end counted by the nearest measured delay,

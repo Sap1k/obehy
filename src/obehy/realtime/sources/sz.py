@@ -13,7 +13,6 @@ delay `de` and the predicted time `nsp` stand for the middle of their minute). S
 from __future__ import annotations
 
 import csv
-import json
 import re
 from collections import defaultdict
 from datetime import date, time, timedelta
@@ -23,7 +22,9 @@ from typing import Any, cast
 
 from pyproj import Transformer
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
+    FLOORED_MINUTE,
+    FLOORED_MINUTE_MIDDLE_S,
     Delay,
     Fact,
     Interval,
@@ -38,22 +39,17 @@ from obehy.realtime.model import (
     TripStatus,
     VehicleKey,
 )
+from obehy.realtime.sources.decoding import PayloadError, load_json
 from obehy.realtime.times import Instant, read_local, resolve_clock, within_skew
 
 SOURCE = "sz-mapa"
 CHANNEL = "trains"
-DECODER_VERSION = 2
+DECODER_VERSION = 3
 
 ID = re.compile(r"^TR/([^/]+)/([^/]+)/([^/]+)/([^/]+)/(\d{8})$")
 HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
-MINUTE = timedelta(seconds=59)  # `cr` is truncated to the minute
-HALF_MINUTE_S = 30  # SZ-Q12: `de` and `nsp` are truncated minutes too
 # The SR70 catalogue with its 20-character names (jrunify-ext-geodata rail/SR70_Nazev20.csv).
 CATALOGUE = Path(__file__).resolve().parents[2] / "data" / "realtime" / "sr70-name20.csv"
-
-
-class PayloadError(ValueError):
-    """A successful poll whose body does not have the documented shape."""
 
 
 @cache
@@ -106,10 +102,7 @@ def _md(document: dict[str, Any], received_at: Instant, skew: timedelta) -> Inst
 def decode(
     body: bytes, sha256: str, received_at: Instant, max_clock_skew: timedelta
 ) -> list[Observation]:
-    try:
-        document = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise PayloadError(f"not JSON: {error}") from error
+    document = load_json(body)
     if not isinstance(document, dict):
         raise PayloadError("payload is not an object")
     payload = cast(dict[str, Any], document)
@@ -170,7 +163,7 @@ def _train(
         facts.append(NextPoint(next_name.strip(), sr70_5(p.get("zst_sr70"))))
     delay = p.get("de")
     if isinstance(delay, int) and not isinstance(delay, bool):
-        facts.append(Delay(delay * 60 + HALF_MINUTE_S, "point"))  # SZ-Q12
+        facts.append(Delay(delay * 60, "point"))  # SZ-Q12: whole minutes (manifest semantics)
     stop = sr70_5(p.get("nsn70"))
     if stop is not None:
         facts.append(
@@ -178,6 +171,7 @@ def _train(
                 stop, _clock(p.get("nst"), reference), _middle(_clock(p.get("nsp"), reference))
             )
         )
+    # Not read as such, but part of the entry SZ-Q6 compares (`facts.TripStatus`).
     facts.append(TripStatus(p.get("s") == 1, p.get("di") == 1))
     return Observation(
         source=SOURCE,
@@ -194,7 +188,7 @@ def _train(
 def _middle(value: Instant | None) -> Instant | None:
     """A truncated minute's middle (SZ-Q12)."""
 
-    return None if value is None else Instant(value + timedelta(seconds=HALF_MINUTE_S))
+    return None if value is None else Instant(value + timedelta(seconds=FLOORED_MINUTE_MIDDLE_S))
 
 
 def _position(feature: dict[str, Any], p: dict[str, Any]) -> Position | None:
@@ -229,6 +223,6 @@ def _point(p: dict[str, Any], reference: Instant) -> PointEvent | None:
         name,
         name_codes().get(name, ()),
         _clock(p.get("cp"), reference),
-        Interval(actual, Instant(actual + MINUTE)),
+        Interval(actual, Instant(actual + FLOORED_MINUTE)),  # `cr`: a truncated minute
         p.get("rr") == 1,
     )

@@ -10,8 +10,7 @@ from typing import Any
 import pytest
 
 from obehy.realtime import record
-from obehy.realtime.manifest import Auth, Cursor
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Observation,
     Position,
@@ -21,8 +20,9 @@ from obehy.realtime.model import (
     VehicleAttribute,
     VehicleKey,
 )
-from obehy.realtime.replay import DECODERS
+from obehy.realtime.manifest import Auth, Cursor
 from obehy.realtime.sources import pid
+from obehy.realtime.sources.registry import DECODERS
 from obehy.realtime.times import instant
 
 RECEIVED = instant(datetime(2026, 10, 14, 22, 11, 10, tzinfo=UTC))  # 00:11:10 CEST

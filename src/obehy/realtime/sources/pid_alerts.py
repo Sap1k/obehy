@@ -17,7 +17,6 @@ German, HTML, attachments) is internal to Golemio (403 for our key, 2026-10-21).
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 
@@ -25,6 +24,7 @@ from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2 as rt
 
 from obehy.realtime.alerts import Alert, AlertEntity, Period, Texts, texts
+from obehy.realtime.sources.decoding import PayloadError, load_json
 from obehy.realtime.times import Instant, ServiceTime, instant, local_date
 
 SOURCE = "pid"
@@ -33,10 +33,6 @@ INFOTEXTS = "infotexts"
 ROUTES, STOPS, TRIPS = "pid:gtfs_route_id", "pid:gtfs_stop_id", "pid:gtfs_trip_id"
 REPEAT_DAYS = 7
 PRIORITY = {"low": "INFO", "normal": "WARNING", "high": "SEVERE"}
-
-
-class PayloadError(ValueError):
-    """A successful poll whose body does not have the documented shape."""
 
 
 def _texts(value: rt.TranslatedString) -> Texts:
@@ -141,10 +137,7 @@ def _periods(
 
 
 def decode_infotexts(body: bytes, received_at: Instant) -> list[Alert]:
-    try:
-        document = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise PayloadError(f"not JSON: {error}") from error
+    document = load_json(body)
     if not isinstance(document, list):
         raise PayloadError("infotexts are not a list")
     alerts: list[Alert] = []

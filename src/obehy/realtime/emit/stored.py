@@ -26,7 +26,7 @@ from typing import Any
 
 import psycopg
 
-from obehy.realtime.model import Feed, Observation, RawRef
+from obehy.realtime.facts import Feed, Observation, RawRef
 from obehy.realtime.model_json import facts_from_json
 from obehy.realtime.times import instant
 

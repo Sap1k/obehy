@@ -10,16 +10,14 @@ from reception are dropped (T15). `TODepartureDT` is kept as the source's planne
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Fact,
     Feed,
     Observation,
-    Position,
     RawRef,
     SourceDeparture,
     SourceState,
@@ -27,7 +25,8 @@ from obehy.realtime.model import (
     VehicleAttribute,
     VehicleKey,
 )
-from obehy.realtime.times import Instant, instant, read_unless_offset_twice, within_skew
+from obehy.realtime.sources.decoding import PayloadError, fix, fresh, line_trip, load_json, number
+from obehy.realtime.times import Instant, instant, read_unless_offset_twice
 
 SOURCE = "duk"
 CHANNEL = "vehicles"
@@ -39,16 +38,6 @@ TEPLICE = range(400000, 410000)
 # DUK-Q1: how far a doubled offset may miss the vehicle's activity time (measured: under
 # 20 s, also while both clocks are frozen at a stop).
 DOUBLE_OFFSET_TOLERANCE = timedelta(minutes=5)
-
-
-class PayloadError(ValueError):
-    """A successful poll whose body does not have the documented shape."""
-
-
-def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return float(value)
 
 
 def _time(value: object) -> Instant | None:
@@ -76,10 +65,7 @@ def _gps_time(entry: dict[str, Any]) -> Instant | None:
 def decode(
     body: bytes, sha256: str, received_at: Instant, max_clock_skew: timedelta
 ) -> list[Observation]:
-    try:
-        document = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise PayloadError(f"not JSON: {error}") from error
+    document = load_json(body)
     entries = (
         cast(dict[str, Any], document).get("VehicleList") if isinstance(document, dict) else None
     )
@@ -112,17 +98,16 @@ def _entry(
     if cis_line == 0:
         feed, key = "czptt", TripKey("czptt:train_number", str(trip))
     else:
-        feed, key = "jdf", TripKey("cis:line_trip", f"{cis_line:06d}:{trip}")
-    observed = _gps_time(entry)
-    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
-        observed = None
+        feed, key = "jdf", line_trip(cis_line, trip)
+    observed = fresh(_gps_time(entry), received_at, max_clock_skew)
     facts: list[Fact] = [VehicleKey(str(vehicle)), key]
-    lat, lon = _number(entry.get("Latitude")), _number(entry.get("Longitude"))
+    lat, lon = number(entry.get("Latitude")), number(entry.get("Longitude"))
     # A position without a trustworthy time cannot place events in time: it is dropped.
-    if observed is not None and lat is not None and lon is not None and lat != 0 and lon != 0:
-        bearing = _number(entry.get("Azimut"))
-        # DUK-Q13: an Azimut of exactly 0 means unknown, often while the vehicle moves.
-        facts.append(Position(lat=lat, lon=lon, bearing=None if bearing == 0 else bearing))
+    bearing = number(entry.get("Azimut"))
+    # DUK-Q13: an Azimut of exactly 0 means unknown, often while the vehicle moves.
+    position = fix(lat, lon, None if bearing == 0 else bearing)
+    if observed is not None and position is not None:
+        facts.append(position)
     delay = entry.get("Delay")
     if isinstance(delay, int) and not isinstance(delay, bool):
         facts.append(Delay(delay * 60, "unknown"))

@@ -19,8 +19,6 @@ live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "line_ref", "destination", "next_stop", "position", "delay"]
 
 [channel.semantics]
-clock = "source"
-delay_reference = "departure"  # ARRIVA-Q3: at the departure from the stop before the next one
 delay_floor_minute = true  # ARRIVA-Q3
 
 [channel.request]

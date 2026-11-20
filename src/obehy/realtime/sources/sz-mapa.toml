@@ -24,3 +24,4 @@ capabilities = ["vehicle_key", "trip_key", "position", "delay", "stop_event", "n
 
 [channel.semantics]
 unchanged_entry_is_no_news = true  # SZ-Q6
+delay_floor_minute = true  # SZ-Q12

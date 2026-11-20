@@ -518,9 +518,9 @@
     "delay_s": 511,
     "lifecycle": "finished",
     "off_route": false,
-    "reported_delay_s": 480,
+    "reported_delay_s": 510,
     "sources": {
-     "arriva-express": 480
+     "arriva-express": 510
     }
    }
   },

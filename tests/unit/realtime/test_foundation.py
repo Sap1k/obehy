@@ -71,17 +71,15 @@ def test_facts_round_trip_through_json() -> None:
     import json
     from datetime import UTC, datetime
 
-    from obehy.realtime.model import (
+    from obehy.realtime.facts import (
         Delay,
         Destination,
         Fact,
         LineRef,
-        NextStop,
         NextStopName,
         Position,
         SourceDeparture,
         SourceState,
-        StopEvent,
         TripCancelled,
         TripKey,
         VehicleAttribute,
@@ -97,8 +95,6 @@ def test_facts_round_trip_through_json() -> None:
         Delay(-60, "unknown"),
         SourceState("1"),
         SourceDeparture(instant(datetime(2026, 10, 10, 22, 54, tzinfo=UTC))),
-        StopEvent("A", "departure", instant(datetime(2026, 10, 8, 10, tzinfo=UTC))),
-        NextStop("B"),
         LineRef("cis:line", "580916"),
         Destination("Teplice,Celní"),
         NextStopName("Teplice,Pražská"),
@@ -107,8 +103,8 @@ def test_facts_round_trip_through_json() -> None:
     )
     stored = json.loads(json.dumps(facts_to_json(facts)))
     assert facts_from_json(stored) == facts
-    # Version 2 only added fact types: warm replay still reads facts stored as version 1.
-    assert facts_from_json({**stored, "v": 1, "facts": stored["facts"][:2]}) == facts[:2]
+    # Version 5 only dropped fact types nothing read: warm replay still reads version 4.
+    assert facts_from_json({**stored, "v": 4, "facts": stored["facts"][:2]}) == facts[:2]
 
 
 def test_a_trips_journey_key_is_the_first_journey_namespace_it_has() -> None:

@@ -44,8 +44,8 @@ from obehy.realtime.runtime.fetch import (
     fetch,
     refused,
     send,
-    utc_clock,
 )
+from obehy.realtime.times import now
 from obehy.runtime_config import (
     ConfigurationError,
     default_config_path,
@@ -193,7 +193,7 @@ class Egress:
     """The fetcher of the recorder and the worker: direct, or through the pool."""
 
     pool: ProxyPool | None
-    clock: Clock = utc_clock
+    clock: Clock = now
     opener: Callable[[str], OpenerDirector] = anonymous_opener
     secrets: Mapping[str, str] = field(default_factory=dict[str, str])
     # Per channel: the cursor value of its last good poll and when that poll was received.

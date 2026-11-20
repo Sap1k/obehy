@@ -14,16 +14,15 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
 
+from obehy.realtime.facts import Observation, PlatformAssignment
 from obehy.realtime.index import IndexView, Trip, calls_at_station
 from obehy.realtime.infer.keyed import Match
 from obehy.realtime.model import (
     Effect,
     FeedState,
     Instance,
-    Observation,
     ObservationResult,
     Platform,
-    PlatformAssignment,
     Reason,
     RecordPlatform,
     Unresolved,

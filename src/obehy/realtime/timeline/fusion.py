@@ -22,22 +22,24 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
-from obehy.realtime.index import IndexView, Trip, calls_at_station
-from obehy.realtime.model import (
-    CallState,
+from obehy.realtime.facts import (
     Delay,
-    Effect,
     EventKind,
-    Instance,
     Interval,
-    Lead,
     NextPoint,
     NextStopPrediction,
     Observation,
     PointEvent,
+    SourceSemantics,
+)
+from obehy.realtime.index import IndexView, Trip, calls_at_station
+from obehy.realtime.model import (
+    CallState,
+    Effect,
+    Instance,
+    Lead,
     Progress,
     SourceClass,
-    SourceSemantics,
     SourceTrack,
     Track,
     Unresolved,

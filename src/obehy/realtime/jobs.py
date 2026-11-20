@@ -77,11 +77,14 @@ def history_days(connection: psycopg.Connection) -> list[date]:
 
 
 def drop_history(connection: psycopg.Connection, before: date) -> list[date]:
-    """Drop every history table's partitions of service dates before `before`; returns the
+    """Drop every history table's partitions of service dates before `before`, and the
+    compositions of those dates (a record like history, kept as long); returns the history
     dates dropped."""
 
     dropped: set[date] = set()
     with connection.transaction():
+        # Units go with their composition (ON DELETE CASCADE).
+        connection.execute("DELETE FROM rt.composition WHERE service_date < %s", (before,))
         for table in HISTORY_TABLES:
             for name in _partitions(connection, f"history.{table}"):
                 day = history_day(name)

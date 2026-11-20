@@ -33,17 +33,9 @@ from pathlib import Path
 from typing import Any, cast
 
 from obehy.realtime.core import Context, estimate_all, refresh, step
+from obehy.realtime.facts import LineRef, Observation, Position, TripKey, VehicleKey
 from obehy.realtime.index import CHILD_NAMESPACE, Index, KeyRef, Trip, parent_ref
-from obehy.realtime.model import (
-    Effect,
-    FeedState,
-    LineRef,
-    Observation,
-    Position,
-    TripKey,
-    VehicleKey,
-    WriteEvent,
-)
+from obehy.realtime.model import Effect, FeedState, WriteEvent
 from obehy.realtime.model_json import facts_to_json
 from obehy.realtime.policy import load_policy
 from obehy.realtime.quality import QualityLog
@@ -163,7 +155,8 @@ class Group:
 
 
 def _decoded(window: Window, archive: Path) -> Iterator[Observation]:
-    from obehy.realtime.replay import DECODERS, merged_polls
+    from obehy.realtime.replay import merged_polls
+    from obehy.realtime.sources.registry import DECODERS
 
     channels = [(window.source, channel) for channel in window.channels]
     skew = POLICY.time.max_clock_skew

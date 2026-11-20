@@ -28,7 +28,6 @@ import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg
@@ -40,28 +39,22 @@ from obehy.realtime.emit.alerts import AlertFeed, write_alerts
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.stored import stream_observations
 from obehy.realtime.emit.vehicles import REGISTRY_CHANNEL
+from obehy.realtime.facts import Feed, Observation
 from obehy.realtime.index_sql import ReleaseLoads, active_loads
+from obehy.realtime.logs import log
 from obehy.realtime.manifest import Channel, Lookup, semantics_by_channel
-from obehy.realtime.model import Derivation, Feed, Observation
+from obehy.realtime.model import Derivation
 from obehy.realtime.phases import Phases
 from obehy.realtime.policy import Policy
 from obehy.realtime.record import SUMMARY_INTERVAL_S, ChannelStats, archive_poll, fetch
-from obehy.realtime.replay import ALERT_DECODERS, DECODERS
 from obehy.realtime.runner import Runner
 from obehy.realtime.runtime.demand import FetchBody, StationDemand, run_demand
 from obehy.realtime.runtime.fetch import fetch_body
 from obehy.realtime.runtime.lookups import open_broker, run_broker
 from obehy.realtime.runtime.scheduler import FetchFn, run_channel
-from obehy.realtime.times import Instant, instant
+from obehy.realtime.sources.registry import ALERT_DECODERS, DECODERS
+from obehy.realtime.times import Instant, instant, now
 from obehy.realtime.warm import warm_start, warm_window
-
-
-def _now() -> Instant:
-    return instant(datetime.now(UTC))
-
-
-def _log(message: str) -> None:
-    print(f"{datetime.now(UTC).isoformat(timespec='seconds')} {message}", flush=True)
 
 
 def _writer(connection: psycopg.Connection, loads: ReleaseLoads, policy: Policy) -> Writer:
@@ -117,7 +110,7 @@ class PollHandler:
                 try:
                     alerts = alert_decoder(body, instant(poll.received_at))
                 except ValueError as error:
-                    _log(f"{channel.name}: undecodable payload: {error}")
+                    log(f"{channel.name}: undecodable payload: {error}")
                     return []
                 self.alerts(channel, instant(poll.received_at), alerts)
             return []
@@ -134,9 +127,9 @@ class PollHandler:
                     poll.request,
                 )
             except ValueError as error:
-                _log(f"{channel.name}: undecodable payload: {error}")
+                log(f"{channel.name}: undecodable payload: {error}")
                 return []
-            return [o for o in observations if channel.is_live(o.feed)]
+            return channel.live_only(observations)
 
     def summary(self, over_s: float) -> list[str]:
         """The channels' poll counts and the phases' share of a core since the last summary."""
@@ -201,12 +194,12 @@ class _Worker:
     async def start(self) -> None:
         """Warm replay on a thread while the channels are polled, then the backlog."""
 
-        until = _now()
+        until = now()
         chunks = stream_observations(self.database_url, *warm_window(self.policy, until))
         stopping = asyncio.create_task(self._stop_warm_replay())
         try:
             warmed = await asyncio.to_thread(
-                warm_start, self.runner, chunks, until, self.warm_stop, _log
+                warm_start, self.runner, chunks, until, self.warm_stop, log
             )
         finally:
             stopping.cancel()
@@ -216,13 +209,13 @@ class _Worker:
             if backlog:
                 self.runner.process(backlog)
             self.runner.phases.reset()
-            self.runner.tick(_now())
+            self.runner.tick(now())
             self.ready.set()
         # What is alive now lives as long as the worker: keep it out of every GC pass.
         gc.collect()
         gc.freeze()
         release = self.runner.loads.run_id
-        _log(
+        log(
             f"realtime worker on release {release}; warm replay of {warmed} observations,"
             f" {len(backlog)} more received meanwhile"
         )
@@ -252,7 +245,7 @@ class _Worker:
         while not self.stop.is_set():
             await asyncio.sleep(self.policy.emit_tick_s)
             async with self.lock:
-                self.runner.tick(_now())
+                self.runner.tick(now())
 
     async def summaries(self) -> None:
         await self.ready.wait()
@@ -264,7 +257,7 @@ class _Worker:
                 lines = self.handler.summary(now - last)
             last = now
             for line in lines:
-                _log(line)
+                log(line)
 
     async def publications(self) -> None:
         """Rebase live journeys when `obehy release activate` publishes a new release; reload
@@ -285,7 +278,7 @@ class _Worker:
                     async with self.lock:
                         if self.runner.writer is not None:
                             self.runner.writer.reload_registry()
-                    _log("reloaded the vehicle registry")
+                    log("reloaded the vehicle registry")
                     continue
                 current = active_loads(listener)  # the main connection may be loading
                 if current.run_id == self.runner.loads.run_id:
@@ -296,15 +289,15 @@ class _Worker:
                     )
                 if self.demand is not None:
                     self.demand.switch(current.load_ids["czptt"])
-                _log(f"rebased onto release {current.run_id}")
+                log(f"rebased onto release {current.run_id}")
         finally:
             listener.close()
 
     async def close(self) -> None:
         async with self.lock:
-            self.runner.tick(_now())
+            self.runner.tick(now())
         for name, channel_stats in sorted(self.handler.stats.items()):
-            _log(channel_stats.line(name))
+            log(channel_stats.line(name))
         self.connection.close()
         self.alert_connection.close()
         if self.demand is not None:

@@ -47,7 +47,13 @@ class Poll:
 
     @property
     def ok(self) -> bool:
-        return self.error is None and self.status is not None and 200 <= self.status < 300
+        return succeeded(self.status, self.error)
+
+
+def succeeded(status: object, error: object) -> bool:
+    """Whether a poll succeeded, live or archived: no transport error and a 2xx status."""
+
+    return error is None and isinstance(status, int) and 200 <= status < 300
 
 
 @dataclass(frozen=True)

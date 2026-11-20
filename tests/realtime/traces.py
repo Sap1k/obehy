@@ -24,6 +24,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from obehy.realtime.facts import Feed, LineRef, Observation, RawRef, TripKey, VehicleKey
 from obehy.realtime.index import (
     CHILD_NAMESPACE,
     Call,
@@ -35,7 +36,6 @@ from obehy.realtime.index import (
     Trip,
     parent_ref,
 )
-from obehy.realtime.model import Feed, LineRef, Observation, RawRef, TripKey, VehicleKey
 from obehy.realtime.model_json import facts_from_json, facts_to_json
 from obehy.realtime.times import Instant, ServiceTime, candidate_service_dates, instant
 
@@ -134,7 +134,7 @@ def extract(
     from obehy.realtime.archive import iter_polls
     from obehy.realtime.index_sql import IndexLoader, active_loads, file_loads, run_loads
     from obehy.realtime.policy import load_policy
-    from obehy.realtime.replay import DECODERS
+    from obehy.realtime.sources.registry import DECODERS
 
     policy = load_policy()
     channel = "buses" if source == "arriva-express" else "vehicles"

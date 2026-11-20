@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
-from obehy.realtime.model import SourceSemantics
+from obehy.realtime.facts import Observation, SourceSemantics
 
 SOURCES = Path(__file__).resolve().parent / "sources"
 FEED_NAMES = ("jdf", "czptt")
@@ -80,7 +80,9 @@ class Channel:
     # recorded days before it goes live.
     live_feeds: tuple[str, ...] | None = None
     capabilities: tuple[str, ...] = ()
-    semantics: dict[str, Any] = field(default_factory=dict[str, Any])
+    # How the core reads the channel's facts (`[channel.semantics]`); every key a flag of
+    # `SourceSemantics`: what a connector produces is in its code, not restated here.
+    core_semantics: SourceSemantics = field(default_factory=SourceSemantics)
     # Sent only through the proxy pool, anonymously (runtime/egress.py); never directly.
     proxied: bool = False
     # Demand polling: the named query that says what to request (runtime/demand.py); the
@@ -92,13 +94,15 @@ class Channel:
     def is_live(self, feed: str) -> bool:
         return self.live_feeds is None or feed in self.live_feeds
 
+    def live_only(self, observations: list[Observation]) -> list[Observation]:
+        """The observations of feeds the channel is live on: what the worker processes, and
+        replay too unless asked for every feed."""
+
+        return [o for o in observations if self.is_live(o.feed)]
+
     @property
     def name(self) -> str:
         return f"{self.source}/{self.channel}"
-
-    @property
-    def core_semantics(self) -> SourceSemantics:
-        return _core_semantics(self.semantics, self.name)
 
 
 @dataclass(frozen=True)
@@ -193,6 +197,9 @@ CORE_SEMANTICS = tuple(SourceSemantics.__dataclass_fields__)
 
 
 def _core_semantics(semantics: dict[str, Any], where: str) -> SourceSemantics:
+    unknown = sorted(set(semantics) - set(CORE_SEMANTICS))
+    if unknown:
+        raise ManifestError(f"{where}: unknown semantics.{unknown[0]}")
     flags: dict[str, bool] = {}
     for name in CORE_SEMANTICS:
         value = semantics.get(name, False)
@@ -280,7 +287,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
     semantics = table.get("semantics", {})
     if not isinstance(semantics, dict):
         raise ManifestError(f"{where}: semantics must be a table")
-    _core_semantics(cast(dict[str, Any], semantics), where)
+    core_semantics = _core_semantics(cast(dict[str, Any], semantics), where)
     feeds = _strings(table, "feeds", where, FEED_NAMES)
     live_feeds = _strings(table, "live_feeds", where, feeds) if "live_feeds" in table else None
     proxied = _proxied(table, where)
@@ -315,7 +322,7 @@ def _channel(source: str, raw: object, where: str, filters: Sequence[str]) -> Ch
         feeds=feeds,
         live_feeds=live_feeds,
         capabilities=_strings(table, "capabilities", where, CAPABILITIES),
-        semantics=dict(cast(dict[str, Any], semantics)),
+        core_semantics=core_semantics,
         proxied=proxied,
         demand=demand,
         auth=auth,

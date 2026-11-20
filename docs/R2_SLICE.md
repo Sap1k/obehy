@@ -74,7 +74,6 @@ PointEvent(name, scheduled: Instant?, actual: Interval, standing: bool)
 NextPoint(sr70, name)                                  SŽ nna/zst_sr70
 NextStopPrediction(sr70_5, scheduled: Instant?, predicted: Instant?)
                                                        SŽ nsn70/nst/nsp
-TripStatus(replacement_bus: bool, diverted: bool)      SŽ s/di
 PlatformAssignment(station_sr70, kind: arrival|departure, scheduled: Instant, value, label)
                                                        board row; label = platform|track
 Delay.reference += "point"                             SŽ de: measured at the last point
@@ -99,7 +98,7 @@ Delay.reference += "point"                             SŽ de: measured at the l
 | `nna`, `zst_sr70` | `NextPoint` | SZ-Q7 |
 | `de`, `pde` | `Delay(reference = point)`; `pde` kept for the predictor report | SZ-Q8 |
 | `nsn70`, `nst`, `nsp` | `NextStopPrediction` | SZ-Q4 |
-| `s`, `di` | `TripStatus` | |
+| `s`, `di` | `TripStatus` (read only as part of the entry SZ-Q6 compares) | SZ-Q6 |
 | `e`, `d`, `r`, `tt`, `na` | not facts: kept in the raw archive only | |
 
 - **SZ-Q6, unchanged entries.** The core keeps a per-source fingerprint of each train's last

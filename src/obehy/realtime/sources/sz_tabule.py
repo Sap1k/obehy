@@ -19,7 +19,7 @@ from datetime import time, timedelta
 from html.parser import HTMLParser
 from typing import Any, Literal
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Fact,
     Observation,
     PlatformAssignment,
@@ -27,6 +27,7 @@ from obehy.realtime.model import (
     RawRef,
     TripKey,
 )
+from obehy.realtime.sources.decoding import PayloadError
 from obehy.realtime.times import Instant, resolve_clock
 
 SOURCE = "sz-tabule"
@@ -45,10 +46,6 @@ PART_SEPARATOR = " / "
 UNASSIGNED = frozenset({"", "-", "ND"})  # SZT-Q4
 HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
 COLUMN = re.compile(r"^inTaCol[PO]-\d+$")
-
-
-class PayloadError(ValueError):
-    """A successful poll whose body does not have the documented shape."""
 
 
 @dataclass(slots=True)

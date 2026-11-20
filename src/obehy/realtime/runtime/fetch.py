@@ -16,7 +16,7 @@ import http.client
 import ssl
 import time
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Protocol, cast
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -25,6 +25,7 @@ from urllib.request import HTTPSHandler, OpenerDirector, Request, build_opener
 from obehy.pipeline.download import http_request
 from obehy.realtime.archive import Poll
 from obehy.realtime.manifest import Channel
+from obehy.realtime.times import now
 
 KEPT_HEADERS = ("age", "date", "etag", "last-modified")
 EPOCH_MS = "{epoch_ms}"
@@ -48,10 +49,6 @@ class _Response(Protocol):
     def __exit__(self, *args: object) -> None: ...
 
 
-def utc_clock() -> datetime:
-    return datetime.now(UTC)
-
-
 def _kept_headers(headers: Any, extra: tuple[str, ...] = ()) -> dict[str, str]:
     result: dict[str, str] = {}
     for name in (*KEPT_HEADERS, *extra):
@@ -61,7 +58,7 @@ def _kept_headers(headers: Any, extra: tuple[str, ...] = ()) -> dict[str, str]:
     return result
 
 
-def refused(channel: Channel, reason: str, clock: Clock = utc_clock) -> Poll:
+def refused(channel: Channel, reason: str, clock: Clock = now) -> Poll:
     """A poll that was never sent."""
 
     now = clock()
@@ -71,7 +68,7 @@ def refused(channel: Channel, reason: str, clock: Clock = utc_clock) -> Poll:
 def send(
     request: Request,
     timeout_s: float,
-    clock: Clock = utc_clock,
+    clock: Clock = now,
     opener: OpenerDirector | None = None,
     keep: tuple[str, ...] = (),
 ) -> Poll:
@@ -142,7 +139,7 @@ def channel_request(
     return request
 
 
-def fetch_body(channel: Channel, body: bytes, clock: Clock = utc_clock) -> Poll:
+def fetch_body(channel: Channel, body: bytes, clock: Clock = now) -> Poll:
     """A direct request with a per-read body (demand channels); refused like `fetch`."""
 
     if channel.proxied:
@@ -153,7 +150,7 @@ def fetch_body(channel: Channel, body: bytes, clock: Clock = utc_clock) -> Poll:
     return send(request, channel.timeout_s, clock)
 
 
-def fetch(channel: Channel, clock: Clock = utc_clock) -> Poll:
+def fetch(channel: Channel, clock: Clock = now) -> Poll:
     """A direct request; refused for a channel that must go through the proxies."""
 
     if channel.proxied:

@@ -28,16 +28,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import timedelta
 
+from obehy.realtime.facts import Position
 from obehy.realtime.geo import distance_m
-from obehy.realtime.model import (
-    Hypothesis,
-    OffPath,
-    Placement,
-    Position,
-    Progress,
-    StopSeen,
-    Track,
-)
+from obehy.realtime.model import Hypothesis, OffPath, Placement, Progress, StopSeen, Track
 from obehy.realtime.policy import ProgressPolicy
 from obehy.realtime.timeline.commit import Crossing, commit
 from obehy.realtime.timeline.path import Candidate, Path, candidates, point_at

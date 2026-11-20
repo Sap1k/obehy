@@ -58,6 +58,28 @@ _MICROSECOND = timedelta(microseconds=1)
 _HOUR_US = 3_600_000_000
 
 
+def now() -> Instant:
+    """The wall clock: the one place the realtime code reads it (live only; replay and warm
+    start step a simulated clock)."""
+
+    return instant(datetime.now(UTC))
+
+
+def local_wall(value: Instant) -> datetime:
+    """The Europe/Prague wall-clock time of an instant, naive: for comparing a time of day."""
+
+    return value.astimezone(PRAGUE).replace(tzinfo=None)
+
+
+def wall_instant(wall: datetime) -> Instant:
+    """The instant of a Europe/Prague wall-clock time given without an offset (a command
+    line's); the first of a repeated hour."""
+
+    if wall.tzinfo is not None:
+        return instant(wall)
+    return instant(wall.replace(tzinfo=PRAGUE, fold=0))
+
+
 def local_date(value: Instant) -> date:
     """The Europe/Prague calendar date of an instant."""
 

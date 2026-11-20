@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import math
 import re
 import signal
@@ -17,11 +16,11 @@ import statistics
 import sys
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
-from typing import Any, cast
 
 from obehy.realtime.archive import ArchiveWriter, Poll
+from obehy.realtime.logs import log
 from obehy.realtime.manifest import (
     SOURCES,
     Channel,
@@ -37,7 +36,7 @@ from obehy.realtime.policy import BoardPolicy
 from obehy.realtime.runtime.demand import DueCalls, FetchBody, run_demand
 from obehy.realtime.runtime.fetch import fetch, fetch_body
 from obehy.realtime.runtime.scheduler import backoff_interval, run_channel
-from obehy.realtime.sources import dpmd
+from obehy.realtime.sources import arriva_express, dpmd
 from obehy.realtime.times import Instant
 
 MANIFEST = SOURCES
@@ -65,33 +64,10 @@ class PayloadFilter:
 
 
 def _arriva_express(body: bytes) -> Filtered:
-    """Keep only `mainType = "ARRIVA EXPRESS"` vehicles in the GraphQL batch response."""
-
     try:
-        document = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FilterError(f"not JSON: {error}") from error
-    if not isinstance(document, list):
-        raise FilterError("expected a GraphQL batch (JSON array)")
-    kept = dropped = 0
-    for item in cast(list[object], document):
-        data = cast(dict[str, Any], item).get("data") if isinstance(item, dict) else None
-        if not isinstance(data, dict):
-            raise FilterError("batch item without a data object")
-        vehicles = cast(dict[str, Any], data).get("busesCurrentLocations")
-        if not isinstance(vehicles, list):
-            raise FilterError("data.busesCurrentLocations is not a list")
-        entries = cast(list[object], vehicles)
-        express: list[object] = [
-            vehicle
-            for vehicle in entries
-            if isinstance(vehicle, dict)
-            and cast(dict[str, Any], vehicle).get("mainType") == "ARRIVA EXPRESS"
-        ]
-        kept += len(express)
-        dropped += len(entries) - len(express)
-        cast(dict[str, Any], data)["busesCurrentLocations"] = express
-    encoded = json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        encoded, kept, dropped = arriva_express.recorded(body)
+    except arriva_express.PayloadError as error:
+        raise FilterError(str(error)) from error
     return Filtered(encoded, kept, dropped)
 
 
@@ -185,10 +161,6 @@ class ChannelStats:
         if self.filter_errors:
             text += f", {self.filter_errors} filter errors"
         return text
-
-
-def log(message: str) -> None:
-    print(f"{datetime.now(UTC).isoformat(timespec='seconds')} {message}", flush=True)
 
 
 def _on_poll(

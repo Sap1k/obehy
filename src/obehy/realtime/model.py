@@ -9,104 +9,24 @@ every value stored in them is immutable, so a state can be snapshotted by copyin
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum, StrEnum
 from typing import Literal, NamedTuple
 
 from obehy.realtime.facts import (
-    FACT_SCHEMA_VERSION as FACT_SCHEMA_VERSION,
-)
-from obehy.realtime.facts import (
-    FEEDS as FEEDS,
-)
-from obehy.realtime.facts import (
-    READABLE_FACT_SCHEMAS as READABLE_FACT_SCHEMAS,
-)
-from obehy.realtime.facts import (
-    Delay as Delay,
-)
-from obehy.realtime.facts import (
-    DelayReference as DelayReference,
-)
-from obehy.realtime.facts import (
-    Destination as Destination,
-)
-from obehy.realtime.facts import (
-    EventKind as EventKind,
-)
-from obehy.realtime.facts import (
-    Fact as Fact,
-)
-from obehy.realtime.facts import (
-    Feed as Feed,
-)
-from obehy.realtime.facts import (
-    Interval as Interval,
-)
-from obehy.realtime.facts import (
-    LineRef as LineRef,
-)
-from obehy.realtime.facts import (
-    NextPoint as NextPoint,
-)
-from obehy.realtime.facts import (
-    NextStop as NextStop,
-)
-from obehy.realtime.facts import (
-    NextStopName as NextStopName,
-)
-from obehy.realtime.facts import (
-    NextStopPrediction as NextStopPrediction,
-)
-from obehy.realtime.facts import (
-    Observation as Observation,
-)
-from obehy.realtime.facts import (
-    PlatformAssignment as PlatformAssignment,
-)
-from obehy.realtime.facts import (
-    PlatformLabel as PlatformLabel,
-)
-from obehy.realtime.facts import (
-    PointEvent as PointEvent,
-)
-from obehy.realtime.facts import (
-    Position as Position,
-)
-from obehy.realtime.facts import (
-    RawRef as RawRef,
-)
-from obehy.realtime.facts import (
-    ServiceDay as ServiceDay,
-)
-from obehy.realtime.facts import (
-    SourceDeparture as SourceDeparture,
-)
-from obehy.realtime.facts import (
-    SourceSemantics as SourceSemantics,
-)
-from obehy.realtime.facts import (
-    SourceState as SourceState,
-)
-from obehy.realtime.facts import (
-    StopEvent as StopEvent,
-)
-from obehy.realtime.facts import (
-    TripCancelled as TripCancelled,
-)
-from obehy.realtime.facts import (
-    TripKey as TripKey,
-)
-from obehy.realtime.facts import (
-    TripStatus as TripStatus,
-)
-from obehy.realtime.facts import (
-    VehicleAttribute as VehicleAttribute,
-)
-from obehy.realtime.facts import (
-    VehicleKey as VehicleKey,
+    DelayReference,
+    EventKind,
+    Fact,
+    Feed,
+    Interval,
+    NextPoint,
+    NextStopPrediction,
+    Observation,
+    PlatformLabel,
+    Position,
+    TripKey,
 )
 from obehy.realtime.times import Instant
 
@@ -153,7 +73,6 @@ class Reason(StrEnum):
     NOT_ACTIVE = "not_active"
     NOT_IN_SERVICE = "not_in_service"
     AMBIGUOUS = "ambiguous"
-    UNTIMED = "untimed"
     STALE_KEY = "stale_key"
 
 
@@ -201,7 +120,7 @@ class KeylessEpisode:
 
 Lifecycle = Literal["forecast", "pre_trip", "running", "finished", "cancelled"]
 CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
-SourceClass = Literal["gps", "source", "propagated"]
+SourceClass = Literal["gps", "source"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -803,9 +722,3 @@ class Derivation:
     core_version: str
     policy_version: str
     release_id: str
-
-
-def freeze[K, V](mapping: Mapping[K, V]) -> dict[K, V]:
-    """A shallow copy of a state mapping (values are immutable)."""
-
-    return dict(mapping)

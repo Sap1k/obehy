@@ -8,18 +8,16 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, cast
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     FACT_SCHEMA_VERSION,
     READABLE_FACT_SCHEMAS,
     Delay,
     DelayReference,
     Destination,
-    EventKind,
     Fact,
     Interval,
     LineRef,
     NextPoint,
-    NextStop,
     NextStopName,
     NextStopPrediction,
     PlatformAssignment,
@@ -29,7 +27,6 @@ from obehy.realtime.model import (
     ServiceDay,
     SourceDeparture,
     SourceState,
-    StopEvent,
     TripCancelled,
     TripKey,
     TripStatus,
@@ -65,10 +62,6 @@ def fact_to_json(fact: Fact) -> Json:
             return {"t": "source_state", "code": code}
         case SourceDeparture(at):
             return {"t": "source_departure", "at": at.isoformat()}
-        case StopEvent(call_ref, kind, at):
-            return {"t": "stop_event", "call": call_ref, "kind": kind, "at": at.isoformat()}
-        case NextStop(call_ref):
-            return {"t": "next_stop", "call": call_ref}
         case ServiceDay(day):
             return {"t": "service_day", "day": day.isoformat()}
         case PointEvent(name, codes, scheduled, actual, standing):
@@ -130,14 +123,6 @@ def fact_from_json(data: Json) -> Fact:
             return SourceState(str(data["code"]))
         case "source_departure":
             return SourceDeparture(instant(datetime.fromisoformat(str(data["at"]))))
-        case "stop_event":
-            return StopEvent(
-                str(data["call"]),
-                cast(EventKind, data["kind"]),
-                instant(datetime.fromisoformat(str(data["at"]))),
-            )
-        case "next_stop":
-            return NextStop(str(data["call"]))
         case "service_day":
             return ServiceDay(date.fromisoformat(str(data["day"])))
         case "point_event":

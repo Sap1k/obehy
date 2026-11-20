@@ -15,7 +15,8 @@ from datetime import timedelta
 from itertools import pairwise
 from typing import Literal, NamedTuple
 
-from obehy.realtime.model import EventKind, Hypothesis, Interval, Placement, StopSeen
+from obehy.realtime.facts import EventKind, Interval
+from obehy.realtime.model import Hypothesis, Placement, StopSeen
 from obehy.realtime.policy import ProgressPolicy
 from obehy.realtime.timeline.plan import Plan, Timetable, Trigger
 from obehy.realtime.timeline.stops import departure, holding

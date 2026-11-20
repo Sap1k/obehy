@@ -19,16 +19,14 @@ from reception are dropped (T15).
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Fact,
     Feed,
     Observation,
-    Position,
     RawRef,
     SourceState,
     TripCancelled,
@@ -36,7 +34,16 @@ from obehy.realtime.model import (
     VehicleAttribute,
     VehicleKey,
 )
-from obehy.realtime.times import Instant, instant, within_skew
+from obehy.realtime.sources.decoding import (
+    PayloadError,
+    fix,
+    fresh,
+    line_trip,
+    load_json,
+    number,
+    table,
+)
+from obehy.realtime.times import Instant, instant
 
 SOURCE = "pid"
 CHANNEL = "vehicles"
@@ -50,24 +57,10 @@ CANCELLED = "canceled"
 MODES = {0: "tram", 1: "metro", 2: "train", 3: "bus", 4: "ferry", 7: "funicular", 11: "trolleybus"}
 
 
-class PayloadError(ValueError):
-    """A successful poll whose body does not have the documented shape."""
-
-
-def _table(value: object) -> dict[str, Any]:
-    return cast(dict[str, Any], value) if isinstance(value, dict) else {}
-
-
 def _integer(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
-
-
-def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return float(value)
 
 
 def _time(value: object) -> Instant | None:
@@ -83,17 +76,14 @@ def _time(value: object) -> Instant | None:
 def decode(
     body: bytes, sha256: str, received_at: Instant, max_clock_skew: timedelta
 ) -> list[Observation]:
-    try:
-        document = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise PayloadError(f"not JSON: {error}") from error
-    features = _table(document).get("features")
+    document = load_json(body)
+    features = table(document).get("features")
     if not isinstance(features, list):
         raise PayloadError("payload lacks features")
     blocks: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     observations: list[Observation] = []
     for item, raw in enumerate(cast(list[object], features)):
-        feature = _table(raw)
+        feature = table(raw)
         if _cancelled(feature):  # PID-Q4: the trip, not a vehicle
             found = _cancellation(feature, RawRef(sha256, item), received_at, max_clock_skew)
             observations.extend([] if found is None else [found])
@@ -111,7 +101,7 @@ def decode(
 
 
 def _cancelled(feature: dict[str, Any]) -> bool:
-    last = _table(_table(feature.get("properties")).get("last_position"))
+    last = table(table(feature.get("properties")).get("last_position"))
     return last.get("state_position") == CANCELLED or last.get("is_canceled") is True
 
 
@@ -122,17 +112,19 @@ def _cancellation(
     trip's keys and `TripCancelled`, no vehicle and no position (it is where the trip would
     start)."""
 
-    properties = _table(feature.get("properties"))
-    trip = _table(properties.get("trip"))
-    route_type = _integer(_table(trip.get("gtfs")).get("route_type"))
+    properties = table(feature.get("properties"))
+    trip = table(properties.get("trip"))
+    route_type = _integer(table(trip.get("gtfs")).get("route_type"))
     if route_type is None:
         return None
     feed, keys, _ = _keys(trip, route_type)
     if not keys:
         return None
-    observed = _time(_table(properties.get("last_position")).get("origin_timestamp"))
-    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
-        observed = None
+    observed = fresh(
+        _time(table(properties.get("last_position")).get("origin_timestamp")),
+        received_at,
+        max_clock_skew,
+    )
     return Observation(
         source=SOURCE,
         channel=CHANNEL,
@@ -146,13 +138,13 @@ def _cancellation(
 
 
 def _state(feature: dict[str, Any]) -> object:
-    return _table(_table(feature.get("properties")).get("last_position")).get("state_position")
+    return table(table(feature.get("properties")).get("last_position")).get("state_position")
 
 
 def _start(feature: dict[str, Any]) -> datetime:
     """When the entry's trip starts (offsets differ across a DST change); unknown sorts last."""
 
-    start = _time(_table(_table(feature.get("properties")).get("trip")).get("start_timestamp"))
+    start = _time(table(table(feature.get("properties")).get("trip")).get("start_timestamp"))
     return start if start is not None else datetime.max.replace(tzinfo=UTC)
 
 
@@ -176,26 +168,26 @@ def _keys(trip: dict[str, Any], route_type: int) -> tuple[Feed, list[TripKey], s
     """The feed, the trip keys in preference order, and the vehicle key when the entry has no
     fleet number (PID-Q2)."""
 
-    cis = _table(trip.get("cis"))
+    cis = table(trip.get("cis"))
     number = _integer(cis.get("trip_number"))
     if route_type == TRAIN:
         if number is None:
             return "czptt", [], None
         return "czptt", [TripKey("czptt:train_number", str(number))], f"train:{number}"
     keys: list[TripKey] = []
-    trip_id = _table(trip.get("gtfs")).get("trip_id")
+    trip_id = table(trip.get("gtfs")).get("trip_id")
     if isinstance(trip_id, str) and trip_id:
         keys.append(TripKey("pid:gtfs_trip_id", trip_id))
     line = cis.get("line_id")  # PID-Q3: "none" for trains, null for city lines
     if isinstance(line, str) and line.isdigit() and number is not None:
-        keys.append(TripKey("cis:line_trip", f"{int(line):06d}:{number}"))
+        keys.append(line_trip(line, number))
     fallback = f"trip:{trip_id}" if isinstance(trip_id, str) and trip_id else None
     return "jdf", keys, fallback
 
 
 def _vehicle(feature: dict[str, Any]) -> str | None:
-    trip = _table(_table(feature.get("properties")).get("trip"))
-    route_type = _integer(_table(trip.get("gtfs")).get("route_type"))
+    trip = table(table(feature.get("properties")).get("trip"))
+    route_type = _integer(table(trip.get("gtfs")).get("route_type"))
     if route_type is None:
         return None
     _, _, fallback = _keys(trip, route_type)
@@ -216,10 +208,10 @@ def _attributes(trip: dict[str, Any]) -> list[VehicleAttribute]:
         value = trip.get(field)
         if isinstance(value, bool):
             found.append(VehicleAttribute(attribute, "true" if value else "false"))
-    operator = _table(trip.get("agency_name")).get("real")
+    operator = table(trip.get("agency_name")).get("real")
     if isinstance(operator, str) and operator.strip():
         found.append(VehicleAttribute("operator", operator.strip()))
-    category = _table(trip.get("vehicle_type")).get("description_cs")
+    category = table(trip.get("vehicle_type")).get("description_cs")
     if isinstance(category, str) and category.strip():
         found.append(VehicleAttribute("category", category.strip()))
     fleet_number = _integer(trip.get("vehicle_registration_number"))
@@ -236,30 +228,29 @@ def _observation(
     received_at: Instant,
     max_clock_skew: timedelta,
 ) -> Observation:
-    properties = _table(feature.get("properties"))
-    trip = _table(properties.get("trip"))
-    last = _table(properties.get("last_position"))
-    feed, keys, _ = _keys(trip, cast(int, _table(trip.get("gtfs")).get("route_type")))
+    properties = table(feature.get("properties"))
+    trip = table(properties.get("trip"))
+    last = table(properties.get("last_position"))
+    feed, keys, _ = _keys(trip, cast(int, table(trip.get("gtfs")).get("route_type")))
     state = last.get("state_position")
     # PID-Q4: an entry after its trip (`after_track*`) names a trip it is not running.
     if not bound or state not in PRE_TRIP | RUNNING:
         keys = []
-    observed = _time(last.get("origin_timestamp"))
-    if observed is not None and not within_skew(observed, received_at, max_clock_skew):
-        observed = None
+    observed = fresh(_time(last.get("origin_timestamp")), received_at, max_clock_skew)
     facts: list[Fact] = [VehicleKey(vehicle), *keys]
-    coordinates = _table(feature.get("geometry")).get("coordinates")
+    coordinates = table(feature.get("geometry")).get("coordinates")
     if observed is not None and isinstance(coordinates, list):
         point = cast(list[object], coordinates)
-        lon, lat = (_number(point[0]), _number(point[1])) if len(point) >= 2 else (None, None)
-        if lat is not None and lon is not None and lat != 0 and lon != 0:
-            facts.append(Position(lat=lat, lon=lon, bearing=_number(last.get("bearing"))))
+        lon, lat = (number(point[0]), number(point[1])) if len(point) >= 2 else (None, None)
+        position = fix(lat, lon, number(last.get("bearing")))
+        if position is not None:
+            facts.append(position)
     facts.extend(_attributes(trip))
     if keys and state in PRE_TRIP:
         facts.append(SourceState("pre_trip"))
     elif keys and state in RUNNING:
         facts.append(SourceState("running"))
-        delay = _integer(_table(last.get("delay")).get("actual"))
+        delay = _integer(table(last.get("delay")).get("actual"))
         if delay is not None:
             facts.append(Delay(delay, "unknown"))
     return Observation(

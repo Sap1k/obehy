@@ -23,7 +23,6 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
-semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 
 [channel.request]
 method = "POST"
@@ -40,7 +39,6 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
-semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 
 [channel.request]
 method = "POST"
@@ -57,7 +55,6 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
-semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 
 [channel.request]
 method = "POST"
@@ -74,7 +71,6 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
-semantics = { clock = "source", delay_reference = "unknown", key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" } }
 
 [channel.request]
 method = "POST"

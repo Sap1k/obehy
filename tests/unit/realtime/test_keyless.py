@@ -6,24 +6,26 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from obehy.realtime.core import Context, step
-from obehy.realtime.index import Index
-from obehy.realtime.manifest import semantics_by_channel
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Destination,
-    Effect,
     Fact,
-    FeedState,
-    JourneyKey,
     LineRef,
     NextStopName,
     Observation,
-    ObservationResult,
     Position,
     RawRef,
+    VehicleKey,
+)
+from obehy.realtime.index import Index
+from obehy.realtime.manifest import semantics_by_channel
+from obehy.realtime.model import (
+    Effect,
+    FeedState,
+    JourneyKey,
+    ObservationResult,
     Reason,
     VehicleId,
-    VehicleKey,
     WriteEvent,
 )
 from obehy.realtime.policy import load_policy

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from obehy.realtime.model import (
+from obehy.realtime.facts import (
     Delay,
     Fact,
     Feed,

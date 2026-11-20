@@ -22,15 +22,8 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from obehy.realtime.emit.pairing import Evidence, Fix, Pairings
-from obehy.realtime.model import (
-    Feed,
-    FeedState,
-    JourneyKey,
-    ObservationResult,
-    VehicleAttribute,
-    VehicleId,
-    VehicleKey,
-)
+from obehy.realtime.facts import Feed, VehicleAttribute, VehicleKey
+from obehy.realtime.model import FeedState, JourneyKey, ObservationResult, VehicleId
 from obehy.realtime.runs import run_vehicle_id
 from obehy.realtime.times import Instant, local_date
 from obehy.reference.precedence import Profile, Statement, profile

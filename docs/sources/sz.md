@@ -62,7 +62,7 @@ and 5 requests per second and treats a 403 as blocked.
 | `nsn`, `nsn70`, `nst`, `nsp` | name, **5-digit** SR70 (no check digit), `HH:mm` ×2, or empty | next passenger stop, timetabled and predicted time | prediction for the next stop |
 | `r`, `d` | company code, name | operator | `Operator` |
 | `s` | 0 / 1 (30 trains) | rail-replacement bus | NAD handling |
-| `di` | 0; 1 on 111 of 1.2 M entries on 2026-10-14 | diverted | `trip_status` |
+| `di` | 0; 1 on 111 of 1.2 M entries on 2026-10-14 | diverted | `trip_status` (only for SZ-Q6's comparison) |
 | `e` | 0 / 1 (set at some point on 33% of train-days) | most likely: the train runs under ETCS supervision (see below) | train attribute for display; not used for matching or progress |
 
 Names are Unicode (escaped in the JSON).
@@ -153,7 +153,8 @@ keys derived for the measurement):
 
 `vehicle_position`, `trip_progress`, `stop_event` (actual arrival/departure/passage at passenger
 and operational points), `delay`, `prediction` (next stop), `trip_status` (replacement bus,
-diversion). Platforms are not in this endpoint; they come from the station boards
+diversion: read only as part of the entry SZ-Q6 compares, as a flag flipping shows SŽ refreshing
+a train it has no new point for). Platforms are not in this endpoint; they come from the station boards
 (`sz-tabule.md`).
 
 No cancellations: the map lists trains that run, and no field marks one cancelled (every field
@@ -174,7 +175,7 @@ and its values over 2,775 polls of 2026-10-14 checked).
 | SZ-Q9 | TRs absent from CZPTT, or present but not running that day | unmatched, shown as such |
 | SZ-Q10 | `cna` stays the same while other fields of the entry change (delay, position), so a point repeats; another source may have passed it already | resolved from the call this source placed the train at last; a repeat of a recorded event changes nothing |
 | SZ-Q11 | a train reports points its timetable does not have (diverted; `di` stays 0) | unresolved, counted; nothing moves |
-| SZ-Q12 | times are whole minutes, truncated: `de` = `cr` − `cp` in minutes, `nsp` a minute | the delay and the predicted time stand for their minute's middle (+30 s), as `cr` is the minute's interval; measured 2026-10-12 07:00-08:00: SŽ's own next-stop prediction bias −28.9 s → +1.1 s, MAE 72.4 → 72.0 s |
+| SZ-Q12 | times are whole minutes, truncated: `de` = `cr` − `cp` in minutes, `nsp` a minute | the delay and the predicted time stand for their minute's middle (+30 s), as `cr` is the minute's interval: the predicted time in the connector, the delay in the core (manifest `delay_floor_minute`, as ARRIVA-Q3); measured 2026-10-12 07:00-08:00: SŽ's own next-stop prediction bias −28.9 s → +1.1 s, MAE 72.4 → 72.0 s |
 
 ## Open questions
 

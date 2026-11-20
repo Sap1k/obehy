@@ -21,7 +21,7 @@ Observation   source, channel, feed, received_at: Instant, observed_at: Instant 
               raw_ref (sha256, index line), decoder_version, facts: tuple[Fact, ...]
 Fact          VehicleKey(source_vehicle_id) | TripKey(namespace, key)
               | Position(lat, lon, bearing?) | Delay(seconds, reference: arrival|departure|unknown)
-              | SourceState(code) | StopEvent(call_ref, kind, at) | NextStop(call_ref)
+              | SourceState(code)
 JourneyKey    feed, namespace, key, service_date          public and history identity
 Binding       vehicle_key → JourneyKey, method, bound_at; service_date fixed once
 Instance      JourneyKey, release_id, trip_id, mode, lifecycle, flags {off_route, stale, lost},
@@ -153,10 +153,9 @@ feeds = ["jdf", "czptt"]            # decode routes each observation to exactly 
 capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 
 [channel.semantics]
-clock = "source"                    # source | none (observed_at becomes an interval)
-delay_reference = "unknown"         # DUK-Q6
-key_namespaces = { jdf = "cis:line_trip", czptt = "czptt:train_number" }
-# How the core reads the facts where sources differ (`SourceSemantics`); absent means false.
+# How the core reads the facts where sources differ (`SourceSemantics`); absent means false,
+# and any other key is an error: what a connector produces (its keys, its delay's reference)
+# is in its decoder, not restated here.
 pre_trip_delay_is_elapsed = true    # DUK-Q14
 pre_trip_after_end_is_stale = true  # DUK-Q15
 
@@ -173,7 +172,7 @@ pre_trip_after_end_is_stale = true  # DUK-Q15
 | `[prediction]` | propagation (BASE_PLAN.md 20.5): dwell recovery, early departure limit, observed dwell credit, early fade; hop running times `runtime_decay_s`, `runtime_prior_weight`, `runtime_ratio_max`, `publish_deadband_s`, `floor_fresh_s` (v11) |
 | `[delay]` | discard floor −30 min (DUK-Q6) |
 | `[warm_replay]` | mode = "vehicles", max_hours = 6 (v6; was hours = 4) |
-| `[retention]` | observation_hours = 8 (v13; hourly partitions dropped by `obehy jobs hourly`; 1 day in v12), raw_days = { default = 1, "sz-tabule" = 14 } (v14; raw archive days per source; 14 for all in v9–v13), history_days = 21 (v13), both dropped by `obehy jobs nightly` |
+| `[retention]` | observation_hours = 8 (v13; hourly partitions dropped by `obehy jobs hourly`; 1 day in v12), raw_days = { default = 1, "sz-tabule" = 14 } (v14; raw archive days per source; 14 for all in v9–v13), history_days = 21 (v13; with the compositions of those days), both dropped by `obehy jobs nightly` |
 | `[guard]` | free_gb = 6, min_raw_days = 3, min_history_days = 7 (v13): `obehy jobs hourly` deletes the oldest raw, then history days below the free space; release loads keep it |
 
 The file carries `policy_version`, which goes into `derivation`. Code holds no defaults for

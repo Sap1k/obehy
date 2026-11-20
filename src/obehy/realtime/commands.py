@@ -10,7 +10,7 @@ import shutil
 import sys
 import tomllib
 from collections.abc import Sequence
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -20,16 +20,18 @@ from obehy.realtime import bench, record, replay
 from obehy.realtime.archive import prune as prune_archive
 from obehy.realtime.archive import sources as archive_sources
 from obehy.realtime.emit.alerts import prune_alerts
+from obehy.realtime.facts import FEEDS, Feed
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError, active_loads
 from obehy.realtime.jobs import drop_history, hourly, vehicle_day
 from obehy.realtime.manifest import Channel, ManifestError, select_channels
-from obehy.realtime.model import FEEDS, Feed
 from obehy.realtime.policy import PolicyError, load_policy
 from obehy.realtime.runtime.demand import StationDemand
 from obehy.realtime.runtime.egress import Egress, EgressError, build_egress
 from obehy.realtime.runtime.lookups import prune_lookups
-from obehy.realtime.times import PRAGUE, Instant, instant, local_date
+from obehy.realtime.sources import registry
+from obehy.realtime.times import Instant, local_date, wall_instant
+from obehy.realtime.times import now as clock_now
 from obehy.realtime.worker import WorkerOptions, run_worker
 from obehy.runtime_config import ConfigurationError, load_database_url
 
@@ -44,13 +46,6 @@ def _feeds(text: str) -> tuple[Feed, ...]:
     if unknown:
         raise argparse.ArgumentTypeError(f"unknown feeds {unknown}")
     return tuple(cast(Feed, feed) for feed in chosen)
-
-
-def _utc(text: str) -> Instant:
-    value = datetime.fromisoformat(text)
-    if value.tzinfo is None:
-        raise argparse.ArgumentTypeError(f"{text!r} needs a UTC offset (Z)")
-    return instant(value)
 
 
 def _database(parser: argparse.ArgumentParser) -> None:
@@ -103,6 +98,11 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
         help="estimate every tick; report prediction accuracy, flicker and dwell at stops",
     )
     replayer.add_argument(
+        "--all-feeds",
+        action="store_true",
+        help="also feeds a channel is not live on yet (live_feeds): to check a connector",
+    )
+    replayer.add_argument(
         "--from-files",
         action="store_true",
         help="read the release directory's serving files; no database (and no history)",
@@ -124,8 +124,10 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     bencher.add_argument("--out", type=Path, required=True, help="output directory")
     bencher.add_argument("--trace-memory", action="store_true", help="tracemalloc (slow)")
     bencher.add_argument("--profile", action="store_true", help="write a cProfile dump")
-    bencher.add_argument("--since", type=_utc, help="start inside the days, e.g. 2026-10-12T04:00Z")
-    bencher.add_argument("--until", type=_utc, help="stop before this time")
+    bencher.add_argument(
+        "--since", type=_local_time, help="start at this local time (YYYY-MM-DDTHH:MM)"
+    )
+    bencher.add_argument("--until", type=_local_time, help="and stop before this local time")
     _database(bencher)
 
     checker = rt.add_parser("check-gtfs-rt", help="check GTFS-RT snapshots against a static GTFS")
@@ -267,9 +269,9 @@ def _record(args: argparse.Namespace) -> int:
 
 
 def _local_time(value: str) -> Instant:
-    """A Prague wall-clock time from the command line."""
+    """A Prague wall-clock time from the command line (an explicit offset is kept)."""
 
-    return instant(datetime.fromisoformat(value).replace(tzinfo=PRAGUE))
+    return wall_instant(datetime.fromisoformat(value))
 
 
 def _replay(args: argparse.Namespace) -> int:
@@ -279,14 +281,14 @@ def _replay(args: argparse.Namespace) -> int:
             record.load_channels(cast(Path, args.manifest)),
             cast(list[str] | None, args.sources) or list(replay.SOURCES),
         )
-        if (channel.source, channel.channel) not in replay.ALERT_DECODERS
+        if (channel.source, channel.channel) not in registry.ALERT_DECODERS
     ]
     options = replay.ReplayOptions(
         release=cast(str, args.release),
         archive=cast(Path, args.archive),
         start=cast(date, args.start),
         end=cast(date, args.end),
-        channels=[(c.source, c.channel) for c in channels],
+        channels=channels,
         out=cast(Path, args.out),
         feeds=cast(tuple[Feed, ...], args.feeds),
         write_history=cast(bool, args.write_history),
@@ -294,6 +296,7 @@ def _replay(args: argparse.Namespace) -> int:
         quality=cast(bool, args.quality),
         since=cast(Instant | None, args.since),
         until=cast(Instant | None, args.until),
+        all_feeds=cast(bool, args.all_feeds),
     )
     if cast(bool, args.from_files):
         document = replay.replay(None, options, load_policy())
@@ -312,7 +315,7 @@ def _bench(args: argparse.Namespace) -> int:
         for channel in select_channels(
             record.load_channels(cast(Path, args.manifest)), cast(list[str] | None, args.sources)
         )
-        if (channel.source, channel.channel) in replay.DECODERS
+        if (channel.source, channel.channel) in registry.DECODERS
         and (archive / channel.source / channel.channel).is_dir()
     ]
     if not channels:
@@ -372,7 +375,7 @@ def _worker(args: argparse.Namespace) -> int:
 
 def _jobs(args: argparse.Namespace) -> int:
     policy = load_policy()
-    now = instant(datetime.now(UTC))
+    now = clock_now()
     if args.job_command == "hourly":
         data = cast(Path, args.data)
         with psycopg.connect(_url(args), autocommit=True) as connection:

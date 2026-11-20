@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 
+from obehy.realtime.facts import TripKey
 from obehy.realtime.index import Index
 from obehy.realtime.infer.keyed import bind
-from obehy.realtime.model import TripKey
 from obehy.realtime.policy import load_policy
 from tests.realtime.builder import timetable
 from tests.realtime.observations import local

@@ -8,7 +8,7 @@ Per batch it loads the static data of the batch's keys (lazy index), steps every
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -27,14 +27,8 @@ from obehy.realtime.core import (
 from obehy.realtime.emit.alerts import AlertFeed
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.gtfs_rt import FeedEmitter, write_feed
-from obehy.realtime.index import KeyRef
-from obehy.realtime.index_sql import IndexLoader, ReleaseLoads
-from obehy.realtime.infer.keyed import admissible
-from obehy.realtime.manifest import semantics_by_channel
-from obehy.realtime.model import (
-    Effect,
+from obehy.realtime.facts import (
     Feed,
-    FeedState,
     LineRef,
     Observation,
     PlatformAssignment,
@@ -42,6 +36,11 @@ from obehy.realtime.model import (
     SourceSemantics,
     TripKey,
 )
+from obehy.realtime.index import KeyRef
+from obehy.realtime.index_sql import IndexLoader, ReleaseLoads
+from obehy.realtime.infer.keyed import admissible
+from obehy.realtime.manifest import semantics_by_channel
+from obehy.realtime.model import Effect, FeedState, JourneyKey
 from obehy.realtime.phases import Phases
 from obehy.realtime.policy import Policy
 from obehy.realtime.record import load_channels
@@ -51,6 +50,7 @@ from obehy.realtime.times import (
     candidate_service_dates,
     instant,
     local_date,
+    next_multiple,
 )
 
 
@@ -131,12 +131,25 @@ class Runner:
 
     def __post_init__(self) -> None:
         for feed in self.feeds:
-            loader = IndexLoader(self.connection, self.loads, feed)
-            self.runtimes[feed] = FeedRuntime(
-                loader,
-                FeedState(feed),
-                Context(loader.index, self.policy, semantics=self.semantics),
+            self.runtimes[feed] = self._runtime(self.loads, feed, FeedState(feed))
+
+    def _runtime(
+        self,
+        loads: ReleaseLoads,
+        feed: Feed,
+        state: FeedState,
+        journeys: Sequence[JourneyKey] = (),
+    ) -> FeedRuntime:
+        """A feed's runtime over `loads`: a fresh index, loaded for `journeys` first, and the
+        core's context on it."""
+
+        loader = IndexLoader(self.connection, loads, feed)
+        if journeys:
+            loader.ensure(
+                {(j.namespace, j.key) for j in journeys}, {j.service_date for j in journeys}
             )
+        ctx = Context(loader.index, self.policy, semantics=self.semantics)
+        return FeedRuntime(loader, state, ctx)
 
     def prefetch(self, observations: Sequence[Observation]) -> None:
         """Load the static data of the observations' keys ahead of processing them."""
@@ -325,14 +338,10 @@ class Runner:
             journeys = set(state.instances) | {
                 v.binding.journey for v in state.vehicles.values() if v.binding is not None
             }
-            loader = IndexLoader(self.connection, self.loads, feed)
-            loader.ensure(
-                {(j.namespace, j.key) for j in journeys}, {j.service_date for j in journeys}
-            )
+            fresh = self._runtime(self.loads, feed, state, sorted(journeys))
             for journey in sorted(journeys):
-                resolve(journey, loader.index)  # rebuilds the run trips of rail journeys
-            ctx = Context(loader.index, self.policy, semantics=self.semantics)
-            self.runtimes[feed] = FeedRuntime(loader, state, ctx)
+                resolve(journey, fresh.ctx.index)  # rebuilds the run trips of rail journeys
+            self.runtimes[feed] = fresh
 
     def switch_release(self, loads: ReleaseLoads, writer: Writer | None) -> list[Effect]:
         """Rebase live journeys onto a newly activated release (mid-day activation)."""
@@ -343,14 +352,55 @@ class Runner:
             self.alerts.dirty = True  # resolved against the new release
         effects: list[Effect] = []
         for feed, runtime in sorted(self.runtimes.items()):
-            loader = IndexLoader(self.connection, loads, feed)
-            journeys = sorted(runtime.state.instances)
-            loader.ensure(
-                {(j.namespace, j.key) for j in journeys}, {j.service_date for j in journeys}
-            )
-            ctx = Context(loader.index, self.policy, semantics=self.semantics)
-            effects.extend(rebase(runtime.state, loader.index))
-            self.runtimes[feed] = FeedRuntime(loader, runtime.state, ctx)
+            fresh = self._runtime(loads, feed, runtime.state, sorted(runtime.state.instances))
+            effects.extend(rebase(runtime.state, fresh.ctx.index))
+            self.runtimes[feed] = fresh
         if self.writer is not None and effects:
             self.writer.write(effects)
         return effects
+
+
+class Ticks:
+    """A simulated clock's housekeeping ticks, as the worker's wall clock runs them: every
+    `emit_tick_s` on round multiples, each before the first observation after it. Replay, warm
+    start and bench all step through time with it; `on_tick` sees each tick after it ran."""
+
+    def __init__(
+        self,
+        runner: Runner,
+        *,
+        emit: bool = False,
+        on_tick: Callable[[Instant], None] | None = None,
+    ) -> None:
+        self.runner = runner
+        self.every_s = runner.policy.emit_tick_s
+        self.emit = emit
+        self.on_tick = on_tick
+        self.next: Instant | None = None
+
+    def due(self, at: Instant) -> bool:
+        return self.next is not None and self.next <= at
+
+    def advance(self, at: Instant) -> None:
+        """Run every tick up to and including `at`."""
+
+        if self.next is None:
+            self.next = next_multiple(at, self.every_s)
+        while self.next <= at:
+            self.runner.tick(self.next, emit=self.emit)
+            if self.on_tick is not None:
+                self.on_tick(self.next)
+            self.next = next_multiple(self.next, self.every_s)
+
+    def split(self, chunk: list[Observation]) -> Iterator[list[Observation]]:
+        """The chunk in runs between ticks; the ticks between them are run on the way."""
+
+        start = 0
+        for i, observation in enumerate(chunk):
+            if self.next is None or self.due(observation.received_at):
+                if i > start:
+                    yield chunk[start:i]
+                start = i
+                self.advance(observation.received_at)
+        if start < len(chunk):
+            yield chunk[start:]

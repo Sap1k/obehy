@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from datetime import date
 
 from obehy.realtime.core import Context, step
+from obehy.realtime.facts import SourceSemantics
 from obehy.realtime.index import Index
 from obehy.realtime.manifest import semantics_by_channel
 from obehy.realtime.model import (
@@ -16,7 +17,6 @@ from obehy.realtime.model import (
     ObservationResult,
     Reason,
     SnapshotJourney,
-    SourceSemantics,
     VehicleId,
 )
 from obehy.realtime.policy import load_policy

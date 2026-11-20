@@ -15,19 +15,12 @@ from collections.abc import Container
 from dataclasses import dataclass, replace
 from typing import Literal
 
+from obehy.realtime.facts import LineRef, Observation
 from obehy.realtime.index import IndexView
 from obehy.realtime.infer.keyed import Match, admissible, span
 from obehy.realtime.infer.keyless.candidates import candidates
 from obehy.realtime.infer.keyless.score import place, position_residual
-from obehy.realtime.model import (
-    Binding,
-    JourneyKey,
-    KeylessEpisode,
-    LineRef,
-    Observation,
-    Reason,
-    VehicleState,
-)
+from obehy.realtime.model import Binding, JourneyKey, KeylessEpisode, Reason, VehicleState
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.plan import PlanCache
 from obehy.realtime.times import Instant

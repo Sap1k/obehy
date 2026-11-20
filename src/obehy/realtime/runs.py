@@ -13,10 +13,10 @@ from datetime import date
 from functools import lru_cache
 from itertools import pairwise
 
+from obehy.realtime.facts import Feed
 from obehy.realtime.index import IndexView, Trip
 from obehy.realtime.model import (
     Effect,
-    Feed,
     Instance,
     JourneyKey,
     JourneySpan,

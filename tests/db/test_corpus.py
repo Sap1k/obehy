@@ -19,7 +19,7 @@ import psycopg
 import pytest
 
 from obehy.realtime.policy import load_policy
-from obehy.realtime.replay import ReplayOptions, replay
+from obehy.realtime.replay import ReplayOptions, named_channels, replay
 from obehy.runtime_config import load_database_url
 
 GOLDEN = Path(__file__).resolve().parents[1] / "golden"
@@ -48,7 +48,7 @@ def test_pinned_corpus_replays_to_its_golden_outputs(golden: Path, tmp_path: Pat
                 archive=corpus / "archive",
                 start=date.fromisoformat(options["from"]),
                 end=date.fromisoformat(options["to"]),
-                channels=[(source, channel) for source, channel in options["channels"]],
+                channels=named_channels([(s, c) for s, c in options["channels"]]),
                 out=out,
                 feeds=tuple(options["feeds"]),
                 gtfs_rt_every_s=options["gtfs_rt_every_s"],

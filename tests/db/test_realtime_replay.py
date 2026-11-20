@@ -13,10 +13,10 @@ import pytest
 
 from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.emit.stored import stored_observations
+from obehy.realtime.facts import Observation
 from obehy.realtime.index_sql import ensure_release, run_loads
-from obehy.realtime.model import Observation
 from obehy.realtime.policy import load_policy
-from obehy.realtime.replay import ReplayOptions, replay
+from obehy.realtime.replay import ReplayOptions, named_channels, replay
 from obehy.realtime.runner import Runner
 from obehy.realtime.times import Instant, instant
 from obehy.realtime.warm import warm_start, warm_window
@@ -86,7 +86,7 @@ def _options(tmp_path: Path, out: str, release: Path, **extra: Any) -> ReplayOpt
         archive=tmp_path / "archive",
         start=DAY,
         end=DAY,
-        channels=[("duk", "vehicles")],
+        channels=named_channels([("duk", "vehicles")]),
         out=tmp_path / out,
         gtfs_rt_every_s=60,
         **extra,
