@@ -15,9 +15,10 @@ from datetime import timedelta
 from itertools import pairwise
 from typing import Literal, NamedTuple
 
-from obehy.realtime.model import EventKind, Hypothesis, Interval, Placement
+from obehy.realtime.model import EventKind, Hypothesis, Interval, Placement, StopSeen
 from obehy.realtime.policy import ProgressPolicy
 from obehy.realtime.timeline.plan import Plan, Timetable, Trigger
+from obehy.realtime.timeline.stops import departure, holding
 from obehy.realtime.times import Instant
 
 
@@ -59,6 +60,9 @@ def commit(
     at: Instant,
     policy: ProgressPolicy,
     dwell_s: float,
+    *,
+    stop: StopSeen | None = None,
+    returning: bool = False,
 ) -> Committed:
     """Commit, in path order, every crossing the deciding readings agree on.
 
@@ -74,6 +78,11 @@ def commit(
     stop without a timetabled dwell a fix there stands for a typical dwell, `dwell_s`
     (`_crossing_time`). Readings outside the decision that are behind the new commit point
     contradict it and are dropped.
+
+    Where the vehicle was seen at a stop (`stop`, `stops.seen`), its departure waits while the
+    newest fix is still there and is timed by those fixes; its arrival is no later than the
+    first of them. A departure crossed on the first fix back on the path (`returning`) waits
+    for the next fix.
     """
 
     if not beam:
@@ -90,6 +99,11 @@ def commit(
         bracket = brackets[0]
         if bracket is None and any(_before(h.history, trigger.along_m) for h in deciding):
             break  # passed by a reading held off the path: no fix past it yet
+        if trigger.kind == "departure":
+            if holding(stop) == trigger.call:
+                break  # still at the stop
+            if returning and bracket is not None and bracket.after.at == at:
+                break  # back on the path past a stop it may pull back to
         reached = trigger.along_m
         if bracket is None:
             # Crossed before anything was observed: nothing, except the origin's departure
@@ -108,10 +122,23 @@ def commit(
                 )
             continue
         when = _crossing_time(bracket, trigger, plan, dwell_s)
+        fixes = Interval(bracket.before.at, bracket.after.at)
+        seen_leaving = False
+        if stop is not None and stop.call == trigger.call:
+            if trigger.kind == "arrival":
+                when = min(when, stop.first)
+            elif stop.away is not None:
+                # Between the last fix at the stop and the first one away.
+                when = departure(plan, stop, dwell_s)
+                fixes = Interval(stop.last, stop.away)
+                seen_leaving = True
         if crossed_at is not None and when < crossed_at:
             when = crossed_at
         crossed_at = when
-        fixes = Interval(bracket.before.at, bracket.after.at)
+        if seen_leaving and fixes.hi - fixes.lo > longest:
+            # Silent between: it left at some time in the gap, the fixes say no more.
+            crossed.append(Crossing(trigger.call, trigger.kind, fixes, when, "inferred", fixes))
+            continue
         if fixes.hi - fixes.lo <= longest:
             crossed.append(Crossing(trigger.call, trigger.kind, fixes, when, "progress", fixes))
             continue

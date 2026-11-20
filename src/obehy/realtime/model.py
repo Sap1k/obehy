@@ -317,6 +317,19 @@ class OffPath:
 
 
 @dataclass(frozen=True, slots=True)
+class StopSeen:
+    """The fixes at a call whose departure is not committed yet (`timeline.stops`): within the
+    departure margin of its point, wherever the reading places them. The vehicle arrived by
+    `first`, was still there at `last`, and was seen away from it at `away` (None: not yet)."""
+
+    call: int
+    first: Instant
+    last: Instant
+    away: Instant | None = None
+    away_m: float | None = None  # where the reading placed the first fix away
+
+
+@dataclass(frozen=True, slots=True)
 class Track:
     """The live hypotheses of a journey and how far events are committed."""
 
@@ -332,6 +345,8 @@ class Track:
     off_path: OffPath | None = None
     # The newest fix's source and place (lon, lat): the distance driven to the next one.
     fix: tuple[str, float, float] | None = None
+    # The fixes at the call the vehicle is at or has just left, departure not committed.
+    at_stop: StopSeen | None = None
 
     @property
     def lateness_s(self) -> float | None:

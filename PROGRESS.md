@@ -313,6 +313,14 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — Stop presence (`timeline/stops.py`, BASE_PLAN 20.4). A road vehicle's fixes
+  within the departure margin of a stop bound its events whatever the reading makes of them:
+  arrival no later than the first fix there, no departure while the newest fix is still there,
+  departure between the last fix there and the first away (shown as soon as it is seen away);
+  a departure crossed on the first fix back from off the path waits a fix (a stop reached from
+  its far side). PID peak 06:45-09:00: bus shown departures moving after the fact 8,573 →
+  1,740, departures while still at the stop 1,678 → 678 (tram 71 → 13); accuracy and flicker
+  unchanged. Corpus and unit tests pass; departures still predicted ~55 s early (step 2).
 - **2026-11-20** — Replay and fixtures without a database. `obehy rt replay --from-files` reads a
   fetched release's serving parquet (`realtime/index_files.py`, the same `IndexLoader` behind a
   row source; recorded queries identical before and after, trips and calls equal to the SQL-built

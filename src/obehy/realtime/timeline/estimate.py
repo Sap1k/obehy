@@ -101,6 +101,9 @@ def last_fix_at_stop(instance: Instance, plan: Plan) -> tuple[int, Instant] | No
     track = instance.track
     if track is None or not track.hypotheses:
         return None
+    stop = track.at_stop
+    if stop is not None:
+        return (stop.call, stop.last) if instance.calls[stop.call].passenger else None
     best = track.hypotheses[0]
     if best.off_path_since is not None or not best.history:
         return None
@@ -194,6 +197,7 @@ def estimate(
     extra: tuple[timedelta, ...] | None = None,
     now: Instant | None = None,
     dwelt: tuple[int, Instant] | None = None,
+    left: tuple[int, Instant] | None = None,
 ) -> Instance:
     """Per-call estimates; computed when state is emitted, not on every fix.
 
@@ -202,7 +206,9 @@ def estimate(
 
     Road vehicles pass the call without a timetabled dwell their last fix was taken at, and
     when (`dwelt`, `last_fix_at_stop`): its predicted departure is never before that fix, nor
-    before a typical dwell after the arrival (`_dwelling_until`)."""
+    before a typical dwell after the arrival (`_dwelling_until`). Seen away from it and the
+    departure not committed yet, the departure shown is the one that will be (`left`,
+    `stops.departure`): it does not follow `now` meanwhile."""
 
     lateness, delay_class = current if current is not None else own_lateness(instance)
     if instance.lifecycle == "pre_trip" and lateness is not None and lateness < timedelta(0):
@@ -267,6 +273,8 @@ def estimate(
                 )
                 if dwelt is not None and dwelt[0] == i and est_dep is not None:
                     est_dep = _dwelling_until(est_dep, est_arr, dwelt[1], instance.mode, policy)
+                if left is not None and left[0] == i and est_dep is not None:
+                    est_dep = left[1]
             calls.append(_call(state, est_arr, est_dep, status, "gps"))
             latest = est_dep or est_arr
             if latest is not None and (floor is None or latest > floor):

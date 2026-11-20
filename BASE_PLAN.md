@@ -1329,6 +1329,16 @@ call, departure after it, never past the midpoint to the neighbouring call).
   committed and the others are dropped, so history never lags without bound.
 - The committed frontier only moves forward (an invariant checked in replay); the live position
   may be revised while hypotheses compete.
+- **Stop presence (road vehicles).** Fixes within the departure margin of a stop's point bound
+  its events whatever the reading makes of them: the arrival is no later than the first fix
+  there; the departure is not committed while the newest fix is still there, lies between the
+  last fix there and the first fix away (a typical dwell after the last at most, early enough
+  to have driven to the fix away at the timetable's pace), and is the time shown as soon as the
+  vehicle is seen away. A departure crossed on the first fix back on the path after a stretch
+  off it waits for the next fix (a detour may join the road past the stop and pull back to it).
+  The reading alone misses these: it cannot step back to a stop reached from the far side, holds
+  a bay off the shape off the path, and creeps forward over the trigger on a standing vehicle's
+  GPS noise.
 
 **Unmatched fixes and off-route.** A fix with no candidate within reach of any segment matches
 nothing: hypotheses keep their state and age. Unmatched fixes for longer than `T` set `off_route`

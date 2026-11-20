@@ -88,9 +88,10 @@ from obehy.realtime.timeline.estimate import (
     waiting_is_not_early,
 )
 from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness, lead_of, with_lead
-from obehy.realtime.timeline.plan import PlanCache
+from obehy.realtime.timeline.plan import Plan, PlanCache
 from obehy.realtime.timeline.progress import at_origin_or_moving, past_first_stop
 from obehy.realtime.timeline.runtimes import forget, record, running_extra
+from obehy.realtime.timeline.stops import departure
 from obehy.realtime.times import PRAGUE, Instant
 
 CORE_VERSION = "r1.0"
@@ -345,6 +346,7 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
                 extra=extra,
                 now=_fresh(instance, now, policy),
                 dwelt=last_fix_at_stop(instance, plan),
+                left=_seen_leaving(instance, plan, policy),
             )
             continue
         predictor = anchor_prediction(instance, trip, ctx.index, ctx.policy.rail.predictor)
@@ -358,6 +360,19 @@ def estimate_all(state: FeedState, ctx: Context, now: Instant) -> None:
         )
         state.instances[journey] = monotone(estimated)
     state.dirty.clear()
+
+
+def _seen_leaving(
+    instance: Instance, plan: Plan, policy: PredictionPolicy
+) -> tuple[int, Instant] | None:
+    """The call a road vehicle has been seen away from, its departure not committed yet, and
+    when it left: the time `commit` will record (`timeline.stops.departure`)."""
+
+    track = instance.track
+    stop = track.at_stop if track is not None else None
+    if stop is None or stop.away is None:
+        return None
+    return stop.call, departure(plan, stop, policy.dwell_credit_s(instance.mode))
 
 
 def _fresh(instance: Instance, now: Instant, policy: PredictionPolicy) -> Instant | None:

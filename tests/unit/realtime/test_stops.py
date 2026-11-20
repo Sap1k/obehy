@@ -8,8 +8,6 @@ from __future__ import annotations
 import random
 from datetime import timedelta
 
-import pytest
-
 from obehy.realtime.core import estimate_all
 from obehy.realtime.model import Interval, WriteEvent
 from tests.realtime.observations import local
@@ -66,7 +64,6 @@ def test_a_bus_standing_in_gps_jitter_has_not_left() -> None:
     assert departure.hi <= local("2026-10-08 08:08:10")
 
 
-@pytest.mark.xfail(reason="the reported reverse-approach bug, fixed by stop presence", strict=True)
 def test_a_stop_reached_from_its_far_side_keeps_the_time_the_bus_stood_there() -> None:
     """A detour brings the bus onto the road beyond B; it pulls back to the stop, stands three
     minutes and drives on. B's departure is when it left, not when it came."""

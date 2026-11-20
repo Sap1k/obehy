@@ -34,6 +34,7 @@ from obehy.realtime.policy import ProgressPolicy
 from obehy.realtime.timeline.commit import Crossing, commit
 from obehy.realtime.timeline.path import Candidate, Path, candidates, point_at
 from obehy.realtime.timeline.plan import Plan
+from obehy.realtime.timeline.stops import capped, seen
 from obehy.realtime.times import Instant, micros
 
 
@@ -57,9 +58,11 @@ def update(
     source: str,
     policy: ProgressPolicy,
     dwell_s: float,
+    stop_radius_m: float = 0.0,
 ) -> Step:
     """Extend the journey's hypotheses with one fix (from `source`) and commit what they
-    agree on; a fix at a stop without a timetabled dwell stands for `dwell_s` there."""
+    agree on. A road vehicle's fixes within `stop_radius_m` of a stop bound its events there
+    (`stops`); a fix at a stop without a timetabled dwell stands for `dwell_s` there."""
 
     if len(plan.path.points) < 2:
         return Step(track or Track((), 0.0), None, (), None, False)
@@ -98,9 +101,25 @@ def update(
         # may still be inferred (`commit`).
         committed_m = math.nextafter(origin, -math.inf)
     crossed_at = track.crossed_at if track is not None else None
-    done = commit(plan, beam, committed_m, crossed_at, at, policy, dwell_s)
+    stop = None
+    if stop_radius_m > 0:
+        before = track.at_stop if track is not None else None
+        stop = seen(plan, before, committed_m, here, at, stop_radius_m)
+        if stop is not None and stop.away == at:
+            stop = replace(stop, away_m=beam[0].along_m)
+    # The first fix back on the path after a stretch off it may have come onto the road past a
+    # stop it then pulls back to (a detour): a departure it crossed waits for the next fix.
+    returning = bool(live) and live[0].off_path_since is not None
+    done = commit(
+        plan, beam, committed_m, crossed_at, at, policy, dwell_s, stop=stop, returning=returning
+    )
     best = done.beam[0]
-    progress = Progress(best.along_m, plan.call_index_at(best.along_m), at)
+    if stop is not None:
+        trigger = plan.zones[stop.call].departure_m
+        if trigger is None or trigger <= done.committed_m:
+            stop = None
+    along = capped(plan, stop, best.along_m)
+    progress = Progress(along, plan.call_index_at(along), at)
     since = best.off_path_since
     off_route = since is not None and at - since >= timedelta(seconds=policy.off_route_hold_s)
     previous = track.off_path if track is not None else None
@@ -112,6 +131,7 @@ def update(
         crossed_at=done.crossed_at,
         off_path=estimate,
         fix=(source, *here),
+        at_stop=stop,
     )
     return Step(new_track, progress, done.crossed, since, off_route)
 

@@ -94,8 +94,18 @@ def advance(
     # A rail run's calls are timed by its sources; a road vehicle's unseen dwell at a stop
     # without a timetabled one is the typical one (`commit._crossing_time`).
     dwell_s = 0.0 if run else policy.prediction.dwell_credit_s(trip.mode)
+    # A road vehicle's fixes at a stop bound its events there (`stops`).
+    radius_m = 0.0 if run else policy.lifecycle.departure_margin_m
     step = update(
-        plan, instance.track, position, observation.at, trip.mode, source, progress_policy, dwell_s
+        plan,
+        instance.track,
+        position,
+        observation.at,
+        trip.mode,
+        source,
+        progress_policy,
+        dwell_s,
+        stop_radius_m=radius_m,
     )
     track = track.evolve(position_at=observation.at)
     calls, crossed = _cross(instance, step.crossed, source, policy, fuse=run)
