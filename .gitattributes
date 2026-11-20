@@ -1,3 +1,4 @@
 tests/fixtures/jdf/**/native/*.txt -text
 deploy/** text eol=lf
 web/** text eol=lf
+tests/golden/** text eol=lf

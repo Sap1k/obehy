@@ -26,7 +26,7 @@ import json
 import re
 import time
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -493,7 +493,13 @@ class Run:
         return [e for e in self.effects if isinstance(e, WriteEvent)]
 
 
-def run(name: str, quality: QualityLog | None = None) -> Run:
+def run(
+    name: str,
+    quality: QualityLog | None = None,
+    tick: Callable[[FeedState, Instant], None] | None = None,
+) -> Run:
+    """Step `name` through the core; `quality` and `tick` see the state after every tick."""
+
     from obehy.realtime.runner import shipped_semantics
 
     index, observations = load(name)
@@ -514,6 +520,8 @@ def run(name: str, quality: QualityLog | None = None) -> Run:
         estimate_all(state, ctx, now)
         if quality is not None:
             quality.sample(state, ctx, now)
+        if tick is not None:
+            tick(state, now)
         now = Instant(now + TICK)
     return Run(state, effects)
 

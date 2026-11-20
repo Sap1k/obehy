@@ -1,0 +1,455 @@
+{
+ "effects": [
+  ["AssignVehicle",{"at":"2026-10-15T04:44:53+00:00","journey":{"feed":"jdf","key":"100324:1012","namespace":"cis:line_trip","service_date":"2026-10-15","type":"JourneyKey"},"vehicle":{"source":"pid","source_vehicle_id":"3:8897","type":"VehicleId"}}],
+  ["observed","2026-10-15T04:45:15.537218+00:00","pid",1279,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:45:34.535085+00:00","pid",954,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:45:44.401147+00:00","pid",1229,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:46:04.595579+00:00","pid",1580,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:46:24.250792+00:00","pid",1392,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:46:44.575993+00:00","pid",1938,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:46:54.305579+00:00","pid",932,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:47:14.602668+00:00","pid",1229,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:47:54.230091+00:00","pid",1695,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:48:14.254501+00:00","pid",1484,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:48:24.433688+00:00","pid",3029,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:48:44.248306+00:00","pid",566,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:49:04.629654+00:00","pid",1297,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:49:14.732255+00:00","pid",1146,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:49:34.461551+00:00","pid",1711,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:49:54.330084+00:00","pid",1776,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:50:14.240455+00:00","pid",1371,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:50:24.967375+00:00","pid",1650,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:50:44.512531+00:00","pid",2017,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:51:04.802663+00:00","pid",1278,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:51:24.837303+00:00","pid",1843,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T04:51:44.209127+00:00","pid",204,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:176",1,"arrival","2026-10-15T04:51:02+00:00","2026-10-15T04:51:17+00:00","progress","pid"],
+  ["observed","2026-10-15T04:52:03.996372+00:00","pid",432,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:176",1,"departure","2026-10-15T04:51:37+00:00","2026-10-15T05:00:57+00:00","inferred","pid"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:27600",1,"arrival","2026-10-15T04:51:50.955037+00:00","2026-10-15T04:53:37+00:00","inferred","pid"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:27600",1,"departure","2026-10-15T04:51:50.955037+00:00","2026-10-15T04:53:37+00:00","inferred","pid"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:24758",1,"arrival","2026-10-15T04:52:50.955037+00:00","2026-10-15T04:54:37+00:00","inferred","pid"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:24758",1,"departure","2026-10-15T04:52:50.955037+00:00","2026-10-15T04:54:37+00:00","inferred","pid"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:14354",1,"arrival","2026-10-15T04:53:50.955037+00:00","2026-10-15T04:55:37+00:00","inferred","pid"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:14354",1,"departure","2026-10-15T04:53:50.955037+00:00","2026-10-15T04:55:37+00:00","inferred","pid"],
+  ["observed","2026-10-15T05:01:14.694993+00:00","pid",231,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T05:01:35.179351+00:00","pid",1177,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T05:01:54.449561+00:00","pid",439,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["observed","2026-10-15T05:02:14.288943+00:00","pid",424,"jdf/cis:line_trip/100324:1012/2026-10-15",null,["jdf/cis:line_trip/100324:1012/2026-10-15"],"2026-10-15T04:45:15.537218+00:00"],
+  ["event","jdf/cis:line_trip/100324:1012/2026-10-15","jdf:stop:13011",1,"arrival","2026-10-15T05:02:50.955037+00:00","2026-10-15T05:03:41.127560+00:00","inferred","pid"]
+ ],
+ "final": {
+  "instances": {
+   "jdf/cis:line_trip/100324:1012/2026-10-15": {
+    "calls": [
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:22401",
+      "passed": [null,null],
+      "sequence": 0,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:18575",
+      "passed": [null,null],
+      "sequence": 1,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:31076",
+      "passed": [null,null],
+      "sequence": 2,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:29777",
+      "passed": [null,null],
+      "sequence": 3,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:20909",
+      "passed": [null,null],
+      "sequence": 4,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:7085",
+      "passed": [null,null],
+      "sequence": 5,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:33702",
+      "passed": [null,null],
+      "sequence": 6,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:36852",
+      "passed": [null,null],
+      "sequence": 7,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:9508",
+      "passed": [null,null],
+      "sequence": 8,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:3291",
+      "passed": [null,null],
+      "sequence": 9,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:12800",
+      "passed": [null,null],
+      "sequence": 10,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:35421",
+      "passed": [null,null],
+      "sequence": 11,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:2724",
+      "passed": [null,null],
+      "sequence": 12,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:36071",
+      "passed": [null,null],
+      "sequence": 13,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:7050",
+      "passed": [null,null],
+      "sequence": 14,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:3417",
+      "passed": [null,null],
+      "sequence": 15,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:33653",
+      "passed": [null,null],
+      "sequence": 16,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:22991",
+      "passed": [null,null],
+      "sequence": 17,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:6998",
+      "passed": [null,null],
+      "sequence": 18,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:9611",
+      "passed": [null,null],
+      "sequence": 19,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:7963",
+      "passed": [null,null],
+      "sequence": 20,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:35391",
+      "passed": [null,null],
+      "sequence": 21,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:15788",
+      "passed": [null,null],
+      "sequence": 22,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:7277",
+      "passed": [null,null],
+      "sequence": 23,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:21763",
+      "passed": [null,null],
+      "sequence": 24,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:17388",
+      "passed": [null,null],
+      "sequence": 25,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:24954",
+      "passed": [null,null],
+      "sequence": 26,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:20621",
+      "passed": [null,null],
+      "sequence": 27,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:2219",
+      "passed": [null,null],
+      "sequence": 28,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:3121",
+      "passed": [null,null],
+      "sequence": 29,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:28804",
+      "passed": [null,null],
+      "sequence": 30,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:4324",
+      "passed": [null,null],
+      "sequence": 32,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:10779",
+      "passed": [null,null],
+      "sequence": 33,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:32798",
+      "passed": [null,null],
+      "sequence": 34,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "jdf:stop:24779",
+      "passed": [null,null],
+      "sequence": 35,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T04:51:02.085686+00:00","2026-10-15T04:51:37+00:00"],
+      "location_id": "jdf:stop:176",
+      "passed": ["2026-10-15T04:51:02.085686+00:00","2026-10-15T04:51:37+00:00"],
+      "sequence": 36,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T04:53:17.894089+00:00","2026-10-15T04:53:17.894089+00:00"],
+      "location_id": "jdf:stop:27600",
+      "passed": ["2026-10-15T04:53:17.894089+00:00","2026-10-15T04:53:17.894089+00:00"],
+      "sequence": 37,
+      "source_class": "gps",
+      "status": "inferred",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T04:54:08.341134+00:00","2026-10-15T04:54:08.341134+00:00"],
+      "location_id": "jdf:stop:24758",
+      "passed": ["2026-10-15T04:54:08.341134+00:00","2026-10-15T04:54:08.341134+00:00"],
+      "sequence": 38,
+      "source_class": "gps",
+      "status": "inferred",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T04:54:58.788179+00:00","2026-10-15T04:54:58.788179+00:00"],
+      "location_id": "jdf:stop:14354",
+      "passed": ["2026-10-15T04:54:58.788179+00:00","2026-10-15T04:54:58.788179+00:00"],
+      "sequence": 39,
+      "source_class": "gps",
+      "status": "inferred",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T05:03:16.041299+00:00",null],
+      "location_id": "jdf:stop:13011",
+      "passed": ["2026-10-15T05:03:16.041299+00:00",null],
+      "sequence": 40,
+      "source_class": "gps",
+      "status": "inferred",
+      "visit_n": 1
+     }
+    ],
+    "delay_s": 885,
+    "lifecycle": "finished",
+    "off_route": false,
+    "sources": {
+     "pid": 885
+    }
+   }
+  },
+  "vehicles": {
+   "pid:3:8897": {
+    "journey": "jdf/cis:line_trip/100324:1012/2026-10-15",
+    "method": "keyed",
+    "reason": null,
+    "status": "running"
+   }
+  }
+ },
+ "timeline": {
+  "jdf/cis:line_trip/100324:1012/2026-10-15": [
+   ["2026-10-15T04:45:20+00:00","pre_trip",718,0],
+   ["2026-10-15T04:45:40+00:00","running",726,0],
+   ["2026-10-15T04:45:50+00:00","running",732,0],
+   ["2026-10-15T04:46:10+00:00","running",740,0],
+   ["2026-10-15T04:46:30+00:00","running",750,0],
+   ["2026-10-15T04:46:50+00:00","running",767,0],
+   ["2026-10-15T04:47:00+00:00","running",781,0],
+   ["2026-10-15T04:47:20+00:00","running",789,0],
+   ["2026-10-15T04:48:00+00:00","running",805,0],
+   ["2026-10-15T04:48:20+00:00","running",819,0],
+   ["2026-10-15T04:48:30+00:00","running",827,0],
+   ["2026-10-15T04:48:50+00:00","running",836,0],
+   ["2026-10-15T04:49:10+00:00","running",842,0],
+   ["2026-10-15T04:49:20+00:00","running",849,0],
+   ["2026-10-15T04:49:40+00:00","running",857,0],
+   ["2026-10-15T04:50:00+00:00","running",861,0],
+   ["2026-10-15T04:50:20+00:00","running",871,0],
+   ["2026-10-15T04:50:30+00:00","running",883,0],
+   ["2026-10-15T04:50:50+00:00","running",881,0],
+   ["2026-10-15T04:51:10+00:00","running",896,0],
+   ["2026-10-15T04:51:30+00:00","running",910,0],
+   ["2026-10-15T04:51:50+00:00","running",917,0],
+   ["2026-10-15T04:52:10+00:00","running",937,1],
+   ["2026-10-15T05:01:20+00:00","running",837,4],
+   ["2026-10-15T05:01:40+00:00","running",838,4],
+   ["2026-10-15T05:02:00+00:00","running",868,4],
+   ["2026-10-15T05:02:20+00:00","running",885,4],
+   ["2026-10-15T05:07:20+00:00","finished",885,5]
+  ]
+ }
+}

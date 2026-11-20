@@ -1,0 +1,509 @@
+{
+ "effects": [
+  ["AssignVehicle",{"at":"2026-10-12T06:08:24+00:00","journey":{"feed":"czptt","key":"1065","namespace":"czptt:train_number","service_date":"2026-10-12","type":"JourneyKey"},"vehicle":{"source":"sz-mapa","source_vehicle_id":"TR/3189/KASO----4901/00/2026/20261012","type":"VehicleId"}}],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54212",1,"departure","2026-10-12T06:05:00+00:00","2026-10-12T06:05:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:08:24.810737+00:00","sz-mapa",99,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:08:55.557743+00:00","sz-mapa",99,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:09:24.829428+00:00","sz-mapa",179,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:09:54.848761+00:00","sz-mapa",179,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:10:24.832724+00:00","sz-mapa",245,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:10:54.832361+00:00","sz-mapa",245,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:11:24.784690+00:00","sz-mapa",245,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:11:54.794821+00:00","sz-mapa",302,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:12:24.677010+00:00","sz-mapa",370,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:13:03.784831+00:00","sz-mapa",370,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:13:24.656769+00:00","sz-mapa",403,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:13:54.811192+00:00","sz-mapa",403,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:14:24.670709+00:00","sz-mapa",437,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:14:54.780286+00:00","sz-mapa",437,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:15:25.841175+00:00","sz-mapa",461,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:15:54.773987+00:00","sz-mapa",461,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:16:24.828489+00:00","sz-mapa",461,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:16:54.757500+00:00","sz-mapa",482,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:17:24.898566+00:00","sz-mapa",482,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:17:54.903406+00:00","sz-mapa",504,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:18:24.784994+00:00","sz-mapa",504,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:18:54.821219+00:00","sz-mapa",520,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54252",1,"passage","2026-10-12T06:17:00+00:00","2026-10-12T06:17:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:19:24.925520+00:00","sz-mapa",2,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:19:54.853867+00:00","sz-mapa",2,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:20:24.796868+00:00","sz-mapa",111,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:20:54.798357+00:00","sz-mapa",111,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:21:24.756010+00:00","sz-mapa",204,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:21:54.916929+00:00","sz-mapa",204,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:22:24.668380+00:00","sz-mapa",292,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:22:54.788543+00:00","sz-mapa",292,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:23:24.636271+00:00","sz-mapa",340,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:23:54.706037+00:00","sz-mapa",340,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:24:24.683277+00:00","sz-mapa",388,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:24:54.796848+00:00","sz-mapa",388,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54232",1,"departure","2026-10-12T06:23:00+00:00","2026-10-12T06:23:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:25:24.683705+00:00","sz-mapa",37,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:25:54.819935+00:00","sz-mapa",37,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:26:24.661244+00:00","sz-mapa",165,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:26:54.802052+00:00","sz-mapa",165,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:27:24.835098+00:00","sz-mapa",165,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:28:01.847569+00:00","sz-mapa",258,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54272",1,"arrival","2026-10-12T06:27:58+00:00","2026-10-12T06:28:24+00:00","progress","sz-mapa"],
+  ["observed","2026-10-12T06:28:24.654354+00:00","sz-mapa",302,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:28:54.776029+00:00","sz-mapa",302,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54272",1,"passage","2026-10-12T06:28:00+00:00","2026-10-12T06:28:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:29:24.795183+00:00","sz-mapa",1,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:29:54.864082+00:00","sz-mapa",1,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:30:25.265008+00:00","sz-mapa",109,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:30:54.799747+00:00","sz-mapa",109,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:31:24.627679+00:00","sz-mapa",212,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:31:54.755769+00:00","sz-mapa",212,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:32:24.823985+00:00","sz-mapa",281,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:32:55.026866+00:00","sz-mapa",281,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54282",1,"passage","2026-10-12T06:32:00+00:00","2026-10-12T06:32:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:33:24.882484+00:00","sz-mapa",27,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:33:54.763077+00:00","sz-mapa",27,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:34:24.852163+00:00","sz-mapa",131,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:34:54.807511+00:00","sz-mapa",131,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54312",1,"arrival","2026-10-12T06:33:24+00:00","2026-10-12T06:34:24+00:00","progress","sz-mapa"],
+  ["observed","2026-10-12T06:35:24.770124+00:00","sz-mapa",207,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:35:54.799899+00:00","sz-mapa",207,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:36:24.649384+00:00","sz-mapa",287,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:36:55.131079+00:00","sz-mapa",287,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:37:24.805932+00:00","sz-mapa",348,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:37:54.876449+00:00","sz-mapa",348,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:38:24.801838+00:00","sz-mapa",383,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:38:54.824743+00:00","sz-mapa",383,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:39:24.784891+00:00","sz-mapa",419,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:39:54.770532+00:00","sz-mapa",419,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:40:24.798566+00:00","sz-mapa",443,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:40:54.759196+00:00","sz-mapa",443,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:41:24.764800+00:00","sz-mapa",457,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:41:55.006181+00:00","sz-mapa",457,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54300",1,"arrival","2026-10-12T06:41:00+00:00","2026-10-12T06:41:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:42:24.678583+00:00","sz-mapa",113,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:42:55.430155+00:00","sz-mapa",113,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:54300",1,"departure","2026-10-12T06:42:00+00:00","2026-10-12T06:42:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:43:24.860412+00:00","sz-mapa",34,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:43:54.751750+00:00","sz-mapa",34,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:44:24.668880+00:00","sz-mapa",139,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:44:54.776735+00:00","sz-mapa",139,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:45:24.763758+00:00","sz-mapa",235,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:45:54.777286+00:00","sz-mapa",235,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:46:24.726053+00:00","sz-mapa",300,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:46:54.788687+00:00","sz-mapa",300,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:47:24.745301+00:00","sz-mapa",300,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:47:54.956528+00:00","sz-mapa",355,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:48:24.756401+00:00","sz-mapa",392,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:48:54.787616+00:00","sz-mapa",392,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:49:24.834252+00:00","sz-mapa",418,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:49:54.761253+00:00","sz-mapa",418,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:50:24.736744+00:00","sz-mapa",438,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:50:54.791584+00:00","sz-mapa",438,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:56552",1,"departure","2026-10-12T06:50:00+00:00","2026-10-12T06:50:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:51:24.755406+00:00","sz-mapa",63,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:51:54.778738+00:00","sz-mapa",63,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:52:24.881356+00:00","sz-mapa",63,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:52:54.829769+00:00","sz-mapa",185,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:56572",1,"arrival","2026-10-12T06:52:54+00:00","2026-10-12T06:53:24+00:00","progress","sz-mapa"],
+  ["observed","2026-10-12T06:53:24.671727+00:00","sz-mapa",260,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:53:54.815694+00:00","sz-mapa",260,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:54:24.641583+00:00","sz-mapa",318,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:54:55.130212+00:00","sz-mapa",318,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:55:24.793218+00:00","sz-mapa",362,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:55:54.768680+00:00","sz-mapa",362,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:56:24.948752+00:00","sz-mapa",387,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:56:54.877532+00:00","sz-mapa",387,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:57:24.734719+00:00","sz-mapa",387,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:57:54.728631+00:00","sz-mapa",417,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:58:24.824124+00:00","sz-mapa",417,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:58:54.746758+00:00","sz-mapa",443,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["event","czptt/czptt:train_number/1065/2026-10-12","czptt:stop:CZ:56582",1,"departure","2026-10-12T06:58:00+00:00","2026-10-12T06:58:59+00:00","source","sz-mapa"],
+  ["observed","2026-10-12T06:59:24.849977+00:00","sz-mapa",50,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"],
+  ["observed","2026-10-12T06:59:54.797555+00:00","sz-mapa",50,"czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",null,["czptt/czptt:train_number/1065/2026-10-12"],"2026-10-12T06:08:24.810737+00:00"]
+ ],
+ "final": {
+  "instances": {
+   "czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12": {
+    "calls": [
+     {
+      "estimated": [null,"2026-10-12T06:05:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:54212",
+      "passed": [null,"2026-10-12T06:05:29.500000+00:00"],
+      "sequence": 1,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "czptt:stop:CZ:54262",
+      "passed": [null,null],
+      "sequence": 2,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T06:17:29.500000+00:00","2026-10-12T06:17:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:54252",
+      "passed": ["2026-10-12T06:17:29.500000+00:00","2026-10-12T06:17:29.500000+00:00"],
+      "sequence": 3,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "czptt:stop:CZ:54242",
+      "passed": [null,null],
+      "sequence": 4,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,"2026-10-12T06:23:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:54232",
+      "passed": [null,"2026-10-12T06:23:29.500000+00:00"],
+      "sequence": 5,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T06:28:24+00:00","2026-10-12T06:28:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:54272",
+      "passed": ["2026-10-12T06:28:24+00:00","2026-10-12T06:28:29.500000+00:00"],
+      "sequence": 6,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "czptt:stop:CZ:54292",
+      "passed": [null,null],
+      "sequence": 7,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T06:32:29.500000+00:00","2026-10-12T06:32:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:54282",
+      "passed": ["2026-10-12T06:32:29.500000+00:00","2026-10-12T06:32:29.500000+00:00"],
+      "sequence": 8,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T06:34:24+00:00",null],
+      "location_id": "czptt:stop:CZ:54312",
+      "passed": ["2026-10-12T06:34:24+00:00",null],
+      "sequence": 9,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "czptt:stop:CZ:58088",
+      "passed": [null,null],
+      "sequence": 10,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T06:41:29.500000+00:00","2026-10-12T06:42:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:54300",
+      "passed": ["2026-10-12T06:41:29.500000+00:00","2026-10-12T06:42:29.500000+00:00"],
+      "sequence": 11,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "czptt:stop:CZ:56562",
+      "passed": [null,null],
+      "sequence": 12,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,"2026-10-12T06:50:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:56552",
+      "passed": [null,"2026-10-12T06:50:29.500000+00:00"],
+      "sequence": 13,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T06:53:24+00:00",null],
+      "location_id": "czptt:stop:CZ:56572",
+      "passed": ["2026-10-12T06:53:24+00:00",null],
+      "sequence": 14,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,null],
+      "location_id": "czptt:stop:CZ:56573",
+      "passed": [null,null],
+      "sequence": 15,
+      "source_class": null,
+      "status": "no_realtime",
+      "visit_n": 1
+     },
+     {
+      "estimated": [null,"2026-10-12T06:58:29.500000+00:00"],
+      "location_id": "czptt:stop:CZ:56582",
+      "passed": [null,"2026-10-12T06:58:29.500000+00:00"],
+      "sequence": 16,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:05:30+00:00","2026-10-12T07:06:30+00:00"],
+      "location_id": "czptt:stop:CZ:56590",
+      "passed": [null,null],
+      "sequence": 17,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:09:30+00:00","2026-10-12T07:09:30+00:00"],
+      "location_id": "czptt:stop:CZ:56600",
+      "passed": [null,null],
+      "sequence": 18,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:13:30+00:00","2026-10-12T07:13:30+00:00"],
+      "location_id": "czptt:stop:CZ:56610",
+      "passed": [null,null],
+      "sequence": 19,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:15:00+00:00","2026-10-12T07:15:00+00:00"],
+      "location_id": "czptt:stop:CZ:56620",
+      "passed": [null,null],
+      "sequence": 20,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:18:00+00:00","2026-10-12T07:18:00+00:00"],
+      "location_id": "czptt:stop:CZ:56630",
+      "passed": [null,null],
+      "sequence": 21,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:18:30+00:00","2026-10-12T07:18:30+00:00"],
+      "location_id": "czptt:stop:CZ:56641",
+      "passed": [null,null],
+      "sequence": 22,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:23:00+00:00","2026-10-12T07:31:00+00:00"],
+      "location_id": "czptt:stop:CZ:56640",
+      "passed": [null,null],
+      "sequence": 23,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:34:30+00:00","2026-10-12T07:34:30+00:00"],
+      "location_id": "czptt:stop:CZ:56692",
+      "passed": [null,null],
+      "sequence": 24,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:36:00+00:00","2026-10-12T07:36:00+00:00"],
+      "location_id": "czptt:stop:CZ:56650",
+      "passed": [null,null],
+      "sequence": 25,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:36:30+00:00","2026-10-12T07:36:30+00:00"],
+      "location_id": "czptt:stop:CZ:58157",
+      "passed": [null,null],
+      "sequence": 26,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:39:00+00:00","2026-10-12T07:39:00+00:00"],
+      "location_id": "czptt:stop:CZ:56690",
+      "passed": [null,null],
+      "sequence": 27,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:40:00+00:00","2026-10-12T07:40:00+00:00"],
+      "location_id": "czptt:stop:CZ:56693",
+      "passed": [null,null],
+      "sequence": 28,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:40:30+00:00","2026-10-12T07:40:30+00:00"],
+      "location_id": "czptt:stop:CZ:56691",
+      "passed": [null,null],
+      "sequence": 29,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:41:30+00:00","2026-10-12T07:41:30+00:00"],
+      "location_id": "czptt:stop:CZ:56700",
+      "passed": [null,null],
+      "sequence": 30,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:42:00+00:00","2026-10-12T07:42:00+00:00"],
+      "location_id": "czptt:stop:CZ:56711",
+      "passed": [null,null],
+      "sequence": 31,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:44:30+00:00","2026-10-12T07:44:30+00:00"],
+      "location_id": "czptt:stop:CZ:56720",
+      "passed": [null,null],
+      "sequence": 32,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:46:30+00:00","2026-10-12T07:46:30+00:00"],
+      "location_id": "czptt:stop:CZ:56710",
+      "passed": [null,null],
+      "sequence": 33,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:51:30+00:00","2026-10-12T07:51:30+00:00"],
+      "location_id": "czptt:stop:CZ:56730",
+      "passed": [null,null],
+      "sequence": 34,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T07:57:00+00:00","2026-10-12T08:02:30+00:00"],
+      "location_id": "czptt:stop:CZ:56740",
+      "passed": [null,null],
+      "sequence": 35,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T08:05:30+00:00","2026-10-12T08:05:30+00:00"],
+      "location_id": "czptt:stop:CZ:56750",
+      "passed": [null,null],
+      "sequence": 36,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T08:07:30+00:00","2026-10-12T08:07:30+00:00"],
+      "location_id": "czptt:stop:CZ:56760",
+      "passed": [null,null],
+      "sequence": 37,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T08:11:30+00:00","2026-10-12T08:11:30+00:00"],
+      "location_id": "czptt:stop:CZ:56780",
+      "passed": [null,null],
+      "sequence": 38,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-12T08:14:00+00:00","2026-10-12T08:14:00+00:00"],
+      "location_id": "czptt:stop:CZ:56770",
+      "passed": [null,null],
+      "sequence": 39,
+      "source_class": "source",
+      "status": "predicted",
+      "visit_n": 1
+     }
+    ],
+    "delay_s": 90,
+    "lifecycle": "running",
+    "off_route": false,
+    "sources": {
+     "sz-mapa": 90
+    }
+   }
+  },
+  "vehicles": {
+   "sz-mapa:TR/3189/KASO----4901/00/2026/20261012": {
+    "journey": "czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12",
+    "method": "keyed",
+    "reason": null,
+    "status": "running"
+   }
+  }
+ },
+ "timeline": {
+  "czptt/czptt:pa/Pa:0054:--KADR336849:01:2026/2026-10-12": [
+   ["2026-10-12T06:08:30+00:00","running",30,1],
+   ["2026-10-12T06:19:30+00:00","running",150,2],
+   ["2026-10-12T06:25:30+00:00","running",150,3],
+   ["2026-10-12T06:28:30+00:00","running",150,4],
+   ["2026-10-12T06:29:30+00:00","running",90,4],
+   ["2026-10-12T06:33:30+00:00","running",90,5],
+   ["2026-10-12T06:35:30+00:00","running",90,6],
+   ["2026-10-12T06:42:30+00:00","running",150,7],
+   ["2026-10-12T06:51:30+00:00","running",90,8],
+   ["2026-10-12T06:53:30+00:00","running",90,9],
+   ["2026-10-12T06:59:30+00:00","running",90,10]
+  ]
+ }
+}

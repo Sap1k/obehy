@@ -1,0 +1,466 @@
+{
+ "effects": [
+  ["AssignVehicle",{"at":"2026-10-15T06:38:56+00:00","journey":{"feed":"jdf","key":"220630:1024","namespace":"cis:line_trip","service_date":"2026-10-15","type":"JourneyKey"},"vehicle":{"source":"pid","source_vehicle_id":"3:8834","type":"VehicleId"}}],
+  ["observed","2026-10-15T06:39:15.027616+00:00","pid",378,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:40:15.422034+00:00","pid",603,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:41:14.971873+00:00","pid",329,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:49:05.236253+00:00","pid",1564,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:49:25.913361+00:00","pid",1692,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:49:35.397907+00:00","pid",1639,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:49:55.176090+00:00","pid",1617,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:50:05.270113+00:00","pid",1580,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:50:35.215841+00:00","pid",1653,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:50:45.231206+00:00","pid",1746,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:51:15.172117+00:00","pid",1780,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:51:45.261039+00:00","pid",1739,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:52:05.254953+00:00","pid",1648,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:52:35.199447+00:00","pid",1680,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:52:55.175950+00:00","pid",1631,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:53:15.002592+00:00","pid",1773,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:53:45.213622+00:00","pid",1821,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:53:55.094377+00:00","pid",1634,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:54:15.141379+00:00","pid",1754,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:54:35.182490+00:00","pid",1614,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:54:55.104697+00:00","pid",1628,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:55:25.181635+00:00","pid",1785,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["event","jdf/cis:line_trip/220630:1024/2026-10-15","jdf:stop:20352",1,"departure","2026-10-15T06:54:58+00:00","2026-10-15T06:55:23+00:00","progress","pid"],
+  ["observed","2026-10-15T06:55:35.134821+00:00","pid",1668,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:55:55.505107+00:00","pid",1644,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:56:05.122782+00:00","pid",1593,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:56:15.674783+00:00","pid",1783,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["event","jdf/cis:line_trip/220630:1024/2026-10-15","jdf:stop:30795",1,"arrival","2026-10-15T06:56:07+00:00","2026-10-15T06:56:19+00:00","progress","pid"],
+  ["observed","2026-10-15T06:56:35.013681+00:00","pid",1593,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:57:05.177924+00:00","pid",1578,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["event","jdf/cis:line_trip/220630:1024/2026-10-15","jdf:stop:30795",1,"departure","2026-10-15T06:56:19+00:00","2026-10-15T06:56:46+00:00","progress","pid"],
+  ["observed","2026-10-15T06:57:15.173867+00:00","pid",1742,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:57:35.387259+00:00","pid",1554,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["event","jdf/cis:line_trip/220630:1024/2026-10-15","jdf:stop:28033",1,"arrival","2026-10-15T06:57:04+00:00","2026-10-15T06:57:31+00:00","progress","pid"],
+  ["observed","2026-10-15T06:57:45.081100+00:00","pid",1734,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:57:55.104901+00:00","pid",1602,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:58:15.100315+00:00","pid",1730,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:58:25.135462+00:00","pid",1666,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["event","jdf/cis:line_trip/220630:1024/2026-10-15","jdf:stop:28033",1,"departure","2026-10-15T06:58:03+00:00","2026-10-15T06:58:27+00:00","progress","pid"],
+  ["observed","2026-10-15T06:58:45.056221+00:00","pid",1694,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:58:55.030200+00:00","pid",1599,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:59:15.020832+00:00","pid",1223,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:59:25.137676+00:00","pid",1632,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["observed","2026-10-15T06:59:35.187721+00:00","pid",1595,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"],
+  ["event","jdf/cis:line_trip/220630:1024/2026-10-15","jdf:stop:28475",1,"arrival","2026-10-15T06:59:09+00:00","2026-10-15T06:59:18+00:00","progress","pid"],
+  ["observed","2026-10-15T06:59:55.065689+00:00","pid",1600,"jdf/cis:line_trip/220630:1024/2026-10-15",null,["jdf/cis:line_trip/220630:1024/2026-10-15"],"2026-10-15T06:39:15.027616+00:00"]
+ ],
+ "final": {
+  "instances": {
+   "jdf/cis:line_trip/220630:1024/2026-10-15": {
+    "calls": [
+     {
+      "estimated": [null,"2026-10-15T06:55:10.500000+00:00"],
+      "location_id": "jdf:stop:20352",
+      "passed": [null,"2026-10-15T06:55:10.500000+00:00"],
+      "sequence": 0,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T06:56:07.225896+00:00","2026-10-15T06:56:32.500000+00:00"],
+      "location_id": "jdf:stop:30795",
+      "passed": ["2026-10-15T06:56:07.225896+00:00","2026-10-15T06:56:32.500000+00:00"],
+      "sequence": 1,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T06:57:31+00:00","2026-10-15T06:58:15+00:00"],
+      "location_id": "jdf:stop:28033",
+      "passed": ["2026-10-15T06:57:31+00:00","2026-10-15T06:58:15+00:00"],
+      "sequence": 2,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T06:59:17.413516+00:00","2026-10-15T06:59:47.413516+00:00"],
+      "location_id": "jdf:stop:28475",
+      "passed": ["2026-10-15T06:59:17.413516+00:00",null],
+      "sequence": 3,
+      "source_class": "gps",
+      "status": "actual",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:03:14.896621+00:00","2026-10-15T07:03:44.896621+00:00"],
+      "location_id": "jdf:stop:16963",
+      "passed": [null,null],
+      "sequence": 4,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:05:14.896621+00:00","2026-10-15T07:05:44.896621+00:00"],
+      "location_id": "jdf:stop:11990",
+      "passed": [null,null],
+      "sequence": 5,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:08:14.896621+00:00","2026-10-15T07:08:44.896621+00:00"],
+      "location_id": "jdf:stop:16828",
+      "passed": [null,null],
+      "sequence": 9,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:09:14.896621+00:00","2026-10-15T07:09:44.896621+00:00"],
+      "location_id": "jdf:stop:14785",
+      "passed": [null,null],
+      "sequence": 10,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:14:14.896621+00:00","2026-10-15T07:14:44.896621+00:00"],
+      "location_id": "jdf:stop:24709",
+      "passed": [null,null],
+      "sequence": 12,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:16:14.896621+00:00","2026-10-15T07:16:44.896621+00:00"],
+      "location_id": "jdf:stop:9734",
+      "passed": [null,null],
+      "sequence": 15,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:18:14.896621+00:00","2026-10-15T07:18:44.896621+00:00"],
+      "location_id": "jdf:stop:4769",
+      "passed": [null,null],
+      "sequence": 16,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:21:14.896621+00:00","2026-10-15T07:21:44.896621+00:00"],
+      "location_id": "jdf:stop:32628",
+      "passed": [null,null],
+      "sequence": 20,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:23:14.896621+00:00","2026-10-15T07:23:44.896621+00:00"],
+      "location_id": "jdf:stop:16883",
+      "passed": [null,null],
+      "sequence": 21,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:24:14.896621+00:00","2026-10-15T07:24:44.896621+00:00"],
+      "location_id": "jdf:stop:29524",
+      "passed": [null,null],
+      "sequence": 24,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:28:14.896621+00:00","2026-10-15T07:28:44.896621+00:00"],
+      "location_id": "jdf:stop:23852",
+      "passed": [null,null],
+      "sequence": 26,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:31:14.896621+00:00","2026-10-15T07:31:44.896621+00:00"],
+      "location_id": "jdf:stop:18362",
+      "passed": [null,null],
+      "sequence": 27,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:32:14.896621+00:00","2026-10-15T07:32:44.896621+00:00"],
+      "location_id": "jdf:stop:18840",
+      "passed": [null,null],
+      "sequence": 28,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:34:14.896621+00:00","2026-10-15T07:34:44.896621+00:00"],
+      "location_id": "jdf:stop:17384",
+      "passed": [null,null],
+      "sequence": 29,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:36:14.896621+00:00","2026-10-15T07:36:44.896621+00:00"],
+      "location_id": "jdf:stop:25729",
+      "passed": [null,null],
+      "sequence": 30,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:38:14.896621+00:00","2026-10-15T07:38:44.896621+00:00"],
+      "location_id": "jdf:stop:11154",
+      "passed": [null,null],
+      "sequence": 31,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:40:14.896621+00:00","2026-10-15T07:40:44.896621+00:00"],
+      "location_id": "jdf:stop:32928",
+      "passed": [null,null],
+      "sequence": 32,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:42:14.896621+00:00","2026-10-15T07:42:44.896621+00:00"],
+      "location_id": "jdf:stop:2007",
+      "passed": [null,null],
+      "sequence": 33,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:43:14.896621+00:00","2026-10-15T07:43:44.896621+00:00"],
+      "location_id": "jdf:stop:11497",
+      "passed": [null,null],
+      "sequence": 35,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:44:14.896621+00:00","2026-10-15T07:47:00+00:00"],
+      "location_id": "jdf:stop:6458",
+      "passed": [null,null],
+      "sequence": 36,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:49:00+00:00","2026-10-15T07:49:30+00:00"],
+      "location_id": "jdf:stop:30249",
+      "passed": [null,null],
+      "sequence": 37,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:51:00+00:00","2026-10-15T07:51:30+00:00"],
+      "location_id": "jdf:stop:33224",
+      "passed": [null,null],
+      "sequence": 38,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:53:00+00:00","2026-10-15T07:53:30+00:00"],
+      "location_id": "jdf:stop:16344",
+      "passed": [null,null],
+      "sequence": 39,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T07:55:00+00:00","2026-10-15T07:55:30+00:00"],
+      "location_id": "jdf:stop:607",
+      "passed": [null,null],
+      "sequence": 40,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:00:00+00:00","2026-10-15T08:00:30+00:00"],
+      "location_id": "jdf:stop:36466",
+      "passed": [null,null],
+      "sequence": 41,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:02:00+00:00","2026-10-15T08:02:30+00:00"],
+      "location_id": "jdf:stop:3092",
+      "passed": [null,null],
+      "sequence": 42,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:04:00+00:00","2026-10-15T08:04:30+00:00"],
+      "location_id": "jdf:stop:9505",
+      "passed": [null,null],
+      "sequence": 43,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:05:00+00:00","2026-10-15T08:05:30+00:00"],
+      "location_id": "jdf:stop:11108",
+      "passed": [null,null],
+      "sequence": 44,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:07:00+00:00","2026-10-15T08:07:30+00:00"],
+      "location_id": "jdf:stop:26220",
+      "passed": [null,null],
+      "sequence": 45,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:08:00+00:00","2026-10-15T08:08:30+00:00"],
+      "location_id": "jdf:stop:24030",
+      "passed": [null,null],
+      "sequence": 46,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:09:00+00:00","2026-10-15T08:09:30+00:00"],
+      "location_id": "jdf:stop:27871",
+      "passed": [null,null],
+      "sequence": 47,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:10:00+00:00","2026-10-15T08:10:30+00:00"],
+      "location_id": "jdf:stop:24954",
+      "passed": [null,null],
+      "sequence": 48,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:12:00+00:00","2026-10-15T08:12:30+00:00"],
+      "location_id": "jdf:stop:9051",
+      "passed": [null,null],
+      "sequence": 49,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:14:00+00:00","2026-10-15T08:14:30+00:00"],
+      "location_id": "jdf:stop:17388",
+      "passed": [null,null],
+      "sequence": 50,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:16:00+00:00","2026-10-15T08:16:30+00:00"],
+      "location_id": "jdf:stop:21763",
+      "passed": [null,null],
+      "sequence": 51,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:19:00+00:00","2026-10-15T08:19:30+00:00"],
+      "location_id": "jdf:stop:7277",
+      "passed": [null,null],
+      "sequence": 52,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     },
+     {
+      "estimated": ["2026-10-15T08:21:00+00:00","2026-10-15T08:21:00+00:00"],
+      "location_id": "jdf:stop:824",
+      "passed": [null,null],
+      "sequence": 53,
+      "source_class": "gps",
+      "status": "predicted",
+      "visit_n": 1
+     }
+    ],
+    "delay_s": 25,
+    "lifecycle": "running",
+    "off_route": false,
+    "sources": {
+     "pid": 25
+    }
+   }
+  },
+  "vehicles": {
+   "pid:3:8834": {
+    "journey": "jdf/cis:line_trip/220630:1024/2026-10-15",
+    "method": "keyed",
+    "reason": null,
+    "status": "running"
+   }
+  }
+ },
+ "timeline": {
+  "jdf/cis:line_trip/220630:1024/2026-10-15": [
+   ["2026-10-15T06:39:20+00:00","pre_trip",null,0],
+   ["2026-10-15T06:55:30+00:00","running",0,0],
+   ["2026-10-15T06:55:40+00:00","running",23,1],
+   ["2026-10-15T06:56:00+00:00","running",13,1],
+   ["2026-10-15T06:56:10+00:00","running",20,1],
+   ["2026-10-15T06:56:20+00:00","running",7,1],
+   ["2026-10-15T06:56:40+00:00","running",19,2],
+   ["2026-10-15T06:57:10+00:00","running",46,2],
+   ["2026-10-15T06:57:20+00:00","running",41,2],
+   ["2026-10-15T06:57:40+00:00","running",34,2],
+   ["2026-10-15T06:57:50+00:00","running",31,3],
+   ["2026-10-15T06:58:00+00:00","running",44,3],
+   ["2026-10-15T06:58:20+00:00","running",53,3],
+   ["2026-10-15T06:58:30+00:00","running",63,3],
+   ["2026-10-15T06:58:50+00:00","running",64,3],
+   ["2026-10-15T06:59:00+00:00","running",58,3],
+   ["2026-10-15T06:59:20+00:00","running",44,3],
+   ["2026-10-15T06:59:30+00:00","running",32,3],
+   ["2026-10-15T06:59:40+00:00","running",18,3],
+   ["2026-10-15T07:00:00+00:00","running",25,4]
+  ]
+ }
+}
