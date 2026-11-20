@@ -196,7 +196,7 @@ obehy/                         (this repository)
 │   │   ├── emit/              gtfsrt, state_table, vehicles snapshot, history writer
 │   │   ├── worker.py          asyncio shell around core.py
 │   │   ├── record.py, archive.py, replay.py, evaluate.py
-│   │   └── sql/               set-wise jobs: vehicle_day, circulation_edge, punctuality
+│   │   └── sql/               set-wise SQL: circulation_edge, punctuality (planned)
 │   ├── api/                   FastAPI app, /api/v1 routers, debug
 │   └── data/                  versioned rules, policies and connector manifests
 ├── web/                       Vite + React frontend
@@ -1129,9 +1129,9 @@ behind). The connector does not try to guess offsets: a source time further from
 than the policy skew limit (`time.max_clock_skew`) is dropped and the observation is treated as
 untimed for that poll (section 19.6).
 
-**Service date everywhere.** Instances, history partitions, `vehicle_day` and departure queries
+**Service date everywhere.** Instances, history partitions, vehicle days and departure queries
 are keyed by service date, never by the UTC or local calendar date: a 00:30 night trip belongs to
-yesterday's service date. A vehicle's working day can cross midnight; `vehicle_day` is a chain of
+yesterday's service date. A vehicle's working day can cross midnight; a vehicle day is a chain of
 consecutive journeys split at gaps longer than a policy limit (default 3 h), dated by its first
 journey's service date.
 
@@ -1625,7 +1625,7 @@ Circulation knowledge comes from four sources:
 | static `block_key` (CZPTT, some GTFS) | release trips | static fact |
 | imported rosters (operator rotation plans, `ref.roster`) | train number + validity + day mask; each step may name a unit, a vehicle type or nothing | plan |
 | learned circulation edges (below) | literal timetable-stable keys + day class | prior |
-| observed `vehicle_day` (below) | journeys | fact, after the day |
+| observed vehicle days (below) | journeys | fact |
 
 Forecast precedence for "what runs next and with which vehicle" is static block > roster valid
 that day > learned edge; a learned edge is shown only where the roster is silent, and
@@ -1634,20 +1634,20 @@ Rosters resolve to the active release through `source_key(czptt:train_number)` o
 
 The learned and observed layers never depend on release-scoped trip IDs.
 
-**Observed layer (facts).** A nightly SQL job (`obehy rt circulations build`) writes
-`history.vehicle_day` from the day's confirmed vehicle assignments: keyed bindings of a source
-`vehicle_key`, and `vehicle_assignment` facts from sources that name which vehicle works which
-train numbers (section 28). For each vehicle and service
-date (section 19.3) it records the ordered journeys (section 29), with actual start and end times
-and locations, layovers and gaps. Weak inferences never enter it, so they cannot feed their own
-prior.
+**Observed layer (facts).** `history.vehicle_chains` cuts vehicle days live from the
+confirmed vehicle assignments: keyed bindings of a source `vehicle_key`, and `vehicle_assignment`
+facts from sources that name which vehicle works which train numbers (section 28). For each
+vehicle and service date (section 19.3) it gives the ordered journeys (section 29), with first
+and last sightings, layovers and gaps; nothing is materialised, so today's are there too. Weak
+inferences never enter it, so they cannot feed their own prior.
 
 **Tour identity.** A tour is a plan keyed by journey keys; a vehicle is never part of it, so a
 vehicle can work a different oběh every day and a mid-day swap changes only the live binding.
 `tour_id` is opaque and stable: rosters and blocks keep their own names (`roster:<dataset>:<name>`,
 `block:<key>`); a learned chain is `learned:<feed>:<day_class>:<first journey key>`, renewed when
-its first journey changes. The nightly job sets `vehicle_day.tour_id` with `tour_match_share` (the
-share of the day's journeys that follow the tour), so per-oběh history is one query.
+its first journey changes. Each observed vehicle day is matched to a tour with
+`tour_match_share` (the share of the day's journeys that follow the tour), so per-oběh history is
+one query.
 
 **Learned layer (successor edges).** Each edge reads "after journey key A, this vehicle usually
 does key B next":
@@ -1663,7 +1663,7 @@ circulation_edge
     status           active | dormant
 ```
 
-- **Learning** is one `INSERT … SELECT` over consecutive `vehicle_day` pairs where B starts
+- **Learning** is one `INSERT … SELECT` over consecutive journeys of vehicle days where B starts
   within 90 minutes of A's end. Counts decay with a half-life of about 14 days, so the model
   follows roster and timetable changes. `p = support / trials`.
 - **Day class** (working day, Saturday, Sunday or holiday, school holiday) comes from the
@@ -1680,11 +1680,11 @@ circulation_edge
   CZPTT's names the train path (its run's parts), not a circulation.
 - **Served** (section 30): the observed layer as `vehicles/<id>/days`,
   `trips/…/circulation` and `circulations` (a source's day, by company and mode, by route or
-  by one source vehicle), cut live from `history.vehicle_assignment` by the nightly job's own
-  rule (`history.vehicle_chains`), so today is there too. History knows a vehicle by its
-  source's ID; `history.vehicle_of` maps it to the registry by source-ID keys only, so a
-  vehicle recognised only by plate, co-location or train has no history under its registry ID
-  yet.
+  by one source vehicle), cut live from `history.vehicle_assignment` by
+  `history.vehicle_chains`, so today is there too. Each assignment keeps the vehicle the worker
+  resolved its report as (registry key, stated identifier such as a plate, or co-located
+  partner, as the live map names it; on a rail run the unit, not the train), so a vehicle's
+  days are the reports that were it.
 - **A journey's line as it ran.** The journey key stays its identity; each schedule snapshot
   also keeps opaque copies of its trip's `route_id`, mode and `agency_id`, so a past day scopes
   and draws by the line it ran as after its release is gone. With the calls this is the
@@ -2024,7 +2024,7 @@ vehicle_media (later)       vehicle_id | vehicle_model_id, url, licence, attribu
 Two different facts, kept apart:
 
 - **`vehicle_assignment`**: which vehicle works a journey. It comes from bound live reports,
-  or from sources that publish assignments by train number. Assignments feed `vehicle_day`, so
+  or from sources that publish assignments by train number. Assignments make vehicle days, so
   trains get observed tours too (section 22).
 - **Composition**: the formation of a train, which may name exact vehicles, only vehicle
   types, or neither.
@@ -2470,7 +2470,7 @@ are fixed in `docs/R1_SLICE.md`.
 9. `release fetch`; project API with realtime departures and vehicles.
 10. PID: Golemio APIs and GTFS-RT alerts.
 11. Arriva Express: keyless inference, own GPS delay, travel-time provider interface.
-12. Circulation learning v1 (`vehicle_day`, `circulation_edge`, `tour_id`).
+12. Circulation learning v1 (vehicle days, `circulation_edge`, `tour_id`).
 13. Frontend in `web/` with per-release PMTiles.
 
 The first end-to-end success is:

@@ -139,7 +139,6 @@ def test_old_history_moves_to_slim_daily_tables(old_history: psycopg.Connection)
         ("journey_schedule", 2),
         ("vehicle_assignment", 1),
         ("journey_cancellation", 1),
-        ("vehicle_day", 0),
     ):
         count = connection.execute(
             sql.SQL("SELECT count(*) FROM history.{}").format(sql.Identifier(table))

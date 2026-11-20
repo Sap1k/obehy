@@ -24,7 +24,6 @@ HISTORY_TABLES = (
     "journey_call",
     "actual_stop_event",
     "vehicle_assignment",
-    "vehicle_day",
     "journey_link",
     "platform_evidence",
     "journey_cancellation",

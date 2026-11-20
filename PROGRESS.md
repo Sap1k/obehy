@@ -313,6 +313,19 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-20** — One vehicle identity in history (migration 0027). The worker writes each
+  assignment's `vehicle_id` as the live map names the report (registry key, stated plate,
+  co-located partner; a rail run's unit, not its train), so a plate-bound bus's history and
+  oběhy are under its registry ID; `history.vehicle_of` is gone (past rows backfilled by its
+  rule). Vehicle days group by vehicle (two sources' sightings of one journey count once).
+  Physical-vehicle policy is one table (`rt.physical_vehicles`, written by the writer from the
+  manifests) read through `rt.is_physical` by every query; `api/physical.py` and its four SQL
+  copies are gone. `history.journey_latest` replaces the latest-schedule joins. `vehicle_day`
+  (never read) and `obehy jobs vehicle-day` are gone. A composition answered from a trip's last
+  call no longer shows on that trip (a run's next part shares its train number). Validated:
+  unit and DB tests (test database); 0027 took 75 s on 1 M synthetic assignments (21 days at
+  PID volume) with tests running alongside; no dev data to time it on. Not yet: shared current-trip/vehicle views and the API
+  resolver (Phase 4).
 - **2026-11-20** — Realtime core cleaned for the Rust port: one rule per concept (policy v18).
   The published journey delay is the lateness the predictions start from (was the source's
   reported delay: an Arriva bus 44 min late by GPS showed +5); "passed" is one rule
@@ -325,8 +338,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   binding changed, published delay moved in 103 (median 20 s); file replays 2026-10-15 PID and
   2026-10-06 DÚK/SŽ/Arriva 07-08 against the old core: GTFS-RT identical but one Arriva trip
   (+30 s). Compositions now leave with their history day (nightly and the disk guard), which
-  also clears the rows of the old `czptt:tr` key. DB tests not run (no test database). Next: DB
-  contract (migration 0027).
+  also clears the rows of the old `czptt:tr` key. DB tests: 107 of 108 passed after the push;
+  the composition broker test caught a run's next part lending its formation to the part
+  before, fixed in 0027 (below).
 - **2026-11-20** — Delay history over a segment is the API's (`api/segments.py`):
   `/trips/{id}/history?from=&to=` gives each day's run (start, end, worst and every call's delay
   as the rider meets it, a run lost near either end counted by the nearest measured delay,
@@ -462,7 +476,7 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   `trips/…/circulation` (plus the feed's block, PID's only), cut live by the nightly job's own
   rule, now `history.vehicle_chains` (migration 0025; job output identical on both dev dates).
   Dev DB: S9 timetable 1.0 s, 795 KiB raw (nginx gzips); circulation 1 s. Not yet: learned
-  tours, history under plate-bound registry IDs.
+  tours (history under plate-bound registry IDs since 2026-11-20).
 - **2026-10-30** — Station pairing is decided once per release at activation
   (`release/pairing.py`, policy `data/stops/station-pairing-v1.toml`, migration 0024) into
   `control.station_pairing`, read through `active.stop_group`; search groups in SQL with exact

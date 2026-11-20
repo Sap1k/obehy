@@ -1,7 +1,7 @@
 -- The current vehicles on trips of a date, by trip, the one standing for the journey first
 -- (emit/represent.py), then freshest first: one per vehicle (two sources' reports of one vehicle
--- are one), its report standing for the journey else its newest fix, every source reporting it,
--- its traits.
+-- are one), its report standing for the journey else its newest fix, every source reporting it
+-- and whether its ID is a vehicle on the trip's mode, its traits.
 SELECT *
 FROM (
     SELECT DISTINCT ON (v.trip_id, v.vehicle_id)
@@ -12,10 +12,14 @@ FROM (
            array_agg(v.source) OVER (PARTITION BY v.trip_id, v.vehicle_id) AS sources,
            array_agg(v.source_vehicle_id) OVER (PARTITION BY v.trip_id, v.vehicle_id)
                AS source_vehicle_ids,
+           array_agg(rt.is_physical(v.source, ro.mode))
+               OVER (PARTITION BY v.trip_id, v.vehicle_id) AS physical,
            p.low_floor, p.air_conditioning, p.wheelchair_accessible, p.manufacturer, p.model,
            p.operator, p.licence_plate, p.fleet_number
     FROM rt.vehicle_state_current v
     LEFT JOIN rt.vehicle_profile p USING (vehicle_id)
+    LEFT JOIN active.trip t ON t.trip_id = v.trip_id
+    LEFT JOIN active.route ro ON ro.route_id = t.route_id
     WHERE v.trip_id = ANY(%(trip_ids)s::text[]) AND v.service_date = %(service_date)s
         AND v.release_id = %(release_id)s AND v.last_seen >= %(seen_since)s
     ORDER BY v.trip_id, v.vehicle_id, v.latitude IS NULL, v.represents DESC,

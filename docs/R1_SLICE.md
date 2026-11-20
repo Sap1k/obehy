@@ -57,7 +57,7 @@ JrUtil (`BASE_PLAN.md` 19.3). Values were checked with `zoneinfo`.
 | T10 | DUK-Q1: the local offset applied twice | `12:00:00+02:00` in summer, `10:00:00+01:00` in winter, activity 08:00:10Z | 08:00Z both; a time not one offset ahead of its activity time is read as labelled |
 | T11 | ARRIVA-Q1: local time labelled UTC | `10:00:00+00:00` in summer | 08:00Z |
 | T12 | SZ-Q2: bare `HH:mm` across midnight | `23:59`, received 00:01 local | 23:59 local of the previous day |
-| T13 | `vehicle_day` across midnight | journeys 22:00–23:30 and 00:15–01:00 | one vehicle day dated by its first journey; split at gaps over 3 h |
+| T13 | a vehicle day across midnight | journeys 22:00–23:30 and 00:15–01:00 | one vehicle day dated by its first journey; split at gaps over 3 h |
 | T14 | trip spanning the fall-back change | `ST(10-25, 01:00)` → `ST(10-25, 04:00)` | 23:00Z → 03:00Z: 4 h of real time, not 3 |
 | T15 | clock lags the DST switch | correctly labelled DÚK bus still sends `+02:00` on 10-25 after 01:00Z, 1 h off `received_at` | beyond `max_clock_skew`: time dropped, observation untimed |
 
@@ -118,8 +118,8 @@ history.vehicle_assignment  feed, vehicle_key, journey, valid_from, valid_to, me
                             derivation_id
 history.journey_cancellation  journey, source; first_seen, last_seen, restored_at,
                             derivation_id
-history.vehicle_day         feed, vehicle_key, service_date, seq; journeys[], tour_id,
-                            tour_match_share (written by the nightly SQL job)
+history.vehicle_chains(day) vehicle days, cut live from vehicle_assignment (its vehicle_id:
+                            the vehicle the worker resolved the report as); not stored
 ```
 
 - Journey key columns are repeated in every table except the two large ones, which use
@@ -252,8 +252,9 @@ different oběh every day, and a mid-day swap changes only the live binding.
     `block:<key>`;
   - a learned chain is `learned:<feed>:<day_class>:<first journey key>`, renewed when the chain's
     first journey changes (for example at a timetable change).
-- The nightly job sets `history.vehicle_day.tour_id` with `tour_match_share`, the share of the
-  day's journeys that follow the tour. "Which vehicle ran oběh X each day" is then one query.
+- Each vehicle day (`history.vehicle_chains`) is matched to a tour with `tour_match_share`, the
+  share of the day's journeys that follow the tour. "Which vehicle ran oběh X each day" is then
+  one query.
 
 ## 9. Progress model (`timeline/progress.py`, `commit.py`, `plan.py`)
 

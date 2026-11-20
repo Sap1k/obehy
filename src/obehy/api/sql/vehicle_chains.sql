@@ -1,14 +1,15 @@
--- The working days of some source vehicles between two service dates, by the nightly job's
--- rule (history.vehicle_chains), with the registry vehicle each was (only %(vehicle_id)s's, when
--- given). Each journey as history recorded it (its latest schedule revision: trip ID, line
--- name, headsign, first and last passenger call, the line it ran as), the line shown as the
--- active release has it when it still does, and what the registry knows of the vehicle (its profile, as the worker
--- resolves it). One row per journey, chains in order.
+-- The working days of some source reports, or of one vehicle, between two service dates
+-- (history.vehicle_chains), each with the vehicle the worker resolved it as. Each journey as
+-- history recorded it (its latest schedule revision: trip ID, line name, headsign, first and
+-- last passenger call, the line it ran as), the line shown as the active release has it when it
+-- still does, and what the registry knows of the vehicle (its profile, as the worker resolves
+-- it). One row per journey, chains in order.
 WITH chains AS (
-    SELECT c.*, history.vehicle_of(c.source, c.source_vehicle_id, c.service_date) AS vehicle_id
+    SELECT c.*
     FROM generate_series(%(since)s::date, %(until)s::date, interval '1 day') AS d (day),
     LATERAL history.vehicle_chains(
-        d.day::date, %(gap_s)s::integer, %(sources)s::text[], %(source_vehicle_ids)s::text[]
+        d.day::date, %(gap_s)s::integer, %(sources)s::text[], %(source_vehicle_ids)s::text[],
+        %(vehicle_id)s::text
     ) c
 ),
 journeys AS (
@@ -20,7 +21,6 @@ journeys AS (
            (j.value ->> 'last_seen')::timestamptz AS last_seen
     FROM chains c,
     LATERAL jsonb_array_elements(c.journeys) WITH ORDINALITY AS j (value, ord)
-    WHERE %(vehicle_id)s::text IS NULL OR c.vehicle_id = %(vehicle_id)s
 )
 SELECT j.vehicle_id, j.feed, j.source, j.source_vehicle_id, j.day, j.seq, j.chain_first_seen,
        j.chain_last_seen, j.key_namespace, j.key, j.service_date, j.first_seen, j.last_seen,
@@ -32,16 +32,8 @@ SELECT j.vehicle_id, j.feed, j.source, j.source_vehicle_id, j.day, j.seq, j.chai
        coalesce(s.mode, r.mode) AS mode, r.color, r.text_color,
        vp.fleet_number, vp.public_label, vp.manufacturer, vp.model AS vehicle_model
 FROM journeys j
-LEFT JOIN LATERAL (
-    SELECT x.trip_id, x.route_name, x.headsign, x.revision, x.route_id, x.mode
-    FROM history.journey_schedule x
-    WHERE (x.feed, x.key_namespace, x.key, x.service_date)
-        = (j.feed, j.key_namespace, j.key, j.service_date)
-    ORDER BY x.revision DESC
-    LIMIT 1
-) s ON true
-LEFT JOIN history.journey hj
-    ON (hj.feed, hj.key_namespace, hj.key, hj.service_date)
+LEFT JOIN history.journey_latest s
+    ON (s.feed, s.key_namespace, s.key, s.service_date)
         = (j.feed, j.key_namespace, j.key, j.service_date)
 LEFT JOIN LATERAL (
     SELECT (array_agg(loc.value ORDER BY c.ordinal))[1] AS origin_id,
@@ -57,8 +49,8 @@ LEFT JOIN LATERAL (
     FROM history.journey_call c
     JOIN history.term loc ON loc.term_id = c.location_term
     JOIN history.term name ON name.term_id = c.name_term
-    WHERE c.journey_id = hj.journey_id AND c.service_date = j.service_date
-        AND c.revision = s.revision AND c.passenger_service
+    WHERE c.journey_id = s.journey_id AND c.service_date = j.service_date
+        AND c.revision = s.latest_revision AND c.passenger_service
 ) ends ON true
 -- Snapshots written before the line was kept with them: the active release's trip.
 LEFT JOIN active.trip t ON t.trip_id = s.trip_id AND s.route_id IS NULL

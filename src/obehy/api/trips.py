@@ -31,7 +31,6 @@ from obehy.api.common import (
 from obehy.api.limits import Limits
 from obehy.api.lookup_rules import can_ask
 from obehy.api.params import date_span
-from obehy.api.physical import is_physical
 from obehy.api.segments import percentile, run, summary
 from obehy.realtime.policy import load_policy
 from obehy.realtime.times import local_date
@@ -208,7 +207,7 @@ def trip_history(
                 source_vehicle_id=r["source_vehicle_id"],
                 fleet_number=r["fleet_number"],
                 public_label=r["public_label"],
-                physical=is_physical(r["source"], r["mode"]),
+                physical=r["physical"],
             )
         )
     seen: dict[date, tuple[str, bool]] = {}  # per service date: its trip, whether cancelled
@@ -339,7 +338,7 @@ def trip(
         bikes_allowed=tristate(row["bikes_allowed"]),
         amenities=amenities(stated),
         realtime=None if realtime is None else trip_realtime(realtime),
-        vehicles=[trip_vehicle(v, row["mode"]) for v in vehicles],
+        vehicles=[trip_vehicle(v) for v in vehicles],
         run_parts=[schema.TripPart.model_validate(p) for p in parts]
         or [schema.TripPart(trip_id=trip_id, run_part=None)],
         composition=can_ask(snap, "composition", trip_id, service_date),

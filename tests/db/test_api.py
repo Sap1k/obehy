@@ -464,21 +464,21 @@ def client(
         " '2026-10-06 06:01+02', (SELECT min(derivation_id) FROM history.derivation))"
     )
     # Bus 1001 ran that journey and then one not in the release; MPVnet saw the bus on it by
-    # its plate, a binding history does not keep.
+    # its plate, which the registry binds to it: the worker wrote both reports as duk:1001.
     connection.execute(
         "INSERT INTO history.vehicle_assignment VALUES"
         " ('jdf', 'duk', '1001', 'cis:line_trip', '000001:1', '2026-10-06',"
         "  '2026-10-06 05:58+02', '2026-10-06 06:16+02', 'keyed',"
-        "  (SELECT min(derivation_id) FROM history.derivation)),"
+        "  (SELECT min(derivation_id) FROM history.derivation), 'duk:1001'),"
         " ('jdf', 'duk', '1001', 'cis:line_trip', '000009:9', '2026-10-06',"
         "  '2026-10-06 06:30+02', '2026-10-06 07:00+02', 'keyed',"
-        "  (SELECT min(derivation_id) FROM history.derivation)),"
+        "  (SELECT min(derivation_id) FROM history.derivation), 'duk:1001'),"
         " ('jdf', 'mpvnet', '4U1 2345', 'cis:line_trip', '000001:1', '2026-10-06',"
         "  '2026-10-06 05:59+02', '2026-10-06 06:15+02', 'keyed',"
-        "  (SELECT min(derivation_id) FROM history.derivation)),"
+        "  (SELECT min(derivation_id) FROM history.derivation), 'duk:1001'),"
         " ('jdf', 'pid', 'trip:M1', 'pid:gtfs_trip_id', 'M1', '2026-10-06',"
         "  '2026-10-06 06:00+02', '2026-10-06 06:20+02', 'keyed',"
-        "  (SELECT min(derivation_id) FROM history.derivation))"
+        "  (SELECT min(derivation_id) FROM history.derivation), 'pid:trip:M1')"
     )
     # Train 6600 continues as 6601 and continued from 6599 (neither in the release).
     connection.execute(
@@ -1028,11 +1028,15 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
     # Run under the trip ID of an earlier timetable version: the same journey.
     assert (day["service_date"], day["trip_id"]) == ("2026-10-06", "jdf:trip:old")
     assert day["cancelled"] is False  # cancelled, then seen running
-    assert day["vehicles"] == ["duk:1001", "mpvnet:4U1 2345"]
+    # MPVnet's report was the bus by its plate: one vehicle, two reports.
+    assert day["vehicles"] == ["duk:1001"]
     assert [
-        (v["source"], v["source_vehicle_id"], v["fleet_number"], v["physical"])
+        (v["vehicle_id"], v["source"], v["source_vehicle_id"], v["fleet_number"], v["physical"])
         for v in day["worked_by"]
-    ] == [("duk", "1001", "1001", True), ("mpvnet", "4U1 2345", None, True)]
+    ] == [
+        ("duk:1001", "duk", "1001", "1001", True),
+        ("duk:1001", "mpvnet", "4U1 2345", "1001", True),
+    ]
     # The arrival at Nový Bor was inferred, not seen.
     assert [(c["departure_estimated"], c["arrival_estimated"]) for c in day["calls"]] == [
         (False, False),
@@ -1079,17 +1083,21 @@ def test_a_trips_history_with_how_late_it_was_per_stop(client: TestClient) -> No
 def test_a_trips_circulation_and_a_vehicles_days(client: TestClient) -> None:
     circulation = _get(client, "/trips/jdf:trip:1/2026-10-06/circulation")
     assert circulation["planned"] is None
-    observed = {c["vehicle_id"]: c for c in circulation["observed"]}
-    assert sorted(observed) == ["duk:1001", "mpvnet:4U1 2345"]
-    bus = observed["duk:1001"]
+    # DÚK's and MPVnet's reports of the bus (its plate) are one vehicle's day, under the report
+    # that saw it first.
+    (bus,) = circulation["observed"]
+    assert (bus["vehicle_id"], bus["source"], bus["source_vehicle_id"]) == (
+        "duk:1001",
+        "duk",
+        "1001",
+    )
     assert bus["position"] == 0
-    # What the registry knows of it; the plate MPVnet reported is no registry key of its own.
+    # What the registry knows of it.
     assert (bus["fleet_number"], bus["manufacturer"], bus["model"]) == (
         "1001",
         "Iveco",
         "Crossway LE LINE 13M",
     )
-    assert observed["mpvnet:4U1 2345"]["fleet_number"] is None
     assert [
         (j["journey"]["key"], j["trip_id"], j["origin"], j["destination"], j["layover_s"])
         for j in bus["journeys"]

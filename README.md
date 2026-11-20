@@ -385,9 +385,9 @@ of each phase (archive, decode, index, core, write, estimate, GTFS-RT, state) as
 core. SŽ channels poll only with the egress proxy list configured (see
 "Recording realtime payloads"); station boards are read per station while trains are due there,
 at most 60 a minute. Rail point events and the SŽ station codes need a release with serving 5.1
-`sr70` keys. `obehy jobs vehicle-day --from DAY` builds the
-vehicles' working days; `obehy jobs nightly` (03:30 Prague in the server stack)
-rebuilds them for the last two service dates and drops history service dates older than
+`sr70` keys. Vehicles' working days are cut live from history (`history.vehicle_chains`);
+`obehy jobs nightly` (03:30 Prague in the server stack) drops history service dates (and their
+compositions) older than
 `[retention] history_days` (21; about 0.5 GB a day with PID) and raw archive days older than
 `raw_days` per source (yesterday and today, SŽ station boards two weeks; pin days to keep
 with `obehy rt corpus pin` first).

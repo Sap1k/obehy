@@ -1,6 +1,6 @@
 """Time scenario table T1, T6-T12, T14, T15 (docs/R1_SLICE.md section 2).
 
-T2-T5 are binding scenarios (tests of the core) and T13 is the vehicle-day job.
+T2-T5 are binding scenarios (tests of the core) and T13 is `history.vehicle_chains` (DB tests).
 """
 
 from __future__ import annotations

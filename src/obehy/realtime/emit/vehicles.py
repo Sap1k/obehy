@@ -23,6 +23,7 @@ from psycopg.types.json import Jsonb
 
 from obehy.realtime.emit.pairing import Evidence, Fix, Pairings
 from obehy.realtime.facts import Feed, VehicleAttribute, VehicleKey
+from obehy.realtime.manifest import physical_vehicles
 from obehy.realtime.model import FeedState, JourneyKey, ObservationResult, VehicleId
 from obehy.realtime.runs import run_vehicle_id
 from obehy.realtime.times import Instant, local_date
@@ -32,6 +33,22 @@ from obehy.reference.registry import BoundBy, Registry, load_registry
 from obehy.reference.vocabulary import Vocabulary, load_vocabulary
 
 Report = tuple[str, str]  # (source, source vehicle ID)
+
+
+def write_physical_policy(connection: psycopg.Connection) -> None:
+    """Each source's `[vehicles] physical` as `rt.physical_vehicles`, which every reader asks
+    through `rt.is_physical`: the manifests' policy, replaced whole."""
+
+    rows = [
+        (source, mode, physical)
+        for source, manifest in sorted(physical_vehicles().items())
+        for mode, physical in sorted(manifest.physical_vehicles.items())
+    ]
+    with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute("DELETE FROM rt.physical_vehicles")
+        cursor.executemany(
+            "INSERT INTO rt.physical_vehicles (source, mode, physical) VALUES (%s, %s, %s)", rows
+        )
 
 
 def _journey_json(journey: JourneyKey) -> dict[str, str]:
@@ -119,6 +136,9 @@ class VehicleBook:
         train = self.trains.get(report)
         if train is not None:
             return train, "train"
+        return self._vehicle(report, day)
+
+    def _vehicle(self, report: Report, day: date) -> tuple[str, BoundBy | None]:
         bound = self.registry.bound(report[0], report[1], self._stated(report), day)
         if bound is not None:
             return bound
@@ -184,6 +204,16 @@ class VehicleBook:
 
         found = self.identity.get((vehicle.source, vehicle.source_vehicle_id))
         return str(vehicle) if found is None else found[0]
+
+    def worked_by(self, report: Report, day: date) -> str:
+        """Which vehicle a report on a journey of `day` is in history: the vehicle the live map
+        names, but a report on a rail run is its own unit there, not the train (the train
+        number is the journey's own key)."""
+
+        if report in self.trains:
+            return self._vehicle(report, day)[0]
+        known = self.identity.get(report)
+        return known[0] if known is not None else self.identify(report, day)[0]
 
     def identify(self, report: Report, day: date) -> tuple[str, BoundBy | None]:
         """Which vehicle a report is on `day`: the train of the rail run it is on, else by a

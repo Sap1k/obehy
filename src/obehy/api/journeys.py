@@ -112,7 +112,7 @@ def _trip(snap: Snapshot, limits: Limits, trip_id: str, service_date: date) -> s
         trip_short_name=row["trip_short_name"],
         headsign=row["headsign"],
         realtime=None if realtime is None else trip_realtime(realtime),
-        vehicles=[trip_vehicle(v, row["mode"]) for v in vehicles],
+        vehicles=[trip_vehicle(v) for v in vehicles],
         composition=can_ask(snap, "composition", trip_id, service_date),
         calls=[
             trip_call(c, stated, first=n == 0, last=n == len(calls) - 1)

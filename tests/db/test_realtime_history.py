@@ -1,4 +1,4 @@
-"""The effect writer and the vehicle-day job against PostgreSQL (ticket 6)."""
+"""The effect writer, vehicle days and the retention jobs against PostgreSQL (ticket 6)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from obehy.realtime.archive import days as archive_days
 from obehy.realtime.core import CORE_VERSION, Context, snapshot, step
 from obehy.realtime.disk_guard import GB
 from obehy.realtime.emit.db import Writer
-from obehy.realtime.jobs import drop_history, drop_observations, history_days, hourly, vehicle_day
+from obehy.realtime.jobs import drop_history, drop_observations, history_days, hourly
 from obehy.realtime.model import (
     AssignVehicle,
     Derivation,
@@ -158,7 +158,7 @@ def _assign(writer: Writer, key: str, day: date, start: str, end: str) -> None:
     )
 
 
-def test_t13_vehicle_day_crosses_midnight_and_splits_at_long_gaps(
+def test_t13_a_vehicle_day_crosses_midnight_and_splits_at_long_gaps(
     connection: psycopg.Connection,
 ) -> None:
     writer = _writer(connection)
@@ -166,14 +166,24 @@ def test_t13_vehicle_day_crosses_midnight_and_splits_at_long_gaps(
     _assign(writer, "582492:2", D9, "2026-10-09 00:15", "2026-10-09 01:00")
     _assign(writer, "582492:3", D9, "2026-10-09 06:00", "2026-10-09 07:00")
 
-    assert vehicle_day(connection, D8, POLICY) == 1
-    assert vehicle_day(connection, D9, POLICY) == 1
-    rows = connection.execute(
-        "SELECT service_date, seq, jsonb_array_length(journeys), tour_id"
-        " FROM history.vehicle_day ORDER BY service_date, seq"
-    ).fetchall()
-    assert rows == [(D8, 1, 2, None), (D9, 1, 1, None)]
-    assert vehicle_day(connection, D8, POLICY) == 1  # idempotent
+    gap_s = POLICY.time.vehicle_day_gap_s
+    rows = [
+        row
+        for day in (D8, D9)
+        for row in connection.execute(
+            "SELECT vehicle_id, service_date, seq, jsonb_array_length(journeys)"
+            " FROM history.vehicle_chains(%s, %s) ORDER BY seq",
+            (day, gap_s),
+        ).fetchall()
+    ]
+    # Dated by its first journey; the history row names the vehicle the worker resolved.
+    assert rows == [("duk:1001", D8, 1, 2), ("duk:1001", D9, 1, 1)]
+    assert (
+        connection.execute(
+            "SELECT * FROM history.vehicle_chains(%s, %s, vehicle => 'duk:1002')", (D8, gap_s)
+        ).fetchall()
+        == []
+    )
 
 
 def _partitions(connection: psycopg.Connection, parent: str) -> list[str]:

@@ -54,7 +54,7 @@ flowchart LR
 | `obehy release` | fetch, verify, load and activate releases into `static.*` (§16) |
 | `obehy ref import` | load curated reference datasets into `ref.*` |
 | `obehy realtime` | the one process that talks to realtime upstreams; connectors plus the pure core (§18) |
-| `obehy jobs` | nightly set-wise SQL: `vehicle_day`, circulation edges, punctuality, retention |
+| `obehy jobs` | nightly set-wise SQL: retention (circulation edges and punctuality planned) |
 | `obehy api` | FastAPI `/api/v1`; never calls upstream |
 
 PostgreSQL schemas:
@@ -158,7 +158,7 @@ that consumes it; a missing capability means that component never hears from the
 | prediction | timeline candidates | own propagation |
 | vehicle attributes, media | `rt.vehicle_attribute_observed` | registry or model defaults only |
 | composition | `rt.composition`, segments per journey | none |
-| vehicle_assignment | `rt.vehicle_assignment` → `vehicle_day` | tours only from `vehicle_key` bindings |
+| vehicle_assignment | `history.vehicle_assignment` (with the resolved `vehicle_id`) → `history.vehicle_chains` | tours only from `vehicle_key` bindings |
 | platform | platform evidence | static boarding point |
 | alert | alert mapper | — |
 
@@ -319,8 +319,10 @@ erDiagram
     one segment will combine per unit: exact vehicles from one, coach detail from ČD (one
     source so far: units are listed per source).
 - **`vehicle_assignment`** (vehicle → journey) is separate from composition. It comes from
-  bound live reports, or from sources naming the vehicle of each train, and feeds
-  `vehicle_day`, the observed tours.
+  bound live reports, or from sources naming the vehicle of each train. Each row keeps the
+  vehicle the worker resolved the report as (`vehicle_id`: registry, stated identifier or
+  co-located partner, as the live map; a rail run's unit, not its train); a vehicle's working
+  days, the observed tours, are cut from them live by `history.vehicle_chains`.
 - **Alerts** (`realtime/alerts.py`, `emit/alerts.py`) are not core state: alert channels write
   whole sets to `rt.alert` on their own connection, SQL resolves their entities per feed
   against the active release (`rt.alert_target`), and the emit tick appends them to each
@@ -329,7 +331,7 @@ erDiagram
   - static `block_key`;
   - imported rosters, by train number + validity;
   - learned circulation edges (§22);
-  - observed `vehicle_day`.
+  - observed vehicle days (`history.vehicle_chains`).
 
   Forecast precedence is block > roster > learned edge. Observed actuals always win for
   history.

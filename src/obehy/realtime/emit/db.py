@@ -24,7 +24,7 @@ from obehy.realtime.emit.storage import (
     create_observation_partition,
     hour_of,
 )
-from obehy.realtime.emit.vehicles import VehicleBook
+from obehy.realtime.emit.vehicles import VehicleBook, write_physical_policy
 from obehy.realtime.facts import Feed, VehicleKey
 from obehy.realtime.model import (
     AssignVehicle,
@@ -83,6 +83,7 @@ class Writer:
         self.derivation_id = cast(int, row[0])
         self.terms = Terms.load(self.connection)
         self.vehicles = VehicleBook.load(self.connection)
+        write_physical_policy(self.connection)
 
     def reload_registry(self) -> None:
         """`obehy ref import` loaded a dataset: identities and profiles are redone."""
@@ -127,11 +128,13 @@ class Writer:
             for snapshot in snapshots:
                 self._snapshot(snapshot)
             self._events(events)
+            # Live attributes first: what a report states may name its vehicle.
+            attributes = self.vehicles.observe(results)
             self._assignments(results, assigned)
             self._links(links)
             self._platforms(platforms)
             self._cancellations(cancellations)
-            self.vehicles.write(self.connection, self.vehicles.observe(results))
+            self.vehicles.write(self.connection, attributes)
 
     def _observations(self, results: Sequence[ObservationResult]) -> None:
         if not results:
@@ -314,11 +317,12 @@ class Writer:
             cursor.executemany(
                 "INSERT INTO history.vehicle_assignment (feed, source, source_vehicle_id,"
                 " key_namespace, key, service_date, first_seen, last_seen, method,"
-                " derivation_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                " derivation_id, vehicle_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (feed, source, source_vehicle_id, key_namespace, key,"
                 " service_date) DO UPDATE SET"
                 " first_seen = least(history.vehicle_assignment.first_seen, excluded.first_seen),"
-                " last_seen = greatest(history.vehicle_assignment.last_seen, excluded.last_seen)",
+                " last_seen = greatest(history.vehicle_assignment.last_seen, excluded.last_seen),"
+                " vehicle_id = excluded.vehicle_id",
                 [
                     (
                         journey.feed,
@@ -331,6 +335,7 @@ class Writer:
                         hi,
                         method,
                         self.derivation_id,
+                        self.vehicles.worked_by((source, vehicle), journey.service_date),
                     )
                     for (source, vehicle, journey), (lo, hi, method) in sorted(
                         seen.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])

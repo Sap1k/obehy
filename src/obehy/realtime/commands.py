@@ -1,5 +1,5 @@
 """CLI: `obehy rt record|replay|bench|corpus pin`, `obehy realtime`,
-`obehy jobs vehicle-day|nightly|hourly`."""
+`obehy jobs nightly|hourly`."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from obehy.realtime.emit.alerts import prune_alerts
 from obehy.realtime.facts import FEEDS, Feed
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError, active_loads
-from obehy.realtime.jobs import drop_history, hourly, vehicle_day
+from obehy.realtime.jobs import drop_history, hourly
 from obehy.realtime.manifest import Channel, ManifestError, select_channels
 from obehy.realtime.policy import PolicyError, load_policy
 from obehy.realtime.runtime.demand import StationDemand
@@ -156,14 +156,10 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
 
     jobs = commands.add_parser("jobs", help="set-wise jobs over history")
     job_commands = jobs.add_subparsers(dest="job_command", required=True)
-    days = job_commands.add_parser("vehicle-day", help="rebuild vehicle days of service dates")
-    days.add_argument("--from", dest="start", type=date.fromisoformat, required=True)
-    days.add_argument("--to", dest="end", type=date.fromisoformat)
-    _database(days)
     nightly = job_commands.add_parser(
         "nightly",
-        help="vehicle days of the last two service dates, then drop expired history days, "
-        "alerts, lookups and raw archive days",
+        help="drop expired history days (with their compositions), alerts, lookups and raw "
+        "archive days",
     )
     nightly.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
     _database(nightly)
@@ -388,36 +384,19 @@ def _jobs(args: argparse.Namespace) -> int:
             ):
                 print(line, file=sys.stderr if line.startswith("disk guard") else sys.stdout)
         return 0
-    if args.job_command == "nightly":
-        # Yesterday's service date may still have had journeys running; redo it tomorrow.
-        today = local_date(now)
-        start, end = today - timedelta(days=2), today - timedelta(days=1)
-    else:
-        start = cast(date, args.start)
-        end = cast(date | None, args.end) or start
     with psycopg.connect(_url(args), autocommit=True) as connection:
-        day = start
-        while day <= end:
-            print(f"{day}: {vehicle_day(connection, day, policy)} vehicle days")
-            day += timedelta(days=1)
-        if args.job_command == "nightly":
-            kept = local_date(now) - timedelta(days=policy.retention.history_days)
-            dropped = drop_history(connection, kept)
-            print(f"dropped {len(dropped)} history days before {kept}")
-            # Alerts and lookup requests outlive the raw archive's shorter windows.
-            withdrawn = now - timedelta(days=policy.retention.longest_raw_days)
-            print(
-                f"deleted {prune_alerts(connection, withdrawn)} alerts withdrawn before {withdrawn}"
-            )
-            print(
-                f"deleted {prune_lookups(connection, withdrawn)} lookup requests before {withdrawn}"
-            )
-    if args.job_command == "nightly":
-        archive = cast(Path, args.archive)
-        for source in archive_sources(archive):
-            cutoff = now.date() - timedelta(days=int(policy.retention.raw_days(source)))
-            pruned = prune_archive(archive, cutoff, source)
-            print(f"deleted {len(pruned)} raw archive days of {source} before {cutoff}")
+        kept = local_date(now) - timedelta(days=policy.retention.history_days)
+        dropped = drop_history(connection, kept)
+        print(f"dropped {len(dropped)} history days before {kept}")
+        # Alerts and lookup requests outlive the raw archive's shorter windows.
+        withdrawn = now - timedelta(days=policy.retention.longest_raw_days)
+        print(f"deleted {prune_alerts(connection, withdrawn)} alerts withdrawn before {withdrawn}")
+        print(f"deleted {prune_lookups(connection, withdrawn)} lookup requests before {withdrawn}")
+    archive = cast(Path, args.archive)
+    for source in archive_sources(archive):
+        cutoff = now.date() - timedelta(days=int(policy.retention.raw_days(source)))
+        pruned = prune_archive(archive, cutoff, source)
+        print(f"deleted {len(pruned)} raw archive days of {source} before {cutoff}")
     return 0
 
 

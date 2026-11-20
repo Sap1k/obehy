@@ -103,3 +103,13 @@ def test_a_co_located_vehicle_keeps_its_id_as_reports_join_and_leave() -> None:
     # GTFS-RT names the vehicle as the state tables do.
     assert book.vehicle_id(VehicleId(*DUK)) == "dpmd:301"
     assert book.vehicle_id(VehicleId("duk", "999")) == "duk:999"
+    # History keeps the vehicle a report was: the co-located one, as the map names it.
+    assert book.worked_by(MPV, day) == "dpmd:301"
+
+
+def test_history_keeps_a_rail_runs_unit_not_its_train() -> None:
+    book = VehicleBook(Registry(), load_vocabulary())
+    day = date(2026, 10, 20)
+    book.trains[DUK] = "train:6402"
+    assert book.identify(DUK, day) == ("train:6402", "train")  # the map: the train
+    assert book.worked_by(DUK, day) == "duk:807"  # history: the unit (the key is the train)

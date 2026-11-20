@@ -7,8 +7,8 @@ schedule snapshot). Only vehicles a source's manifest calls physical for the mod
 by scope (`[vehicles] physical`): a metro run or a train keyed by its number is no vehicle to
 follow. Learned and roster tours are not served yet.
 
-History knows a vehicle by its source's ID; which registry vehicle that was on a date is
-`history.vehicle_of` (by the registry's source-ID keys).
+History keeps each source report with the vehicle the worker resolved it as
+(`history.vehicle_assignment.vehicle_id`), so a vehicle's days are the reports that were it.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from obehy.api.codes import load_codes
 from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_cache
 from obehy.api.db import Snapshot
 from obehy.api.params import ParameterError, date_span
-from obehy.api.physical import physical_table
 from obehy.realtime.policy import load_policy
 from obehy.realtime.times import local_date
 
@@ -39,22 +38,24 @@ def _gap_s() -> int:
 
 def _chains(
     snap: Snapshot,
-    sources: Sequence[Mapping[str, Any]],
+    sources: Sequence[Mapping[str, Any]] | None,
     since: date,
     until: date,
     vehicle_id: str | None = None,
 ) -> list[tuple[date, schema.VehicleChain]]:
-    """The chains of `sources` dated `since` to `until` (`vehicle_chains.sql`), latest day
-    first; only `vehicle_id`'s when given."""
+    """The chains of `sources` (None: any), only `vehicle_id`'s when given, dated `since` to
+    `until` (`vehicle_chains.sql`), latest day first."""
 
-    if not sources:
+    if sources is not None and not sources:
         return []
     params: dict[str, Any] = {
         "since": since,
         "until": until,
         "gap_s": _gap_s(),
-        "sources": [s["source"] for s in sources],
-        "source_vehicle_ids": [s["source_vehicle_id"] for s in sources],
+        "sources": None if sources is None else [s["source"] for s in sources],
+        "source_vehicle_ids": None
+        if sources is None
+        else [s["source_vehicle_id"] for s in sources],
         "vehicle_id": vehicle_id,
     }
     found: dict[tuple[Any, ...], tuple[date, schema.VehicleChain]] = {}
@@ -122,9 +123,8 @@ def vehicle_days(
         limits.history_default_days,
         limits.history_max_days,
     )
-    sources = snap.all("vehicle_sources", {"vehicle_id": vehicle_id})
     days: dict[date, list[schema.VehicleChain]] = {}
-    for day, chain in _chains(snap, sources, start, end, vehicle_id):
+    for day, chain in _chains(snap, None, start, end, vehicle_id):
         days.setdefault(day, []).append(chain)
     return schema.VehicleDays(
         **envelope(snap),
@@ -225,7 +225,7 @@ def circulation_scopes(
     realtime_cache(response, limits)
     day = service_date or local_date(snap.now)
     agencies: dict[str, schema.ScopeAgency] = {}
-    asked = {"source": source, "service_date": day, **physical_table()}
+    asked = {"source": source, "service_date": day}
     rows = snap.all("circulation_scopes", asked) if source else []
     routes = snap.all("circulation_routes", asked) if source else []
     for r in rows:
@@ -247,7 +247,7 @@ def circulation_scopes(
             schema.ScopeSource(
                 source=r["source"], label=load_codes().source(r["source"]), vehicles=r["vehicles"]
             )
-            for r in snap.all("circulation_sources", {"service_date": day, **physical_table()})
+            for r in snap.all("circulation_sources", {"service_date": day})
         ],
         agencies=sorted(agencies.values(), key=lambda a: (-a.vehicles, a.name)),
         routes=[
@@ -292,7 +292,6 @@ def circulations(
             "source_vehicle_id": source_vehicle_id,
             "agency_ids": agency_id or [],
             "modes": mode or None,
-            **physical_table(),
         },
     ):
         matched.setdefault(r["source_vehicle_id"], set()).add((r["key_namespace"], r["key"]))

@@ -167,6 +167,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "station_pairing",
         "circulation_reads",
         "journey_line",
+        "vehicle_identity",
     ]
 
 

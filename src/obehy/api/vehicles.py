@@ -22,7 +22,6 @@ from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_ca
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
 from obehy.api.params import ParameterError, parse_bbox, parse_near, search_words
-from obehy.api.physical import is_physical
 from obehy.reference.vocabulary import load_vocabulary
 
 router = APIRouter(tags=["vehicles"])
@@ -177,20 +176,13 @@ def vehicle(
             )
         )
     vehicle = _vehicle(current[0]) if current else None
-    mode = vehicle.line.mode if vehicle is not None and vehicle.line is not None else None
     return schema.VehicleDetail(
         **envelope(snap),
         vehicle_id=vehicle_id,
         vehicle=vehicle,
         registry=registry,
         reports=[
-            schema.VehicleSource.model_validate(
-                r
-                | {
-                    "label": codes.source(r["source"]),
-                    "physical": is_physical(r["source"], mode),
-                }
-            )
+            schema.VehicleSource.model_validate(r | {"label": codes.source(r["source"])})
             for r in found["reports"]
         ],
         sources=list(found["sources"] or []),

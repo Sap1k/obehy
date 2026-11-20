@@ -1,12 +1,11 @@
-"""Set-wise jobs over stored realtime data (`obehy jobs …`): vehicle days, retention and the
-disk guard; SQL in `realtime/sql/`."""
+"""Set-wise jobs over stored realtime data (`obehy jobs …`): retention and the disk guard."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import LiteralString, cast
+from typing import cast
 
 import psycopg
 from psycopg import sql
@@ -16,30 +15,10 @@ from obehy.realtime.archive import prune as prune_archive
 from obehy.realtime.disk_guard import GB, next_step
 from obehy.realtime.emit.storage import (
     HISTORY_TABLES,
-    create_history_partitions,
     history_day,
     observation_end,
 )
 from obehy.realtime.policy import Policy
-
-SQL = Path(__file__).resolve().parent / "sql"
-
-
-def _query(name: str) -> LiteralString:
-    # Files shipped with the package, never user input.
-    return cast(LiteralString, (SQL / name).read_text(encoding="utf-8"))
-
-
-def vehicle_day(connection: psycopg.Connection, day: date, policy: Policy) -> int:
-    """Rebuild `history.vehicle_day` for one service date; returns the rows written."""
-
-    create_history_partitions(connection, day)
-    with connection.transaction():
-        connection.execute("DELETE FROM history.vehicle_day WHERE service_date = %s", (day,))
-        cursor = connection.execute(
-            _query("vehicle_day.sql"), {"day": day, "gap_s": policy.time.vehicle_day_gap_s}
-        )
-        return cursor.rowcount
 
 
 def _partitions(connection: psycopg.Connection, parent: str) -> list[str]:
