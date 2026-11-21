@@ -346,6 +346,22 @@ pub fn load_database_url(config: &Path, env: &dyn Env) -> Result<String, Configu
     }
 }
 
+/// The DB-test admin URL: `OBEHY_TEST_DATABASE_URL` or `[database] test_url`, if any
+/// (`load_test_database_url`).
+pub fn load_test_database_url(config: &Path, env: &dyn Env) -> Option<String> {
+    if let Some(url) = env_value(env, "OBEHY_TEST_DATABASE_URL") {
+        return Some(url);
+    }
+    let document = read_config(config).ok()??;
+    let url = document
+        .get("database")?
+        .as_table()?
+        .get("test_url")?
+        .as_str()
+        .map(strip)?;
+    (!url.is_empty()).then(|| expandvars(url, env))
+}
+
 /// `OBEHY_SECRET_<NAME>`.
 pub fn secret_env(name: &str) -> String {
     format!("OBEHY_SECRET_{}", name.to_uppercase().replace('-', "_"))

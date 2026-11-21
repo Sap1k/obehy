@@ -1232,6 +1232,7 @@ dependencies = [
  "obehy-core",
  "obehy-sources",
  "parquet",
+ "prost",
  "reqwest",
  "serde_json",
  "sha2",

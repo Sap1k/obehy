@@ -112,7 +112,7 @@ pub enum Driver {
 }
 
 impl Driver {
-    fn block_on<F: Future>(&self, future: F) -> F::Output {
+    pub fn block_on<F: Future>(&self, future: F) -> F::Output {
         match self {
             Driver::Own(runtime) => runtime.block_on(future),
             Driver::Shared(handle) => handle.block_on(future),

@@ -48,6 +48,9 @@ hyper = "1"
 sha2 = "0.11"
 # Thread CPU time per worker phase (phases.py's `time.thread_time()`).
 cpu-time = "1.0"
+# R7/R8, the store and the lookup broker (obehy-rt only): binary COPY streams, pipelined
+# statements, LISTEN notifications.
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -10,10 +10,13 @@ pub mod egress;
 pub mod fetch;
 pub mod index;
 pub mod logs;
+pub mod lookups;
 pub mod phases;
 pub mod record;
 pub mod scheduler;
 pub mod settings;
+pub mod store;
+pub mod warm;
 
 // The shell drives the connectors (R2, R8).
 use obehy_sources as _;

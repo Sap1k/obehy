@@ -104,3 +104,34 @@ uv run python rust/tools/index_crosscheck.py plan --release data/releases/<run> 
 cargo run --release -p obehy-rt --example index_check -- --plan OUT/plan.json --expect OUT/expect.json
 uv run python rust/tools/index_crosscheck.py sql --plan OUT/plan.json --expect OUT/expect.json --subset --parity
 ```
+
+## Publishing and the vehicle book against Python (R7)
+
+`obehy_core::publish` (`FeedEmitter`, `represent`, alert entities) and `obehy_core::vehicles`
+(`VehicleBook`, pairings, the registry and precedence it decides with) are checked by
+`obehy-core/tests/publish.rs` against `obehy-core/tests/fixtures/publish/`, which
+`uv run python rust/tools/gen_publish_fixtures.py` writes (about 2 minutes): two real windows
+(PID 2026-10-15, DÚK/SŽ map/Arriva 2026-10-06, 07:00-07:15 Prague) run through the Python runner
+as `obehy rt compare` runs them, every call the writer made to its vehicle book with its result,
+and on two snapshots each the whole `FeedState` (read back by `obehy_core::model::state_json`)
+with Python's GTFS-RT bytes; the GTFS-RT unit tests' serializations; a scripted vehicle book
+(registry keys, pairing, a train, a reload); hand-made alert rows.
+
+## The store, warm start and the lookup broker (R7/R8)
+
+`obehy_rt::store` is the writer (`Writer`: effects and state as rows), the `Store` trait with
+`PgStore` (PostgreSQL; prepared statements, pipelined rows, binary COPY for sets) and
+`RecordingStore` (the harness's row records), and warm start's reader (`store::stored`, binary
+COPY out on a thread of its own); `obehy_rt::warm` steps the runner through it,
+`obehy_rt::lookups` is the lookup broker. Checks against Python (test database from
+`[database] test_url`; every database made is dropped):
+
+```
+uv run python rust/tools/store_db.py parity tests/realtime/compare/dpmd-output.jsonl.gz
+cargo run --release -p obehy-rt --example writer_parity -- --stream <output stream>
+cargo test -p obehy-rt --test store_db
+```
+
+`parity` sends a stream's row records through Python's `SqlStore` and the Rust store into two
+fresh databases and compares every `rt.*` and `history.*` table; `writer_parity` drives the Rust
+writer with a stream's effects and compares its rows with Python's.
