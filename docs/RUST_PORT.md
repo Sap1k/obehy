@@ -192,6 +192,22 @@ whole worker (index sweeps, compactions, release switches included) while sampli
 memory per simulated hour. After the first day, the daily peak must not rise from day to day,
 and the steady state must stay within 1.2× of the memory right after warm start.
 
+**Rust (R7, 2026-11-21)**: `obehy-rt bench --warm-hours 6` over SŽ's map 2026-10-09..15
+(6.2 M observations, 6 h warm start, two releases with the switch on 10-15, Windows, system
+allocator). The serving files stand in for PostgreSQL and hold the whole release in memory
+(295 MB for czptt, 1.55 GB for both feeds), read once and reported apart. The vehicle book was
+the one container without a rule: on SŽ it gained about 8,800 reports a day, and the daily peak
+rose with it (537, 548, 558 MB on 10-12..14). With `[emit] forget_reports_s` (two days; Rust
+only, Python ignores the key) it levels at about 18,500 reports and the weekday peaks are
+516, 519, 519, 512 MB. At 10-14 13:00 the 4.5-day process holds 503 MB, a process warm-started
+for the same moment 454 MB (1.11×; 1.32× without the files' 295 MB, most of it the book's two
+days of reports). A release switch opens a new writer, so the live worker's book also starts
+over with each release. Every other container follows the live state (index, plans, hops,
+state rows, GTFS-RT entities). Allocator: the system one; mimalloc kept 330 MB more after
+reading the files and doubled at the release switch (1.09 GB), with the same day-to-day
+growth; jemalloc does not build for the MSVC target. The soak ran on Windows: repeat it in the
+Linux image (glibc) before the switch; `--features mimalloc` stays available.
+
 ## Speed
 
 Known numbers from the Python worker (2026-10): about 43 µs of core per observation, the live
@@ -228,6 +244,25 @@ not in them. The targets are fixed against this baseline:
 | Warm start, to ready | under a minute |
 | Live CPU, the whole worker | ≤ 1/5 of the Python worker's |
 | Resident memory, steady state | ≤ 1/3 of the Python worker's after warm start |
+
+**Rust (R7, 2026-11-21)**: `obehy-rt bench --from-files`, the same hours, same machine (decoding
+on 6 threads, CPU summed; the serving tables read before the clock starts, so `index` is the
+lookups only):
+
+| Hour | decode | step | refresh | estimate | state | GTFS-RT | writes | index | obs/s | peak RSS (files) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| PID 2026-10-15 07–08 | 25 (52) | 10.7 (22) | 1.0 (2) | 15.5 (32) | 57 (119) | 10.4 (22) | 3.6 (8) | 0.8 | 4,765 | 2.14 GB (1.59) |
+| DÚK+SŽ+Arriva 2026-10-06 07–08 | 2.1 (12) | 2.5 (14) | 0.3 (2) | 2.7 (15) | 12.7 (70) | 3.3 (18) | 1.0 (6) | 0.4 | 7,777 | 1.75 GB (1.55) |
+
+Core is 18× faster on PID and 15× on DÚK+SŽ+Arriva; replay 10× and 11× in observations a
+second; the whole path's CPU 1/8 and 1/10 of Python's. The state tables are now the largest
+phase (only 3× faster; R7 shared each journey's calls JSON between its row and the writer's
+cache, which took them from 76 to 19 s on two DÚK+SŽ+Arriva hours): the next speed item. Warm
+start over 4 hours from files: DÚK+SŽ+Arriva 27 s (23×), PID 113 s (27×; the core thread,
+estimates 61 s, is the limit, so PID in `window` mode misses the minute). Reading
+`rt.observation` with binary COPY runs at about 100,000 observations a second, beside the
+core, so the database adds no time (checked on a 20-minute window; a 4-hour one did not fit
+the test database's disk).
 
 Where the speed comes from, besides compiled code:
 

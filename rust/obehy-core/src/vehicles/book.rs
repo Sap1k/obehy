@@ -14,10 +14,10 @@
 //!
 //! Python never forgets a report: `live` (every report with a vehicle key, attributes or not),
 //! `identity` and `members` (keys never removed, sets emptied) grow with every (source,
-//! vehicle) seen for the life of the worker. Kept as is for parity. The proposed rule
-//! ([`VehicleBook::forget_unseen`], not called by the runner yet): a report leaves `live`,
-//! `identity` and its `members` set when no observation of it has been received for a policy
-//! number of days (`forget_after_days`, to add) and it is not on a rail run now, and an emptied
+//! vehicle) seen for the life of the writer (a release switch opens a new one). The Rust rule
+//! ([`VehicleBook::forget_unseen`], called by the writer every `emit.sweep_index_every_s`): a
+//! report leaves `live`, `identity` and its `members` set when no observation of it has been
+//! received for `emit.forget_reports_s` (two days) and it is not on a rail run now, and an emptied
 //! `members` entry goes with it. With days it cannot change output within the harness windows
 //! (hours); after them it can: a report seen again is identified afresh (the same answer unless
 //! a co-located cluster held it by its sticky name), and its forgotten live attributes count
@@ -495,10 +495,10 @@ impl VehicleBook {
         (self.live.len(), self.identity.len(), self.members.len())
     }
 
-    /// The proposed eviction rule (module docs): forget every report last observed before
-    /// `before` that is not on a rail run now, from `live`, `identity` and `members` (an
-    /// emptied entry goes); how many. Not called by the runner: Python never forgets, and the
-    /// port keeps parity until the rule is decided.
+    /// The eviction rule (module docs): forget every report last observed before `before`
+    /// that is not on a rail run now, from `live`, `identity` and `members` (an emptied entry
+    /// goes); how many. The writer calls it (policy `emit.forget_reports_s`); Python never
+    /// forgets.
     pub fn forget_unseen(&mut self, before: Instant) -> usize {
         let stale: Vec<Report> = self
             .live

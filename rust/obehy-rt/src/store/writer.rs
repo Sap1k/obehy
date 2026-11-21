@@ -18,7 +18,7 @@ use obehy_core::model::{
 use obehy_core::publish::{representing, shown};
 use obehy_core::py::json::PyJson;
 use obehy_core::runs::{current_part, published_parts};
-use obehy_core::time::{Date, Instant, local_date};
+use obehy_core::time::{Date, Instant, TimeDelta, local_date};
 
 use super::cells::{Cell, Row, order_rows};
 use super::rows::{
@@ -66,6 +66,11 @@ pub struct Writer<S: Store, B: Book> {
     /// Which vehicle each report is, live attributes and profiles.
     pub vehicles: B,
     state: BTreeMap<Feed, Written>,
+    /// The vehicle book's eviction: forget reports unseen this long, checked this often (book
+    /// time), next at; None: never (Python).
+    forget: Option<(TimeDelta, TimeDelta, Option<Instant>)>,
+    /// Reports the book forgot so far.
+    pub forgotten: usize,
 }
 
 fn journey_key_cells(journey: &JourneyKey) -> Row {
@@ -90,7 +95,36 @@ impl<S: Store, B: Book> Writer<S, B> {
             derivation,
             vehicles: book(stored),
             state: BTreeMap::new(),
+            forget: None,
+            forgotten: 0,
         })
+    }
+
+    /// The vehicle book forgets reports unseen for `after_s`, checked every `every_s` of book
+    /// time at a state write (policy `emit.forget_reports_s`, `emit.sweep_index_every_s`).
+    pub fn forget_reports(&mut self, after_s: Option<i64>, every_s: i64) {
+        self.forget = after_s.filter(|s| *s > 0).map(|after| {
+            (
+                TimeDelta::from_seconds(after),
+                TimeDelta::from_seconds(every_s),
+                None,
+            )
+        });
+    }
+
+    fn evict(&mut self) {
+        let (Some((after, every, next)), Some(clock)) = (&mut self.forget, self.vehicles.clock())
+        else {
+            return;
+        };
+        match *next {
+            None => *next = Some(clock + *every),
+            Some(due) if clock >= due => {
+                self.forgotten += self.vehicles.forget_unseen(clock - *after);
+                *next = Some(clock + *every);
+            }
+            Some(_) => {}
+        }
     }
 
     /// `obehy ref import` loaded a dataset: identities and profiles are redone.
@@ -270,6 +304,7 @@ impl<S: Store, B: Book> Writer<S, B> {
         sorted.sort_by_key(|(feed, _)| *feed);
         // Pairings first: they may change who a report is.
         self.vehicles.track(&sorted);
+        self.evict();
         let mut written: Vec<(Feed, Written)> = Vec::new();
         let outcome = self.transaction(|w| {
             for (feed, state) in &sorted {
@@ -408,4 +443,65 @@ fn write_table<S: Store>(
         store.upsert_state(table, &changed)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bench::NullStore;
+    use crate::store::vehicles::{AttributeRow, PlainBook, RegistryRows, Report, VehicleRows};
+
+    /// A plain book with a clock, recording what it was asked to forget.
+    #[derive(Debug, Default)]
+    struct Clocked {
+        clock: Option<Instant>,
+        forgot: Vec<Instant>,
+    }
+
+    impl Book for Clocked {
+        fn observe(&mut self, results: &[&ObservationResult]) -> Vec<AttributeRow> {
+            PlainBook.observe(results)
+        }
+        fn rows(&mut self, attributes: Vec<AttributeRow>) -> VehicleRows {
+            PlainBook.rows(attributes)
+        }
+        fn worked_by(&mut self, report: &Report, day: Date) -> String {
+            PlainBook.worked_by(report, day)
+        }
+        fn identify(&mut self, report: &Report, day: Date) -> (String, Option<String>) {
+            PlainBook.identify(report, day)
+        }
+        fn track(&mut self, _: &[(Feed, &FeedState)]) {}
+        fn reload(&mut self, _: RegistryRows) {}
+        fn clock(&self) -> Option<Instant> {
+            self.clock
+        }
+        fn forget_unseen(&mut self, before: Instant) -> usize {
+            self.forgot.push(before);
+            1
+        }
+    }
+
+    #[test]
+    fn the_book_forgets_unseen_reports_every_interval_of_its_own_time() {
+        let derivation = Derivation {
+            core_version: "c".into(),
+            policy_version: "p".into(),
+            release_id: "r".into(),
+        };
+        let mut writer = Writer::open(NullStore, derivation, |_| Clocked::default()).unwrap();
+        let at = Instant::from_unix_seconds;
+        writer.write_state(&[]).unwrap(); // no clock yet: nothing to do
+        writer.forget_reports(Some(100), 10);
+        for seconds in [1_000, 1_005, 1_009, 1_010, 1_015, 1_020] {
+            writer.vehicles.clock = Some(at(seconds));
+            writer.write_state(&[]).unwrap();
+        }
+        assert_eq!(writer.vehicles.forgot, [at(910), at(920)]);
+        assert_eq!(writer.forgotten, 2);
+        writer.forget_reports(None, 10); // as Python: never
+        writer.vehicles.clock = Some(at(2_000));
+        writer.write_state(&[]).unwrap();
+        assert_eq!(writer.forgotten, 2);
+    }
 }

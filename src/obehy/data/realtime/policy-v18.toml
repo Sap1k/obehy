@@ -197,6 +197,9 @@ tick_s = 10
 sweep_index_every_s = 3600
 keep_index_s = 14400
 compact_index_at_s = 12600
+# The Rust worker's vehicle book forgets a (source, vehicle) report no observation named for this
+# long (a returning one is identified afresh). Python never forgets and ignores this key.
+forget_reports_s = 172800
 
 [retention]
 # Hourly rt.observation partitions (UTC hours) are dropped by `obehy jobs hourly` once they end

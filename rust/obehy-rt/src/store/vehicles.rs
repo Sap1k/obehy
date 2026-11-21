@@ -140,6 +140,14 @@ pub trait Book {
     fn identify(&mut self, report: &Report, day: Date) -> (String, Option<String>);
     /// This tick's reports on journeys (trains, pairing evidence), feeds sorted.
     fn track(&mut self, states: &[(Feed, &FeedState)]);
+    /// The latest observation time the book has seen (its clock), if any.
+    fn clock(&self) -> Option<Instant> {
+        None
+    }
+    /// Forget the reports last observed before `before` (the book's eviction rule); how many.
+    fn forget_unseen(&mut self, _before: Instant) -> usize {
+        0
+    }
     /// A new registry (`obehy ref import`).
     fn reload(&mut self, registry: RegistryRows);
 }
@@ -354,6 +362,14 @@ pub fn profile_row(p: Profile) -> ProfileRow {
 }
 
 impl Book for VehicleBook {
+    fn clock(&self) -> Option<Instant> {
+        VehicleBook::clock(self)
+    }
+
+    fn forget_unseen(&mut self, before: Instant) -> usize {
+        VehicleBook::forget_unseen(self, before)
+    }
+
     fn observe(&mut self, results: &[&ObservationResult]) -> Vec<AttributeRow> {
         let owned: Vec<ObservationResult> = results.iter().map(|r| (*r).clone()).collect();
         VehicleBook::observe(self, &owned)

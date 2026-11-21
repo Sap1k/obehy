@@ -343,10 +343,14 @@ pub struct BenchArgs {
     /// ticks), then record what it left (`after_warm`) and go on as the worker.
     #[arg(long = "warm-hours", default_value_t = 0)]
     pub warm_hours: i64,
-    /// The vehicle book forgets reports not observed for this many seconds, checked at the
-    /// sweep interval (default: never, as Python).
+    /// The vehicle book forgets reports not observed for this many seconds (default: policy
+    /// `emit.forget_reports_s`; 0: never, as Python).
     #[arg(long = "forget-reports")]
     pub forget_reports_s: Option<i64>,
+    /// Keep the writer (and its vehicle book) across a release switch instead of opening a
+    /// new one as the worker does.
+    #[arg(long = "keep-writer")]
+    pub keep_writer: bool,
 }
 
 struct Bench {
@@ -365,14 +369,33 @@ struct Bench {
     polls: u64,
     switches: Vec<(Instant, PathBuf)>,
     started: Monotonic,
-    forget_reports: Option<TimeDelta>,
-    next_forget: Option<Instant>,
+    forget_reports_s: Option<i64>,
+    keep_writer: bool,
+    /// Reports forgotten by writers already replaced.
     forgotten: usize,
     /// During warm start: effects are not written.
     writing_paused: bool,
 }
 
 type BenchRunner = Runner<SharedLoads, Phases>;
+
+/// The bench's writer of a release: rows dropped, the vehicle book's eviction after
+/// `forget_s` (policy `emit.forget_reports_s` or `--forget-reports`).
+fn bench_writer(
+    policy: &Policy,
+    run_id: &str,
+    forget_s: Option<i64>,
+) -> Result<Writer<NullStore, VehicleBook>, ReplayError> {
+    let derivation = Derivation {
+        core_version: CORE_VERSION.to_owned(),
+        policy_version: policy.version.clone(),
+        release_id: run_id.to_owned(),
+    };
+    let mut writer = Writer::open(NullStore, derivation, harness_book()?)
+        .map_err(|e| ReplayError::Other(e.to_string()))?;
+    writer.forget_reports(forget_s, policy.emit.sweep_index_every_s);
+    Ok(writer)
+}
 
 fn states(runner: &BenchRunner) -> Vec<(Feed, &FeedState)> {
     runner
@@ -462,7 +485,13 @@ impl Bench {
             let loads = SharedLoads::open(&release, &feeds)?;
             eprintln!("bench: switching to release {} at {at}", loads.run_id);
             let mut phases = std::mem::take(&mut runner.phases);
+            let run_id = loads.run_id.clone();
             let switched = phases.time("switch", || runner.switch_release(loads));
+            if !self.keep_writer {
+                // A writer of the new release, as the worker's `_writer`: a new vehicle book.
+                self.forgotten += self.writer.forgotten;
+                self.writer = bench_writer(&self.policy, &run_id, self.forget_reports_s)?;
+            }
             let outcome = switched
                 .map_err(ReplayError::from)
                 .and_then(|effects| self.write(&mut phases, &effects));
@@ -475,7 +504,6 @@ impl Bench {
                 return Ok(()); // warm start: no writer, no emitting
             }
             self.ticked(runner, now, effects)?;
-            self.forget(runner, now);
             Ok::<(), ReplayError>(())
         })?;
         self.ticks = ticks;
@@ -501,25 +529,6 @@ impl Bench {
             self.next_sample = Some(due + self.sample_every);
         }
         Ok(())
-    }
-
-    /// The vehicle book's eviction, at the runner's sweep interval.
-    fn forget(&mut self, runner: &mut BenchRunner, now: Instant) {
-        let Some(after) = self.forget_reports else {
-            return;
-        };
-        let every = TimeDelta::from_seconds(self.policy.emit.sweep_index_every_s);
-        match self.next_forget {
-            None => self.next_forget = Some(now + every),
-            Some(due) if now >= due => {
-                let gone = runner
-                    .phases
-                    .time("forget", || self.writer.vehicles.forget_unseen(now - after));
-                self.forgotten += gone;
-                self.next_forget = Some(now + every);
-            }
-            Some(_) => {}
-        }
     }
 
     fn sample(&mut self, runner: &BenchRunner, at: Instant) {
@@ -561,7 +570,10 @@ impl Bench {
             "elapsed_s".into(),
             json!((self.started.elapsed().as_secs_f64() * 10.0).round() / 10.0),
         );
-        record.insert("forgotten_reports".into(), json!(self.forgotten));
+        record.insert(
+            "forgotten_reports".into(),
+            json!(self.forgotten + self.writer.forgotten),
+        );
         let book = self.writer.vehicles.sizes();
         for (name, size) in sizes(runner, &self.writer, book, &self.emitters) {
             record.insert(name.into(), json!(size));
@@ -623,7 +635,10 @@ fn run(args: &BenchArgs) -> Result<Value, String> {
     let run_id = loads.run_id.clone();
     let skew = setup.policy.time.max_clock_skew();
     let policy = Arc::new(setup.policy.clone());
-    let forget_s = args.forget_reports_s.filter(|s| *s > 0);
+    let forget_s = args
+        .forget_reports_s
+        .or(policy.emit.forget_reports_s)
+        .filter(|s| *s > 0);
     let mut runner = Runner::new(
         loads,
         policy.clone(),
@@ -632,15 +647,8 @@ fn run(args: &BenchArgs) -> Result<Value, String> {
         Phases::new(),
     )
     .map_err(|e| text(&e))?;
-    let derivation = Derivation {
-        core_version: CORE_VERSION.to_owned(),
-        policy_version: policy.version.clone(),
-        release_id: run_id.clone(),
-    };
-    let book = harness_book().map_err(|e| text(&e))?;
-    let writer = Writer::open(NullStore, derivation, book).map_err(|e| text(&e))?;
     let mut bench = Bench {
-        writer,
+        writer: bench_writer(&policy, &run_id, forget_s).map_err(|e| text(&e))?,
         emitters: BTreeMap::new(),
         gtfs_rt,
         policy: policy.clone(),
@@ -655,8 +663,8 @@ fn run(args: &BenchArgs) -> Result<Value, String> {
         polls: 0,
         switches,
         started: Monotonic::now(),
-        forget_reports: forget_s.map(TimeDelta::from_seconds),
-        next_forget: None,
+        forget_reports_s: forget_s,
+        keep_writer: args.keep_writer,
         forgotten: 0,
         writing_paused: false,
     };

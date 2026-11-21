@@ -110,9 +110,10 @@ pub fn open_writer(setup: &CoreSetup, loads: &ReleaseLoads) -> Result<LiveWriter
         release_id: loads.run_id.clone(),
     };
     let vocabulary = setup.vocabulary.clone();
-    Ok(Writer::open(store, derivation, |stored| {
-        book(stored, vocabulary)
-    })?)
+    let mut writer = Writer::open(store, derivation, |stored| book(stored, vocabulary))?;
+    let emit = &setup.policy.emit;
+    writer.forget_reports(emit.forget_reports_s, emit.sweep_index_every_s);
+    Ok(writer)
 }
 
 fn answer(done: Option<oneshot::Sender<Reply>>, result: &Result<(), WorkerError>) {

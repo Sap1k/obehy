@@ -120,6 +120,10 @@ fn run(args: &ReplayArgs) -> Result<(), String> {
     let store = PgStore::connect(&url, physical_rows(&setup.sources)).map_err(|e| text(&e))?;
     let mut writer = Writer::open(store, derivation, harness_book().map_err(|e| text(&e))?)
         .map_err(|e| text(&e))?;
+    writer.forget_reports(
+        setup.policy.emit.forget_reports_s,
+        setup.policy.emit.sweep_index_every_s,
+    );
     // `history_writer`: the replayed days' observations of these sources and their service
     // dates' history go first.
     let (start, end) = (setup.window.start, setup.window.end);

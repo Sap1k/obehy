@@ -201,6 +201,11 @@ pub struct EmitPolicy {
     pub sweep_index_every_s: i64,
     pub keep_index_s: i64,
     pub compact_index_at_s: i64,
+    /// Rust only (Python's loader takes extra `[emit]` keys and never forgets): the vehicle
+    /// book forgets a report no observation named for this long, checked every
+    /// `sweep_index_every_s` (`VehicleBook::forget_unseen`); absent: never.
+    #[serde(default)]
+    pub forget_reports_s: Option<i64>,
 }
 
 /// How long stored realtime data is kept (`obehy jobs hourly` and `nightly`).

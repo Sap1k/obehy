@@ -398,6 +398,10 @@ pub fn output_from(
         release_id: loads.run_id.clone(),
     };
     let mut recording = Recording::open(sources, derivation, harness_book()?)?;
+    let forget = &policy.emit;
+    recording
+        .writer
+        .forget_reports(forget.forget_reports_s, forget.sweep_index_every_s);
     recording.flush(None, emit)?; // what opening the writer writes
     let mut sink = Recorder {
         emit,

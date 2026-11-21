@@ -136,6 +136,25 @@ cargo test -p obehy-rt --test store_db
 fresh databases and compares every `rt.*` and `history.*` table; `writer_parity` drives the Rust
 writer with a stream's effects and compares its rows with Python's.
 
+The whole path against a database, warm start and the bench (R7 exit check):
+
+```
+obehy-rt replay --write-history [--url-env VAR] --from-files <release> ...   # rebuild rt.observation + history
+obehy-rt warm --from-files <release> --until <local> [--hours H] [--mode window|vehicles] \
+    [--url-env VAR | --from-archive --archive A --sources S] [--then <local> --out S.jsonl.gz]
+obehy-rt bench --from-files <release> ... --out DIR [--warm-hours 6] [--sample-every 3600] \
+    [--switch-release <release>@<instant>] [--forget-reports S] [--keep-writer]
+```
+
+`replay --write-history` is Python's `replay` with `write_history` (index from the serving files);
+dumped with `store_db.py dump`, both databases are identical. `warm --then` goes on through the
+archive after warm start and writes that window's output stream, compared with Python's warm
+start followed by `compare.output`. `bench` is `obehy rt bench --from-files` (rows made and
+dropped by a null store) plus the memory soak: `bench.json` samples resident memory and every
+container's size each simulated hour; the serving tables are read once per release and their
+memory reported apart (`tables_rss_mb`). The vehicle book forgets reports unseen for
+`[emit] forget_reports_s` (Rust only; Python ignores the key and never forgets).
+
 ## The core, the runner and the output harness (R6)
 
 `obehy_core::core` is `core.py` (`step`, `refresh`, `estimate_all`, `rebase`, `resolve`) over a
