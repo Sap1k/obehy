@@ -1,0 +1,3578 @@
+{
+ "registry": {
+  "by_source": [
+   [
+    [
+     "duk",
+     "807"
+    ],
+    [
+     [
+      "reg:bus-1",
+      2,
+      "2026-01-01",
+      null
+     ]
+    ]
+   ],
+   [
+    [
+     "duk",
+     "900"
+    ],
+    [
+     [
+      "reg:old",
+      1,
+      "2026-01-01",
+      "2026-10-01"
+     ],
+     [
+      "reg:new",
+      3,
+      "2026-10-02",
+      null
+     ]
+    ]
+   ]
+  ],
+  "by_identifier": [
+   [
+    [
+     "licence_plate",
+     "4U12345"
+    ],
+    [
+     [
+      "reg:bus-2",
+      2,
+      "2026-01-01",
+      null
+     ],
+     [
+      "reg:bus-2a",
+      2,
+      "2026-01-01",
+      null
+     ]
+    ]
+   ]
+  ],
+  "entries": [
+   [
+    "reg:bus-1",
+    "807",
+    "Irisbus",
+    "Citelis",
+    [
+     "duk-register"
+    ]
+   ],
+   [
+    "reg:bus-2",
+    null,
+    null,
+    null,
+    [
+     "own",
+     "duk-register"
+    ]
+   ],
+   [
+    "reg:never",
+    "1",
+    null,
+    null,
+    [
+     "own"
+    ]
+   ]
+  ],
+  "values": [
+   [
+    "reg:bus-1",
+    [
+     [
+      "low_floor",
+      "true",
+      "duk-register",
+      1,
+      "curated"
+     ],
+     [
+      "manufacturer",
+      "Irisbus",
+      "duk-register",
+      1,
+      "model"
+     ],
+     [
+      "air_conditioning",
+      "false",
+      "own",
+      0,
+      "curated"
+     ],
+     [
+      "air_conditioning",
+      "true",
+      "duk-register",
+      1,
+      "curated"
+     ]
+    ]
+   ]
+  ]
+ },
+ "book": [
+  {
+   "op": "observe",
+   "in": [
+    [
+     "duk",
+     "807",
+     1792475940000000,
+     [
+      [
+       "low_floor",
+       "false"
+      ],
+      [
+       "operator",
+       "DPMÚL"
+      ]
+     ]
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792475940000000,
+     [
+      [
+       "licence_plate",
+       "4u1-2345"
+      ],
+      [
+       "low_floor",
+       "true"
+      ]
+     ]
+    ],
+    [
+     "dpmd",
+     "301",
+     1792475940000000,
+     []
+    ],
+    [
+     "pid",
+     "9",
+     1792475940000000,
+     [
+      [
+       "operator",
+       "ČSAD"
+      ],
+      [
+       "raw:pid:x",
+       "1"
+      ]
+     ]
+    ],
+    [
+     "duk",
+     "900",
+     1792475940000000,
+     []
+    ]
+   ],
+   "out": [
+    [
+     "duk",
+     "807",
+     "low_floor",
+     "false",
+     1792475940000000
+    ],
+    [
+     "duk",
+     "807",
+     "operator",
+     "DPMÚL",
+     1792475940000000
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     "licence_plate",
+     "4u1-2345",
+     1792475940000000
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     "low_floor",
+     "true",
+     1792475940000000
+    ],
+    [
+     "pid",
+     "9",
+     "operator",
+     "ČSAD",
+     1792475940000000
+    ],
+    [
+     "pid",
+     "9",
+     "raw:pid:x",
+     "1",
+     1792475940000000
+    ]
+   ]
+  },
+  {
+   "op": "rows",
+   "in": "observed",
+   "out": {
+    "gone": [],
+    "kept": [],
+    "rewrite": true,
+    "profiles": [
+     {
+      "vehicle_id": "pid:9",
+      "registered": false,
+      "public_label": null,
+      "flags": {
+       "low_floor": null,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": "ČSAD",
+       "licence_plate": null,
+       "fleet_number": null
+      },
+      "datasets": [],
+      "sources": [
+       "pid"
+      ],
+      "attributes": [
+       {
+        "value": "ČSAD",
+        "origin": "live",
+        "source": "pid",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "operator",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "ČSAD",
+          "origin": "live",
+          "source": "pid",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "1",
+        "origin": "live",
+        "source": "pid",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "raw:pid:x",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "1",
+          "origin": "live",
+          "source": "pid",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792475940000000
+     },
+     {
+      "vehicle_id": "reg:bus-1",
+      "registered": true,
+      "public_label": "807",
+      "flags": {
+       "low_floor": true,
+       "air_conditioning": false,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": "Irisbus",
+       "model": null,
+       "operator": "DPMÚL",
+       "licence_plate": null,
+       "fleet_number": null
+      },
+      "datasets": [
+       "duk-register"
+      ],
+      "sources": [
+       "duk"
+      ],
+      "attributes": [
+       {
+        "value": "false",
+        "origin": "curated",
+        "source": "own",
+        "observed_at": null,
+        "attribute": "air_conditioning",
+        "conflict": true,
+        "statements": [
+         {
+          "value": "false",
+          "origin": "curated",
+          "source": "own",
+          "observed_at": null
+         },
+         {
+          "value": "true",
+          "origin": "curated",
+          "source": "duk-register",
+          "observed_at": null
+         }
+        ]
+       },
+       {
+        "value": "true",
+        "origin": "curated",
+        "source": "duk-register",
+        "observed_at": null,
+        "attribute": "low_floor",
+        "conflict": true,
+        "statements": [
+         {
+          "value": "true",
+          "origin": "curated",
+          "source": "duk-register",
+          "observed_at": null
+         },
+         {
+          "value": "false",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "Irisbus",
+        "origin": "model",
+        "source": "duk-register",
+        "observed_at": null,
+        "attribute": "manufacturer",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "Irisbus",
+          "origin": "model",
+          "source": "duk-register",
+          "observed_at": null
+         }
+        ]
+       },
+       {
+        "value": "DPMÚL",
+        "origin": "live",
+        "source": "duk",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "operator",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "DPMÚL",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792475940000000
+     },
+     {
+      "vehicle_id": "reg:bus-2",
+      "registered": true,
+      "public_label": null,
+      "flags": {
+       "low_floor": true,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": null,
+       "licence_plate": "4u1-2345",
+       "fleet_number": null
+      },
+      "datasets": [
+       "own",
+       "duk-register"
+      ],
+      "sources": [
+       "mpvnet"
+      ],
+      "attributes": [
+       {
+        "value": "4u1-2345",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "licence_plate",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "4u1-2345",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "true",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "low_floor",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "true",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792475940000000
+     }
+    ]
+   }
+  },
+  {
+   "op": "worked_by",
+   "report": [
+    "duk",
+    "900"
+   ],
+   "day": "2026-09-30",
+   "out": "reg:old"
+  },
+  {
+   "op": "worked_by",
+   "report": [
+    "duk",
+    "900"
+   ],
+   "day": "2026-10-20",
+   "out": "reg:old"
+  },
+  {
+   "op": "worked_by",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": "dpmd:301"
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "dpmd:301",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [],
+   "trains": [],
+   "clock": 1792475940000000
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "dpmd",
+     "301",
+     1792476000000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.860999999999999,
+      50.66,
+      1792475995000000
+     ]
+    ],
+    [
+     "dpmd",
+     "302",
+     1792476000000000,
+     null,
+     null
+    ],
+    [
+     "duk",
+     "807",
+     1792476000000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792475995000000
+     ]
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792476000000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.8605,
+      50.66,
+      1792475995000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "source"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "mpvnet",
+    "4U1 2345"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-2",
+    "identifier"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:301",
+    null
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:302",
+    null
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [],
+    "kept": [
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "duk",
+        "807"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792475995000000,
+       1,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       false
+      ]
+     ],
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792475995000000,
+       1,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       false
+      ]
+     ],
+     [
+      [
+       [
+        "duk",
+        "807"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792475995000000,
+       1,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       false
+      ]
+     ]
+    ],
+    "rewrite": false,
+    "profiles": []
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "dpmd:301",
+     null
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "dpmd:302",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "duk",
+       "807"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792475995000000,
+      1,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      false
+     ]
+    ],
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792475995000000,
+      1,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      false
+     ]
+    ],
+    [
+     [
+      [
+       "duk",
+       "807"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792475995000000,
+      1,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      false
+     ]
+    ]
+   ],
+   "trains": [],
+   "clock": 1792476000000000
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "dpmd",
+     "301",
+     1792476060000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.860999999999999,
+      50.66,
+      1792476055000000
+     ]
+    ],
+    [
+     "dpmd",
+     "302",
+     1792476060000000,
+     "train:6402",
+     null
+    ],
+    [
+     "duk",
+     "807",
+     1792476060000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792476055000000
+     ]
+    ],
+    [
+     "duk",
+     "951",
+     1792476060000000,
+     "train:6402",
+     null
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792476060000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.8605,
+      50.66,
+      1792476055000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "source"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "mpvnet",
+    "4U1 2345"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-2",
+    "identifier"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:301",
+    null
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "train:6402",
+    "train"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "951"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "train:6402",
+    "train"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "train:6402",
+    "train"
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [],
+    "kept": [
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "duk",
+        "807"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476055000000,
+       2,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       false
+      ]
+     ],
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476055000000,
+       2,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       false
+      ]
+     ],
+     [
+      [
+       [
+        "duk",
+        "807"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476055000000,
+       2,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       false
+      ]
+     ]
+    ],
+    "rewrite": false,
+    "profiles": []
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "dpmd:301",
+     null
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "train:6402",
+     "train"
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "train:6402",
+     "train"
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "duk",
+       "807"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476055000000,
+      2,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      false
+     ]
+    ],
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476055000000,
+      2,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      false
+     ]
+    ],
+    [
+     [
+      [
+       "duk",
+       "807"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476055000000,
+      2,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      false
+     ]
+    ]
+   ],
+   "trains": [
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "train:6402"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "train:6402"
+    ]
+   ],
+   "clock": 1792476060000000
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "dpmd",
+     "301",
+     1792476120000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.860999999999999,
+      50.66,
+      1792476115000000
+     ]
+    ],
+    [
+     "dpmd",
+     "302",
+     1792476120000000,
+     "train:6402",
+     null
+    ],
+    [
+     "duk",
+     "807",
+     1792476120000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792476115000000
+     ]
+    ],
+    [
+     "duk",
+     "951",
+     1792476120000000,
+     "train:6402",
+     null
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792476120000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.8605,
+      50.66,
+      1792476115000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "source"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "mpvnet",
+    "4U1 2345"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-2",
+    "identifier"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "co_located"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "train:6402",
+    "train"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "951"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "train:6402",
+    "train"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "train:6402",
+    "train"
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [],
+    "kept": [
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "duk",
+        "807"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476115000000,
+       3,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ],
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476115000000,
+       3,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ],
+     [
+      [
+       [
+        "duk",
+        "807"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476115000000,
+       3,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ]
+    ],
+    "rewrite": false,
+    "profiles": [
+     {
+      "vehicle_id": "reg:bus-1",
+      "registered": true,
+      "public_label": "807",
+      "flags": {
+       "low_floor": true,
+       "air_conditioning": false,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": "Irisbus",
+       "model": null,
+       "operator": "DPMÚL",
+       "licence_plate": null,
+       "fleet_number": null
+      },
+      "datasets": [
+       "duk-register"
+      ],
+      "sources": [
+       "duk"
+      ],
+      "attributes": [
+       {
+        "value": "false",
+        "origin": "curated",
+        "source": "own",
+        "observed_at": null,
+        "attribute": "air_conditioning",
+        "conflict": true,
+        "statements": [
+         {
+          "value": "false",
+          "origin": "curated",
+          "source": "own",
+          "observed_at": null
+         },
+         {
+          "value": "true",
+          "origin": "curated",
+          "source": "duk-register",
+          "observed_at": null
+         }
+        ]
+       },
+       {
+        "value": "true",
+        "origin": "curated",
+        "source": "duk-register",
+        "observed_at": null,
+        "attribute": "low_floor",
+        "conflict": true,
+        "statements": [
+         {
+          "value": "true",
+          "origin": "curated",
+          "source": "duk-register",
+          "observed_at": null
+         },
+         {
+          "value": "false",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "Irisbus",
+        "origin": "model",
+        "source": "duk-register",
+        "observed_at": null,
+        "attribute": "manufacturer",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "Irisbus",
+          "origin": "model",
+          "source": "duk-register",
+          "observed_at": null
+         }
+        ]
+       },
+       {
+        "value": "DPMÚL",
+        "origin": "live",
+        "source": "duk",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "operator",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "DPMÚL",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792475940000000
+     }
+    ]
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "reg:bus-1",
+     "co_located"
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "train:6402",
+     "train"
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "train:6402",
+     "train"
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "duk",
+       "807"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476115000000,
+      3,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ],
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476115000000,
+      3,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ],
+    [
+     [
+      [
+       "duk",
+       "807"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476115000000,
+      3,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ]
+   ],
+   "trains": [
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "train:6402"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "train:6402"
+    ]
+   ],
+   "clock": 1792476120000000
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "dpmd",
+     "301",
+     1792476180000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.860999999999999,
+      50.66,
+      1792476175000000
+     ]
+    ],
+    [
+     "dpmd",
+     "302",
+     1792476180000000,
+     null,
+     null
+    ],
+    [
+     "duk",
+     "807",
+     1792476180000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792476175000000
+     ]
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792476180000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.8605,
+      50.66,
+      1792476175000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "source"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "mpvnet",
+    "4U1 2345"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-2",
+    "identifier"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "co_located"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:302",
+    null
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [],
+    "kept": [
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "duk",
+        "807"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476175000000,
+       4,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ],
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476175000000,
+       4,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ],
+     [
+      [
+       [
+        "duk",
+        "807"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476175000000,
+       4,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ]
+    ],
+    "rewrite": false,
+    "profiles": []
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "reg:bus-1",
+     "co_located"
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "dpmd:302",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "duk:951",
+     null
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "duk",
+       "807"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476175000000,
+      4,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ],
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476175000000,
+      4,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ],
+    [
+     [
+      [
+       "duk",
+       "807"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476175000000,
+      4,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ]
+   ],
+   "trains": [],
+   "clock": 1792476180000000
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "dpmd",
+     "301",
+     1792476240000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.860999999999999,
+      50.66,
+      1792476235000000
+     ]
+    ],
+    [
+     "dpmd",
+     "302",
+     1792476240000000,
+     null,
+     null
+    ],
+    [
+     "duk",
+     "807",
+     1792476240000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792476235000000
+     ]
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792476240000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.8605,
+      50.66,
+      1792476235000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "source"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "mpvnet",
+    "4U1 2345"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-2",
+    "identifier"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "co_located"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:302",
+    null
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [],
+    "kept": [
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "duk",
+        "807"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476235000000,
+       5,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ],
+     [
+      [
+       [
+        "dpmd",
+        "301"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476235000000,
+       5,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ],
+     [
+      [
+       [
+        "duk",
+        "807"
+       ],
+       [
+        "mpvnet",
+        "4U1 2345"
+       ]
+      ],
+      [
+       1792475995000000,
+       1792476235000000,
+       5,
+       [
+        "jdf",
+        "cis:line_trip",
+        "582492:143",
+        "2026-10-20"
+       ],
+       true
+      ]
+     ]
+    ],
+    "rewrite": false,
+    "profiles": []
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "reg:bus-1",
+     "co_located"
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "dpmd:302",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "duk:951",
+     null
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "duk",
+       "807"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ],
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ],
+    [
+     [
+      [
+       "duk",
+       "807"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ]
+   ],
+   "trains": [],
+   "clock": 1792476240000000
+  },
+  {
+   "op": "observe",
+   "in": [
+    [
+     "duk",
+     "807",
+     1792480200000000,
+     [
+      [
+       "low_floor",
+       "false"
+      ],
+      [
+       "operator",
+       "DPMÚL"
+      ]
+     ]
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792480200000000,
+     [
+      [
+       "licence_plate",
+       "4U12345"
+      ],
+      [
+       "low_floor",
+       "false"
+      ]
+     ]
+    ]
+   ],
+   "out": [
+    [
+     "duk",
+     "807",
+     "low_floor",
+     "false",
+     1792480200000000
+    ],
+    [
+     "duk",
+     "807",
+     "operator",
+     "DPMÚL",
+     1792480200000000
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     "licence_plate",
+     "4U12345",
+     1792480200000000
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     "low_floor",
+     "false",
+     1792480200000000
+    ]
+   ]
+  },
+  {
+   "op": "rows",
+   "in": "observed",
+   "out": {
+    "gone": [],
+    "kept": [],
+    "rewrite": false,
+    "profiles": [
+     {
+      "vehicle_id": "reg:bus-2",
+      "registered": true,
+      "public_label": null,
+      "flags": {
+       "low_floor": false,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": null,
+       "licence_plate": "4U12345",
+       "fleet_number": null
+      },
+      "datasets": [
+       "own",
+       "duk-register"
+      ],
+      "sources": [
+       "mpvnet"
+      ],
+      "attributes": [
+       {
+        "value": "4U12345",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "licence_plate",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "4U12345",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "false",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "low_floor",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "false",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792480200000000
+     }
+    ]
+   }
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "duk",
+     "807",
+     1792476660000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792476655000000
+     ]
+    ],
+    [
+     "mpvnet",
+     "4U1 2345",
+     1792476660000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.9,
+      50.66,
+      1792476655000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "source"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "mpvnet",
+    "4U1 2345"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-2",
+    "identifier"
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [
+     [
+      [
+       "duk",
+       "807"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ]
+    ],
+    "kept": [],
+    "rewrite": false,
+    "profiles": []
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "reg:bus-1",
+     "co_located"
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "dpmd:302",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "duk:951",
+     null
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "duk",
+       "807"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ],
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ]
+   ],
+   "trains": [],
+   "clock": 1792480200000000
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "dpmd",
+     "301",
+     1792476720000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:145",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792476715000000
+     ]
+    ],
+    [
+     "duk",
+     "807",
+     1792476720000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792476715000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-1",
+    "source"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "reg:bus-2",
+    "co_located"
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "duk",
+       "807"
+      ]
+     ]
+    ],
+    "kept": [],
+    "rewrite": false,
+    "profiles": [
+     {
+      "vehicle_id": "reg:bus-1",
+      "registered": true,
+      "public_label": "807",
+      "flags": {
+       "low_floor": true,
+       "air_conditioning": false,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": "Irisbus",
+       "model": null,
+       "operator": "DPMÚL",
+       "licence_plate": null,
+       "fleet_number": null
+      },
+      "datasets": [
+       "duk-register"
+      ],
+      "sources": [
+       "duk"
+      ],
+      "attributes": [
+       {
+        "value": "false",
+        "origin": "curated",
+        "source": "own",
+        "observed_at": null,
+        "attribute": "air_conditioning",
+        "conflict": true,
+        "statements": [
+         {
+          "value": "false",
+          "origin": "curated",
+          "source": "own",
+          "observed_at": null
+         },
+         {
+          "value": "true",
+          "origin": "curated",
+          "source": "duk-register",
+          "observed_at": null
+         }
+        ]
+       },
+       {
+        "value": "true",
+        "origin": "curated",
+        "source": "duk-register",
+        "observed_at": null,
+        "attribute": "low_floor",
+        "conflict": true,
+        "statements": [
+         {
+          "value": "true",
+          "origin": "curated",
+          "source": "duk-register",
+          "observed_at": null
+         },
+         {
+          "value": "false",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "Irisbus",
+        "origin": "model",
+        "source": "duk-register",
+        "observed_at": null,
+        "attribute": "manufacturer",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "Irisbus",
+          "origin": "model",
+          "source": "duk-register",
+          "observed_at": null
+         }
+        ]
+       },
+       {
+        "value": "DPMÚL",
+        "origin": "live",
+        "source": "duk",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "operator",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "DPMÚL",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792480200000000
+     },
+     {
+      "vehicle_id": "reg:bus-2",
+      "registered": true,
+      "public_label": null,
+      "flags": {
+       "low_floor": false,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": null,
+       "licence_plate": "4U12345",
+       "fleet_number": null
+      },
+      "datasets": [
+       "own",
+       "duk-register"
+      ],
+      "sources": [
+       "mpvnet"
+      ],
+      "attributes": [
+       {
+        "value": "4U12345",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "licence_plate",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "4U12345",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "false",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "low_floor",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "false",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792480200000000
+     }
+    ]
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "reg:bus-2",
+     "co_located"
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "dpmd:302",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "reg:bus-1",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "reg:old",
+     "source"
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "duk:951",
+     null
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "reg:bus-2",
+     "identifier"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ]
+   ],
+   "trains": [],
+   "clock": 1792480200000000
+  },
+  {
+   "op": "reload",
+   "registry": {
+    "by_source": [],
+    "by_identifier": [],
+    "entries": [
+     [
+      "reg:bus-3",
+      null,
+      null,
+      null,
+      []
+     ]
+    ],
+    "values": []
+   }
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:301",
+    "co_located"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "302"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:302",
+    null
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "807"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "duk:807",
+    null
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "900"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "duk:900",
+    null
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "duk",
+    "951"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "duk:951",
+    null
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "mpvnet",
+    "4U1 2345"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:301",
+    "co_located"
+   ]
+  },
+  {
+   "op": "identify",
+   "report": [
+    "pid",
+    "9"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "pid:9",
+    null
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [],
+    "kept": [],
+    "rewrite": false,
+    "profiles": [
+     {
+      "vehicle_id": "dpmd:301",
+      "registered": false,
+      "public_label": null,
+      "flags": {
+       "low_floor": false,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": null,
+       "licence_plate": "4U12345",
+       "fleet_number": null
+      },
+      "datasets": [],
+      "sources": [
+       "mpvnet"
+      ],
+      "attributes": [
+       {
+        "value": "4U12345",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "licence_plate",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "4U12345",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "false",
+        "origin": "live",
+        "source": "mpvnet",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "low_floor",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "false",
+          "origin": "live",
+          "source": "mpvnet",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792480200000000
+     },
+     {
+      "vehicle_id": "duk:807",
+      "registered": false,
+      "public_label": null,
+      "flags": {
+       "low_floor": false,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": "DPMÚL",
+       "licence_plate": null,
+       "fleet_number": null
+      },
+      "datasets": [],
+      "sources": [
+       "duk"
+      ],
+      "attributes": [
+       {
+        "value": "false",
+        "origin": "live",
+        "source": "duk",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "low_floor",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "false",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "DPMÚL",
+        "origin": "live",
+        "source": "duk",
+        "observed_at": "2026-10-20T07:10:00+00:00",
+        "attribute": "operator",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "DPMÚL",
+          "origin": "live",
+          "source": "duk",
+          "observed_at": "2026-10-20T07:10:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792480200000000
+     },
+     {
+      "vehicle_id": "pid:9",
+      "registered": false,
+      "public_label": null,
+      "flags": {
+       "low_floor": null,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": "ČSAD",
+       "licence_plate": null,
+       "fleet_number": null
+      },
+      "datasets": [],
+      "sources": [
+       "pid"
+      ],
+      "attributes": [
+       {
+        "value": "ČSAD",
+        "origin": "live",
+        "source": "pid",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "operator",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "ČSAD",
+          "origin": "live",
+          "source": "pid",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       },
+       {
+        "value": "1",
+        "origin": "live",
+        "source": "pid",
+        "observed_at": "2026-10-20T05:59:00+00:00",
+        "attribute": "raw:pid:x",
+        "conflict": false,
+        "statements": [
+         {
+          "value": "1",
+          "origin": "live",
+          "source": "pid",
+          "observed_at": "2026-10-20T05:59:00+00:00"
+         }
+        ]
+       }
+      ],
+      "last_stated": 1792475940000000
+     },
+     {
+      "vehicle_id": "reg:bus-3",
+      "registered": true,
+      "public_label": null,
+      "flags": {
+       "low_floor": null,
+       "air_conditioning": null,
+       "wheelchair_accessible": null
+      },
+      "texts": {
+       "manufacturer": null,
+       "model": null,
+       "operator": null,
+       "licence_plate": null,
+       "fleet_number": null
+      },
+      "datasets": [],
+      "sources": [],
+      "attributes": [],
+      "last_stated": null
+     }
+    ]
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "dpmd:301",
+     "co_located"
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "dpmd:302",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "duk:807",
+     null
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "duk:900",
+     null
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "duk:951",
+     null
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "dpmd:301",
+     "co_located"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ]
+   ],
+   "trains": [],
+   "clock": 1792480200000000
+  },
+  {
+   "op": "track",
+   "in": [
+    [
+     "dpmd",
+     "301",
+     1792479540000000,
+     null,
+     [
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:145",
+       "2026-10-20"
+      ],
+      13.86,
+      50.66,
+      1792479535000000
+     ]
+    ]
+   ],
+   "out": null
+  },
+  {
+   "op": "identify",
+   "report": [
+    "dpmd",
+    "301"
+   ],
+   "day": "2026-10-20",
+   "out": [
+    "dpmd:301",
+    "co_located"
+   ]
+  },
+  {
+   "op": "rows",
+   "in": [],
+   "out": {
+    "gone": [],
+    "kept": [],
+    "rewrite": false,
+    "profiles": []
+   }
+  },
+  {
+   "op": "checkpoint",
+   "identity": [
+    [
+     [
+      "dpmd",
+      "301"
+     ],
+     "dpmd:301",
+     "co_located"
+    ],
+    [
+     [
+      "dpmd",
+      "302"
+     ],
+     "dpmd:302",
+     null
+    ],
+    [
+     [
+      "duk",
+      "807"
+     ],
+     "duk:807",
+     null
+    ],
+    [
+     [
+      "duk",
+      "900"
+     ],
+     "duk:900",
+     null
+    ],
+    [
+     [
+      "duk",
+      "951"
+     ],
+     "duk:951",
+     null
+    ],
+    [
+     [
+      "mpvnet",
+      "4U1 2345"
+     ],
+     "dpmd:301",
+     "co_located"
+    ],
+    [
+     [
+      "pid",
+      "9"
+     ],
+     "pid:9",
+     null
+    ]
+   ],
+   "pairs": [
+    [
+     [
+      [
+       "dpmd",
+       "301"
+      ],
+      [
+       "mpvnet",
+       "4U1 2345"
+      ]
+     ],
+     [
+      1792475995000000,
+      1792476235000000,
+      5,
+      [
+       "jdf",
+       "cis:line_trip",
+       "582492:143",
+       "2026-10-20"
+      ],
+      true
+     ]
+    ]
+   ],
+   "trains": [],
+   "clock": 1792480200000000
+  }
+ ]
+}

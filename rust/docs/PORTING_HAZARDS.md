@@ -204,6 +204,10 @@ Survey of `src/obehy/realtime` (2026-11-21). Line numbers are as of commit 42287
 - `vehicles.py:155-162` sorted held, `min(key=(rank, report))`. `:148-151` first cluster member
   found in registry wins. `:177` `max(clock or last_seen, last_seen)`. `:265-269` sorted dirty,
   members, attributes.
+- `vehicles.py:251` `live.setdefault(report, {})`: every report with a vehicle key gets a `live`
+  entry, attributes or not, and `_everything_dirty` identifies all of them (ported so, R7).
+  `Evidence` is mutable and shared between `pairs` and `changed`; Rust snapshots it into
+  `changed` after the confirmation flag is set, which is what Python's `changes()` returns.
 
 ## Long-lived containers and eviction (memory design)
 - FeedState.vehicles: dropped in refresh when `now - last_seen > forget_after_s`
