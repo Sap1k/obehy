@@ -31,6 +31,7 @@ toml.workspace = true
 zstd.workspace = true
 cpu-time.workspace = true
 indexmap.workspace = true
+rustc-hash.workspace = true
 thiserror.workspace = true
 futures-util.workspace = true
 memory-stats.workspace = true

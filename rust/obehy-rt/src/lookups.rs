@@ -469,7 +469,7 @@ impl<F: Fetcher> LookupBroker<F> {
                 None => request_json.push((k.clone(), PyJson::str(v))),
             }
         }
-        let extra = [("request".to_owned(), PyJson::Object(request_json))];
+        let extra = [("request".to_owned(), PyJson::from_pairs(request_json))];
         let stored = self
             .archive
             .append(

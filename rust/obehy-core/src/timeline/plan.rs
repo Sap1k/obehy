@@ -16,7 +16,7 @@
 //! everything on a release change; [`PlanCache::sweep`] keeps only the trips the index keeps
 //! and plans from a date on (the runner sweeps with the index).
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::sync::Arc;
 
 use crate::config::Policy;
@@ -510,6 +510,17 @@ impl PlanCache {
         }
         self.plans.insert(key, plan.clone());
         Ok(plan)
+    }
+
+    /// The plan of `trip` on `day` if it is cached for `index`'s release (what [`plan`] would
+    /// return without building anything).
+    ///
+    /// [`plan`]: PlanCache::plan
+    pub fn cached(&self, trip: &Trip, day: Date, index: &Index) -> Option<Arc<Plan>> {
+        if index.release_id != self.release_id {
+            return None;
+        }
+        self.plans.get(&(trip.trip_id.clone(), day)).cloned()
     }
 
     /// Keep the paths of the trips `keep` names and their plans from `since` on.

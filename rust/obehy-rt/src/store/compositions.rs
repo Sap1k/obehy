@@ -24,7 +24,7 @@ fn pairs_json(pairs: &[(String, String)]) -> PyJson {
             None => out.push((k.clone(), PyJson::str(v))),
         }
     }
-    PyJson::Object(out)
+    PyJson::from_pairs(out)
 }
 
 fn unit_row(unit: &Unit) -> PyJson {

@@ -172,12 +172,12 @@ pub fn physical_rows(sources: &[Source]) -> Vec<(String, String, bool)> {
 /// A journey as `rt.vehicle_pairing.journey` stores it.
 pub fn journey_json(journey: &JourneyKey) -> PyJson {
     PyJson::object([
-        ("feed", PyJson::str(journey.feed.as_str())),
+        ("feed", PyJson::lit(journey.feed.as_str())),
         ("namespace", PyJson::str(&journey.namespace)),
         ("key", PyJson::str(&journey.key)),
         (
             "service_date",
-            PyJson::Str(journey.service_date.isoformat()),
+            PyJson::str(journey.service_date.isoformat()),
         ),
     ])
 }
@@ -313,7 +313,7 @@ fn statement_json(s: &Statement) -> Vec<(String, PyJson)> {
         ("source".into(), PyJson::str(&s.source)),
         (
             "observed_at".into(),
-            PyJson::opt(s.observed_at, |at| PyJson::Str(at.isoformat())),
+            PyJson::opt(s.observed_at, |at| PyJson::str(at.isoformat())),
         ),
     ]
 }
@@ -327,11 +327,11 @@ fn attribute_json(attribute: &str, p: &Picked) -> PyJson {
         PyJson::List(
             p.statements
                 .iter()
-                .map(|s| PyJson::Object(statement_json(s)))
+                .map(|s| PyJson::from_pairs(statement_json(s)))
                 .collect(),
         ),
     ));
-    PyJson::Object(out)
+    PyJson::from_pairs(out)
 }
 
 /// A profile as its row (`precedence.Profile`, attributes as their JSON).

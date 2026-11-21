@@ -31,11 +31,11 @@ use crate::platforms::apply_platform;
 use crate::runs::{journey_spans, part_spans, snapshots};
 use crate::time::{Instant, TimeDelta, local_wall};
 use crate::timeline::commit::terminus;
-use crate::timeline::estimate::{behind, estimate_journey};
+use crate::timeline::estimate::{behind, estimate_journey_memo};
 use crate::timeline::fusion::with_lead;
 use crate::timeline::plan::PlanCache;
 use crate::timeline::progress::{at_origin_or_moving, past_first_stop};
-use crate::timeline::runtimes::{forget, record};
+use crate::timeline::runtimes::{RatioMemo, forget, record};
 use crate::timeline::{SourceProgress, advance};
 
 pub const CORE_VERSION: &str = "r1.0";
@@ -606,6 +606,37 @@ pub fn estimate_all(
     ctx: &mut Context,
     now: Instant,
 ) -> Result<(), IndexMiss> {
+    estimate_all_with(state, ctx, now, 1)
+}
+
+/// Fewer journeys than this are estimated on the calling thread alone.
+const PARALLEL_FROM: usize = 64;
+/// Journeys a thread takes at a time.
+const BLOCK: usize = 16;
+
+/// One journey due for its estimate: its slot and the instance moved out of it (a placeholder
+/// holds the slot meanwhile, so its insertion position is kept), and once looked up its trip
+/// and plan, or why the trip is missing.
+struct Due {
+    slot: usize,
+    day: crate::time::Date,
+    instance: Option<Instance>,
+    trip: Option<Arc<Trip>>,
+    plan: Option<Arc<crate::timeline::plan::Plan>>,
+    missing: Option<IndexMiss>,
+}
+
+/// [`estimate_all`] on up to `threads` threads (the caller's among them). A journey's estimate
+/// reads only its own instance, its trip and plan, the index, the policy and the hops, none of
+/// which an estimate changes, and every instance goes back to its own slot, so the result is
+/// the same on any number of threads. Plans already cached are read on the threads; the rest
+/// are built afterwards in journey order, and those journeys estimated then.
+pub fn estimate_all_with(
+    state: &mut FeedState,
+    ctx: &mut Context,
+    now: Instant,
+    threads: usize,
+) -> Result<(), IndexMiss> {
     let policy = &ctx.policy.prediction;
     let mut due: BTreeSet<JourneyKey> = std::mem::take(&mut state.dirty);
     due.extend(
@@ -615,34 +646,129 @@ pub fn estimate_all(
             .filter(|(_, instance)| behind(instance, now, policy))
             .map(|(journey, _)| journey.clone()),
     );
-    // Each instance is moved out for its estimate and back in place (a placeholder holds
-    // its slot meanwhile), so its insertion position is kept and nothing is cloned.
-    let mut spare: Option<Instance> = None;
     let FeedState {
         instances, hops, ..
     } = state;
+    let mut jobs: Vec<Due> = Vec::with_capacity(due.len());
+    let no_calls: Arc<[CallState]> = Arc::from(Vec::new());
     for journey in due {
-        let Some(slot) = instances.get_mut(&journey) else {
+        let Some((slot, _, instance)) = instances.get_full_mut(&journey) else {
             continue;
         };
-        if slot.lifecycle == Lifecycle::Cancelled {
+        if instance.lifecycle == Lifecycle::Cancelled {
             continue;
         }
-        let trip = ctx.index.trip(&slot.trip_id)?.clone();
-        let plan = ctx
-            .plans
-            .plan(&trip, journey.service_date, ctx.index, ctx.policy)?;
-        let placeholder = spare.take().unwrap_or_else(|| placeholder(slot));
-        let instance = std::mem::replace(slot, placeholder);
-        // One estimate for every vehicle: buses, trams and trains alike (core.py).
-        let estimated = estimate_journey(instance, &trip, &plan, ctx.index, ctx.policy, hops, now);
-        spare = Some(std::mem::replace(slot, estimated));
+        let held = vacant(instance, &no_calls);
+        jobs.push(Due {
+            slot,
+            day: journey.service_date,
+            instance: Some(std::mem::replace(instance, held)),
+            trip: None,
+            plan: None,
+            missing: None,
+        });
+    }
+    let (index, plans, policy, hops) = (&*ctx.index, &*ctx.plans, ctx.policy, &*hops);
+    // One estimate for every vehicle: buses, trams and trains alike (core.py).
+    let estimate_block = |block: &mut [Due], memo: &mut RatioMemo| {
+        for job in block {
+            let instance = job.instance.as_ref().expect("not estimated yet");
+            let trip = match index.trip(&instance.trip_id) {
+                Ok(trip) => trip,
+                Err(missing) => {
+                    job.missing = Some(missing);
+                    continue;
+                }
+            };
+            job.trip = Some(trip.clone());
+            let Some(plan) = plans.cached(trip, job.day, index) else {
+                continue; // built afterwards
+            };
+            let instance = job.instance.take().expect("not estimated yet");
+            job.instance = Some(estimate_journey_memo(
+                instance, trip, &plan, index, policy, hops, now, memo,
+            ));
+            job.plan = Some(plan);
+        }
+    };
+    let threads = threads.min(jobs.len().div_ceil(BLOCK));
+    if threads <= 1 || jobs.len() < PARALLEL_FROM {
+        estimate_block(&mut jobs, &mut RatioMemo::default());
+    } else {
+        let blocks = std::sync::Mutex::new(jobs.chunks_mut(BLOCK));
+        let work = || {
+            let mut memo = RatioMemo::default(); // the hops do not change here
+            loop {
+                let block = blocks.lock().expect("no worker panicked").next();
+                let Some(block) = block else { break };
+                estimate_block(block, &mut memo);
+            }
+        };
+        std::thread::scope(|scope| {
+            for _ in 1..threads {
+                scope.spawn(work);
+            }
+            work();
+        });
+    }
+    // In journey order: the first missing trip fails the estimate as it would have alone, and
+    // plans not cached yet are built in the order they would have been.
+    let mut memo = RatioMemo::default();
+    for job in &mut jobs {
+        if let Some(missing) = job.missing.take() {
+            return Err(missing);
+        }
+        if job.plan.is_some() {
+            continue;
+        }
+        let trip = job.trip.take().expect("the trip was found");
+        let instance = job.instance.take().expect("not estimated yet");
+        let plan = ctx.plans.plan(&trip, job.day, ctx.index, ctx.policy)?;
+        job.instance = Some(estimate_journey_memo(
+            instance, &trip, &plan, ctx.index, ctx.policy, hops, now, &mut memo,
+        ));
+    }
+    for job in jobs {
+        instances[job.slot] = job.instance.expect("estimated");
     }
     state.dirty.clear();
     Ok(())
 }
 
-/// A cheap instance to hold a slot while its own is estimated.
+/// An instance holding a slot while its own is estimated: nothing reads it, and nothing is
+/// allocated for it.
+fn vacant(like: &Instance, no_calls: &Arc<[CallState]>) -> Instance {
+    Instance {
+        journey: JourneyKey {
+            feed: like.journey.feed,
+            namespace: String::new(),
+            key: String::new(),
+            service_date: like.journey.service_date,
+        },
+        release_id: String::new(),
+        trip_id: String::new(),
+        mode: String::new(),
+        lifecycle: like.lifecycle,
+        calls: Arc::clone(no_calls),
+        freshness: like.freshness,
+        progress: None,
+        track: None,
+        reported_delay_s: None,
+        lateness_s: None,
+        off_route_since: None,
+        off_route: false,
+        lead: None,
+        journeys: Vec::new(),
+        parts: Vec::new(),
+        sources: Vec::new(),
+        track_source: None,
+        shown_source: None,
+        published: None,
+        held: Vec::new(),
+    }
+}
+
+/// A cheap instance to hold a slot while its own is stepped.
 fn placeholder(like: &Instance) -> Instance {
     Instance {
         journey: like.journey.clone(),

@@ -303,6 +303,7 @@ fn run(args: &WarmArgs) -> Result<(), String> {
     let loads = FileLoads::open(&args.release).map_err(|e| text(&e))?;
     let mut runner = Runner::new(loads, policy.clone(), &feeds, semantics, Phases::new())
         .map_err(|e| text(&e))?;
+    runner.estimate_threads = args.threads.max(1);
     let rss_before = rss_bytes();
     let peak = crate::bench::PeakRss::start();
     let stop = AtomicBool::new(false);

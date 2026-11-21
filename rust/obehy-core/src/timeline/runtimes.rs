@@ -20,16 +20,33 @@
 
 use std::collections::VecDeque;
 
-use indexmap::IndexMap;
-
 use crate::config::policy::PredictionPolicy;
-use crate::model::{CallState, HopKey, Progress, Traversal};
+use crate::model::{CallState, FastIndexMap, HopKey, Progress, Traversal};
 use crate::py::num::{py_max, py_min};
 use crate::time::{Instant, TimeDelta};
 
 /// `FeedState.hops`: each hop's recent traversals, oldest appended first; hops in insertion
 /// order.
-pub type Hops = IndexMap<HopKey, VecDeque<Traversal>>;
+pub type Hops = FastIndexMap<HopKey, VecDeque<Traversal>>;
+
+/// A [`HopKey`] borrowed from a journey's calls, to look a hop up without building its key.
+/// Hashes as `HopKey` does (the same fields in the same order; `String` hashes as `str`).
+#[derive(Hash)]
+struct HopRef<'a> {
+    mode: &'a str,
+    from: &'a str,
+    to: &'a str,
+    from_departure: bool,
+}
+
+impl indexmap::Equivalent<HopKey> for HopRef<'_> {
+    fn equivalent(&self, key: &HopKey) -> bool {
+        self.from_departure == key.from_departure
+            && self.to == key.to
+            && self.from == key.from
+            && self.mode == key.mode
+    }
+}
 
 /// Per call: (scheduled arrival, scheduled departure) (`plan.Scheduled`).
 pub type Scheduled = (Option<Instant>, Option<Instant>);
@@ -126,7 +143,18 @@ pub fn record(
 /// for a hop no one has driven lately. Panics where Python divides by zero (no prior weight and
 /// no traversal in the window).
 pub fn ratio(hops: &Hops, key: &HopKey, now: Instant, policy: &PredictionPolicy) -> Option<f64> {
-    let traversals = hops.get(key).filter(|t| !t.is_empty())?;
+    traversals_ratio(hops.get(key)?, now, policy)
+}
+
+/// [`ratio`] of one hop's traversals.
+fn traversals_ratio(
+    traversals: &VecDeque<Traversal>,
+    now: Instant,
+    policy: &PredictionPolicy,
+) -> Option<f64> {
+    if traversals.is_empty() {
+        return None;
+    }
     let decay = policy.runtime_decay_s;
     let most = policy.runtime_ratio_max;
     // Python compares the float age with this int exactly; it is far below 2^53.
@@ -166,9 +194,114 @@ pub fn running_extra(
     now: Instant,
     policy: &PredictionPolicy,
 ) -> Vec<TimeDelta> {
+    let first = first_ahead(progress);
+    let ratios = hop_ratios(mode, calls, hops, now, policy, first);
+    running_extra_with(calls, progress, plan, &ratios)
+}
+
+/// The first call [`running_extra`] looks at: the one after progress.
+fn first_ahead(progress: Option<&Progress>) -> usize {
+    let reached = progress.map_or(-1, |p| p.call_index);
+    usize::try_from(reached.max(0) + 1).expect("non-negative")
+}
+
+/// Per call `b` from `first` on, the [`ratio`] of the hop into it from the previous passenger
+/// call (None before `first`, for a call that is not a passenger call or has no passenger call
+/// before it, and for a hop without a ratio). [`running_extra`] and [`minimum_drives`] read
+/// the same ratios; computing them once gives both exactly what each would compute.
+pub fn hop_ratios(
+    mode: &str,
+    calls: &[CallState],
+    hops: &Hops,
+    now: Instant,
+    policy: &PredictionPolicy,
+    first: usize,
+) -> Vec<Option<f64>> {
+    hop_ratios_memo(
+        mode,
+        calls,
+        hops,
+        now,
+        policy,
+        first,
+        &mut RatioMemo::default(),
+    )
+}
+
+/// Each hop's [`ratio`] at one `now` over unchanged hops, by the hop's position in `Hops`:
+/// many journeys drive the same hops, and a ratio is a pure function of the hop's traversals
+/// and `now`. Valid while neither changes (`estimate_all` makes one per call).
+#[derive(Debug, Default)]
+pub struct RatioMemo {
+    now: Option<Instant>,
+    ratios: Vec<Option<Option<f64>>>,
+}
+
+impl RatioMemo {
+    fn get(
+        &mut self,
+        position: usize,
+        traversals: &VecDeque<Traversal>,
+        now: Instant,
+        policy: &PredictionPolicy,
+    ) -> Option<f64> {
+        if self.now != Some(now) {
+            self.now = Some(now);
+            self.ratios.clear();
+        }
+        if self.ratios.len() <= position {
+            self.ratios.resize(position + 1, None);
+        }
+        *self.ratios[position].get_or_insert_with(|| traversals_ratio(traversals, now, policy))
+    }
+}
+
+/// [`hop_ratios`] through a memo of the ratios at `now` (the hops must not change while it is
+/// in use).
+#[allow(clippy::too_many_arguments)]
+pub fn hop_ratios_memo(
+    mode: &str,
+    calls: &[CallState],
+    hops: &Hops,
+    now: Instant,
+    policy: &PredictionPolicy,
+    first: usize,
+    memo: &mut RatioMemo,
+) -> Vec<Option<f64>> {
+    let mut ratios = vec![None; calls.len()];
+    let mut previous: Option<usize> = None; // the last passenger call before `b`
+    for (b, call) in calls.iter().enumerate() {
+        if call.passenger {
+            if b >= first
+                && let Some(a) = previous
+            {
+                let hop = HopRef {
+                    mode,
+                    from: &calls[a].location_id,
+                    to: &call.location_id,
+                    from_departure: a == 0,
+                };
+                ratios[b] = hops
+                    .get_full(&hop)
+                    .and_then(|(position, _, t)| memo.get(position, t, now, policy));
+            }
+            previous = Some(b);
+        }
+    }
+    ratios
+}
+
+/// [`running_extra`] with the hops' ratios given ([`hop_ratios`] from at most
+/// `progress.call_index + 1`).
+pub fn running_extra_with(
+    calls: &[CallState],
+    progress: Option<&Progress>,
+    plan: &impl HopPlan,
+    ratios: &[Option<f64>],
+) -> Vec<TimeDelta> {
     let mut extra = vec![TimeDelta::ZERO; calls.len()];
     let reached = progress.map_or(-1, |p| p.call_index);
-    let first = usize::try_from(reached.max(0) + 1).expect("non-negative");
+    let first = first_ahead(progress);
     for b in first..calls.len() {
         if !calls[b].passenger {
             continue;
@@ -176,7 +309,7 @@ pub fn running_extra(
         let Some(a) = previous_passenger(calls, b) else {
             continue;
         };
-        let r = ratio(hops, &key(mode, calls, a, b), now, policy);
+        let r = ratios[b];
         let start = plan.scheduled(a).1.or(plan.scheduled(a).0);
         let end = plan.scheduled(b).0.or(plan.scheduled(b).1);
         let (Some(r), Some(start), Some(end)) = (r, start, end) else {
@@ -219,13 +352,27 @@ pub fn minimum_drives(
     policy: &PredictionPolicy,
     speed_mps: f64,
 ) -> Vec<TimeDelta> {
+    let ratios = hop_ratios(mode, calls, hops, now, policy, 1);
+    minimum_drives_with(mode, calls, plan, policy, speed_mps, &ratios)
+}
+
+/// [`minimum_drives`] with the hops' ratios given ([`hop_ratios`] from call 1).
+pub fn minimum_drives_with(
+    mode: &str,
+    calls: &[CallState],
+    plan: &impl HopPlan,
+    policy: &PredictionPolicy,
+    speed_mps: f64,
+    ratios: &[Option<f64>],
+) -> Vec<TimeDelta> {
     let credit = TimeDelta::from_secs_f64(policy.dwell_credit_s.get(mode));
     let mut drives = vec![TimeDelta::ZERO; calls.len()];
-    for b in 1..calls.len() {
-        if !calls[b].passenger {
+    let mut previous: Option<usize> = None; // the last passenger call before `b`
+    for (b, call) in calls.iter().enumerate() {
+        if !call.passenger {
             continue;
         }
-        let Some(a) = previous_passenger(calls, b) else {
+        let Some(a) = previous.replace(b) else {
             continue;
         };
         let start = plan.scheduled(a).1.or(plan.scheduled(a).0);
@@ -234,7 +381,7 @@ pub fn minimum_drives(
             (Some(start), Some(end)) => end - start,
             _ => TimeDelta::ZERO,
         };
-        if let Some(r) = ratio(hops, &key(mode, calls, a, b), now, policy) {
+        if let Some(r) = ratios[b] {
             running = running.mul_f64(r);
         }
         assert!(speed_mps != 0.0, "float division by zero");

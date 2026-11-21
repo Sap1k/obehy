@@ -49,12 +49,12 @@ impl C {
             PyJson::Bool(b) => C::Bool(*b),
             PyJson::Int(n) => C::Int(i128::from(*n)),
             PyJson::Float(x) => C::Float(*x),
-            PyJson::Str(s) => C::Str(s.clone()),
+            PyJson::Str(s) => C::Str(s.to_string()),
             PyJson::List(items) => C::List(items.iter().map(C::from_py).collect()),
             PyJson::Object(pairs) => C::Obj(
                 pairs
                     .iter()
-                    .map(|(k, v)| (k.clone(), C::from_py(v)))
+                    .map(|(k, v)| (k.to_string(), C::from_py(v)))
                     .collect(),
             ),
         }

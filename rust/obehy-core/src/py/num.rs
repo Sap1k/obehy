@@ -162,16 +162,28 @@ fn vector_norm(vec: &mut [f64], max: f64, found_nan: bool) -> f64 {
 
 /// `math.hypot(*coordinates)`: CPython's own correctly rounded norm, not libm's `hypot`.
 pub fn py_hypot(coordinates: &[f64]) -> f64 {
-    let mut vec: Vec<f64> = coordinates.iter().map(|x| x.abs()).collect();
+    // Two or three coordinates nearly always: on the stack.
+    let mut small = [0.0_f64; 4];
+    let mut large: Vec<f64>;
+    let vec: &mut [f64] = if coordinates.len() <= small.len() {
+        let small = &mut small[..coordinates.len()];
+        for (to, x) in small.iter_mut().zip(coordinates) {
+            *to = x.abs();
+        }
+        small
+    } else {
+        large = coordinates.iter().map(|x| x.abs()).collect();
+        &mut large
+    };
     let mut max = 0.0_f64;
     let mut found_nan = false;
-    for &x in &vec {
+    for &x in vec.iter() {
         found_nan |= x.is_nan();
         if x > max {
             max = x;
         }
     }
-    vector_norm(&mut vec, max, found_nan)
+    vector_norm(vec, max, found_nan)
 }
 
 /// `float.__repr__` (and `str`): the shortest digits that read back to `x`, in fixed notation

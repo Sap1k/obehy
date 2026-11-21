@@ -12,6 +12,10 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 
 use super::facts::*;
+
+/// An `IndexMap` with a fast hasher: iteration follows insertion, never the hash, so the
+/// hasher cannot change any output.
+pub type FastIndexMap<K, V> = IndexMap<K, V, rustc_hash::FxBuildHasher>;
 use crate::time::{Date, Instant};
 
 /// A vehicle as one source names it; ordered by (source, id).
@@ -479,22 +483,22 @@ pub struct Traversal {
 #[derive(Debug, Clone)]
 pub struct FeedState {
     pub feed: Feed,
-    pub vehicles: IndexMap<VehicleId, VehicleState>,
-    pub instances: IndexMap<JourneyKey, Instance>,
+    pub vehicles: FastIndexMap<VehicleId, VehicleState>,
+    pub instances: FastIndexMap<JourneyKey, Instance>,
     /// Journeys whose estimates are out of date (only ever iterated sorted).
     pub dirty: BTreeSet<JourneyKey>,
     /// Recent traversals of each hop, oldest first (insertion order kept).
-    pub hops: IndexMap<HopKey, VecDeque<Traversal>>,
+    pub hops: FastIndexMap<HopKey, VecDeque<Traversal>>,
 }
 
 impl FeedState {
     pub fn new(feed: Feed) -> FeedState {
         FeedState {
             feed,
-            vehicles: IndexMap::new(),
-            instances: IndexMap::new(),
+            vehicles: FastIndexMap::default(),
+            instances: FastIndexMap::default(),
             dirty: BTreeSet::new(),
-            hops: IndexMap::new(),
+            hops: FastIndexMap::default(),
         }
     }
 }

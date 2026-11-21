@@ -17,7 +17,7 @@ use indexmap::IndexMap;
 
 use crate::config::Policy;
 use crate::core::{
-    Context, CoreError, Semantics, estimate_all, rebase, refresh, resolve, step, vehicle_of,
+    Context, CoreError, Semantics, estimate_all_with, rebase, refresh, resolve, step, vehicle_of,
 };
 use crate::index::{Index, IndexLoader, IndexMiss, KeyRef, LoadError, Rows, RowsError};
 use crate::infer::keyed::admissible;
@@ -162,6 +162,9 @@ pub struct Runner<L: Loads, P: Phases = Untimed> {
     pub phases: P,
     pub next_compaction: Option<Instant>,
     pub next_sweep: Option<Instant>,
+    /// Threads estimating a feed's journeys (`estimate_all_with`; the output does not depend
+    /// on it). 1 by default.
+    pub estimate_threads: usize,
 }
 
 impl<L: Loads, P: Phases> std::fmt::Debug for Runner<L, P> {
@@ -198,6 +201,7 @@ impl<L: Loads, P: Phases> Runner<L, P> {
             phases,
             next_compaction: None,
             next_sweep: None,
+            estimate_threads: 1,
         })
     }
 
@@ -353,12 +357,16 @@ impl<L: Loads, P: Phases> Runner<L, P> {
                 semantics,
                 runtimes,
                 phases,
+                estimate_threads,
                 ..
             } = self;
             let runtime = &mut runtimes[&feed];
             let (state, mut ctx) = runtime.split(policy, semantics);
             effects.extend(phases.time("refresh", || refresh(state, now, &mut ctx))?);
-            phases.time("estimate", || estimate_all(state, &mut ctx, now))?;
+            let threads = *estimate_threads;
+            phases.time("estimate", || {
+                estimate_all_with(state, &mut ctx, now, threads)
+            })?;
         }
         Ok(effects)
     }
@@ -370,10 +378,11 @@ impl<L: Loads, P: Phases> Runner<L, P> {
                 policy,
                 semantics,
                 runtimes,
+                estimate_threads,
                 ..
             } = self;
             let (state, mut ctx) = runtimes[&feed].split(policy, semantics);
-            estimate_all(state, &mut ctx, now)?;
+            estimate_all_with(state, &mut ctx, now, *estimate_threads)?;
         }
         Ok(())
     }

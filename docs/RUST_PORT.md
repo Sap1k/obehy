@@ -264,17 +264,64 @@ estimates 61 s, is the limit, so PID in `window` mode misses the minute). Readin
 core, so the database adds no time (checked on a 20-minute window; a 4-hour one did not fit
 the test database's disk).
 
+**Speed pass (2026-11-21)**: the same bench, same hours (estimates on one thread here, so each
+phase is still one core's CPU):
+
+| Hour | decode | step | refresh | estimate | state | GTFS-RT | writes | index | obs/s | peak RSS |
+|---|---|---|---|---|---|---|---|---|---|---|
+| PID 2026-10-15 07–08 | 25 (52) | 6.8 (14) | 0.7 (2) | 9.0 (19) | 23.3 (49) | 10.4 (22) | 2.9 (6) | 0.5 | 8,719 | 2.07 GB |
+| DÚK+SŽ+Arriva 2026-10-06 07–08 | 2.2 (12) | 1.9 (11) | 0.3 (1) | 1.7 (9) | 4.7 (26) | 3.1 (17) | 0.7 (4) | 0.2 | 13,998 | 1.72 GB |
+
+Warm start over 4 hours from files (`obehy-rt warm --from-archive --mode window --threads 6`):
+PID 50 s (was 109–113; 62×), DÚK+SŽ+Arriva 15 s (was 27; 42×). Found by timing the phases'
+parts (no sampling profiler without elevation on the dev machine), and changed:
+
+- **Estimates in parallel.** A journey's estimate reads only its own instance, trip, plan,
+  the index, policy and hops, and writes only its instance; `estimate_all_with` estimates
+  the due journeys on up to `Runner::estimate_threads` threads (the core thread among them;
+  cached plans read there, missing ones built after in journey order) and puts each instance
+  back in its own slot, so the result does not depend on the thread count. Warm start,
+  replay, compare and history use `--threads`, the worker up to 4; bench keeps 1. PID is one
+  feed, so feeds in parallel would not have helped it; that lever is still open for
+  multi-feed sets.
+- **Estimates without waste.** Each hop's ratio is computed once per journey for both the
+  running extras and the least drives, looked up without building its key, and memoized per
+  tick across journeys (`RatioMemo`); estimates and the monotone repair work on the four
+  estimated fields and build new calls only when either step would have (the calls' pointer
+  identity, which the state writer reads, is unchanged).
+- **Projections.** `math.hypot` (`py_hypot`) no longer allocates; the nearest projection
+  (the lagging-fix check) starts from the nearest run of 16 segments and skips segments and
+  runs that cannot be nearer, by bounds whose rounding is far inside their margin; candidate
+  segments clearly out of reach skip the exact norm.
+- **Hashing.** `FeedState`'s maps, the index's, the plan cache's and the serving tables' use
+  FxHash (insertion order or no order is iterated, never the hash).
+- **State tables in place.** The writer keeps each feed's rows by vehicle and journey and
+  rebuilds a trip's rows only when its calls or what else they read changed, sending the same
+  deletes and upserts in the same key order. JSON keys and enum texts are borrowed (`Text`),
+  and ISO times are written without `format!`.
+- **Serving tables** decode their row groups on 6 threads (files only; the worker reads
+  PostgreSQL).
+
+Left on the PID core thread over the 4 hours: step 23 s (the tracker's update and the rest of
+`step`), the estimates' share 13 s, the index 4 s (mostly reading the files), refresh 3.5 s.
+GTFS-RT (10 s an hour on PID) was not touched. Resident memory after the 4-hour PID warm
+start is higher with 6 estimating threads (2.46 GB against 2.19, Windows heap; 1.97 GB with
+one thread), so check it in the Linux image with the soak.
+
 Where the speed comes from, besides compiled code:
 
 - **Feeds in parallel.** Each feed's state is independent (`FeedState` per feed); feeds step
   on separate threads, and their outputs are merged in sorted order, so parallelism cannot
   change the output. The vehicle book, which spans feeds, runs after them.
+- **Estimates in parallel.** Within a feed, the due journeys' estimates are independent and go
+  back to their own slots (done; see the speed pass above).
 - **Decoding in parallel.** Payloads decode on a pool, ahead of the core, in replay as live.
 - **Reads in bulk.** The index and warm start read with binary COPY and few round trips; warm
   replay decodes stored observations on a pool while the core runs.
 - **Writes in bulk.** Binary COPY for history and observations, as sets, off the core's thread.
 - **No per-tick rebuilding.** GTFS-RT entities and state rows are re-encoded only for what
-  changed, as the Python emitter already does for GTFS-RT.
+  changed, as the Python emitter already does for GTFS-RT (state rows: done in the speed
+  pass).
 
 The harness decides correctness and the bench decides speed; a speed-up that changes the
 harness output is a behaviour change and goes through the usual breakdown first.

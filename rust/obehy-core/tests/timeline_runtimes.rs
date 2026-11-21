@@ -39,7 +39,7 @@ fn hop() -> HopKey {
 
 /// Traversals ending `minutes` after 08:00 (negative: before).
 fn hops(traversals: &[(i64, f64, f64)]) -> Hops {
-    let mut hops = Hops::new();
+    let mut hops = Hops::default();
     hops.insert(
         hop(),
         traversals
@@ -57,7 +57,10 @@ fn hops(traversals: &[(i64, f64, f64)]) -> Hops {
 #[test]
 fn a_hop_no_one_drove_has_no_ratio() {
     let policy = policy();
-    assert_eq!(ratio(&Hops::new(), &hop(), NOW, &policy.prediction), None);
+    assert_eq!(
+        ratio(&Hops::default(), &hop(), NOW, &policy.prediction),
+        None
+    );
     assert_eq!(ratio(&hops(&[]), &hop(), NOW, &policy.prediction), None);
 }
 
@@ -227,7 +230,7 @@ fn a_log_of_journeys_learns_the_same_runtimes_as_python() {
     let policy = policy();
     let p = &policy.prediction;
     check_policy(p, &fixture["policy"]);
-    let mut hops = Hops::new();
+    let mut hops = Hops::default();
     let mut counts = [0usize; 4];
     for (step, entry) in fixture["log"].as_array().unwrap().iter().enumerate() {
         match entry["op"].as_str().unwrap() {

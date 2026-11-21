@@ -37,7 +37,7 @@ use crate::timeline::commit::Crossing;
 use crate::timeline::fusion::{
     apply_point, merge, note_source, position_leads, tracks_with, with_track,
 };
-use crate::timeline::path::{Path, Projection, heading_at, point_at, project_all};
+use crate::timeline::path::{Path, Projection, heading_at, point_at};
 use crate::timeline::plan::{Plan, PlanCache};
 use crate::timeline::progress::{Step, update};
 
@@ -225,13 +225,7 @@ pub fn advance(
 
 /// The projection nearest the point (`min(key=lateral_m)`: the first of equal ones).
 fn nearest(path: &Path, lon: f64, lat: f64) -> Projection {
-    let mut best: Option<Projection> = None;
-    for p in project_all(path, lon, lat) {
-        if best.is_none_or(|b| p.lateral_m < b.lateral_m) {
-            best = Some(p);
-        }
-    }
-    best.expect("a path of two points or more")
+    path::nearest(path, lon, lat).expect("a path of two points or more")
 }
 
 /// Whether the fix lies on the path behind the tracker's reading by more than its error.

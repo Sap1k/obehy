@@ -19,14 +19,33 @@ pub enum PyJson {
     Bool(bool),
     Int(i64),
     Float(f64),
-    Str(String),
+    Str(Text),
     List(Vec<PyJson>),
-    Object(Vec<(String, PyJson)>),
+    Object(Vec<(Text, PyJson)>),
 }
+
+/// A JSON string or object key: borrowed when it is a literal (a key, an enum's text), so
+/// building a value allocates only for the texts that vary.
+pub type Text = std::borrow::Cow<'static, str>;
 
 impl PyJson {
     pub fn str(value: impl Into<String>) -> PyJson {
-        PyJson::Str(value.into())
+        PyJson::Str(Text::Owned(value.into()))
+    }
+
+    /// A literal string, not copied.
+    pub fn lit(value: &'static str) -> PyJson {
+        PyJson::Str(Text::Borrowed(value))
+    }
+
+    /// An object from owned `(key, value)` pairs, in order.
+    pub fn from_pairs(pairs: Vec<(String, PyJson)>) -> PyJson {
+        PyJson::Object(
+            pairs
+                .into_iter()
+                .map(|(k, v)| (Text::Owned(k), v))
+                .collect(),
+        )
     }
 
     /// `None` for an absent value.
@@ -35,8 +54,13 @@ impl PyJson {
     }
 
     /// An object from `(key, value)` pairs, in order.
-    pub fn object<const N: usize>(pairs: [(&str, PyJson); N]) -> PyJson {
-        PyJson::Object(pairs.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
+    pub fn object<const N: usize>(pairs: [(&'static str, PyJson); N]) -> PyJson {
+        PyJson::Object(
+            pairs
+                .into_iter()
+                .map(|(k, v)| (Text::Borrowed(k), v))
+                .collect(),
+        )
     }
 }
 
@@ -109,7 +133,7 @@ fn write_value(out: &mut String, value: &PyJson, options: DumpOptions) {
             out.push(']');
         }
         PyJson::Object(pairs) => {
-            let mut order: Vec<&(String, PyJson)> = pairs.iter().collect();
+            let mut order: Vec<&(Text, PyJson)> = pairs.iter().collect();
             if options.sort_keys {
                 order.sort_by(|a, b| a.0.cmp(&b.0));
             }

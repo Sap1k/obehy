@@ -6,7 +6,7 @@
 //! use ([`super::parquet`]) into columns of interned strings, with an index by the column the
 //! loader asks by; only the rows asked for become row structs.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -14,6 +14,7 @@ use obehy_core::index::{
     CallRow, KeyRow, LocationRow, Rows, RowsError, RunPartRow, ShapePointRow, TripRow,
 };
 use obehy_core::time::Date;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use super::parquet;
 
@@ -152,7 +153,7 @@ pub struct Tables {
 type RowsOf = HashMap<u32, Vec<u32>>;
 
 fn group(column: &[u32]) -> RowsOf {
-    let mut rows: RowsOf = HashMap::new();
+    let mut rows: RowsOf = HashMap::default();
     for (row, value) in column.iter().enumerate() {
         rows.entry(*value).or_default().push(row as u32);
     }
@@ -212,7 +213,7 @@ pub struct ServingRows {
 }
 
 fn key_table(t: SourceKeys) -> KeyTable {
-    let mut by_pair: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
+    let mut by_pair: HashMap<(u32, u32), Vec<u32>> = HashMap::default();
     for row in 0..t.namespace.len() {
         by_pair
             .entry((t.namespace[row], t.identifier[row]))
@@ -456,7 +457,7 @@ impl Rows for ServingRows {
             self.trips.as_ref().expect("loaded"),
             &self.strings,
         );
-        let mut wanted: HashSet<(u32, u32)> = HashSet::new();
+        let mut wanted: HashSet<(u32, u32)> = HashSet::default();
         for (namespace, identifier) in namespaces.iter().zip(identifiers) {
             if let (Some(n), Some(i)) = (s.get(namespace), s.get(identifier)) {
                 wanted.insert((n, i));
@@ -538,7 +539,7 @@ impl Rows for ServingRows {
             &self.strings,
         );
         let wanted: HashSet<u32> = trip_ids.iter().filter_map(|t| s.get(t)).collect();
-        let mut numbers: HashMap<u32, &str> = HashMap::new();
+        let mut numbers: HashMap<u32, &str> = HashMap::default();
         for row in s
             .get(TRAIN_NUMBER)
             .and_then(|ns| keys.by_namespace.get(&ns))
@@ -595,7 +596,7 @@ impl Rows for ServingRows {
             (s.text(t.trip_id[a]), t.sequence[a]).cmp(&(s.text(t.trip_id[b]), t.sequence[b]))
         });
         let exact = s.get("exact");
-        let mut visits: HashMap<(u32, u32), i64> = HashMap::new();
+        let mut visits: HashMap<(u32, u32), i64> = HashMap::default();
         Ok(rows
             .into_iter()
             .map(|row| {
@@ -753,7 +754,7 @@ impl Rows for ServingRows {
         );
         let wanted: HashSet<Date> = days.iter().copied().collect();
         let mut added: BTreeSet<(u32, Date)> = BTreeSet::new();
-        let mut removed: HashSet<(u32, Date)> = HashSet::new();
+        let mut removed: HashSet<(u32, Date)> = HashSet::default();
         for row in self.rows_of(&exceptions.by, service_ids) {
             let r = row as usize;
             let (service, day) = (exceptions.t.service_id[r], exceptions.t.service_date[r]);

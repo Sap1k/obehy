@@ -168,7 +168,7 @@ fn key(namespace: &str, identifier: &str) -> KeyRef {
     KeyRef::new(namespace, identifier)
 }
 
-fn trip_ids<V>(map: &std::collections::HashMap<std::sync::Arc<str>, V>) -> Vec<String> {
+fn trip_ids<V, S>(map: &std::collections::HashMap<std::sync::Arc<str>, V, S>) -> Vec<String> {
     let mut ids: Vec<String> = map.keys().map(|k| k.to_string()).collect();
     ids.sort();
     ids

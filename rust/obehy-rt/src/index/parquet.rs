@@ -20,17 +20,56 @@ use super::serving::{
     Calendar, Calls, Exceptions, Locations, NONE, Routes, ShapePoints, SourceKeys, Strings, Trips,
 };
 
-/// The batches of `columns` of a Parquet file.
+/// The batches of `columns` of a Parquet file, in file order; its row groups are decoded on
+/// up to [`READ_THREADS`] threads.
 fn read(path: &Path, columns: &[&str]) -> Result<Vec<RecordBatch>, RowsError> {
-    let file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-    let mask = ProjectionMask::columns(builder.parquet_schema(), columns.iter().copied());
-    let reader = builder
-        .with_projection(mask)
-        .with_batch_size(64 * 1024)
-        .build()?;
-    Ok(reader.collect::<Result<Vec<_>, _>>()?)
+    let open = || -> Result<_, RowsError> {
+        let file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        Ok(ParquetRecordBatchReaderBuilder::try_new(file)?)
+    };
+    let builder = open()?;
+    let groups = builder.metadata().num_row_groups();
+    let read_groups = |builder: ParquetRecordBatchReaderBuilder<File>,
+                       groups: Vec<usize>|
+     -> Result<Vec<RecordBatch>, RowsError> {
+        let mask = ProjectionMask::columns(builder.parquet_schema(), columns.iter().copied());
+        let reader = builder
+            .with_projection(mask)
+            .with_row_groups(groups)
+            .with_batch_size(64 * 1024)
+            .build()?;
+        Ok(reader.collect::<Result<Vec<_>, _>>()?)
+    };
+    let threads = READ_THREADS.min(groups);
+    if threads <= 1 {
+        return read_groups(builder, (0..groups).collect());
+    }
+    // Contiguous runs of row groups, one per thread, joined in order.
+    let per = groups.div_ceil(threads);
+    let runs: Vec<Vec<usize>> = (0..groups)
+        .collect::<Vec<_>>()
+        .chunks(per)
+        .map(<[usize]>::to_vec)
+        .collect();
+    let parts: Vec<Result<Vec<RecordBatch>, RowsError>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = runs
+            .into_iter()
+            .map(|run| scope.spawn(move || read_groups(open()?, run)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("a reader thread panicked"))
+            .collect()
+    });
+    let mut batches = Vec::new();
+    for part in parts {
+        batches.extend(part?);
+    }
+    Ok(batches)
 }
+
+/// Threads decoding one Parquet file's row groups.
+const READ_THREADS: usize = 6;
 
 fn column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, RowsError> {
     batch

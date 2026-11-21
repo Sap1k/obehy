@@ -23,11 +23,11 @@ fn error(message: impl Into<String>) -> FactSchemaError {
 }
 
 fn iso(value: Option<Instant>) -> PyJson {
-    PyJson::opt(value, |at| PyJson::Str(at.isoformat()))
+    PyJson::opt(value, |at| PyJson::str(at.isoformat()))
 }
 
 fn opt_str(value: Option<&String>) -> PyJson {
-    PyJson::opt(value, |text| PyJson::Str(text.clone()))
+    PyJson::opt(value, |text| PyJson::str(text.clone()))
 }
 
 /// `fact_to_json`.
@@ -63,11 +63,11 @@ pub fn fact_to_json(fact: &Fact) -> PyJson {
         Fact::SourceState(f) => PyJson::object([("t", s("source_state")), ("code", s(&f.code))]),
         Fact::SourceDeparture(f) => PyJson::object([
             ("t", s("source_departure")),
-            ("at", PyJson::Str(f.at.isoformat())),
+            ("at", PyJson::str(f.at.isoformat())),
         ]),
         Fact::ServiceDay(f) => PyJson::object([
             ("t", s("service_day")),
-            ("day", PyJson::Str(f.day.isoformat())),
+            ("day", PyJson::str(f.day.isoformat())),
         ]),
         Fact::PointEvent(f) => PyJson::object([
             ("t", s("point_event")),
@@ -77,8 +77,8 @@ pub fn fact_to_json(fact: &Fact) -> PyJson {
                 PyJson::List(f.codes.iter().map(|c| s(c)).collect()),
             ),
             ("scheduled", iso(f.scheduled)),
-            ("lo", PyJson::Str(f.actual.lo.isoformat())),
-            ("hi", PyJson::Str(f.actual.hi.isoformat())),
+            ("lo", PyJson::str(f.actual.lo.isoformat())),
+            ("hi", PyJson::str(f.actual.hi.isoformat())),
             ("standing", PyJson::Bool(f.standing)),
         ]),
         Fact::NextPoint(f) => PyJson::object([
@@ -107,7 +107,7 @@ pub fn fact_to_json(fact: &Fact) -> PyJson {
             ("t", s("platform")),
             ("station", s(&f.station)),
             ("kind", s(f.kind.as_str())),
-            ("scheduled", PyJson::Str(f.scheduled.isoformat())),
+            ("scheduled", PyJson::str(f.scheduled.isoformat())),
             ("value", s(&f.value)),
             ("label", s(f.label.as_str())),
         ]),

@@ -9,7 +9,7 @@
 //! Eviction: [`Pool::sweep`] drops every text nothing outside the pool holds any more; the
 //! index calls it at the end of its own sweep.
 
-use std::collections::HashSet;
+use rustc_hash::FxHashSet as HashSet;
 use std::sync::Arc;
 
 /// An interned ID: compares, hashes and orders by its text (UTF-8 byte order = Python's code

@@ -143,7 +143,7 @@ pub fn trip_row(i: &Instance, calls: Arc<PyJson>) -> Row {
 }
 
 fn iso(value: Option<Instant>) -> PyJson {
-    value.map_or(PyJson::Null, |at| PyJson::Str(at.isoformat()))
+    value.map_or(PyJson::Null, |at| PyJson::str(at.isoformat()))
 }
 
 /// Which sources the journey's realtime came from (the API's provenance), by source.
@@ -175,13 +175,13 @@ pub fn call_json(call: &CallState, passed: bool) -> PyJson {
         ("sequence", PyJson::Int(call.sequence)),
         ("location_id", PyJson::str(&call.location_id)),
         ("visit_n", PyJson::Int(i64::from(call.visit_n))),
-        ("status", PyJson::str(call.status.as_str())),
+        ("status", PyJson::lit(call.status.as_str())),
         ("passed", PyJson::Bool(passed)),
         ("estimated_arrival", iso(call.estimated_arrival)),
         ("estimated_departure", iso(call.estimated_departure)),
         (
             "source_class",
-            PyJson::opt(call.source_class, |c| PyJson::str(c.as_str())),
+            PyJson::opt(call.source_class, |c| PyJson::lit(c.as_str())),
         ),
         ("passenger", PyJson::Bool(call.passenger)),
         (
@@ -189,7 +189,7 @@ pub fn call_json(call: &CallState, passed: bool) -> PyJson {
             PyJson::opt(call.platform.as_ref(), |p| {
                 PyJson::object([
                     ("value", PyJson::str(&p.value)),
-                    ("label", PyJson::str(p.label.as_str())),
+                    ("label", PyJson::lit(p.label.as_str())),
                     (
                         "boarding_point_id",
                         PyJson::opt(p.boarding_point_id.as_deref(), PyJson::str),

@@ -7,8 +7,10 @@
 //! when a date they run on is loaded; rail trips with every part of their run, their train
 //! numbers and the `sr70` keys of their locations).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use super::pool::Id;
 use super::{Call, Index, KeyEntry, KeyRef, Location, Shape, Trip, child_namespace, parent_ref};
@@ -162,8 +164,8 @@ impl<R: Rows> IndexLoader<R> {
         IndexLoader {
             rows,
             index: Index::new(release_id, feed),
-            used: HashMap::new(),
-            lines_used: HashMap::new(),
+            used: HashMap::default(),
+            lines_used: HashMap::default(),
         }
     }
 
@@ -280,8 +282,8 @@ impl<R: Rows> IndexLoader<R> {
         let identifiers: Vec<&str> = refs.iter().map(|r| &*r.identifier).collect();
         let rows = self.rows.keys(&namespaces, &identifiers)?;
         let index = &mut self.index;
-        let mut found: HashMap<(String, String), Vec<KeyEntry>> = HashMap::new();
-        let mut services: HashMap<Id, Id> = HashMap::new();
+        let mut found: HashMap<(String, String), Vec<KeyEntry>> = HashMap::default();
+        let mut services: HashMap<Id, Id> = HashMap::default();
         for row in rows {
             let public_id = index.pool.id(&row.public_id);
             if row.entity_kind == "trip"
@@ -345,7 +347,7 @@ impl<R: Rows> IndexLoader<R> {
     /// The trip keys of each line, by the source's key format (`<line>:<trip>`, as
     /// [`parent_ref`] splits it); recorded in `Index::lines`.
     fn load_line_keys(&mut self, lines: &[KeyRef]) -> Result<HashSet<KeyRef>, LoadError> {
-        let mut found: HashMap<KeyRef, BTreeSet<String>> = HashMap::new();
+        let mut found: HashMap<KeyRef, BTreeSet<String>> = HashMap::default();
         let namespaces: BTreeSet<&Id> = lines.iter().map(|l| &l.namespace).collect();
         for namespace in namespaces {
             let child = child_namespace(namespace).expect("a line namespace");
@@ -362,7 +364,7 @@ impl<R: Rows> IndexLoader<R> {
                     .insert(identifier);
             }
         }
-        let mut keys = HashSet::new();
+        let mut keys = HashSet::default();
         for line in lines {
             let child = self
                 .index
@@ -391,7 +393,7 @@ impl<R: Rows> IndexLoader<R> {
         let heads = self.rows.trips(&ids)?;
         let call_rows = self.rows.calls(&ids)?;
         let index = &mut self.index;
-        let mut calls: HashMap<String, Vec<Call>> = HashMap::new();
+        let mut calls: HashMap<String, Vec<Call>> = HashMap::default();
         let mut locations: BTreeSet<Id> = BTreeSet::new();
         for row in call_rows {
             let location_id = index.pool.id(&row.location_id);
@@ -473,8 +475,8 @@ impl<R: Rows> IndexLoader<R> {
     fn load_runs(&mut self, run_keys: &BTreeSet<Id>) -> Result<(), LoadError> {
         let rows = self.rows.run_parts(&strs(run_keys))?;
         let index = &mut self.index;
-        let mut parts: HashMap<String, Vec<Id>> = HashMap::new();
-        let mut services: HashMap<Id, Id> = HashMap::new();
+        let mut parts: HashMap<String, Vec<Id>> = HashMap::default();
+        let mut services: HashMap<Id, Id> = HashMap::default();
         for row in rows {
             let trip_id = index.pool.id(&row.trip_id);
             services.insert(trip_id.clone(), index.pool.id(&row.service_id));
@@ -526,7 +528,7 @@ impl<R: Rows> IndexLoader<R> {
     }
 
     fn load_shapes(&mut self, shape_ids: &BTreeSet<Id>) -> Result<(), LoadError> {
-        let mut points: HashMap<String, Vec<(f64, f64)>> = HashMap::new();
+        let mut points: HashMap<String, Vec<(f64, f64)>> = HashMap::default();
         for row in self.rows.shape_points(&strs(shape_ids))? {
             points
                 .entry(row.shape_id)

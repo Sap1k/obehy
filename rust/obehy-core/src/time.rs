@@ -76,7 +76,8 @@ impl Instant {
     /// `datetime.isoformat()` of an aware UTC datetime: `2026-10-08T22:30:00+00:00`, with
     /// `.ffffff` only when the microseconds are not zero.
     pub fn isoformat(self) -> String {
-        let mut text = self.utc().isoformat();
+        let mut text = String::with_capacity(32);
+        self.utc().write_iso(&mut text);
         text.push_str("+00:00");
         text
     }

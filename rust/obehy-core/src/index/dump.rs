@@ -23,11 +23,11 @@ fn int(n: impl Into<i64>) -> PyJson {
 }
 
 fn float(x: f64) -> PyJson {
-    PyJson::Str(py_float_repr(x))
+    PyJson::str(py_float_repr(x))
 }
 
 fn date(d: Date) -> PyJson {
-    PyJson::Str(d.isoformat())
+    PyJson::str(d.isoformat())
 }
 
 fn list<T>(items: impl IntoIterator<Item = T>, f: impl FnMut(T) -> PyJson) -> PyJson {

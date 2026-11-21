@@ -129,16 +129,16 @@ pub fn archived_payload(
             )],
         );
     };
-    let mut extra = vec![("filter".to_owned(), PyJson::Str(filter.label(name)))];
+    let mut extra = vec![("filter".to_owned(), PyJson::str(filter.label(name)))];
     let Some(body) = poll.body.as_deref().filter(|_| poll.ok()) else {
         return (poll.body.clone(), extra);
     };
     extra.push(("source_bytes".to_owned(), PyJson::Int(body.len() as i64)));
-    extra.push(("source_sha256".to_owned(), PyJson::Str(sha256_hex(body))));
+    extra.push(("source_sha256".to_owned(), PyJson::str(sha256_hex(body))));
     match (filter.apply)(body) {
         Err(FilterError(message)) => {
             // Store the unfiltered payload so that a schema change is never lost silently.
-            extra.push(("filter_error".to_owned(), PyJson::Str(message)));
+            extra.push(("filter_error".to_owned(), PyJson::str(message)));
             (Some(body.to_vec()), extra)
         }
         Ok(filtered) => {
@@ -221,7 +221,7 @@ pub fn archive_poll(
             .iter()
             .map(|(k, v)| (k.clone(), PyJson::str(v.as_str())))
             .collect();
-        extra.push(("request".to_owned(), PyJson::Object(request)));
+        extra.push(("request".to_owned(), PyJson::from_pairs(request)));
     }
     let stored = writer.append(
         &channel.source,

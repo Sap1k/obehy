@@ -638,14 +638,13 @@ fn unmatched(
 /// How far a fix may lie from a segment (one standard deviation): GPS error combined with the
 /// trust of the geometry there (progress.py `_sigma`).
 pub fn sigma(policy: &ProgressPolicy) -> impl Fn(&Path, f64) -> f64 + '_ {
+    let shaped = py_hypot(&[policy.gps_sigma_m, policy.shape_sigma_m]);
     move |path: &Path, segment_m: f64| {
-        let geometry = if path.shaped {
-            policy.shape_sigma_m
-        } else {
-            let chord = py_max(policy.chord_min_sigma_m, policy.chord_k * segment_m);
-            py_min(policy.chord_max_sigma_m, chord)
-        };
-        py_hypot(&[policy.gps_sigma_m, geometry])
+        if path.shaped {
+            return shaped;
+        }
+        let chord = py_max(policy.chord_min_sigma_m, policy.chord_k * segment_m);
+        py_hypot(&[policy.gps_sigma_m, py_min(policy.chord_max_sigma_m, chord)])
     }
 }
 

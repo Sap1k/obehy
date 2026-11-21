@@ -30,7 +30,9 @@ fn py(value: &Value) -> PyJson {
         ),
         Value::String(s) => PyJson::str(s.as_str()),
         Value::Array(items) => PyJson::List(items.iter().map(py).collect()),
-        Value::Object(map) => PyJson::Object(map.iter().map(|(k, v)| (k.clone(), py(v))).collect()),
+        Value::Object(map) => {
+            PyJson::from_pairs(map.iter().map(|(k, v)| (k.clone(), py(v))).collect())
+        }
     }
 }
 
@@ -44,12 +46,12 @@ fn dump(root: &Path, source: &str, channel: &str, from: Date, to: Date, out: &Pa
             ("n", PyJson::Int(number as i64)),
             (
                 "received_at",
-                PyJson::Str(poll.received_at().expect("received_at").isoformat()),
+                PyJson::str(poll.received_at().expect("received_at").isoformat()),
             ),
             ("entry", py(&Value::Object(poll.entry.clone()))),
             (
                 "body_sha256",
-                PyJson::opt(body.as_deref(), |b| PyJson::Str(sha256_hex(b))),
+                PyJson::opt(body.as_deref(), |b| PyJson::str(sha256_hex(b))),
             ),
             (
                 "body_bytes",
@@ -179,7 +181,7 @@ fn write(root: &Path) {
             vec![
                 ("filter".into(), PyJson::str("arriva-express@1")),
                 ("source_bytes".into(), PyJson::Int(7)),
-                ("source_sha256".into(), PyJson::Str(sha256_hex(b"[1,2,3]"))),
+                ("source_sha256".into(), PyJson::str(sha256_hex(b"[1,2,3]"))),
                 ("kept".into(), PyJson::Int(1)),
                 ("dropped".into(), PyJson::Int(2)),
             ],

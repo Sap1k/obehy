@@ -27,6 +27,29 @@ pub struct Path {
     pub segments: Vec<Segment>,
     /// A real shape (trusted closely) or straight chords between stops (trusted less).
     pub shaped: bool,
+    /// Per run of [`BLOCK`] segments, the box around them: (min lon, max lon, min lat, max lat).
+    pub blocks: Vec<(f64, f64, f64, f64)>,
+}
+
+/// Segments per box of [`Path::blocks`].
+pub const BLOCK: usize = 16;
+
+fn blocks(points: &[LonLat]) -> Vec<(f64, f64, f64, f64)> {
+    let segments = points.len().saturating_sub(1);
+    (0..segments.div_ceil(BLOCK))
+        .map(|b| {
+            let run = &points[b * BLOCK..=((b + 1) * BLOCK).min(segments)];
+            run.iter().fold(
+                (
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                ),
+                |(x0, x1, y0, y1), &(x, y)| (x0.min(x), x1.max(x), y0.min(y), y1.max(y)),
+            )
+        })
+        .collect()
 }
 
 impl Path {
@@ -62,6 +85,13 @@ fn plane(lat0: f64) -> (f64, f64) {
 /// A point's projection onto one segment in the plane of scale `kx`, `ky`: (fraction along
 /// it, lateral metres, the segment's x and y in metres).
 fn onto(segment: Segment, lon: f64, lat: f64, kx: f64, ky: f64) -> (f64, f64, f64, f64) {
+    let (t, ex, ey, ux, uy) = offset(segment, lon, lat, kx, ky);
+    (t, py_hypot(&[ex, ey]), ux, uy)
+}
+
+/// [`onto`] before the norm: (fraction along, the lateral offset's x and y, the segment's x
+/// and y), all in metres but the fraction.
+fn offset(segment: Segment, lon: f64, lat: f64, kx: f64, ky: f64) -> (f64, f64, f64, f64, f64) {
     let (ax, ay, dx, dy) = segment;
     let (ux, uy) = (dx * kx, dy * ky);
     let (px, py) = ((lon - ax) * kx, (lat - ay) * ky);
@@ -71,7 +101,86 @@ fn onto(segment: Segment, lon: f64, lat: f64, kx: f64, ky: f64) -> (f64, f64, f6
     } else {
         py_max(0.0, py_min(1.0, (px * ux + py * uy) / length2))
     };
-    (t, py_hypot(&[px - t * ux, py - t * uy]), ux, uy)
+    (t, px - t * ux, py - t * uy, ux, uy)
+}
+
+/// The projection of the point nearest the path: the first of the least lateral distance
+/// (`min(project_all(...), key=lateral_m)`), None for a path without segments.
+///
+/// The least (lateral, segment) pair is the same in any order of visiting the segments, so
+/// the run of [`BLOCK`] segments whose box is nearest goes first, and segments that cannot be
+/// nearer than the best so far are skipped: a run whose box is farther, and a segment whose
+/// plain `sqrt(x² + y²)` is beyond it (its correctly rounded norm is then not computed). Both
+/// bounds differ from the norm by rounding only, far below their margin (1e-9 relative plus a
+/// micrometre), so a skipped segment is never the one a full scan picks, ties included.
+pub fn nearest(path: &Path, lon: f64, lat: f64) -> Option<Projection> {
+    if !(lon.is_finite() && lat.is_finite()) {
+        return first_nearest(path, lon, lat); // NaN: the full scan's own answer
+    }
+    let (kx, ky) = plane(lat);
+    let (scale_x, scale_y) = (kx.abs(), ky.abs());
+    let bound = |&(x0, x1, y0, y1): &(f64, f64, f64, f64)| {
+        let dx = (x0 - lon).max(lon - x1).max(0.0) * scale_x;
+        let dy = (y0 - lat).max(lat - y1).max(0.0) * scale_y;
+        (dx * dx + dy * dy).sqrt()
+    };
+    let beyond = |d: f64, best: &(Projection, usize)| d > best.0.lateral_m * (1.0 + 1e-9) + 1e-6;
+    let mut best: Option<(Projection, usize)> = None;
+    let scan = |b: usize, best: &mut Option<(Projection, usize)>| {
+        for i in b * BLOCK..((b + 1) * BLOCK).min(path.segments.len()) {
+            let (t, ex, ey, _, _) = offset(path.segments[i], lon, lat, kx, ky);
+            if let Some(found) = best
+                && beyond((ex * ex + ey * ey).sqrt(), found)
+            {
+                continue;
+            }
+            let lateral = py_hypot(&[ex, ey]);
+            let better = match best {
+                None => true,
+                Some((p, at)) => lateral < p.lateral_m || (lateral == p.lateral_m && i < *at),
+            };
+            if better {
+                let (start, end) = (path.distances_m[i], path.distances_m[i + 1]);
+                let projection = Projection {
+                    along_m: start + t * (end - start),
+                    lateral_m: lateral,
+                    segment_m: end - start,
+                };
+                *best = Some((projection, i));
+            }
+        }
+    };
+    let mut first: Option<(usize, f64)> = None;
+    for (b, block) in path.blocks.iter().enumerate() {
+        let d = bound(block);
+        if first.is_none_or(|(_, least)| d < least) {
+            first = Some((b, d));
+        }
+    }
+    let (first, _) = first?;
+    scan(first, &mut best);
+    for (b, block) in path.blocks.iter().enumerate() {
+        if b == first
+            || best
+                .as_ref()
+                .is_some_and(|found| beyond(bound(block), found))
+        {
+            continue;
+        }
+        scan(b, &mut best);
+    }
+    best.map(|(projection, _)| projection)
+}
+
+/// [`nearest`] as `min(project_all(...), key=lateral_m)` scans: every segment, in order.
+fn first_nearest(path: &Path, lon: f64, lat: f64) -> Option<Projection> {
+    let mut best: Option<Projection> = None;
+    for p in project_all(path, lon, lat) {
+        if best.is_none_or(|b| p.lateral_m < b.lateral_m) {
+            best = Some(p);
+        }
+    }
+    best
 }
 
 fn segments(points: &[LonLat]) -> Vec<Segment> {
@@ -171,12 +280,14 @@ pub fn make_path(
     shaped: bool,
 ) -> Path {
     let segments = segments(&points);
+    let blocks = blocks(&points);
     Path {
         points,
         distances_m: distances,
         call_distances_m: call_distances,
         segments,
         shaped,
+        blocks,
     }
 }
 
@@ -200,11 +311,18 @@ pub fn candidates(
     }
     let mut out = Vec::new();
     for i in first..last {
-        let (t, lateral, ux, uy) = onto(segments[i], lon, lat, kx, ky);
+        let (t, ex, ey, ux, uy) = offset(segments[i], lon, lat, kx, ky);
         let (start, end) = (distances[i], distances[i + 1]);
         let segment = end - start;
         let s = sigma(path, segment);
-        if lateral <= reach_sigmas * s {
+        let reach = reach_sigmas * s;
+        // Clearly out of reach by the plain norm (it differs from the correctly rounded one
+        // by rounding only): the norm is not computed.
+        if (ex * ex + ey * ey).sqrt() > reach * (1.0 + 1e-9) + 1e-6 {
+            continue;
+        }
+        let lateral = py_hypot(&[ex, ey]);
+        if lateral <= reach {
             let heading = py_fmod(degrees(ux.atan2(uy)), 360.0);
             out.push(Candidate {
                 along_m: start + t * segment,

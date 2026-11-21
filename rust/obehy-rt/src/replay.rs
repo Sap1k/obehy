@@ -617,6 +617,7 @@ pub fn run_command(args: &ReplayArgs) -> std::process::ExitCode {
         Ok(r) => r,
         Err(e) => return fail(e.to_string()),
     };
+    runner.estimate_threads = args.window.threads.max(1);
     let mut sink = Replayed {
         out: args.out.clone(),
         lifecycle: policy.lifecycle.clone(),

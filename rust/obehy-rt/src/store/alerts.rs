@@ -68,7 +68,7 @@ fn pairs(value: &Texts) -> PyJson {
             None => out.push((k.clone(), PyJson::str(v))),
         }
     }
-    PyJson::Object(out)
+    PyJson::from_pairs(out)
 }
 
 /// `json.dumps(dict(value), ensure_ascii=False, sort_keys=True)`.
@@ -77,7 +77,7 @@ fn texts(value: &Texts) -> Jsonb {
 }
 
 fn iso(value: Option<Instant>) -> PyJson {
-    value.map_or(PyJson::Null, |at| PyJson::Str(at.isoformat()))
+    value.map_or(PyJson::Null, |at| PyJson::str(at.isoformat()))
 }
 
 /// The content columns of an alert after source, alert ID and channel (`_row` without the
@@ -101,7 +101,7 @@ fn content(alert: &Alert) -> Vec<Jsonb> {
                     ("identifier", PyJson::str(&e.identifier)),
                     (
                         "service_date",
-                        PyJson::opt(e.service_date, |d| PyJson::Str(d.isoformat())),
+                        PyJson::opt(e.service_date, |d| PyJson::str(d.isoformat())),
                     ),
                 ])
             })

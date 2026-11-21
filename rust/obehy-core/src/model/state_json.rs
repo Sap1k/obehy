@@ -12,7 +12,6 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use indexmap::IndexMap;
 use serde_json::Value;
 
 use super::json::fact_from_json;
@@ -387,7 +386,7 @@ pub fn feed_state(value: &Value) -> Result<FeedState> {
     for v in list(get(value, "vehicles")?, vehicle_state)? {
         state.vehicles.insert(v.vehicle.clone(), v);
     }
-    let instances: IndexMap<JourneyKey, Instance> = list(get(value, "instances")?, |kv| {
+    let instances: FastIndexMap<JourneyKey, Instance> = list(get(value, "instances")?, |kv| {
         Ok((journey(item(kv, 0)?)?, instance(item(kv, 1)?)?))
     })?
     .into_iter()

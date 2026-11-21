@@ -39,6 +39,14 @@ use crate::store::vehicles::book;
 use crate::store::{PgStore, Writer};
 use crate::warm::{WarmError, stored_chunks, warm_start, warm_window};
 
+/// Threads estimating journeys at a tick (warm start's ticks above all): the machine's, at
+/// most [`MAX_ESTIMATE_THREADS`]. The output does not depend on it.
+fn estimate_threads() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| n.get().min(MAX_ESTIMATE_THREADS))
+}
+
+const MAX_ESTIMATE_THREADS: usize = 4;
+
 /// The outcome the async side waits for.
 pub type Reply = Result<(), String>;
 
@@ -132,13 +140,14 @@ pub fn run_core(
         config: setup.config.clone(),
         loads: setup.loads.clone(),
     };
-    let runner = Runner::new(
+    let mut runner = Runner::new(
         loads,
         Arc::clone(&setup.policy),
         &setup.feeds,
         setup.semantics.clone(),
         Phases::new(),
     )?;
+    runner.estimate_threads = estimate_threads();
     let writer = open_writer(&setup, &setup.loads)?;
     let mut pipeline = Pipeline {
         runner,

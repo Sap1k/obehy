@@ -16,33 +16,76 @@ use crate::py::num::{py_max, py_min};
 use crate::time::{Instant, TimeDelta};
 use crate::timeline::fusion::{anchor_prediction, current_lateness};
 use crate::timeline::plan::{Plan, Scheduled, no_timetabled_dwell};
-use crate::timeline::runtimes::{Hops, minimum_drives, running_extra};
+use crate::timeline::runtimes::{
+    Hops, RatioMemo, hop_ratios_memo, minimum_drives_with, running_extra_with,
+};
 use crate::timeline::stops::departure;
 
 /// The current lateness and where it comes from (`estimate.Lateness`).
 pub type Lateness = (Option<TimeDelta>, Option<SourceClass>);
 
-fn with_estimates(
-    state: &CallState,
+/// One call's estimate: what `estimate` and `monotone` change of a call.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Estimated {
     arrival: Option<Instant>,
     departure: Option<Instant>,
     status: CallStatus,
     source_class: Option<SourceClass>,
-) -> CallState {
-    let mut call = state.clone();
-    call.estimated_arrival = arrival;
-    call.estimated_departure = departure;
-    call.status = status;
-    call.source_class = source_class;
-    call
 }
 
-/// The instance with `calls`; the same calls are kept as they were (emitters reuse them).
-fn with_calls(mut instance: Instance, calls: Vec<CallState>) -> Instance {
-    if instance.calls[..] != calls[..] {
-        instance.calls = calls.into();
+impl Estimated {
+    fn of(call: &CallState) -> Estimated {
+        Estimated {
+            arrival: call.estimated_arrival,
+            departure: call.estimated_departure,
+            status: call.status,
+            source_class: call.source_class,
+        }
+    }
+}
+
+fn with_estimates(
+    arrival: Option<Instant>,
+    departure: Option<Instant>,
+    status: CallStatus,
+    source_class: Option<SourceClass>,
+) -> Estimated {
+    Estimated {
+        arrival,
+        departure,
+        status,
+        source_class,
+    }
+}
+
+/// The instance with its calls estimated as `estimated`, as `with_calls` of the calls with
+/// them: new calls when `changed`, else the same (emitters reuse them). The calls differ from
+/// the instance's only in the estimated fields, so comparing those is comparing the calls.
+fn with_estimated(mut instance: Instance, estimated: &[Estimated], changed: bool) -> Instance {
+    if changed {
+        instance.calls = instance
+            .calls
+            .iter()
+            .zip(estimated)
+            .map(|(call, e)| {
+                let mut call = call.clone();
+                call.estimated_arrival = e.arrival;
+                call.estimated_departure = e.departure;
+                call.status = e.status;
+                call.source_class = e.source_class;
+                call
+            })
+            .collect();
     }
     instance
+}
+
+/// Whether `estimated` differs from the calls' own estimates.
+fn differs(calls: &[CallState], estimated: &[Estimated]) -> bool {
+    calls
+        .iter()
+        .zip(estimated)
+        .any(|(c, e)| Estimated::of(c) != *e)
 }
 
 /// The current lateness, with early running measured while the vehicle stands at a stop taken
@@ -190,6 +233,18 @@ pub fn estimate(
     policy: &PredictionPolicy,
     inputs: &Inputs<'_>,
 ) -> Instance {
+    let estimated = estimates(&instance, scheduled, policy, inputs);
+    let changed = differs(&instance.calls, &estimated);
+    with_estimated(instance, &estimated, changed)
+}
+
+/// [`estimate`]'s per-call estimates, the instance left as it is.
+fn estimates(
+    instance: &Instance,
+    scheduled: &[Scheduled],
+    policy: &PredictionPolicy,
+    inputs: &Inputs<'_>,
+) -> Vec<Estimated> {
     assert_eq!(
         instance.calls.len(),
         scheduled.len(),
@@ -227,7 +282,7 @@ pub fn estimate(
     let mut before = floor;
     let finished = instance.lifecycle == Lifecycle::Finished;
     let last = instance.calls.len() as i64 - 1;
-    let mut calls: Vec<CallState> = Vec::with_capacity(instance.calls.len());
+    let mut calls: Vec<Estimated> = Vec::with_capacity(instance.calls.len());
     let mut ahead = 0; // passenger calls predicted so far
     let road = inputs.drives.is_some();
     let mut credit = policy.dwell_credit_s.delta(mode);
@@ -293,7 +348,6 @@ pub fn estimate(
                 lateness = Some(l);
             }
             calls.push(with_estimates(
-                state,
                 est_arr,
                 est_dep,
                 status,
@@ -307,13 +361,7 @@ pub fn estimate(
             };
             floor = latest(floor, est_dep.or(est_arr));
         } else if index <= reached || finished {
-            calls.push(with_estimates(
-                state,
-                None,
-                None,
-                CallStatus::NoRealtime,
-                None,
-            ));
+            calls.push(with_estimates(None, None, CallStatus::NoRealtime, None));
         } else if let Some(mut l) = lateness {
             match inputs.anchor {
                 Some((call, value)) if call == i => l = value,
@@ -395,25 +443,13 @@ pub fn estimate(
                 (arr, dep) = (state.estimated_arrival, state.estimated_departure);
             }
             before = dep.or(arr).or(before);
-            calls.push(with_estimates(
-                state,
-                arr,
-                dep,
-                CallStatus::Predicted,
-                delay_class,
-            ));
+            calls.push(with_estimates(arr, dep, CallStatus::Predicted, delay_class));
             lateness = Some(l);
         } else {
-            calls.push(with_estimates(
-                state,
-                None,
-                None,
-                CallStatus::Scheduled,
-                None,
-            ));
+            calls.push(with_estimates(None, None, CallStatus::Scheduled, None));
         }
     }
-    with_calls(instance, calls)
+    calls
 }
 
 /// The later of two times, either possibly unknown.
@@ -473,32 +509,36 @@ fn leaves_by_fixes(
 
 /// The final monotone repair (BASE_PLAN.md 20.6): emitted times never decrease along the trip.
 pub fn monotone(instance: Instance) -> Instance {
+    let mut estimated: Vec<Estimated> = instance.calls.iter().map(Estimated::of).collect();
+    let changed = repair(&mut estimated);
+    with_estimated(instance, &estimated, changed)
+}
+
+/// [`monotone`] on the estimates; whether any time moved.
+fn repair(estimated: &mut [Estimated]) -> bool {
     let mut latest: Option<Instant> = None;
-    let mut calls: Vec<CallState> = Vec::with_capacity(instance.calls.len());
-    for state in instance.calls.iter() {
-        let (mut arrival, mut departure) = (state.estimated_arrival, state.estimated_departure);
-        if let Some(a) = arrival {
+    let mut changed = false;
+    for e in estimated {
+        if let Some(a) = e.arrival {
             if let Some(l) = latest
                 && a < l
             {
-                arrival = Some(l);
+                e.arrival = Some(l);
+                changed = true;
             }
-            latest = arrival;
+            latest = e.arrival;
         }
-        if let Some(d) = departure {
+        if let Some(d) = e.departure {
             if let Some(l) = latest
                 && d < l
             {
-                departure = Some(l);
+                e.departure = Some(l);
+                changed = true;
             }
-            latest = departure;
+            latest = e.departure;
         }
-        let mut state = state.clone();
-        state.estimated_arrival = arrival;
-        state.estimated_departure = departure;
-        calls.push(state);
     }
-    with_calls(instance, calls)
+    changed
 }
 
 /// The predicted departure and the lateness carried on from it (estimate.py `_departure`).
@@ -655,25 +695,42 @@ pub fn estimate_journey(
     hops: &Hops,
     now: Instant,
 ) -> Instance {
+    estimate_journey_memo(
+        instance,
+        trip,
+        plan,
+        index,
+        policy,
+        hops,
+        now,
+        &mut RatioMemo::default(),
+    )
+}
+
+/// [`estimate_journey`] with the hops' ratios at `now` memoized across journeys.
+#[allow(clippy::too_many_arguments)]
+pub fn estimate_journey_memo(
+    instance: Instance,
+    trip: &Trip,
+    plan: &Plan,
+    index: &Index,
+    policy: &Policy,
+    hops: &Hops,
+    now: Instant,
+    memo: &mut RatioMemo,
+) -> Instance {
     let prediction = &policy.prediction;
     let mode = instance.mode.as_str();
-    let extra = running_extra(
-        mode,
-        &instance.calls,
-        instance.progress.as_ref(),
-        plan,
-        hops,
-        now,
-        prediction,
-    );
-    let drives = minimum_drives(
+    // One ratio per hop for both: each reads the same hops at the same `now`.
+    let ratios = hop_ratios_memo(mode, &instance.calls, hops, now, prediction, 1, memo);
+    let extra = running_extra_with(&instance.calls, instance.progress.as_ref(), plan, &ratios);
+    let drives = minimum_drives_with(
         mode,
         &instance.calls,
         plan,
-        hops,
-        now,
         prediction,
         policy.progress.max_speed_mps.get(mode),
+        &ratios,
     );
     estimate_with(instance, trip, plan, index, policy, now, &extra, &drives)
 }
@@ -706,5 +763,10 @@ pub fn estimate_with(
         left: seen_leaving(&instance, plan, prediction),
         drives: Some(drives),
     };
-    monotone(estimate(instance, &plan.scheduled, prediction, &inputs))
+    // `monotone(estimate(...))` without the intermediate calls: new calls when either step
+    // would have made new ones.
+    let mut estimated = estimates(&instance, &plan.scheduled, prediction, &inputs);
+    let estimate_changed = differs(&instance.calls, &estimated);
+    let repaired = repair(&mut estimated);
+    with_estimated(instance, &estimated, estimate_changed || repaired)
 }

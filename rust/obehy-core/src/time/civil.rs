@@ -101,8 +101,22 @@ impl Date {
 
     /// `date.isoformat()`: `2026-10-08`.
     pub fn isoformat(self) -> String {
+        let mut text = String::with_capacity(10);
+        self.write_iso(&mut text);
+        text
+    }
+
+    /// [`Date::isoformat`] onto `out`.
+    pub fn write_iso(self, out: &mut String) {
         let (year, month, day) = civil_from_days(self.0);
-        format!("{year:04}-{month:02}-{day:02}")
+        match u32::try_from(year) {
+            Ok(year) => push_padded(out, year, 4),
+            Err(_) => out.push_str(&format!("{year:04}")),
+        }
+        out.push('-');
+        push_padded(out, month, 2);
+        out.push('-');
+        push_padded(out, day, 2);
     }
 
     /// `date.fromisoformat(text)` (Python 3.13: `YYYY-MM-DD`, `YYYYMMDD` and ISO week dates).
@@ -170,15 +184,46 @@ impl NaiveDateTime {
 
     /// `datetime.isoformat()` of a naive datetime: `2026-10-08T22:30:00[.ffffff]`.
     pub fn isoformat(self) -> String {
-        let (hour, minute, second, micro) = self.hms_micro();
-        let mut text = format!(
-            "{}T{hour:02}:{minute:02}:{second:02}",
-            self.date().isoformat()
-        );
-        if micro != 0 {
-            text.push_str(&format!(".{micro:06}"));
-        }
+        let mut text = String::with_capacity(26);
+        self.write_iso(&mut text);
         text
+    }
+
+    /// [`NaiveDateTime::isoformat`] onto `out`.
+    pub fn write_iso(self, out: &mut String) {
+        let (hour, minute, second, micro) = self.hms_micro();
+        self.date().write_iso(out);
+        out.push('T');
+        push_padded(out, hour, 2);
+        out.push(':');
+        push_padded(out, minute, 2);
+        out.push(':');
+        push_padded(out, second, 2);
+        if micro != 0 {
+            out.push('.');
+            push_padded(out, micro, 6);
+        }
+    }
+}
+
+/// `value` in decimal, zero-padded to `width` digits (`{value:0width$}`).
+fn push_padded(out: &mut String, value: u32, width: usize) {
+    let mut digits = [0u8; 10];
+    let mut n = value;
+    let mut at = digits.len();
+    loop {
+        at -= 1;
+        digits[at] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    for _ in (digits.len() - at)..width {
+        out.push('0');
+    }
+    for &d in &digits[at..] {
+        out.push(char::from(d));
     }
 }
 

@@ -88,7 +88,11 @@ pub fn published_parts(instance: &Instance) -> Vec<PartSpan> {
 
 /// The trip part the vehicle is on: the one holding the next call to reach.
 pub fn current_part(instance: &Instance) -> String {
-    part_holding(&published_parts(instance), instance.left_index()).to_owned()
+    if instance.parts.is_empty() {
+        // The one published part is the trip itself.
+        return instance.trip_id.clone();
+    }
+    part_holding(&instance.parts, instance.left_index()).to_owned()
 }
 
 /// `current_part` over the published parts and the instance's `left_index()`.

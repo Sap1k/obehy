@@ -222,7 +222,7 @@ pub fn elapsed_ms(requested_at: Instant, received_at: Instant) -> i64 {
 }
 
 fn string_map(map: &BTreeMap<String, String>) -> PyJson {
-    PyJson::Object(
+    PyJson::from_pairs(
         map.iter()
             .map(|(k, v)| (k.clone(), PyJson::str(v.as_str())))
             .collect(),
@@ -239,11 +239,11 @@ pub fn index_line(
     let mut entry = vec![
         (
             "requested_at".to_owned(),
-            PyJson::Str(timestamp(poll.requested_at)),
+            PyJson::str(timestamp(poll.requested_at)),
         ),
         (
             "received_at".to_owned(),
-            PyJson::Str(timestamp(poll.received_at)),
+            PyJson::str(timestamp(poll.received_at)),
         ),
         (
             "elapsed_ms".to_owned(),
@@ -275,7 +275,7 @@ pub fn index_line(
             None => entry.push((key.clone(), value.clone())),
         }
     }
-    dumps(&PyJson::Object(entry), DumpOptions::COMPACT.utf8())
+    dumps(&PyJson::from_pairs(entry), DumpOptions::COMPACT.utf8())
 }
 
 /// Appends polls; each write opens the index anew, so days roll over without state.

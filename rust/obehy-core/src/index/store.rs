@@ -1,7 +1,9 @@
 //! The index itself: `Index` of `realtime/index.py`, its lookups, the sweep and run trips.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 use std::sync::Arc;
+
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use super::pool::{Id, Pool};
 use super::{
@@ -59,7 +61,7 @@ pub struct KeyMap<V> {
 impl<V> Default for KeyMap<V> {
     fn default() -> Self {
         KeyMap {
-            by_namespace: HashMap::new(),
+            by_namespace: HashMap::default(),
         }
     }
 }
@@ -191,14 +193,14 @@ impl Index {
             feed,
             pool: Pool::default(),
             key_entries: KeyMap::default(),
-            trips: HashMap::new(),
-            service_dates: HashMap::new(),
+            trips: HashMap::default(),
+            service_dates: HashMap::default(),
             loaded_dates: BTreeSet::new(),
-            locations: HashMap::new(),
-            shapes: HashMap::new(),
-            runs: HashMap::new(),
-            trip_services: HashMap::new(),
-            location_keys: HashMap::new(),
+            locations: HashMap::default(),
+            shapes: HashMap::default(),
+            runs: HashMap::default(),
+            trip_services: HashMap::default(),
+            location_keys: HashMap::default(),
             keyed: KeyMap::default(),
             lines: KeyMap::default(),
         }
@@ -373,7 +375,7 @@ impl Index {
         wanted.extend(parents);
         self.key_entries.retain(|key, _| wanted.contains(key));
         drop(wanted);
-        let mut named: HashSet<Id> = HashSet::new();
+        let mut named: HashSet<Id> = HashSet::default();
         for (_, entries) in self.key_entries.iter() {
             named.extend(entries.iter().map(|e| e.public_id.clone()));
         }
@@ -402,8 +404,8 @@ impl Index {
         drop((trips, runs, named));
         self.loaded_dates.retain(|d| *d >= since);
         let mut services: HashSet<Id> = self.trip_services.values().cloned().collect();
-        let mut shapes: HashSet<Id> = HashSet::new();
-        let mut locations: HashSet<Id> = HashSet::new();
+        let mut shapes: HashSet<Id> = HashSet::default();
+        let mut locations: HashSet<Id> = HashSet::default();
         for trip in self.trips.values() {
             services.insert(trip.service_id.clone());
             shapes.extend(trip.shape_id.clone());

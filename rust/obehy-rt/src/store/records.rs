@@ -59,10 +59,10 @@ pub fn py_of(value: &Value) -> PyJson {
             || PyJson::Float(n.as_f64().unwrap_or(f64::NAN)),
             PyJson::Int,
         ),
-        Value::String(s) => PyJson::Str(s.clone()),
+        Value::String(s) => PyJson::str(s.as_str()),
         Value::Array(items) => PyJson::List(items.iter().map(py_of).collect()),
         Value::Object(map) => {
-            PyJson::Object(map.iter().map(|(k, v)| (k.clone(), py_of(v))).collect())
+            PyJson::from_pairs(map.iter().map(|(k, v)| (k.clone(), py_of(v))).collect())
         }
     }
 }

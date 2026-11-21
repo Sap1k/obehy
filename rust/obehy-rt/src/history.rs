@@ -159,6 +159,7 @@ fn run(args: &ReplayArgs) -> Result<(), String> {
         Phases::new(),
     )
     .map_err(|e| text(&e))?;
+    runner.estimate_threads = args.window.threads.max(1);
     let mut sink = History {
         writer,
         polls: 0,

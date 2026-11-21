@@ -344,7 +344,7 @@ pub fn output(
 ) -> io::Result<()> {
     let loads = FileLoads::open(&options.release).map_err(io_error)?;
     let policy = Arc::new(policy);
-    let runner = Runner::new(
+    let mut runner = Runner::new(
         loads,
         policy.clone(),
         &options.feeds,
@@ -352,6 +352,7 @@ pub fn output(
         Phases::new(),
     )
     .map_err(io_error)?;
+    runner.estimate_threads = options.threads.max(1);
     output_from(runner, window, options, decoders, sources, emit)
 }
 
