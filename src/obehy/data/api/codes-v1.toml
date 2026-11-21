@@ -71,6 +71,8 @@ park_and_ride = { group = "facility", icon = "park_and_ride", en = "Park and rid
 "dpmd" = { cs = "DPMD", en = "DPMD" }
 "mpvnet" = { cs = "MPVnet", en = "MPVnet" }
 "arriva-express" = { cs = "Arriva", en = "Arriva" }
+"iredo" = { cs = "IREDO", en = "IREDO" }
+"idsok" = { cs = "IDSOK", en = "IDSOK" }
 "sz-mapa" = { cs = "Správa železnic", en = "Správa železnic" }
 "sz-tabule" = { cs = "Správa železnic (tabule)", en = "Správa železnic (tabule)" }
 "cd" = { cs = "České dráhy", en = "České dráhy" }

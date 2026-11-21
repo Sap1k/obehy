@@ -1,0 +1,53 @@
+# IDSOK vehicle map (docs/sources/idsok.md): Olomoucký kraj, Olomouc city lines included. Buses
+# and trams go to jdf (CIS line + trip), trains to czptt (train number). IREDO runs the same
+# software and payload.
+source = "idsok"
+manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "IDSOK vehicle map"
+covers = "IDSOK (Olomoucký kraj) buses, Olomouc trams and buses, and trains: positions and delays."
+
+# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those): the payload names
+# trips, not vehicles (IDSOK-Q3).
+[vehicles]
+physical = { default = false }
+
+[[channel]]
+name = "vehicles"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 10
+request = { method = "GET", url = "https://cestujok.cz/idspublicservices/api/service/position" }
+feeds = ["jdf", "czptt"]
+capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+
+# How a payload becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven sources").
+[channel.decode]
+version = 1
+reader = "json"
+root = "array"
+entities = ""  # IDSOK-Q1: the payload is the bare list
+errors = { root = "payload is not a list", entities = "payload is not a list" }
+keep = { kind = ["S", "K"] }
+feed = { by = "kind", cases = [{ match = "S", value = "jdf" }, { match = "K", value = "czptt" }] }
+observed_at = { value = "time", fresh = true }
+fact = [
+  { t = "vehicle_key", id = "trip:{id}" },  # IDSOK-Q3
+  { t = "trip_key", by = "kind", cases = [
+    { match = "S", ns = "cis:line_trip", key = "{line:06d}:{spoj:d}" },
+    { match = "K", ns = "czptt:train_number", key = "{train}" },
+  ] },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
+  { t = "delay", s = "delay", scale = 60, ref = "unknown" },
+]
+
+[channel.decode.values]
+id = { path = "id", as = "trimmed", required = true }
+kind = { path = "sourceType", as = "text", required = true }
+bus = { from = "id", regex = '^S-(\d{6})-(\d+)$', captures = ["line", "spoj"], captures_as = "py_int", when = { kind = "S" }, required = true }  # IDSOK-Q2
+rail = { from = "id", regex = '^K-(\d+)$', captures = ["train"], when = { kind = "K" }, required = true }
+time = { path = "time", as = "hhmmss" }  # IDSOK-Q4
+lat = { path = "lat", as = "number" }
+lon = { path = "lon", as = "number" }
+bearing = { path = "angle", as = "number" }
+delay = { path = "delay", as = "int" }

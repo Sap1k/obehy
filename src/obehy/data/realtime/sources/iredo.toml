@@ -1,0 +1,58 @@
+# IREDO vehicle map (docs/sources/iredo.md): Královéhradecký and Pardubický kraj. Buses go to jdf
+# (CIS line + trip), trains to czptt (train number). IDSOK runs the same software and payload.
+source = "iredo"
+manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "IREDO vehicle map"
+covers = "IREDO (Královéhradecký and Pardubický kraj) buses and trains: positions and delays."
+
+# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those): the payload names
+# trips, not vehicles (IREDO-Q3).
+[vehicles]
+physical = { default = false }
+
+[[channel]]
+name = "vehicles"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 10
+feeds = ["jdf", "czptt"]
+capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+
+# The map's own request; the box and zoom do not filter (IREDO-Q1).
+[channel.request]
+method = "POST"
+url = "https://iredo.online/map/mapData"
+body = '{"w":12.0,"s":48.5,"e":19.0,"n":51.1,"zoom":10}'
+headers = { content-type = "application/json" }
+
+# How a payload becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven sources").
+[channel.decode]
+version = 1
+reader = "json"
+root = "object"
+entities = "connections"
+errors = { root = "payload is not a map model", entities = "payload lacks connections" }
+keep = { kind = ["S", "K"] }
+feed = { by = "kind", cases = [{ match = "S", value = "jdf" }, { match = "K", value = "czptt" }] }
+observed_at = { value = "time", fresh = true }
+fact = [
+  { t = "vehicle_key", id = "trip:{id}" },  # IREDO-Q3
+  { t = "trip_key", by = "kind", cases = [
+    { match = "S", ns = "cis:line_trip", key = "{line:06d}:{spoj:d}" },
+    { match = "K", ns = "czptt:train_number", key = "{train}" },
+  ] },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
+  { t = "delay", s = "delay", scale = 60, ref = "unknown" },
+]
+
+[channel.decode.values]
+id = { path = "id", as = "trimmed", required = true }
+kind = { path = "sourceType", as = "text", required = true }
+bus = { from = "id", regex = '^S-(\d{6})-(\d+)$', captures = ["line", "spoj"], captures_as = "py_int", when = { kind = "S" }, required = true }  # IREDO-Q2
+rail = { from = "id", regex = '^K-(\d+)$', captures = ["train"], when = { kind = "K" }, required = true }
+time = { path = "time", as = "hhmmss" }  # IREDO-Q4
+lat = { path = "lat", as = "number" }
+lon = { path = "lon", as = "number" }
+bearing = { path = "angle", as = "number" }
+delay = { path = "delay", as = "int" }
