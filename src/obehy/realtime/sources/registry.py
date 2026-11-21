@@ -44,6 +44,17 @@ DECODERS: dict[tuple[str, str], Decoder] = {
     },
 }
 
+# The decoder version each channel's observations carry (`Observation.decoder_version`).
+DECODER_VERSIONS: dict[tuple[str, str], int] = {
+    (duk.SOURCE, duk.CHANNEL): duk.DECODER_VERSION,
+    (sz.SOURCE, sz.CHANNEL): sz.DECODER_VERSION,
+    (sz_tabule.SOURCE, sz_tabule.CHANNEL): sz_tabule.DECODER_VERSION,
+    (dpmd.SOURCE, dpmd.CHANNEL): dpmd.DECODER_VERSION,
+    (pid.SOURCE, pid.CHANNEL): pid.DECODER_VERSION,
+    (arriva_express.SOURCE, arriva_express.CHANNEL): arriva_express.DECODER_VERSION,
+    **{(mpvnet.SOURCE, name): mpvnet.DECODER_VERSION for name in mpvnet.CHANNELS},
+}
+
 # Alert channels (BASE_PLAN.md section 25): body, reception time. Never replayed: alerts do
 # not pass through the core.
 AlertDecoder = Callable[[bytes, Instant], list[Alert]]

@@ -313,6 +313,16 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-21** — R0 item 1 (docs/RUST_PORT.md): `obehy rt compare --level facts|output` writes a
+  window's decoded facts or everything the worker would write (effects, the writer's rows,
+  state tables, decoded GTFS-RT) as canonical JSON lines (`realtime/canonical.py`), with
+  `--check` / `obehy rt compare-diff`. `Writer` now builds rows and a `Store` writes them
+  (`emit/sql_store.py`, or `emit/recording.py` for the harness). References: short windows in
+  `tests/realtime/compare/`, the 106 corpus journeys in `tests/golden/corpus-stream/` (unit
+  test), full hours in `data/compare/` (`tests/realtime/compare_windows.py`). Validated: SQL call
+  log of a DÚK and an SŽ window identical before and after; `rt replay` report and GTFS-RT
+  identical; output independent of the hash seed; DB tests pass on the test database.
+
 - **2026-11-21** — The realtime index loads only trips that run on its loaded dates. A key names
   every variant in the timetable year, and the worker used to load them all: on SŽ at noon
   23,260 trips for 1,220 live journeys, about 3x a fresh process's index, which is how the

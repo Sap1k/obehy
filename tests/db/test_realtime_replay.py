@@ -209,11 +209,12 @@ def test_a_mid_day_release_switch_adds_a_revision(
     second = write_release(tmp_path / "b", "run-b", jdf=serving_rows(_timetable(drop_b=True)))
     from obehy.realtime.core import CORE_VERSION
     from obehy.realtime.emit.db import Writer
+    from obehy.realtime.emit.sql_store import SqlStore
     from obehy.realtime.model import Derivation
 
     new = ensure_release(connection, second, report=_quiet)
     runner.switch_release(
-        new, Writer(connection, Derivation(CORE_VERSION, POLICY.version, "run-b"))
+        new, Writer(SqlStore(connection), Derivation(CORE_VERSION, POLICY.version, "run-b"))
     )
 
     rows = connection.execute(

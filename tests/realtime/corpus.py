@@ -490,8 +490,10 @@ def run(
     name: str,
     quality: QualityLog | None = None,
     tick: Callable[[FeedState, Instant], None] | None = None,
+    stepped: Callable[[str, Instant, list[Effect]], None] | None = None,
 ) -> Run:
-    """Step `name` through the core; `quality` and `tick` see the state after every tick."""
+    """Step `name` through the core; `quality` and `tick` see the state after every tick,
+    `stepped` the effects of each step (`step`, at its reception) and refresh (`tick`)."""
 
     from obehy.realtime.runner import shipped_semantics
 
@@ -507,9 +509,15 @@ def run(
     upcoming = next(pending, None)
     while now <= end:
         while upcoming is not None and upcoming.received_at <= now:
-            effects.extend(step(state, upcoming, ctx))
+            produced = step(state, upcoming, ctx)
+            effects.extend(produced)
+            if stepped is not None:
+                stepped("step", upcoming.received_at, produced)
             upcoming = next(pending, None)
-        effects.extend(refresh(state, now, ctx))
+        produced = refresh(state, now, ctx)
+        effects.extend(produced)
+        if stepped is not None:
+            stepped("tick", now, produced)
         estimate_all(state, ctx, now)
         if quality is not None:
             quality.sample(state, ctx, now)

@@ -37,6 +37,7 @@ from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.core import CORE_VERSION
 from obehy.realtime.emit.alerts import AlertFeed, write_alerts
 from obehy.realtime.emit.db import Writer
+from obehy.realtime.emit.sql_store import SqlStore
 from obehy.realtime.emit.stored import stream_observations
 from obehy.realtime.emit.vehicles import REGISTRY_CHANNEL
 from obehy.realtime.facts import Feed, Observation
@@ -58,7 +59,7 @@ from obehy.realtime.warm import warm_start, warm_window
 
 
 def _writer(connection: psycopg.Connection, loads: ReleaseLoads, policy: Policy) -> Writer:
-    return Writer(connection, Derivation(CORE_VERSION, policy.version, loads.run_id))
+    return Writer(SqlStore(connection), Derivation(CORE_VERSION, policy.version, loads.run_id))
 
 
 @dataclass(frozen=True, slots=True)

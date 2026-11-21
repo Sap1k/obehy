@@ -363,7 +363,8 @@ class Runner:
 class Ticks:
     """A simulated clock's housekeeping ticks, as the worker's wall clock runs them: every
     `emit_tick_s` on round multiples, each before the first observation after it. Replay, warm
-    start and bench all step through time with it; `on_tick` sees each tick after it ran."""
+    start and bench all step through time with it; `on_tick` sees each tick after it ran, and
+    `on_effects` its effects before that."""
 
     def __init__(
         self,
@@ -371,11 +372,13 @@ class Ticks:
         *,
         emit: bool = False,
         on_tick: Callable[[Instant], None] | None = None,
+        on_effects: Callable[[Instant, list[Effect]], None] | None = None,
     ) -> None:
         self.runner = runner
         self.every_s = runner.policy.emit_tick_s
         self.emit = emit
         self.on_tick = on_tick
+        self.on_effects = on_effects
         self.next: Instant | None = None
 
     def due(self, at: Instant) -> bool:
@@ -387,7 +390,9 @@ class Ticks:
         if self.next is None:
             self.next = next_multiple(at, self.every_s)
         while self.next <= at:
-            self.runner.tick(self.next, emit=self.emit)
+            effects = self.runner.tick(self.next, emit=self.emit)
+            if self.on_effects is not None:
+                self.on_effects(self.next, effects)
             if self.on_tick is not None:
                 self.on_tick(self.next)
             self.next = next_multiple(self.next, self.every_s)

@@ -124,6 +124,19 @@ def scaled_micros(delta_us: int, factor: float) -> int:
     return q
 
 
+def utc_text(value: datetime) -> str:
+    """An aware time as UTC ISO 8601 with `Z`: `YYYY-MM-DDTHH:MM:SSZ`, with six digits of
+    fractional seconds (`.ffffffZ`) only when the microseconds are not zero."""
+
+    at = instant(value)
+    text = (
+        f"{at.year:04d}-{at.month:02d}-{at.day:02d}T{at.hour:02d}:{at.minute:02d}:{at.second:02d}"
+    )
+    if at.microsecond:
+        text += f".{at.microsecond:06d}"
+    return text + "Z"
+
+
 def next_multiple(at: Instant, every_s: int) -> Instant:
     """The first instant after `at` on a round multiple of `every_s` seconds (emit ticks)."""
 

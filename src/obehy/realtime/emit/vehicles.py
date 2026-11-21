@@ -35,15 +35,21 @@ from obehy.reference.vocabulary import Vocabulary, load_vocabulary
 Report = tuple[str, str]  # (source, source vehicle ID)
 
 
-def write_physical_policy(connection: psycopg.Connection) -> None:
-    """Each source's `[vehicles] physical` as `rt.physical_vehicles`, which every reader asks
-    through `rt.is_physical`: the manifests' policy, replaced whole."""
+def physical_rows() -> list[tuple[str, str, bool]]:
+    """Each source's `[vehicles] physical`: `rt.physical_vehicles`' rows."""
 
-    rows = [
+    return [
         (source, mode, physical)
         for source, manifest in sorted(physical_vehicles().items())
         for mode, physical in sorted(manifest.physical_vehicles.items())
     ]
+
+
+def write_physical_policy(connection: psycopg.Connection) -> None:
+    """Each source's `[vehicles] physical` as `rt.physical_vehicles`, which every reader asks
+    through `rt.is_physical`: the manifests' policy, replaced whole."""
+
+    rows = physical_rows()
     with connection.transaction(), connection.cursor() as cursor:
         cursor.execute("DELETE FROM rt.physical_vehicles")
         cursor.executemany(
@@ -288,89 +294,115 @@ class VehicleBook:
     ) -> None:
         """The live attributes, then the changed profiles (all of them on the first write)."""
 
-        if observed:
-            with connection.cursor() as cursor:
-                cursor.executemany(
-                    "INSERT INTO rt.vehicle_attribute_observed AS o (source, source_vehicle_id,"
-                    " attribute, value, first_seen, last_seen) VALUES (%s, %s, %s, %s, %s, %s)"
-                    " ON CONFLICT (source, source_vehicle_id, attribute) DO UPDATE SET"
-                    " value = excluded.value,"
-                    " first_seen = CASE WHEN o.value = excluded.value THEN o.first_seen"
-                    "  ELSE excluded.first_seen END,"
-                    " last_seen = greatest(o.last_seen, excluded.last_seen)",
-                    [(*row[:4], row[4], row[4]) for row in observed],
-                )
-        self._write_pairings(connection)
-        built = self.profiles()
-        if self.rewrite:
-            connection.execute("DELETE FROM rt.vehicle_profile")
-            self.rewrite = False
-        if not built:
-            return
-        with connection.cursor() as cursor:
-            cursor.executemany(
-                "INSERT INTO rt.vehicle_profile (vehicle_id, registered, public_label,"
-                " manufacturer, model, low_floor, air_conditioning, wheelchair_accessible,"
-                " operator, licence_plate, fleet_number, datasets, sources, attributes,"
-                " last_stated) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                " ON CONFLICT (vehicle_id) DO UPDATE SET (registered, public_label,"
-                " manufacturer, model, low_floor, air_conditioning, wheelchair_accessible,"
-                " operator, licence_plate, fleet_number, datasets, sources, attributes,"
-                " last_stated) = (excluded.registered, excluded.public_label,"
-                " excluded.manufacturer, excluded.model, excluded.low_floor,"
-                " excluded.air_conditioning, excluded.wheelchair_accessible, excluded.operator,"
-                " excluded.licence_plate, excluded.fleet_number, excluded.datasets,"
-                " excluded.sources, excluded.attributes, excluded.last_stated)",
-                [
-                    (
-                        p.vehicle_id,
-                        p.registered,
-                        p.public_label,
-                        p.texts["manufacturer"],
-                        p.texts["model"],
-                        p.flags["low_floor"],
-                        p.flags["air_conditioning"],
-                        p.flags["wheelchair_accessible"],
-                        p.texts["operator"],
-                        p.texts["licence_plate"],
-                        p.texts["fleet_number"],
-                        list(p.datasets),
-                        list(p.sources),
-                        Jsonb(list(p.attributes)),
-                        p.last_stated,
-                    )
-                    for p in built
-                ],
-            )
+        write_vehicle_rows(connection, self.rows(observed))
 
-    def _write_pairings(self, connection: psycopg.Connection) -> None:
+    def rows(self, observed: list[tuple[str, str, str, str, Instant]]) -> VehicleRows:
+        """What `write` sends: the live attributes `observed`, the pairings changed since the
+        last call, the changed profiles (all of them, and the old ones deleted, the first time)."""
+
         changes = self.pairings.changes()
         gone = [pair for pair, evidence in sorted(changes.items()) if evidence is None]
         kept = [(pair, e) for pair, e in sorted(changes.items()) if e is not None]
+        built = self.profiles()
+        rewrite, self.rewrite = self.rewrite, False
+        return VehicleRows(observed, gone, kept, rewrite, built)
+
+
+@dataclass(frozen=True, slots=True)
+class VehicleRows:
+    attributes: list[tuple[str, str, str, str, Instant]]
+    gone: list[tuple[Report, Report]]
+    kept: list[tuple[tuple[Report, Report], Evidence]]
+    rewrite: bool  # delete every stored profile first
+    profiles: list[Profile]
+
+
+def write_vehicle_rows(connection: psycopg.Connection, rows: VehicleRows) -> None:
+    observed = rows.attributes
+    if observed:
         with connection.cursor() as cursor:
-            if gone:
-                cursor.executemany(
-                    "DELETE FROM rt.vehicle_pairing WHERE (source_a, source_vehicle_a, source_b,"
-                    " source_vehicle_b) = (%s, %s, %s, %s)",
-                    [(*a, *b) for a, b in gone],
+            cursor.executemany(
+                "INSERT INTO rt.vehicle_attribute_observed AS o (source, source_vehicle_id,"
+                " attribute, value, first_seen, last_seen) VALUES (%s, %s, %s, %s, %s, %s)"
+                " ON CONFLICT (source, source_vehicle_id, attribute) DO UPDATE SET"
+                " value = excluded.value,"
+                " first_seen = CASE WHEN o.value = excluded.value THEN o.first_seen"
+                "  ELSE excluded.first_seen END,"
+                " last_seen = greatest(o.last_seen, excluded.last_seen)",
+                [(*row[:4], row[4], row[4]) for row in observed],
+            )
+    _write_pairings(connection, rows.gone, rows.kept)
+    built = rows.profiles
+    if rows.rewrite:
+        connection.execute("DELETE FROM rt.vehicle_profile")
+    if not built:
+        return
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            "INSERT INTO rt.vehicle_profile (vehicle_id, registered, public_label,"
+            " manufacturer, model, low_floor, air_conditioning, wheelchair_accessible,"
+            " operator, licence_plate, fleet_number, datasets, sources, attributes,"
+            " last_stated) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            " ON CONFLICT (vehicle_id) DO UPDATE SET (registered, public_label,"
+            " manufacturer, model, low_floor, air_conditioning, wheelchair_accessible,"
+            " operator, licence_plate, fleet_number, datasets, sources, attributes,"
+            " last_stated) = (excluded.registered, excluded.public_label,"
+            " excluded.manufacturer, excluded.model, excluded.low_floor,"
+            " excluded.air_conditioning, excluded.wheelchair_accessible, excluded.operator,"
+            " excluded.licence_plate, excluded.fleet_number, excluded.datasets,"
+            " excluded.sources, excluded.attributes, excluded.last_stated)",
+            [
+                (
+                    p.vehicle_id,
+                    p.registered,
+                    p.public_label,
+                    p.texts["manufacturer"],
+                    p.texts["model"],
+                    p.flags["low_floor"],
+                    p.flags["air_conditioning"],
+                    p.flags["wheelchair_accessible"],
+                    p.texts["operator"],
+                    p.texts["licence_plate"],
+                    p.texts["fleet_number"],
+                    list(p.datasets),
+                    list(p.sources),
+                    Jsonb(list(p.attributes)),
+                    p.last_stated,
                 )
-            if kept:
-                cursor.executemany(
-                    "INSERT INTO rt.vehicle_pairing VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                    " ON CONFLICT (source_a, source_vehicle_a, source_b, source_vehicle_b)"
-                    " DO UPDATE SET (first_seen, last_seen, fixes, confirmed, journey) ="
-                    " (excluded.first_seen, excluded.last_seen, excluded.fixes,"
-                    " excluded.confirmed, excluded.journey)",
-                    [
-                        (
-                            *a,
-                            *b,
-                            e.first_seen,
-                            e.last_seen,
-                            e.fixes,
-                            e.confirmed,
-                            Jsonb(_journey_json(e.journey)),
-                        )
-                        for (a, b), e in kept
-                    ],
-                )
+                for p in built
+            ],
+        )
+
+
+def _write_pairings(
+    connection: psycopg.Connection,
+    gone: list[tuple[Report, Report]],
+    kept: list[tuple[tuple[Report, Report], Evidence]],
+) -> None:
+    with connection.cursor() as cursor:
+        if gone:
+            cursor.executemany(
+                "DELETE FROM rt.vehicle_pairing WHERE (source_a, source_vehicle_a, source_b,"
+                " source_vehicle_b) = (%s, %s, %s, %s)",
+                [(*a, *b) for a, b in gone],
+            )
+        if kept:
+            cursor.executemany(
+                "INSERT INTO rt.vehicle_pairing VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                " ON CONFLICT (source_a, source_vehicle_a, source_b, source_vehicle_b)"
+                " DO UPDATE SET (first_seen, last_seen, fixes, confirmed, journey) ="
+                " (excluded.first_seen, excluded.last_seen, excluded.fixes,"
+                " excluded.confirmed, excluded.journey)",
+                [
+                    (
+                        *a,
+                        *b,
+                        e.first_seen,
+                        e.last_seen,
+                        e.fixes,
+                        e.confirmed,
+                        Jsonb(_journey_json(e.journey)),
+                    )
+                    for (a, b), e in kept
+                ],
+            )

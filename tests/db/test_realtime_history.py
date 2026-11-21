@@ -14,6 +14,7 @@ from obehy.realtime.archive import days as archive_days
 from obehy.realtime.core import CORE_VERSION, Context, snapshot, step
 from obehy.realtime.disk_guard import GB
 from obehy.realtime.emit.db import Writer
+from obehy.realtime.emit.sql_store import SqlStore
 from obehy.realtime.jobs import drop_history, drop_observations, history_days, hourly
 from obehy.realtime.model import (
     AssignVehicle,
@@ -42,7 +43,7 @@ def _scalar(connection: psycopg.Connection, query: LiteralString, *params: objec
 
 
 def _writer(connection: psycopg.Connection, release: str = "run-a") -> Writer:
-    return Writer(connection, Derivation(CORE_VERSION, POLICY.version, release))
+    return Writer(SqlStore(connection), Derivation(CORE_VERSION, POLICY.version, release))
 
 
 def _east(metres: float) -> tuple[float, float]:
@@ -203,13 +204,13 @@ def test_retention_drops_observation_hours_and_older_daily_partitions(
         "CREATE TABLE rt.observation_20260908 PARTITION OF rt.observation"
         " FOR VALUES FROM ('2026-09-08 00:00Z') TO ('2026-09-09 00:00Z')"
     )
-    writer = _writer(connection)
+    store = SqlStore(connection)
     for hour in (
         datetime(2026, 9, 8, 5, tzinfo=UTC),
         datetime(2026, 9, 9, 10, tzinfo=UTC),
         datetime(2026, 9, 9, 11, tzinfo=UTC),
     ):
-        writer._observation_partition(hour)  # pyright: ignore[reportPrivateUsage]
+        store.prepare({hour}, set(), [])
     assert _partitions(connection, "rt.observation") == [
         "observation_20260908",
         "observation_2026090910",

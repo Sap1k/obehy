@@ -17,7 +17,7 @@ from __future__ import annotations
 import heapq
 import json
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from itertools import batched
@@ -29,8 +29,9 @@ import psycopg
 from obehy.pipeline.files import atomic_output_path
 from obehy.realtime.archive import ArchivedPoll, iter_polls, succeeded
 from obehy.realtime.core import CORE_VERSION, estimate_all
-from obehy.realtime.emit.db import Writer, clear_observations
+from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.gtfs_rt import feed_message
+from obehy.realtime.emit.sql_store import SqlStore, clear_observations
 from obehy.realtime.evaluate import SAMPLE_EVERY, PredictorLog
 from obehy.realtime.facts import Feed, Observation, SourceState, TripKey, VehicleKey
 from obehy.realtime.index_sql import ReleaseLoads, ensure_release, file_loads
@@ -159,21 +160,15 @@ def replay(
     keyless = KeylessLog(policy.keyless.episode_gap_s)
     predictors = PredictorLog() if "czptt" in runner.runtimes else None
     quality = QualityLog() if options.quality else None
-    clock = _Clock(runner, options, predictors, quality)
-    last: Instant | None = None
-    for chunk in batched(_decoded(options, policy, stats), LOOKAHEAD_POLLS, strict=False):
-        # Load the static data of the next polls' keys in one round trip set.
-        runner.prefetch([o for _, observations in chunk for o in observations or ()])
-        for at, observations in chunk:
-            clock.advance(at)
-            if observations is None:
-                continue
-            effects = runner.process(observations)
-            _count(effects, groups, reasons, unresolved)
-            keyless.observe(effects)
-            last = at
+    clock = Clock(runner, options, predictors, quality)
+
+    def stepped(_: Instant, effects: list[Effect]) -> None:
+        _count(effects, groups, reasons, unresolved)
+        keyless.observe(effects)
+
+    last = drive(runner, _decoded(options, policy, stats), clock, stepped)
     if last is not None:
-        _finish(runner, last, writer)
+        finish(runner, last, writer)
     document = _report(loads, options, stats, groups, reasons, runner.skipped)
     if predictors is not None:
         document["unresolved"] = dict(sorted(unresolved.items()))
@@ -190,9 +185,32 @@ def replay(
     return document
 
 
-class _Clock:
+def drive(
+    runner: Runner,
+    polls: Iterable[tuple[Instant, list[Observation] | None]],
+    clock: Clock,
+    stepped: Callable[[Instant, list[Effect]], None],
+) -> Instant | None:
+    """Run the decoded polls through the runner on the simulated clock; `stepped` sees each
+    poll's effects. The last poll's time, if any ran."""
+
+    last: Instant | None = None
+    for chunk in batched(polls, LOOKAHEAD_POLLS, strict=False):
+        # Load the static data of the next polls' keys in one round trip set.
+        runner.prefetch([o for _, observations in chunk for o in observations or ()])
+        for at, observations in chunk:
+            clock.advance(at)
+            if observations is None:
+                continue
+            stepped(at, runner.process(observations))
+            last = at
+    return last
+
+
+class Clock:
     """The simulated clock: the runner's ticks (`Ticks`), and with them GTFS-RT snapshots
-    every `gtfs_rt_every_s` and the samplers, on round multiples."""
+    every `gtfs_rt_every_s` and the samplers, on round multiples. `snapshot` takes the
+    snapshots (default: files under `out`); `ticked` sees each tick's effects."""
 
     def __init__(
         self,
@@ -200,12 +218,16 @@ class _Clock:
         options: ReplayOptions,
         predictors: PredictorLog | None = None,
         quality: QualityLog | None = None,
+        *,
+        snapshot: Callable[[Instant], None] | None = None,
+        ticked: Callable[[Instant, list[Effect]], None] | None = None,
     ) -> None:
         self.runner = runner
         self.options = options
         self.predictors = predictors
         self.quality = quality
-        self.ticks = Ticks(runner, on_tick=self._ticked)
+        self.snapshot: Callable[[Instant], None] = snapshot or self._files
+        self.ticks = Ticks(runner, on_tick=self._ticked, on_effects=ticked)
         self.next_snapshot: Instant | None = None
         self.next_sample: Instant | None = None
 
@@ -218,6 +240,9 @@ class _Clock:
                 self.next_sample = next_multiple(at, int(SAMPLE_EVERY.total_seconds()))
         self.ticks.advance(at)
 
+    def _files(self, at: Instant) -> None:
+        _snapshot(self.options, self.runner, at)
+
     def _ticked(self, at: Instant) -> None:
         if self.quality is not None:
             for _, runtime in sorted(self.runner.runtimes.items()):
@@ -229,22 +254,36 @@ class _Clock:
             self.next_sample = instant(self.next_sample + SAMPLE_EVERY)
         if self.next_snapshot is not None and self.next_snapshot <= at:
             every = self.options.gtfs_rt_every_s or 0
-            _snapshot(self.options, self.runner, self.next_snapshot)
+            self.snapshot(self.next_snapshot)
             self.next_snapshot = instant(self.next_snapshot + timedelta(seconds=every))
 
 
-def _finish(runner: Runner, last: Instant, writer: Writer | None) -> None:
-    """Final housekeeping and estimates, and the current state when writing history."""
+def finish(runner: Runner, last: Instant, writer: Writer | None) -> list[Effect]:
+    """Final housekeeping and estimates, and the current state when writing history; the
+    final tick's effects."""
 
-    runner.tick(last, emit=False)
+    effects = runner.tick(last, emit=False)
     if writer is not None:
         writer.write_state({feed: r.state for feed, r in runner.runtimes.items()})
+    return effects
 
 
-def _decoded(
-    options: ReplayOptions, policy: Policy, stats: dict[str, _Stats]
-) -> Iterator[tuple[Instant, list[Observation] | None]]:
-    """Each poll in the window, decoded; None for a failed or undecodable poll."""
+@dataclass(frozen=True, slots=True)
+class DecodedPoll:
+    """One archived poll of the window and its observations; None for a failed poll or, with
+    the decoder's `error`, an undecodable payload."""
+
+    at: Instant
+    source: str
+    channel: str
+    poll: ArchivedPoll
+    observations: list[Observation] | None
+    error: ValueError | None = None
+
+
+def decoded_polls(options: ReplayOptions, policy: Policy) -> Iterator[DecodedPoll]:
+    """Each poll of the window (`since`..`until`) in reception order, decoded; only the
+    observations of live feeds unless `all_feeds`."""
 
     channels = {(c.source, c.channel): c for c in options.channels}
     for received, source, channel, poll in _polls(options):
@@ -253,12 +292,9 @@ def _decoded(
             return
         if options.since is not None and at < options.since:
             continue
-        name = f"{source}/{channel}"
-        stats[name].polls += 1
         body = poll.body()
         if body is None or not succeeded(poll.entry.get("status"), poll.entry.get("error")):
-            stats[name].failed_polls += 1
-            yield at, None
+            yield DecodedPoll(at, source, channel, poll, None)
             continue
         try:
             request = poll.entry.get("request")
@@ -269,14 +305,30 @@ def _decoded(
                 policy.time.max_clock_skew,
                 cast(dict[str, Any], request) if isinstance(request, dict) else {},
             )
-        except ValueError:
-            stats[name].bad_payloads += 1
-            yield at, None
+        except ValueError as error:
+            yield DecodedPoll(at, source, channel, poll, None, error)
             continue
         if not options.all_feeds:
             observations = channels[(source, channel)].live_only(observations)
-        stats[name].observations += len(observations)
-        yield at, observations
+        yield DecodedPoll(at, source, channel, poll, observations)
+
+
+def _decoded(
+    options: ReplayOptions, policy: Policy, stats: dict[str, _Stats]
+) -> Iterator[tuple[Instant, list[Observation] | None]]:
+    """Each poll in the window, decoded and counted; None for a failed or undecodable poll."""
+
+    for decoded in decoded_polls(options, policy):
+        counts = stats[f"{decoded.source}/{decoded.channel}"]
+        counts.polls += 1
+        if decoded.observations is None:
+            if decoded.error is None:
+                counts.failed_polls += 1
+            else:
+                counts.bad_payloads += 1
+        else:
+            counts.observations += len(decoded.observations)
+        yield decoded.at, decoded.observations
 
 
 def _writer(
@@ -303,7 +355,7 @@ def history_writer(
     """A writer for rebuilding the UTC days `start`..`end`: their observations of `sources`
     and their service dates' history are cleared first."""
 
-    writer = Writer(connection, Derivation(CORE_VERSION, policy.version, loads.run_id))
+    writer = Writer(SqlStore(connection), Derivation(CORE_VERSION, policy.version, loads.run_id))
     first = datetime(start.year, start.month, start.day, tzinfo=UTC)
     last = datetime(end.year, end.month, end.day, tzinfo=UTC)
     clear_observations(connection, first, last + timedelta(days=1), sources)

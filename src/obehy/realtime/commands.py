@@ -1,4 +1,4 @@
-"""CLI: `obehy rt record|replay|bench|corpus pin`, `obehy realtime`,
+"""CLI: `obehy rt record|replay|compare|compare-diff|bench|corpus pin`, `obehy realtime`,
 `obehy jobs nightly|hourly`."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import cast
 
 import psycopg
 
-from obehy.realtime import bench, record, replay
+from obehy.realtime import bench, compare, compare_check, record, replay
 from obehy.realtime.archive import prune as prune_archive
 from obehy.realtime.archive import sources as archive_sources
 from obehy.realtime.emit.alerts import prune_alerts
@@ -109,6 +109,43 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     )
     _database(replayer)
 
+    comparer = rt.add_parser(
+        "compare", help="write a window's exact facts or output stream (the Rust reference)"
+    )
+    comparer.add_argument("--level", choices=["facts", "output"], required=True)
+    comparer.add_argument(
+        "--from-files", dest="release", help="release directory (needed by --level output)"
+    )
+    comparer.add_argument("--from", dest="start", type=date.fromisoformat, required=True)
+    comparer.add_argument("--to", dest="end", type=date.fromisoformat, required=True)
+    comparer.add_argument("--archive", type=Path, default=Path("data/rt-raw"))
+    comparer.add_argument(
+        "--sources", type=_list, help=f"source IDs (default: {','.join(replay.SOURCES)})"
+    )
+    comparer.add_argument("--feeds", type=_feeds, default=FEEDS, help="default: jdf,czptt")
+    comparer.add_argument("--manifest", type=Path, default=record.MANIFEST)
+    comparer.add_argument("--since", type=_local_time, help="from this local time")
+    comparer.add_argument("--until", type=_local_time, help="and before this local time")
+    comparer.add_argument("--all-feeds", action="store_true", help="also feeds not live yet")
+    comparer.add_argument(
+        "--gtfs-rt-every",
+        type=int,
+        default=60,
+        metavar="SECONDS",
+        help="state tables and GTFS-RT every so often (output; default 60, 0: only at the end)",
+    )
+    comparer.add_argument("--out", type=Path, required=True, help="JSON lines (.gz: gzip)")
+    comparer.add_argument("--check", type=Path, help="then diff against this reference")
+    comparer.add_argument("--limit", type=int, default=10, help="differences shown")
+
+    differ = rt.add_parser("compare-diff", help="where two compare streams part")
+    differ.add_argument("reference", type=Path)
+    differ.add_argument("candidate", type=Path)
+    differ.add_argument("--limit", type=int, default=10, help="differences shown")
+    differ.add_argument(
+        "--ignore", action="append", default=[], help="KIND.FIELD left out (repeatable)"
+    )
+
     bencher = rt.add_parser(
         "bench", help="time the live worker's path over archived polls (development database)"
     )
@@ -188,6 +225,10 @@ def run(args: argparse.Namespace) -> int:
             return _check(args)
         if args.rt_command == "bench":
             return _bench(args)
+        if args.rt_command == "compare":
+            return _compare(args)
+        if args.rt_command == "compare-diff":
+            return _compare_diff(args)
         return _replay(args)
     except (
         OSError,
@@ -196,6 +237,7 @@ def run(args: argparse.Namespace) -> int:
         ConfigurationError,
         IndexLoadError,
         replay.ReplayError,
+        compare.CompareError,
         EgressError,
         psycopg.Error,
     ) as error:
@@ -270,8 +312,8 @@ def _local_time(value: str) -> Instant:
     return wall_instant(datetime.fromisoformat(value))
 
 
-def _replay(args: argparse.Namespace) -> int:
-    channels = [
+def _replay_channels(args: argparse.Namespace) -> list[Channel]:
+    return [
         channel
         for channel in select_channels(
             record.load_channels(cast(Path, args.manifest)),
@@ -279,6 +321,52 @@ def _replay(args: argparse.Namespace) -> int:
         )
         if (channel.source, channel.channel) not in registry.ALERT_DECODERS
     ]
+
+
+def _compare(args: argparse.Namespace) -> int:
+    level = cast(compare.Level, args.level)
+    release = cast(str | None, args.release)
+    if level == "output" and not release:
+        print("error: --level output needs --from-files <release dir>", file=sys.stderr)
+        return 1
+    every = cast(int, args.gtfs_rt_every)
+    options = replay.ReplayOptions(
+        release=release or "",
+        archive=cast(Path, args.archive),
+        start=cast(date, args.start),
+        end=cast(date, args.end),
+        channels=_replay_channels(args),
+        out=cast(Path, args.out).parent,
+        feeds=cast(tuple[Feed, ...], args.feeds),
+        gtfs_rt_every_s=every or None,
+        since=cast(Instant | None, args.since),
+        until=cast(Instant | None, args.until),
+        all_feeds=cast(bool, args.all_feeds),
+    )
+    out = cast(Path, args.out)
+    count = compare.compare(options, level, load_policy(), out)
+    print(f"{count} records in {out}")
+    reference = cast(Path | None, args.check)
+    if reference is None:
+        return 0
+    same, lines = compare_check.diff(reference, out, limit=cast(int, args.limit))
+    print("\n".join(lines))
+    return 0 if same else 1
+
+
+def _compare_diff(args: argparse.Namespace) -> int:
+    same, lines = compare_check.diff(
+        cast(Path, args.reference),
+        cast(Path, args.candidate),
+        limit=cast(int, args.limit),
+        ignore=cast(list[str], args.ignore),
+    )
+    print("\n".join(lines))
+    return 0 if same else 1
+
+
+def _replay(args: argparse.Namespace) -> int:
+    channels = _replay_channels(args)
     options = replay.ReplayOptions(
         release=cast(str, args.release),
         archive=cast(Path, args.archive),

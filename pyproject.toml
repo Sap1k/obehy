@@ -91,6 +91,7 @@ source_modules = [
     "obehy.realtime.platforms",
     "obehy.realtime.compositions",
     "obehy.realtime.disk_guard",
+    "obehy.realtime.canonical",
 ]
 forbidden_modules = [
     "psycopg",
