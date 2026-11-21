@@ -101,7 +101,7 @@ pub fn cell(column: &str, value: &Value) -> StoreResult<Cell> {
         return date(value).map(Cell::Date);
     }
     if JSON.contains(&column) {
-        return Ok(Cell::Json(py_of(value)));
+        return Ok(Cell::json(py_of(value)));
     }
     if FLOATS.contains(&column) {
         return value

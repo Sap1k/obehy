@@ -33,6 +33,12 @@ cpu-time.workspace = true
 indexmap.workspace = true
 thiserror.workspace = true
 futures-util.workspace = true
+memory-stats.workspace = true
+mimalloc = { workspace = true, optional = true }
+
+[features]
+# The global allocator (`obehy_rt::ALLOCATOR`); without it the system allocator.
+mimalloc = ["dep:mimalloc"]
 
 [lints]
 workspace = true

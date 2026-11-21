@@ -1,6 +1,8 @@
 //! Effects and core state as rows (`emit/db.py`'s row functions), in the column order of
 //! `store`'s `*_COLUMNS` and state tables.
 
+use std::sync::Arc;
+
 use obehy_core::model::json::facts_to_json;
 use obehy_core::model::{
     CallState, Feed, Instance, JourneyKey, LinkJourneys, ObservationResult, PartSpan,
@@ -35,7 +37,7 @@ pub fn observation_row(result: &ObservationResult, release_id: &str) -> Row {
         Cell::opt_time(obs.observed_at),
         Cell::Int(obs.decoder_version),
         Cell::Int(obehy_core::model::FACT_SCHEMA_VERSION),
-        Cell::Json(facts_to_json(&obs.facts)),
+        Cell::json(facts_to_json(&obs.facts)),
         Cell::opt_text(journey.map(|j| j.namespace.as_str())),
         Cell::opt_text(journey.map(|j| j.key.as_str())),
         Cell::opt_date(journey.map(|j| j.service_date)),
@@ -124,7 +126,7 @@ pub fn calls_json(instance: &Instance) -> PyJson {
     )
 }
 
-pub fn trip_row(i: &Instance, calls: PyJson) -> Row {
+pub fn trip_row(i: &Instance, calls: Arc<PyJson>) -> Row {
     let mut row: Row = key_cells(&i.journey).into();
     row.extend([
         Cell::text(&i.release_id),
@@ -135,7 +137,7 @@ pub fn trip_row(i: &Instance, calls: PyJson) -> Row {
         Cell::Bool(i.freshness.stale),
         Cell::Time(i.freshness.updated_at),
         Cell::Json(calls),
-        Cell::Json(sources_json(i)),
+        Cell::json(sources_json(i)),
     ]);
     row
 }

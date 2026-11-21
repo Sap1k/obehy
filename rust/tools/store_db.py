@@ -6,6 +6,8 @@
     uv run python rust/tools/store_db.py dump NAME OUT
     uv run python rust/tools/store_db.py parity STREAM [--limit N] [--keep]
     uv run python rust/tools/store_db.py broker-fixture NAME
+    uv run python rust/tools/store_db.py release NAME [NAME ...] --release DIR --archive ROOT
+        --source duk --channel vehicles --since ISO --until ISO [--feed jdf]
 
 `create` makes a database from the test database URL (`OBEHY_TEST_DATABASE_URL` or
 `[database] test_url`), migrated as `tests/db/conftest.py` migrates its template, and prints only
@@ -18,6 +20,8 @@ databases compare as text (ids that sequences hand out are compared as they are:
 send the same rows in the same order). `parity` does it all: two fresh databases, the stream
 through Python's store into one and through `obehy-rt`'s (`examples/store_parity.rs`, the URL
 passed in the environment) into the other, both dumped and compared, the databases dropped.
+`release` loads a bounded subset of a real release (the rows the keys of an archive window
+reach) into one or more databases under one run ID and activates it (`tests/worker_db.rs`).
 """
 
 from __future__ import annotations
@@ -452,6 +456,75 @@ def broker_fixture(name: str) -> None:
             )
 
 
+def subset_release(
+    names: list[str],
+    release: Path,
+    archive: Path,
+    source: str,
+    channel: str,
+    since: str,
+    until: str,
+    feed: str,
+) -> str:
+    """A bounded subset of `release` loaded into each database and activated: the rows the keys
+    of the window's polls reach in `feed` (`index_crosscheck._subset_release`; the other feed is
+    the fixture's), under one fresh run ID, which it prints last. Never the whole feed."""
+
+    import tempfile
+
+    sys.path.insert(0, str(RUST.parent))
+    sys.path.insert(0, str(RUST / "tools"))
+    from index_crosscheck import _subset_release  # pyright: ignore
+
+    from obehy.realtime.policy import load_policy
+    from obehy.realtime.replay import ReplayOptions, decoded_polls, named_channels
+    from obehy.realtime.runner import _lines, _refs  # pyright: ignore
+    from obehy.realtime.times import instant
+    from obehy.release.activate import activate
+    from obehy.release.contract import load_contract
+    from obehy.release.load import load_release
+
+    start, end = instant(_time(since)), instant(_time(until))  # type: ignore[arg-type]
+    refs: set[tuple[str, str]] = set()
+    lines: set[tuple[str, str]] = set()
+    with tempfile.TemporaryDirectory() as tmp:
+        options = ReplayOptions(
+            release=release,
+            archive=archive,
+            start=start.date(),
+            end=end.date(),
+            channels=named_channels([(source, channel)]),
+            out=Path(tmp),
+            since=start,
+            until=end,
+            all_feeds=True,
+        )
+        for poll in decoded_polls(options, load_policy()):
+            for observation in poll.observations or []:
+                if observation.feed == feed:
+                    refs |= _refs(observation)
+                    lines |= _lines(observation)
+        plan = {
+            "feed": feed,
+            "release": str(release),
+            "steps": [
+                {
+                    "op": "ensure",
+                    "refs": [list(r) for r in sorted(refs)],
+                    "lines": [list(r) for r in sorted(lines)],
+                }
+            ],
+        }
+        subset = _subset_release(plan, Path(tmp) / "subset")
+        run_id = json.loads((subset / "release.json").read_text(encoding="utf-8"))["run_id"]
+        contract = load_contract()
+        for name in names:
+            with psycopg.connect(url_of(name), autocommit=True) as connection:
+                load_release(connection, subset, contract, report=lambda _: None)
+                activate(connection, contract, run_id)
+    return run_id
+
+
 def _header(stream: Path) -> dict[str, Any]:
     opener = gzip.open if stream.suffix == ".gz" else open
     with opener(stream, "rt", encoding="utf-8") as lines:  # type: ignore[operator]
@@ -536,6 +609,15 @@ def main() -> None:
     p.add_argument("out", type=Path)
     p = commands.add_parser("broker-fixture")
     p.add_argument("name")
+    p = commands.add_parser("release")
+    p.add_argument("names", nargs="+")
+    p.add_argument("--release", type=Path, required=True)
+    p.add_argument("--archive", type=Path, required=True)
+    p.add_argument("--source", required=True)
+    p.add_argument("--channel", required=True)
+    p.add_argument("--since", required=True)
+    p.add_argument("--until", required=True)
+    p.add_argument("--feed", default="jdf")
     p = commands.add_parser("parity")
     p.add_argument("stream", type=Path)
     p.add_argument("--limit", type=int)
@@ -550,6 +632,19 @@ def main() -> None:
         print(apply(args.name, args.stream, args.limit, args.release))
     elif args.command == "broker-fixture":
         broker_fixture(args.name)
+    elif args.command == "release":
+        print(
+            subset_release(
+                args.names,
+                args.release,
+                args.archive,
+                args.source,
+                args.channel,
+                args.since,
+                args.until,
+                args.feed,
+            )
+        )
     elif args.command == "parity":
         sys.exit(parity(args.stream, args.limit, args.keep, args.work))
     else:

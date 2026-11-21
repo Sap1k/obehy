@@ -15,11 +15,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc;
 
+use obehy_core::config::Channel;
 use obehy_core::index::RowsError;
 use obehy_core::model::{Effect, Feed, Observation};
 use obehy_core::runner::{Loads, Phases, RunError, Runner, Ticks};
 use obehy_core::time::{Instant, TimeDelta, next_multiple};
-use obehy_sources::Decoders;
+use obehy_sources::reader::json::Json;
+use obehy_sources::{Decoders, PayloadError};
 use serde_json::{Map, Value};
 
 use crate::compare::{Window, json_of, merged_polls};
@@ -174,34 +176,60 @@ fn decode_poll(
             .and_then(Value::as_str)
             .unwrap_or_default();
         let request = poll.entry.get("request").map(json_of);
-        match decoders.decode(
-            &decoded.source,
-            &decoded.channel,
-            &body,
+        let channel = window
+            .channels
+            .iter()
+            .find(|c| c.source == decoded.source && c.channel == decoded.channel)
+            .expect("a selected channel");
+        let payload = Payload {
+            body: &body,
             sha256,
-            at,
-            skew,
-            request.as_ref(),
-        ) {
+            received_at: at,
+            request: request.as_ref(),
+        };
+        match decode_payload(decoders, channel, &payload, skew, window.all_feeds) {
             Err(error) => decoded.error = Some((error.class.to_owned(), error.message)),
-            Ok(observations) => {
-                let live = window
-                    .channels
-                    .iter()
-                    .find(|c| c.source == decoded.source && c.channel == decoded.channel)
-                    .expect("a selected channel");
-                decoded.observations = Some(
-                    observations
-                        .into_iter()
-                        .filter(|o| window.all_feeds || live.is_live(o.feed.as_str()))
-                        .map(Arc::new)
-                        .collect(),
-                );
-            }
+            Ok(observations) => decoded.observations = Some(observations),
         }
     }
     decoded.entry = poll.entry;
     Ok(decoded)
+}
+
+/// A stored payload as a decoder reads it: the stored body (filtered if the channel says so),
+/// its sha256, the reception time and the poll's archived request (a board's station).
+#[derive(Debug, Clone, Copy)]
+pub struct Payload<'a> {
+    pub body: &'a [u8],
+    pub sha256: &'a str,
+    pub received_at: Instant,
+    pub request: Option<&'a Json>,
+}
+
+/// A facts channel's payload decoded, only the observations of the channel's live feeds unless
+/// `all_feeds`: the one decoding step replay and the live worker share (`decoded_polls`,
+/// `worker.PollHandler.decode`).
+pub fn decode_payload(
+    decoders: &Decoders,
+    channel: &Channel,
+    payload: &Payload<'_>,
+    skew: TimeDelta,
+    all_feeds: bool,
+) -> Result<Vec<Arc<Observation>>, PayloadError> {
+    let observations = decoders.decode(
+        &channel.source,
+        &channel.channel,
+        payload.body,
+        payload.sha256,
+        payload.received_at,
+        skew,
+        payload.request,
+    )?;
+    Ok(observations
+        .into_iter()
+        .filter(|o| all_feeds || channel.is_live(o.feed.as_str()))
+        .map(Arc::new)
+        .collect())
 }
 
 /// Each poll of the window (`since`..`until`) in reception order, decoded (only the
@@ -458,6 +486,14 @@ pub struct ReplayArgs {
     /// Write a GTFS-RT snapshot of every feed this often (simulated seconds).
     #[arg(long = "gtfs-rt-every")]
     pub gtfs_rt_every: Option<i64>,
+    /// Rebuild `rt.observation` and history of the replayed days in the database
+    /// (`crate::history`).
+    #[arg(long = "write-history")]
+    pub write_history: bool,
+    /// With --write-history: the database URL from this environment variable (default:
+    /// `[database] url`).
+    #[arg(long = "url-env")]
+    pub url_env: Option<String>,
 }
 
 /// Counts what the replay produced and writes the GTFS-RT snapshots.
@@ -546,6 +582,9 @@ impl Sink<FileLoads, crate::phases::Phases> for Replayed {
 /// `obehy-rt replay --from-files`: the window through the runner, GTFS-RT snapshots if asked,
 /// and a summary with the time per phase.
 pub fn run_command(args: &ReplayArgs) -> std::process::ExitCode {
+    if args.write_history {
+        return crate::history::run_command(args);
+    }
     let fail = |message: String| {
         eprintln!("error: {message}");
         std::process::ExitCode::FAILURE

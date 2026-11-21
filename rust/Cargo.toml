@@ -51,6 +51,11 @@ cpu-time = "1.0"
 # R7/R8, the store and the lookup broker (obehy-rt only): binary COPY streams, pipelined
 # statements, LISTEN notifications.
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# R8, the worker's periodic summary: resident memory on Windows and Linux.
+memory-stats = "1.2"
+# R7, the memory soak: an allocator that returns memory, chosen by the soak (`--features
+# mimalloc`; docs/RUST_PORT.md "Memory").
+mimalloc = { version = "0.1.52", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -56,7 +56,7 @@ struct Written {
     vehicles: Rows,
     trips: Rows,
     parts: Rows,
-    calls: BTreeMap<JourneyKey, (Arc<[CallState]>, PyJson)>,
+    calls: BTreeMap<JourneyKey, (Arc<[CallState]>, Arc<PyJson>)>,
 }
 
 #[derive(Debug)]
@@ -109,6 +109,20 @@ impl<S: Store, B: Book> Writer<S, B> {
                 Err(error)
             }
         }
+    }
+
+    /// Container sizes for the periodic summary, summed over feeds: the state rows last
+    /// written (vehicles, trips, parts) and the journeys' cached calls JSON. Each follows the
+    /// state it mirrors: a row leaves when its vehicle or journey leaves the state.
+    pub fn sizes(&self) -> (usize, usize, usize, usize) {
+        self.state.values().fold((0, 0, 0, 0), |(v, t, p, c), w| {
+            (
+                v + w.vehicles.len(),
+                t + w.trips.len(),
+                p + w.parts.len(),
+                c + w.calls.len(),
+            )
+        })
     }
 
     // --- effects ---------------------------------------------------------------------------
@@ -341,7 +355,7 @@ impl<S: Store, B: Book> Writer<S, B> {
                 Some((made_from, encoded)) if Arc::ptr_eq(made_from, &instance.calls) => {
                     (Arc::clone(made_from), encoded.clone())
                 }
-                _ => (Arc::clone(&instance.calls), calls_json(instance)),
+                _ => (Arc::clone(&instance.calls), Arc::new(calls_json(instance))),
             };
             now.trips.insert(
                 Key(journey_key_cells(journey)),

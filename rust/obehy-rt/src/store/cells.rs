@@ -3,6 +3,7 @@
 
 use std::cmp::Ordering;
 use std::error::Error;
+use std::sync::Arc;
 
 use bytes::{BufMut, BytesMut};
 use obehy_core::py::json::{DumpOptions, PyJson, dumps};
@@ -17,7 +18,7 @@ pub const PG_EPOCH_MICROS: i64 = 946_684_800_000_000;
 pub const PG_EPOCH_DAYS: i32 = 10_957;
 
 /// One value of a row.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Cell {
     Null,
     Text(String),
@@ -26,8 +27,26 @@ pub enum Cell {
     Float(f64),
     Date(Date),
     Time(Instant),
-    /// A jsonb value (written as Python's `json.dumps` text; recorded as the object).
-    Json(PyJson),
+    /// A jsonb value (written as Python's `json.dumps` text; recorded as the object). Shared:
+    /// a journey's calls are one tree for its row and the writer's cache, and an unchanged
+    /// row compares by pointer.
+    Json(Arc<PyJson>),
+}
+
+impl PartialEq for Cell {
+    fn eq(&self, other: &Cell) -> bool {
+        match (self, other) {
+            (Cell::Null, Cell::Null) => true,
+            (Cell::Text(a), Cell::Text(b)) => a == b,
+            (Cell::Int(a), Cell::Int(b)) => a == b,
+            (Cell::Bool(a), Cell::Bool(b)) => a == b,
+            (Cell::Float(a), Cell::Float(b)) => a == b,
+            (Cell::Date(a), Cell::Date(b)) => a == b,
+            (Cell::Time(a), Cell::Time(b)) => a == b,
+            (Cell::Json(a), Cell::Json(b)) => Arc::ptr_eq(a, b) || a == b,
+            _ => false,
+        }
+    }
 }
 
 /// A row: one cell per column.
@@ -36,6 +55,10 @@ pub type Row = Vec<Cell>;
 impl Cell {
     pub fn text(value: impl Into<String>) -> Cell {
         Cell::Text(value.into())
+    }
+
+    pub fn json(value: PyJson) -> Cell {
+        Cell::Json(Arc::new(value))
     }
 
     pub fn opt_text(value: Option<impl Into<String>>) -> Cell {

@@ -8,7 +8,7 @@
 //! in `(received_at, source, sha256, item)` order and checks the runner's invariants
 //! ([`RunError::Invariant`] is fatal). [`Runner::tick`] is the housekeeping step: compaction and
 //! sweeps when due, then per feed (sorted) `refresh` and `estimate_all`. [`Ticks`] steps a
-//! simulated clock through ticks on round multiples of `emit.tick_s`.
+//! simulated clock through ticks on round multiples of `emit.tick_s` (`advance`, `split`).
 
 use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
@@ -591,6 +591,32 @@ impl Ticks {
             ticked(runner, next, effects)?;
             next = next_multiple(next, self.every_s);
             self.next = Some(next);
+        }
+        Ok(())
+    }
+
+    /// The chunk (in `received_at` order) in runs between ticks, each handed to `run`; the
+    /// ticks between them run on the way, `ticked` seeing each as in [`Ticks::advance`]
+    /// (Python's `split`). The first observation starts the clock.
+    pub fn split<L: Loads, P: Phases, E: From<RunError>>(
+        &mut self,
+        runner: &mut Runner<L, P>,
+        chunk: &[Arc<Observation>],
+        mut ticked: impl FnMut(&mut Runner<L, P>, Instant, Vec<Effect>) -> Result<(), E>,
+        mut run: impl FnMut(&mut Runner<L, P>, &[Arc<Observation>]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let mut start = 0;
+        for (i, observation) in chunk.iter().enumerate() {
+            if self.next.is_none() || self.due(observation.received_at) {
+                if i > start {
+                    run(runner, &chunk[start..i])?;
+                }
+                start = i;
+                self.advance(runner, observation.received_at, &mut ticked)?;
+            }
+        }
+        if start < chunk.len() {
+            run(runner, &chunk[start..])?;
         }
         Ok(())
     }

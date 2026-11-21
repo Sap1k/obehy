@@ -16,15 +16,15 @@ pub struct Cli {
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Run the live worker (R8).
-    Worker,
+    Worker(crate::worker::command::WorkerArgs),
     /// Record raw polls to the archive without processing them (R8).
     Record(crate::record::RecordArgs),
     /// Replay archived polls through the core (R6).
     Replay(crate::replay::ReplayArgs),
     /// Warm-start the core from stored observations (R7).
-    Warm,
+    Warm(crate::warm::WarmArgs),
     /// Measure decode, core and writer speed over a window (R6).
-    Bench,
+    Bench(crate::bench::BenchArgs),
     /// Write the comparison harness output for a window (R2, R6).
     Compare(crate::compare::CompareArgs),
     /// Write each corpus journey's output stream, and check it against the pinned one (R6).
@@ -35,11 +35,11 @@ pub enum Command {
 impl Command {
     pub fn name(&self) -> &'static str {
         match self {
-            Command::Worker => "worker",
+            Command::Worker(_) => "worker",
             Command::Record(_) => "record",
             Command::Replay(_) => "replay",
-            Command::Warm => "warm",
-            Command::Bench => "bench",
+            Command::Warm(_) => "warm",
+            Command::Bench(_) => "bench",
             Command::Compare(_) => "compare",
             Command::CorpusStream(_) => "corpus-stream",
         }
@@ -48,8 +48,17 @@ impl Command {
 
 /// Runs a parsed command line.
 pub fn run(cli: &Cli) -> ExitCode {
+    if let Command::Worker(args) = &cli.command {
+        return crate::worker::command::run_command(args);
+    }
     if let Command::Record(args) = &cli.command {
         return crate::record::run_command(args);
+    }
+    if let Command::Warm(args) = &cli.command {
+        return crate::warm::run_command(args);
+    }
+    if let Command::Bench(args) = &cli.command {
+        return crate::bench::run_command(args);
     }
     if let Command::Replay(args) = &cli.command {
         return crate::replay::run_command(args);
@@ -70,10 +79,32 @@ mod tests {
 
     #[test]
     fn every_subcommand_parses() {
-        for name in ["worker", "record", "warm", "bench"] {
+        for name in ["worker", "record"] {
             let cli = Cli::try_parse_from(["obehy-rt", name]).expect(name);
             assert_eq!(cli.command.name(), name);
         }
+        let warm = [
+            "obehy-rt",
+            "warm",
+            "--from-files",
+            "r",
+            "--until",
+            "2026-10-06T08:00",
+        ];
+        assert_eq!(
+            Cli::try_parse_from(warm).expect("warm").command.name(),
+            "warm"
+        );
+        let bench = [
+            "obehy-rt",
+            "bench",
+            "--from",
+            "2026-10-06",
+            "--to",
+            "2026-10-06",
+        ];
+        let cli = Cli::try_parse_from(bench.into_iter().chain(["--out", "x"])).expect("bench");
+        assert_eq!(cli.command.name(), "bench");
         let compare = [
             "obehy-rt",
             "compare",

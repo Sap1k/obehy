@@ -343,6 +343,29 @@ pub fn output(
     emit: Emit,
 ) -> io::Result<()> {
     let loads = FileLoads::open(&options.release).map_err(io_error)?;
+    let policy = Arc::new(policy);
+    let runner = Runner::new(
+        loads,
+        policy.clone(),
+        &options.feeds,
+        semantics_of(window),
+        Phases::new(),
+    )
+    .map_err(io_error)?;
+    output_from(runner, window, options, decoders, sources, emit)
+}
+
+/// The output level from a runner already made (a warm-started one: `obehy-rt warm --then`).
+pub fn output_from(
+    mut runner: Runner<FileLoads, Phases>,
+    window: &Window,
+    options: &Options,
+    decoders: &Decoders,
+    sources: &[Source],
+    emit: Emit,
+) -> io::Result<()> {
+    let policy = runner.policy.clone();
+    let loads = runner.loads.clone();
     let mut head = header(window, "output");
     if let C::Obj(fields) = &mut head {
         fields.extend([
@@ -374,15 +397,6 @@ pub fn output(
         policy_version: policy.version.clone(),
         release_id: loads.run_id.clone(),
     };
-    let policy = Arc::new(policy);
-    let mut runner = Runner::new(
-        loads,
-        policy.clone(),
-        &options.feeds,
-        semantics_of(window),
-        Phases::new(),
-    )
-    .map_err(io_error)?;
     let mut recording = Recording::open(sources, derivation, harness_book()?)?;
     recording.flush(None, emit)?; // what opening the writer writes
     let mut sink = Recorder {

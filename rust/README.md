@@ -154,3 +154,24 @@ obehy-rt corpus-stream --out DIR [--check] [names...]   # tests/golden/corpus-st
 
 `compare` takes the arguments `uv run python -m tests.realtime.compare_windows args NAME output`
 prints; `cargo test -p obehy-rt --test corpus_stream` checks the 106 corpus journeys.
+
+## The worker (R8)
+
+`obehy-rt worker` takes `obehy realtime`'s flags (`--archive`, `--gtfs-rt`, `--sources`,
+`--feeds`, `--manifest`, `--config`, `--database-url`). `obehy_rt::worker` is `worker.py`: a
+core thread owns the runner, the writer and the emitters and serves polls, ticks (round
+multiples of `emit.tick_s`, each before the first poll after it, as replay ticks), release
+switches and registry reloads in arrival order; pollers, the tick timer, publications, the
+lookup broker and the summaries (with resident memory and container sizes) are tokio tasks. It
+refuses a database whose last migration is not the one it knows (`worker::schema`). Live and
+replay share decoding (`replay::decode_payload`), the runner and the output
+(`worker::pipeline::Output`, `ReplaySink`):
+
+```
+cargo test -p obehy-rt --test worker_db
+```
+
+runs the worker against a local stub serving archived DÚK payloads on a simulated clock, into a
+test database with a bounded subset release (`store_db.py release`), and compares every `rt.*`
+and `history.*` row and the GTFS-RT file with replay of the worker's archive; it also checks the
+schema refusal and a mid-run release switch.
