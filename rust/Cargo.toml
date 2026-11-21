@@ -1,0 +1,38 @@
+# The realtime worker in Rust (docs/RUST_PORT.md). Three crates, dependencies pointing one way:
+# obehy-rt -> obehy-sources -> obehy-core. Only obehy-rt may use tokio, a database driver or
+# HTTP; `obehy-rt/tests/dependency_direction.rs` enforces it from Cargo.lock.
+[workspace]
+resolver = "3"
+members = ["obehy-core", "obehy-sources", "obehy-rt"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "GPL-3.0-only"
+publish = false
+
+[workspace.dependencies]
+obehy-core = { path = "obehy-core" }
+obehy-sources = { path = "obehy-sources" }
+
+clap = { version = "4.6", features = ["derive"] }
+indexmap = "2.14"
+# Time zones only: Europe/Prague is read from the TZif file Python's `tzdata` ships
+# (obehy-core/tzdata/), never from a bundled or system database (see obehy-core/src/time/zone.rs).
+jiff = { version = "1.0", default-features = false, features = ["std"] }
+regex = "1.13"
+serde = { version = "1.0", features = ["derive"] }
+# float_roundtrip: parse floats correctly rounded, as Python's json does.
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
+thiserror = "2.0"
+# preserve_order: tables keep document order, as tomllib's dicts do (request headers).
+toml = { version = "1.2", features = ["preserve_order"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"

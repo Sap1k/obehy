@@ -1,0 +1,23 @@
+[package]
+name = "obehy-rt"
+description = "The realtime worker binary: the shell, storage, archive and commands."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "obehy-rt"
+path = "src/main.rs"
+
+[dependencies]
+obehy-core.workspace = true
+obehy-sources.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+toml.workspace = true
