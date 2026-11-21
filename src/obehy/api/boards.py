@@ -32,7 +32,7 @@ from obehy.api.params import (
     schedule_spans,
 )
 from obehy.api.stops import group_members
-from obehy.realtime.times import PRAGUE, TimeError, instant
+from obehy.realtime_config import PRAGUE, TimeError, instant
 
 router = APIRouter(tags=["boards"])
 

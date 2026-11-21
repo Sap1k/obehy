@@ -22,9 +22,10 @@ from obehy.realtime import record
 from obehy.realtime.alerts import Alert, AlertEntity, Period
 from obehy.realtime.archive import ArchiveWriter, Poll
 from obehy.realtime.compositions import TripView, Unit
-from obehy.realtime.emit.alerts import AlertFeed, prune_alerts, write_alerts
+from obehy.realtime.emit.alerts import AlertFeed, write_alerts
 from obehy.realtime.emit.compositions import write_composition
 from obehy.realtime.emit.vehicles import VehicleBook
+from obehy.realtime.jobs import prune_alerts
 from obehy.realtime.manifest import Channel
 from obehy.realtime.runtime.lookups import LookupBroker, read_view
 from obehy.realtime.times import Instant, instant, local_date

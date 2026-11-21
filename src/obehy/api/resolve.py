@@ -16,10 +16,10 @@ from fastapi import HTTPException
 
 from obehy.api import schema
 from obehy.api.db import Snapshot
-from obehy.realtime.policy import load_policy
+from obehy.realtime_config import policy_values
 
 # A trip's journey key: the first of these it has (realtime policy `[journey]`).
-JOURNEY_NAMESPACES = list(load_policy().journey.namespaces)
+JOURNEY_NAMESPACES = list(policy_values().journey_namespaces)
 
 
 @dataclass(frozen=True, slots=True)

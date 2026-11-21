@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import re
 import tomllib
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
 from obehy.realtime.facts import Observation, SourceSemantics
+from obehy.realtime_config import SOURCES as SOURCES
+from obehy.realtime_config import Applies, ConfigError, read_applies
 
-SOURCES = Path(__file__).resolve().parent / "sources"
 FEED_NAMES = ("jdf", "czptt")
 POLL_KINDS = ("interval", "demand")
 LOOKUP_KINDS = ("composition",)
@@ -114,32 +114,6 @@ class Rate:
 
 
 @dataclass(frozen=True)
-class Applies:
-    """Which trips a lookup answers for, declared so that the broker and the API agree without
-    asking upstream: a trip key per namespace matching a pattern (all of them), and service
-    dates within `days_around` of today. Empty: every trip of the lookup's feeds, any day."""
-
-    keys: tuple[tuple[str, str], ...] = ()  # (namespace, regex searched in the key)
-    days_around: int | None = None
-
-    @property
-    def namespaces(self) -> tuple[str, ...]:
-        return tuple(namespace for namespace, _ in self.keys)
-
-    def refusal(self, keys: Mapping[str, str], service_date: date, today: date) -> str | None:
-        """Why the lookup does not answer for a trip with these keys on the date; None if it
-        does."""
-
-        for namespace, pattern in self.keys:
-            key = keys.get(namespace)
-            if key is None or re.search(pattern, key) is None:
-                return f"not a trip it answers for ({namespace})"
-        if self.days_around is not None and abs((service_date - today).days) > self.days_around:
-            return f"answers only within {self.days_around} day(s) of today"
-        return None
-
-
-@dataclass(frozen=True)
 class Lookup:
     """A lazy detail (a composition): asked for on demand, never polled. `request` is the
     upstream call as a channel (method, URL whose `{name}` placeholders the connector's plan
@@ -155,7 +129,7 @@ class Lookup:
     retry_s: float  # a failed request is not repeated sooner
     rate: Rate
     daily_budget: int  # requests per day (Europe/Prague)
-    applies: Applies = Applies()
+    applies: Applies = field(default_factory=Applies)
 
     @property
     def qualified(self) -> str:
@@ -389,25 +363,10 @@ def _lookup(source: str, raw: object, where: str) -> Lookup:
 
 
 def _applies(table: dict[str, Any], where: str) -> Applies:
-    if "applies" not in table:
-        return Applies()
-    applies = _table(table, "applies", where)
-    keys = applies.get("keys", {})
-    if not isinstance(keys, dict):
-        raise ManifestError(f"{where}: applies.keys must be a table of patterns")
-    patterns: list[tuple[str, str]] = []
-    for namespace, pattern in sorted(cast(dict[str, object], keys).items()):
-        if not isinstance(pattern, str):
-            raise ManifestError(f"{where}: applies.keys.{namespace} must be a string")
-        try:
-            re.compile(pattern)
-        except re.error as error:
-            raise ManifestError(f"{where}: applies.keys.{namespace}: {error}") from error
-        patterns.append((namespace, pattern))
-    days = applies.get("days_around")
-    if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days < 0):
-        raise ManifestError(f"{where}: applies.days_around must be a whole number of days")
-    return Applies(tuple(patterns), days)
+    try:
+        return read_applies(table, where)
+    except ConfigError as error:
+        raise ManifestError(str(error)) from error
 
 
 def load_source(path: Path, filters: Sequence[str] = ()) -> Source:

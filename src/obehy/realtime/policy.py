@@ -9,7 +9,8 @@ from functools import cache
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
 
-POLICY = Path(__file__).resolve().parents[1] / "data" / "realtime" / "policy-v18.toml"
+from obehy.realtime_config import POLICY as POLICY
+from obehy.realtime_config import PREDICTORS as PREDICTORS
 
 
 class PolicyError(ValueError):
@@ -168,9 +169,6 @@ class BoardPolicy:
     ceiling_per_min: int  # reads per minute at most, sequential
     slowdown_s: int  # after a refusal or slow answers, half the ceiling this long
     slow_latency_factor: float  # slower than this times the median latency is a warning sign
-
-
-PREDICTORS = ("anchor_change", "sz", "propagate")
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import psycopg
 
-from obehy.realtime.policy import load_policy
+from obehy.realtime_config import policy_values
 from obehy.release import activate as activation
 from obehy.release import fetch as fetching
 from obehy.release.contract import load_contract
@@ -179,7 +179,7 @@ def run(args: argparse.Namespace) -> int:
                     report=_report,
                     room=Room(
                         lambda: shutil.disk_usage(release_dir).free,
-                        load_policy().guard.free_gb * 1024**3,
+                        policy_values().guard.free_gb * 1024**3,
                     )
                     if args.check_room
                     else None,

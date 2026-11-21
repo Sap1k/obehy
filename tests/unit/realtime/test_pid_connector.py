@@ -111,8 +111,6 @@ def test_pid_q2_metro_without_a_fleet_number_is_keyed_by_trip() -> None:
     )
     (obs,) = decode(metro)
     assert obs.first(VehicleKey) == VehicleKey("trip:991_120_260207")
-    assert pid.mode("trip:991_120_260207", "jdf") == "metro"
-    assert pid.mode("0:6940", "jdf") == "tram" and pid.mode("train:5861", "czptt") == "train"
 
 
 @pytest.mark.parametrize("state", ["before_track", "before_track_delayed"])

@@ -9,7 +9,7 @@ from functools import cache
 from obehy.api.common import today
 from obehy.api.db import Snapshot
 from obehy.api.resolve import TripOnDate
-from obehy.realtime.manifest import Lookup, declared_lookups
+from obehy.realtime_config import Lookup, declared_lookups
 
 
 @cache

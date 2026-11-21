@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from obehy.realtime.record import Channel, Source, load_sources
+from obehy.realtime_config import Source, load_sources
 from obehy.release.feed_list import feed_list, write_feed_list
 
 
@@ -53,15 +53,6 @@ def test_a_source_live_on_no_feed_is_not_listed(tmp_path: Path) -> None:
     release = tmp_path / "20261013T030215Z-8cf199243726"
     release.mkdir()
     (release / "release.json").write_text(json.dumps({"run_id": release.name}), encoding="utf-8")
-    recorded = Source(
-        "probe",
-        "Probe",
-        "Recorded only.",
-        (
-            Channel(
-                "probe", "c", "GET", "https://example.test", 10, 5, feeds=("jdf",), live_feeds=()
-            ),
-        ),
-    )
+    recorded = Source("probe", "Probe", "Recorded only.", live_feeds=())
 
     assert feed_list(release, [recorded])["realtime_sources"] == []

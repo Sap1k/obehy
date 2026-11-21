@@ -25,7 +25,7 @@ import asyncio
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, LiteralString, cast
 from urllib.parse import quote
@@ -350,15 +350,3 @@ def open_broker(
     )
     connection.execute("SET TIME ZONE 'UTC'")
     return LookupBroker(connection, lookups, fetcher, ArchiveWriter(archive))
-
-
-def prune_lookups(connection: psycopg.Connection[Any], before: datetime) -> int:
-    """Delete requests, fetch records and cached answers older than `before`; compositions are
-    kept. Returns the requests deleted."""
-
-    deleted = connection.execute(
-        "DELETE FROM rt.lookup_request WHERE requested_at < %s", (before,)
-    ).rowcount
-    connection.execute("DELETE FROM rt.lookup_fetch WHERE requested_at < %s", (before,))
-    connection.execute("DELETE FROM rt.detail_cache WHERE expires_at < %s", (before,))
-    return deleted

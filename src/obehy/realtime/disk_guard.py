@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
-from obehy.realtime.policy import GuardPolicy
+from obehy.realtime_config import Guard
 
 GB = 1024**3
 
@@ -24,7 +24,7 @@ class Step:
 
 
 def next_step(
-    free_bytes: int, guard: GuardPolicy, raw_days: Iterable[date], history_days: Iterable[date]
+    free_bytes: int, guard: Guard, raw_days: Iterable[date], history_days: Iterable[date]
 ) -> Step | None:
     """The next day to delete, or None when enough is free or nothing more may go."""
 

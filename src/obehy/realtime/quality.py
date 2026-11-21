@@ -30,7 +30,7 @@ from typing import Any
 
 from obehy.realtime.journey_view import Journey, Key
 from obehy.realtime.quality_checks import Checks
-from obehy.realtime.times import Instant
+from obehy.realtime_config import Instant
 
 HORIZON = 3
 SIGNIFICANT = 30.0  # seconds

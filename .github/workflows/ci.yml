@@ -40,6 +40,50 @@ jobs:
       # The frontend's types come from this document: it must match the API.
       - run: uv run obehy api openapi --out web/openapi.json && git diff --exit-code web/openapi.json
 
+  # The realtime worker in Rust (rust/, docs/RUST_PORT.md). Its tests run on Windows, the
+  # reference platform until the switch: the Python parity fixtures (geo, path, progress,
+  # estimate, runtimes, infer and publish parity, libm.json, the corpus goldens) were generated
+  # there, and f64 sin/cos/atan2/exp come from the platform libm, UCRT on both sides
+  # (rust/docs/PORTING_HAZARDS.md, "Platform libm"). glibc may differ from them in the last bit.
+  rust:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  # The same workspace on Linux, where the worker image runs (Dockerfile, target `worker`):
+  # lints with the Linux cfg and builds the release binary. No tests here: see `rust`.
+  rust-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo build --release --locked -p obehy-rt
+
   web:
     runs-on: ubuntu-latest
     defaults:

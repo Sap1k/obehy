@@ -19,7 +19,6 @@ from psycopg import sql
 
 from obehy.realtime.emit.rows import Row, StateTable
 from obehy.realtime.emit.storage import (
-    HISTORY_TABLES,
     Terms,
     create_history_partitions,
     create_observation_partition,
@@ -30,6 +29,7 @@ from obehy.realtime.emit.vehicles import (
     write_physical_policy,
     write_vehicle_rows,
 )
+from obehy.realtime.jobs import HISTORY_TABLES
 from obehy.realtime.model import Derivation, SnapshotJourney
 
 

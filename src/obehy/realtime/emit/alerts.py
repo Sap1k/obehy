@@ -124,13 +124,6 @@ def write_alerts(
         )
 
 
-def prune_alerts(connection: psycopg.Connection, before: datetime) -> int:
-    """Delete alerts withdrawn before `before`; how many."""
-
-    deleted = connection.execute("DELETE FROM rt.alert WHERE withdrawn_at < %s", (before,))
-    return deleted.rowcount
-
-
 @cache
 def _feed_query() -> LiteralString:
     return cast(LiteralString, (SQL / "alert_feed.sql").read_text(encoding="utf-8"))

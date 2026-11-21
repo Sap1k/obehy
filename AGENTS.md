@@ -44,8 +44,9 @@ realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
 - **No twin implementations.** Live operation and `obehy rt replay` run the same core. Analysis
   is an `obehy rt …` subcommand or a script that imports `obehy`; never re-implement core rules
   in a scratch script.
-- **Time.** Only `realtime/times.py` converts times. Use `Instant` (aware UTC) and `ServiceTime`
-  (service date + wall-clock seconds from local midnight). No naive datetimes. Key everything by service
+- **Time.** Only `realtime/times.py` and the edge it builds on, `realtime_config.py`, convert
+  times. Use `Instant` (aware UTC) and `ServiceTime` (service date + wall-clock seconds from
+  local midnight). No naive datetimes. Key everything by service
   date, never by calendar date. An instance's date is chosen once and never re-derived.
 - **IDs are opaque.** Never parse a public ID (for example the `yymmdd` in a trip ID); resolve
   through `source_key`. History is keyed by journey `(feed, key namespace, key, service date)`

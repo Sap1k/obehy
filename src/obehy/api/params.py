@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from obehy.realtime.times import Instant, ServiceTime, local_date
+from obehy.realtime_config import Instant, ServiceTime, local_date
 
 # Schedule seconds count wall-clock time from local midnight; around a DST change they differ
 # from elapsed time by up to an hour, so the seconds prefilter is widened by that much.

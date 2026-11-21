@@ -54,7 +54,6 @@ PRE_TRIP = frozenset({"before_track", "before_track_delayed"})
 RUNNING = frozenset({"on_track", "at_stop", "off_track"})
 OFF_ROUTE = "off_track"
 CANCELLED = "canceled"
-MODES = {0: "tram", 1: "metro", 2: "train", 3: "bus", 4: "ferry", 7: "funicular", 11: "trolleybus"}
 
 
 def _integer(value: object) -> int | None:
@@ -263,14 +262,3 @@ def _observation(
         decoder_version=DECODER_VERSION,
         facts=tuple(facts),
     )
-
-
-def mode(vehicle: str, feed: Feed) -> str:
-    """The mode of a vehicle key, for replay reports."""
-
-    if feed == "czptt":
-        return "train"
-    head = vehicle.split(":", 1)[0]
-    if head == "trip":
-        return "metro"
-    return MODES.get(int(head), "other") if head.isdigit() else "other"

@@ -29,13 +29,11 @@ from typing import Any, cast
 
 from obehy.pipeline.files import atomic_output_path
 from obehy.realtime.evaluate import PredictorLog
-from obehy.realtime.facts import Feed
 from obehy.realtime.journey_view import JourneyView
 from obehy.realtime.jsonl import open_lines
 from obehy.realtime.keyless_report import KeylessLog, first_facts, observed
 from obehy.realtime.quality import QualityLog
-from obehy.realtime.sources import duk, mpvnet, pid
-from obehy.realtime.times import local_date, parse_utc
+from obehy.realtime_config import local_date, parse_utc
 
 REPORT_SCHEMA_VERSION = 2
 Record = dict[str, Any]
@@ -160,18 +158,47 @@ class ReplayReport:
         return document
 
 
+# The fleets the bound shares are counted by: DÚK's own buses, Teplice and Ústí city buses and
+# its trains (docs/sources/duk.md), MPV net's buses and trains, PID's modes.
+_DUK_TEPLICE = range(400000, 410000)
+_DUK_DPMUL = range(300000, 310000)
+_PID_MODES = {
+    0: "tram",
+    1: "metro",
+    2: "train",
+    3: "bus",
+    4: "ferry",
+    7: "funicular",
+    11: "trolleybus",
+}
+
+
+def fleet(source: str, vehicle: str, feed: str) -> str:
+    """The fleet a key group's vehicle counts in: `<source>/<fleet>`, or the source."""
+
+    if source == "duk":
+        if feed == "czptt":
+            return "duk/train"
+        number = int(vehicle) if vehicle.isdigit() else -1
+        if number in _DUK_TEPLICE:
+            return "duk/teplice"
+        return "duk/dpmul" if number in _DUK_DPMUL else "duk/duk"
+    if source == "mpvnet":
+        return "mpvnet/train" if feed == "czptt" else "mpvnet/bus"
+    if source == "pid":
+        if feed == "czptt":
+            return "pid/train"
+        head = vehicle.split(":", 1)[0]
+        if head == "trip":
+            return "pid/metro"
+        return f"pid/{_PID_MODES.get(int(head), 'other') if head.isdigit() else 'other'}"
+    return source
+
+
 def _fleets(groups: dict[Group, bool]) -> dict[str, dict[str, int]]:
     fleets: dict[str, Counter[str]] = defaultdict(Counter)
     for (source, vehicle, (namespace, _), _), bound in groups.items():
-        feed: Feed = "czptt" if namespace.startswith("czptt:") else "jdf"
-        if source == duk.SOURCE:
-            name = f"{source}/{duk.fleet(vehicle, feed)}"
-        elif source == mpvnet.SOURCE:
-            name = f"{source}/{'train' if feed == 'czptt' else 'bus'}"
-        elif source == pid.SOURCE:
-            name = f"{source}/{pid.mode(vehicle, feed)}"
-        else:
-            name = source
+        name = fleet(source, vehicle, "czptt" if namespace.startswith("czptt:") else "jdf")
         fleets[name]["key_groups"] += 1
         fleets[name]["bound"] += int(bound)
     return {name: dict(sorted(counter.items())) for name, counter in sorted(fleets.items())}

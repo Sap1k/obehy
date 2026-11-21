@@ -18,7 +18,7 @@ from obehy.api.params import (
     search_words,
 )
 from obehy.api.trips import by_key_path, trip_path
-from obehy.realtime.times import ServiceTime
+from obehy.realtime_config import ServiceTime
 from tests.realtime.observations import local
 
 

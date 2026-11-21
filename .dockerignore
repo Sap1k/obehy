@@ -4,4 +4,8 @@
 !README.md
 !src/
 !deploy/
+!rust/
 **/__pycache__
+# The Rust build stage needs the sources only.
+rust/target/
+rust/*/tests/fixtures/

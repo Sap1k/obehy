@@ -34,7 +34,6 @@ DECODER_VERSION = 4
 
 OFF = 255
 PRE_TRIP_STATES = frozenset({2, 3})
-TEPLICE = range(400000, 410000)
 # DUK-Q1: how far a doubled offset may miss the vehicle's activity time (measured: under
 # 20 s, also while both clocks are frozen at a stop).
 DOUBLE_OFFSET_TOLERANCE = timedelta(minutes=5)
@@ -132,16 +131,3 @@ def _entry(
         decoder_version=DECODER_VERSION,
         facts=tuple(facts),
     )
-
-
-def fleet(vehicle: str, feed: Feed) -> str:
-    """The DÚK fleet a vehicle key belongs to, for replay reports (docs/sources/duk.md)."""
-
-    if feed == "czptt":
-        return "train"
-    number = int(vehicle) if vehicle.isdigit() else -1
-    if number in TEPLICE:
-        return "teplice"
-    if 300000 <= number <= 309999:
-        return "dpmul"
-    return "duk"

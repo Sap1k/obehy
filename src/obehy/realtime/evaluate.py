@@ -13,8 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from obehy.realtime.journey_view import Key, at, journey_key
-from obehy.realtime.policy import PREDICTORS
-from obehy.realtime.times import Instant, parse_utc
+from obehy.realtime_config import PREDICTORS, Instant, parse_utc
 
 Call = tuple[Key, int]
 Record = dict[str, Any]

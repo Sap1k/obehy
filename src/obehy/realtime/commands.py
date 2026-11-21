@@ -17,22 +17,19 @@ from typing import cast
 import psycopg
 
 from obehy.realtime import bench, compare, compare_check, record, replay, replay_report
-from obehy.realtime.archive import prune as prune_archive
-from obehy.realtime.archive import sources as archive_sources
-from obehy.realtime.emit.alerts import prune_alerts
 from obehy.realtime.facts import FEEDS, Feed
 from obehy.realtime.gtfs_rt_check import check
 from obehy.realtime.index_sql import IndexLoadError, active_loads
-from obehy.realtime.jobs import drop_history, hourly
+from obehy.realtime.jobs import hourly, nightly
 from obehy.realtime.manifest import Channel, ManifestError, select_channels
 from obehy.realtime.policy import PolicyError, load_policy
 from obehy.realtime.runtime.demand import StationDemand
 from obehy.realtime.runtime.egress import Egress, EgressError, build_egress
-from obehy.realtime.runtime.lookups import prune_lookups
 from obehy.realtime.sources import registry
-from obehy.realtime.times import Instant, local_date, wall_instant
+from obehy.realtime.times import Instant, wall_instant
 from obehy.realtime.times import now as clock_now
 from obehy.realtime.worker import WorkerOptions, run_worker
+from obehy.realtime_config import ConfigError, policy_values
 from obehy.runtime_config import ConfigurationError, load_database_url
 
 
@@ -255,6 +252,7 @@ def run(args: argparse.Namespace) -> int:
         OSError,
         ManifestError,
         PolicyError,
+        ConfigError,
         ConfigurationError,
         IndexLoadError,
         replay.ReplayError,
@@ -494,33 +492,19 @@ def _worker(args: argparse.Namespace) -> int:
 
 
 def _jobs(args: argparse.Namespace) -> int:
-    policy = load_policy()
+    policy = policy_values()
     now = clock_now()
-    if args.job_command == "hourly":
-        data = cast(Path, args.data)
-        with psycopg.connect(_url(args), autocommit=True) as connection:
+    archive = cast(Path, args.archive)
+    with psycopg.connect(_url(args), autocommit=True) as connection:
+        if args.job_command == "hourly":
+            data = cast(Path, args.data)
             for line in hourly(
-                connection,
-                cast(Path, args.archive),
-                policy,
-                now,
-                lambda: shutil.disk_usage(data).free,
+                connection, archive, policy, now, lambda: shutil.disk_usage(data).free
             ):
                 print(line, file=sys.stderr if line.startswith("disk guard") else sys.stdout)
-        return 0
-    with psycopg.connect(_url(args), autocommit=True) as connection:
-        kept = local_date(now) - timedelta(days=policy.retention.history_days)
-        dropped = drop_history(connection, kept)
-        print(f"dropped {len(dropped)} history days before {kept}")
-        # Alerts and lookup requests outlive the raw archive's shorter windows.
-        withdrawn = now - timedelta(days=policy.retention.longest_raw_days)
-        print(f"deleted {prune_alerts(connection, withdrawn)} alerts withdrawn before {withdrawn}")
-        print(f"deleted {prune_lookups(connection, withdrawn)} lookup requests before {withdrawn}")
-    archive = cast(Path, args.archive)
-    for source in archive_sources(archive):
-        cutoff = now.date() - timedelta(days=int(policy.retention.raw_days(source)))
-        pruned = prune_archive(archive, cutoff, source)
-        print(f"deleted {len(pruned)} raw archive days of {source} before {cutoff}")
+        else:
+            for line in nightly(connection, archive, policy, now):
+                print(line)
     return 0
 
 

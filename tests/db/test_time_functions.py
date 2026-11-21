@@ -8,7 +8,7 @@ from datetime import date
 import psycopg
 import pytest
 
-from obehy.realtime.times import ServiceTime
+from obehy.realtime_config import ServiceTime
 
 pytestmark = pytest.mark.postgres
 

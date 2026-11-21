@@ -2,14 +2,12 @@
 history term dictionary (`history.term`).
 
 `rt.observation` is partitioned per UTC hour (`observation_YYYYMMDDHH`) and every history table
-per service date (`<table>_YYYYMMDD`), so retention drops whole partitions (`realtime/jobs.py`).
-Older servers kept daily observation partitions (`observation_YYYYMMDD`); they are recognized
-until dropped.
+per service date (`<table>_YYYYMMDD`), so retention drops whole partitions (`realtime/jobs.py`,
+which reads the names and keeps the list of history tables).
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -18,19 +16,7 @@ from typing import cast
 import psycopg
 from psycopg import errors, sql
 
-HISTORY_TABLES = (
-    "journey",
-    "journey_schedule",
-    "journey_call",
-    "actual_stop_event",
-    "vehicle_assignment",
-    "journey_link",
-    "platform_evidence",
-    "journey_cancellation",
-)
-
-_OBSERVATION = re.compile(r"^observation_(\d{8})(\d{2})?$")
-_HISTORY_DAY = re.compile(r"^(?P<table>[a-z_]+)_(?P<day>\d{8})$")
+from obehy.realtime.jobs import HISTORY_TABLES
 
 
 def hour_of(at: datetime) -> datetime:
@@ -41,28 +27,6 @@ def hour_of(at: datetime) -> datetime:
 
 def observation_name(hour: datetime) -> str:
     return f"observation_{hour:%Y%m%d%H}"
-
-
-def observation_end(name: str) -> datetime | None:
-    """When an observation partition's range ends (hourly or the older daily), if it is one."""
-
-    match = _OBSERVATION.match(name)
-    if match is None:
-        return None
-    day = datetime.strptime(match.group(1), "%Y%m%d").replace(tzinfo=UTC)
-    if match.group(2) is None:
-        return day + timedelta(days=1)
-    return day + timedelta(hours=int(match.group(2)) + 1)
-
-
-def history_day(name: str) -> date | None:
-    """The service date of a daily history partition, if `name` is one."""
-
-    match = _HISTORY_DAY.match(name)
-    if match is None or match.group("table") not in HISTORY_TABLES:
-        return None
-    day = match.group("day")
-    return date(int(day[:4]), int(day[4:6]), int(day[6:]))
 
 
 def create_observation_partition(connection: psycopg.Connection, hour: datetime) -> None:

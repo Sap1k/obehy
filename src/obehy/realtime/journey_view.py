@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, cast
 
-from obehy.realtime.times import Instant, parse_utc
+from obehy.realtime_config import Instant, parse_utc
 
 Record = dict[str, Any]
 

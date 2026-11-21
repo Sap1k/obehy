@@ -24,7 +24,7 @@ import psycopg
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import ConnectionPool
 
-from obehy.realtime.times import Instant, instant
+from obehy.realtime_config import Instant, instant
 
 SQL = Path(__file__).resolve().parent / "sql"
 PUBLICATION: LiteralString = (

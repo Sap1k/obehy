@@ -14,7 +14,7 @@ from pydantic import AfterValidator, BaseModel, Field, computed_field
 
 from obehy.api import labels
 from obehy.api.punctuality import Punctuality
-from obehy.realtime.times import PRAGUE
+from obehy.realtime_config import PRAGUE
 
 CallStatus = Literal["scheduled", "predicted", "actual", "inferred", "no_realtime", "cancelled"]
 # Every time is answered in Prague time, whether read as a timestamp or from a stored instant.

@@ -13,7 +13,7 @@ from psycopg_pool import ConnectionPool
 from obehy.api import schema
 from obehy.api.db import Snapshot, snapshot
 from obehy.api.limits import Limits
-from obehy.realtime.times import PRAGUE, local_date
+from obehy.realtime_config import PRAGUE, local_date
 
 
 def _snapshot(request: Request) -> Iterator[Snapshot]:

@@ -301,6 +301,37 @@ facts decoders going last. AGENTS.md's rule is "no twin implementations": until 
 Python worker is the reference under test only and is never run live alongside Rust; after it,
 it is not kept as a fallback.
 
+What stays and what goes, prepared so that the switch only deletes (the import-linter contract
+"What survives the switch …" in `pyproject.toml` keeps it true):
+
+- **Stays Python:** `obehy/realtime_config.py` (Prague time at the edge, the policy values and
+  manifest fields the API, releases and jobs read; `realtime/times.py`, `policy.py` and
+  `manifest.py` build on it until then); in `realtime/`: `__init__`, `jobs.py` (retention, the
+  disk guard, and what they read of the archive layout and the partition names),
+  `disk_guard.py`, `gtfs_rt_check.py`, the diagnostics `replay_report.py`, `quality.py`,
+  `quality_checks.py`, `evaluate.py`, `keyless_report.py`, `journey_view.py`, and
+  `compare_check.py`, `jsonl.py`, `names.py`; `commands.py` cut down to `obehy jobs`,
+  `obehy rt report --from-stream`, `check-gtfs-rt`, `compare-diff` and `corpus pin`.
+- **Goes:** `alerts`, `archive`, `bench`, `compositions`, `core`, `facts`, `geo`, `index`,
+  `index_files`, `index_sql`, `logs`, `manifest`, `model`, `model_json`, `phases`,
+  `platforms`, `policy`, `record`, `replay`, `runner`, `runs`, `times`, `warm`, `worker`, and
+  `emit/`, `infer/`, `runtime/`, `timeline/`, the connectors `sources/*.py`; last, `compare`,
+  `canonical` (it only turns Python core objects into the stream) and the facts decoders. With
+  them `tests/unit/realtime/`, `tests/realtime/`, the realtime tests in `tests/db/`, and the
+  fixture generators in `rust/tools/`. `tests/db/test_api.py` writes its realtime rows through
+  the Python writer: it is rewritten to insert them with SQL first. The diagnostics' unit tests
+  write their streams with the Python replay; they move to hand-written stream records.
+- **Files both read, which must survive:** `src/obehy/data/realtime/` (policy, SR70 catalogue)
+  and `src/obehy/data/vehicles/attributes.toml` stay where they are. The manifests
+  (`src/obehy/realtime/sources/*.toml`) and the SQL compiled into `obehy-rt`
+  (`src/obehy/realtime/sql/`) live in directories emptied of Python; they move, in the switch's
+  commit, to `src/obehy/data/realtime/sources/` and `src/obehy/data/realtime/sql/`, with
+  `realtime_config.SOURCES`, `obehy-rt`'s `Paths` (and the repository root it finds by them),
+  its `include_str!` paths and the `Dockerfile`'s `COPY` lines.
+- **The image:** the `Dockerfile`'s `worker` target is `obehy-rt worker` in Debian trixie
+  (glibc) with those files under `/app` as in the repository; compose's `realtime` service
+  takes it in place of `command: ["realtime"]`.
+
 ## Carrying the rules over
 
 - **Purity, by crate.** A Cargo workspace in `rust/`:

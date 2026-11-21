@@ -27,14 +27,14 @@ from obehy.api.common import LimitsDep, SnapshotDep, envelope, line, realtime_ca
 from obehy.api.db import Snapshot
 from obehy.api.params import ParameterError, date_span
 from obehy.api.resolve import trip_on
-from obehy.realtime.policy import load_policy
+from obehy.realtime_config import policy_values
 
 router = APIRouter()
 
 
 @cache
 def _gap_s() -> int:
-    return load_policy().time.vehicle_day_gap_s
+    return policy_values().vehicle_day_gap_s
 
 
 def _chains(

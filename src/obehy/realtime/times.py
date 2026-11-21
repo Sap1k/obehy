@@ -1,4 +1,5 @@
-"""The only module that converts realtime times (BASE_PLAN.md section 19.3).
+"""The worker's time conversions (BASE_PLAN.md section 19.3), built on the edge in
+`obehy.realtime_config`; nothing else converts realtime times.
 
 `Instant` is an aware UTC datetime. `ServiceTime` is a schedule time: wall-clock seconds from
 local midnight of the service date, exactly as JrUtil writes it (values past 86400 continue into
@@ -13,48 +14,21 @@ in wall-clock time, which silently breaks durations across a DST change.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
-from typing import NewType
-from zoneinfo import ZoneInfo
 
-PRAGUE = ZoneInfo("Europe/Prague")
+# Prague time at the edge lives in `realtime_config` (read by the API and the jobs too, and
+# kept after the switch to the Rust worker); the worker's conversions build on it.
+from obehy.realtime_config import PRAGUE as PRAGUE
+from obehy.realtime_config import Instant as Instant
+from obehy.realtime_config import ServiceTime as ServiceTime
+from obehy.realtime_config import TimeError as TimeError
+from obehy.realtime_config import instant as instant
+from obehy.realtime_config import local_date as local_date
+from obehy.realtime_config import micros as micros
+from obehy.realtime_config import parse_utc as parse_utc
+from obehy.realtime_config import utc_text as utc_text
 
-Instant = NewType("Instant", datetime)
-
-
-class TimeError(ValueError):
-    """A value that cannot be a valid time in its declared meaning."""
-
-
-def instant(value: datetime) -> Instant:
-    """An aware datetime as a UTC `Instant`; naive input is a programming error."""
-
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise TimeError(f"naive datetime {value.isoformat()} cannot be an Instant")
-    return Instant(value.astimezone(UTC))
-
-
-@dataclass(frozen=True, slots=True, order=True)
-class ServiceTime:
-    service_date: date
-    seconds: int
-
-    def instant(self) -> Instant:
-        """The instant of this wall-clock schedule time (first occurrence when repeated)."""
-
-        return _schedule_instant(self.service_date, self.seconds)
-
-
-@lru_cache(maxsize=1 << 16)  # schedule times repeat on every fix of a journey; bounded
-def _schedule_instant(service_date: date, seconds: int) -> Instant:
-    wall = datetime.combine(service_date, time()) + timedelta(seconds=seconds)
-    return instant(wall.replace(tzinfo=PRAGUE, fold=0))
-
-
-_EPOCH = Instant(datetime(1970, 1, 1, tzinfo=UTC))
-_MICROSECOND = timedelta(microseconds=1)
 _HOUR_US = 3_600_000_000
 
 
@@ -80,36 +54,18 @@ def wall_instant(wall: datetime) -> Instant:
     return instant(wall.replace(tzinfo=PRAGUE, fold=0))
 
 
-def local_date(value: Instant) -> date:
-    """The Europe/Prague calendar date of an instant."""
-
-    return _local_date(micros(value) // _HOUR_US)
-
-
 def candidate_service_dates(value: Instant) -> tuple[date, date, date]:
     """Service dates an observation can belong to: local yesterday, today and tomorrow."""
 
     return _candidate_dates(micros(value) // _HOUR_US)
 
 
-# Prague's UTC offsets are whole hours, so the local date is the same for a whole UTC hour:
-# the conversions run several times per observation and are cached per hour (bounded).
-@lru_cache(maxsize=1 << 12)
-def _local_date(hour: int) -> date:
-    return datetime.fromtimestamp(hour * 3600, UTC).astimezone(PRAGUE).date()
-
-
+# Prague's UTC offsets are whole hours, so the local dates are the same for a whole UTC hour:
+# they are asked several times per observation and cached per hour (bounded).
 @lru_cache(maxsize=1 << 12)
 def _candidate_dates(hour: int) -> tuple[date, date, date]:
-    today = _local_date(hour)
+    today = local_date(instant(datetime.fromtimestamp(hour * 3600, UTC)))
     return today - timedelta(days=1), today, today + timedelta(days=1)
-
-
-def micros(value: Instant) -> int:
-    """Exact microseconds since the epoch, for arithmetic in the tracker's inner loop: a
-    difference of two divided by 1_000_000 is bit-identical to `timedelta.total_seconds()`."""
-
-    return (value - _EPOCH) // _MICROSECOND
 
 
 def scaled_micros(delta_us: int, factor: float) -> int:
@@ -122,25 +78,6 @@ def scaled_micros(delta_us: int, factor: float) -> int:
     if r > denominator or (r == denominator and q % 2 == 1):
         q += 1
     return q
-
-
-def utc_text(value: datetime) -> str:
-    """An aware time as UTC ISO 8601 with `Z`: `YYYY-MM-DDTHH:MM:SSZ`, with six digits of
-    fractional seconds (`.ffffffZ`) only when the microseconds are not zero."""
-
-    at = instant(value)
-    text = (
-        f"{at.year:04d}-{at.month:02d}-{at.day:02d}T{at.hour:02d}:{at.minute:02d}:{at.second:02d}"
-    )
-    if at.microsecond:
-        text += f".{at.microsecond:06d}"
-    return text + "Z"
-
-
-def parse_utc(text: str) -> Instant:
-    """An instant from `utc_text` (or any ISO 8601 time with an offset)."""
-
-    return instant(datetime.fromisoformat(text))
 
 
 def next_multiple(at: Instant, every_s: int) -> Instant:

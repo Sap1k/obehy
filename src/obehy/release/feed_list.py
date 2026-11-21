@@ -18,7 +18,7 @@ from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from obehy.pipeline.files import atomic_output_path
-from obehy.realtime.record import Source, load_sources
+from obehy.realtime_config import Source, load_sources
 
 
 @dataclass(frozen=True)

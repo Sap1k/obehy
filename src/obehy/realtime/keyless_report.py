@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from obehy.realtime.names import same_name
-from obehy.realtime.times import Instant, parse_utc
+from obehy.realtime_config import Instant, parse_utc
 
 Record = dict[str, Any]
 

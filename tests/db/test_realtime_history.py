@@ -10,12 +10,17 @@ from typing import Any, LiteralString
 import psycopg
 import pytest
 
-from obehy.realtime.archive import days as archive_days
 from obehy.realtime.core import CORE_VERSION, Context, snapshot, step
 from obehy.realtime.disk_guard import GB
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.sql_store import SqlStore
-from obehy.realtime.jobs import drop_history, drop_observations, history_days, hourly
+from obehy.realtime.jobs import (
+    archive_days,
+    drop_history,
+    drop_observations,
+    history_days,
+    hourly,
+)
 from obehy.realtime.model import (
     AssignVehicle,
     Derivation,
@@ -25,7 +30,8 @@ from obehy.realtime.model import (
     SnapshotJourney,
     VehicleId,
 )
-from obehy.realtime.policy import GuardPolicy, load_policy
+from obehy.realtime.policy import load_policy
+from obehy.realtime_config import Guard, policy_values
 from tests.realtime.builder import ORIGIN, STEP_LON, timetable
 from tests.realtime.observations import local, observe
 
@@ -260,7 +266,7 @@ def test_the_disk_guard_deletes_raw_days_then_history_days(
     archive = tmp_path / "rt-raw"
     for day in range(4, 9):
         (archive / "duk" / "vehicles" / f"2026-10-0{day}").mkdir(parents=True)
-    policy = replace(POLICY, guard=GuardPolicy(free_gb=6, min_raw_days=3, min_history_days=1))
+    policy = replace(policy_values(), guard=Guard(free_gb=6, min_raw_days=3, min_history_days=1))
 
     lines = list(
         hourly(connection, archive, policy, datetime(2026, 10, 9, 12, tzinfo=UTC), lambda: 0)

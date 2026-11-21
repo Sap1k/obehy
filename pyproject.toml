@@ -94,6 +94,7 @@ source_modules = [
     "obehy.realtime.compositions",
     "obehy.realtime.disk_guard",
     "obehy.realtime.canonical",
+    "obehy.realtime_config",
 ]
 forbidden_modules = [
     "psycopg",
@@ -140,6 +141,64 @@ forbidden_modules = [
     "obehy.realtime.runner",
     "obehy.realtime.replay",
     "obehy.realtime.emit",
+]
+
+# Everything that stays Python after the switch to the Rust worker (docs/RUST_PORT.md, "The
+# switch") imports nothing that is deleted with the Python worker.
+[[tool.importlinter.contracts]]
+name = "What survives the switch imports nothing deleted with the Python worker"
+type = "forbidden"
+source_modules = [
+    "obehy.api",
+    "obehy.release",
+    "obehy.reference",
+    "obehy.realtime_config",
+    "obehy.realtime.jobs",
+    "obehy.realtime.disk_guard",
+    "obehy.realtime.gtfs_rt_check",
+    "obehy.realtime.replay_report",
+    "obehy.realtime.quality",
+    "obehy.realtime.quality_checks",
+    "obehy.realtime.evaluate",
+    "obehy.realtime.keyless_report",
+    "obehy.realtime.journey_view",
+    "obehy.realtime.compare_check",
+    "obehy.realtime.jsonl",
+    "obehy.realtime.names",
+]
+forbidden_modules = [
+    "obehy.realtime.alerts",
+    "obehy.realtime.archive",
+    "obehy.realtime.bench",
+    "obehy.realtime.canonical",
+    "obehy.realtime.commands",
+    "obehy.realtime.compare",
+    "obehy.realtime.compositions",
+    "obehy.realtime.core",
+    "obehy.realtime.emit",
+    "obehy.realtime.facts",
+    "obehy.realtime.geo",
+    "obehy.realtime.index",
+    "obehy.realtime.index_files",
+    "obehy.realtime.index_sql",
+    "obehy.realtime.infer",
+    "obehy.realtime.logs",
+    "obehy.realtime.manifest",
+    "obehy.realtime.model",
+    "obehy.realtime.model_json",
+    "obehy.realtime.phases",
+    "obehy.realtime.platforms",
+    "obehy.realtime.policy",
+    "obehy.realtime.record",
+    "obehy.realtime.replay",
+    "obehy.realtime.runner",
+    "obehy.realtime.runs",
+    "obehy.realtime.runtime",
+    "obehy.realtime.sources",
+    "obehy.realtime.timeline",
+    "obehy.realtime.times",
+    "obehy.realtime.warm",
+    "obehy.realtime.worker",
 ]
 
 [[tool.importlinter.contracts]]

@@ -11,8 +11,9 @@ import pytest
 
 from obehy import cli
 from obehy.realtime import record
-from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls, prune
+from obehy.realtime.archive import ArchiveWriter, Poll, iter_polls
 from obehy.realtime.facts import SourceSemantics
+from obehy.realtime.jobs import prune_archive as prune
 from obehy.realtime.manifest import physical_vehicles
 from obehy.realtime.runtime import fetch
 from obehy.realtime.runtime.scheduler import run_channel
