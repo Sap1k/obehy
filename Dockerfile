@@ -45,7 +45,7 @@ CMD ["worker"]
 
 # --- server ------------------------------------------------------------------------------------
 # uv's build of the official python:3.13-slim (Debian trixie), from GHCR.
-FROM ghcr.io/astral-sh/uv:0.12.7-python3.13-trixie-slim AS server
+FROM ghcr.io/astral-sh/uv:0.13.9-python3.13-trixie-slim AS server
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/*
