@@ -56,6 +56,15 @@ obehy-rt compare --level facts --archive <root> --sources <ids> --from <day> --t
 
 writes the stream `obehy rt compare --level facts` writes, from the same arguments.
 
+## The tracker against Python (R4)
+
+`uv run python rust/tools/gen_progress_fixtures.py` steps the corpus journeys
+(`tests/realtime/corpus`) and the unit scenarios of `test_progress.py`, `test_stops.py` and
+`test_timeline.py` through the Python core and records every call into `timeline/plan`,
+`stops`, `commit` and `progress` with its inputs and output, plus every plan those calls read
+(`obehy-core/tests/fixtures/progress.json.gz`); `tests/timeline_progress.rs` replays them bit for
+bit. Plans are cached in `timeline::plan::PlanCache` (`plan(trip, day, &index, &policy)`).
+
 ## Reading policy, manifests and facts
 
 ```rust

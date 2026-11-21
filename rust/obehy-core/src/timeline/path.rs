@@ -85,7 +85,7 @@ fn segments(points: &[LonLat]) -> Vec<Segment> {
 }
 
 /// `bisect.bisect_right`, CPython's loop.
-fn bisect_right(a: &[f64], x: f64) -> usize {
+pub(crate) fn bisect_right(a: &[f64], x: f64) -> usize {
     let (mut lo, mut hi) = (0, a.len());
     while lo < hi {
         let mid = (lo + hi) / 2;

@@ -13,6 +13,7 @@ pub mod geo;
 pub mod index;
 pub mod infer;
 pub mod model;
+pub mod names;
 pub mod platforms;
 pub mod publish;
 pub mod py;

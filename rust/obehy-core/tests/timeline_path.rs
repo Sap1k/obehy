@@ -10,10 +10,11 @@ use std::path::PathBuf;
 use obehy_core::config::Policy;
 use obehy_core::config::policy::{POLICY_FILE, ProgressPolicy};
 use obehy_core::geo::{LonLat, cumulative_m};
-use obehy_core::py::num::{py_hypot, py_max, py_min};
+use obehy_core::py::num::py_hypot;
 use obehy_core::timeline::path::{
     Path, build_path, candidates, douglas_peucker, heading_at, point_at, project_all, simplify,
 };
+use obehy_core::timeline::progress::sigma;
 use serde_json::Value;
 
 fn policy() -> Policy {
@@ -51,19 +52,6 @@ fn same(actual: f64, expected: f64, what: &str) {
         expected.to_bits(),
         "{what}: {actual:?} != {expected:?}"
     );
-}
-
-/// `progress._sigma`: GPS error combined with the trust of the geometry.
-fn sigma(policy: &ProgressPolicy) -> impl Fn(&Path, f64) -> f64 + '_ {
-    move |path: &Path, segment_m: f64| {
-        let geometry = if path.shaped {
-            policy.shape_sigma_m
-        } else {
-            let chord = py_max(policy.chord_min_sigma_m, policy.chord_k * segment_m);
-            py_min(policy.chord_max_sigma_m, chord)
-        };
-        py_hypot(&[policy.gps_sigma_m, geometry])
-    }
 }
 
 fn check_candidates(found: &[obehy_core::timeline::path::Candidate], expected: &Value, what: &str) {

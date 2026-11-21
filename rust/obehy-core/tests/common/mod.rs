@@ -3,6 +3,9 @@
 
 use std::path::PathBuf;
 
+pub mod builder;
+pub mod trace;
+
 pub fn path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
