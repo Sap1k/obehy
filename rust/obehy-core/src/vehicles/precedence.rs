@@ -1,5 +1,5 @@
 //! Which statement about a vehicle's attribute counts, and the vehicle's profile (BASE_PLAN.md
-//! section 27): port of `reference/precedence.py`. Pure.
+//! section 27). Pure.
 //!
 //! The registry's datasets (curated, the lower priority first) beat what sources state live,
 //! which beats a model's default. Among live statements the vocabulary ranks the sources (per
@@ -97,7 +97,7 @@ pub struct Picked {
 }
 
 /// `_rank`: (origin, rank within it, recency, source, value); recency is minus the float
-/// timestamp, as Python compares it.
+/// timestamp compares it.
 fn rank_cmp(a: &Statement, b: &Statement, vocabulary: &Vocabulary) -> Ordering {
     let within = |s: &Statement| -> i64 {
         match s.origin {

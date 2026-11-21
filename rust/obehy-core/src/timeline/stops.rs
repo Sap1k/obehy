@@ -1,20 +1,13 @@
 //! Where a road vehicle is seen at a stop: the fixes there, whatever the reading makes of them.
-//! Port of `realtime/timeline/stops.py` (its docstring has the rules).
 //!
 //! The fixes within the departure margin of a call's point ([`StopSeen`]) bound its events: the
 //! vehicle arrived by the first fix there; it left after the last fix there and before the
 //! first fix away, a typical dwell after the last fix at most, never past the middle of the gap,
 //! and early enough to have driven to the first fix away at the timetable's pace. At the first
 //! and last call a fix within `terminal_radius_m` counts while the vehicle stands.
-//!
-//! Float comparisons that decide: `zone.departure_m > committed_m` and `trigger <= committed_m`
-//! (both from the plan and the committed point, same operands as Python), exact equality of
-//! neighbouring call distances, and `distance_m(here, point) <= reach` (haversine and
-//! `point_at` are op-for-op ports; the platform libm matches UCRT bit for bit).
 
 use crate::geo::{LonLat, distance_m};
 use crate::model::{EventKind, StopSeen};
-use crate::py::num::py_max;
 use crate::time::{Instant, TimeDelta};
 use crate::timeline::path::point_at;
 use crate::timeline::plan::Plan;
@@ -70,7 +63,7 @@ pub fn at_call(
     let end = (first as i64 + ahead).min(last + 1);
     for call in first as i64..end {
         let reach = if call == 0 || call == last {
-            py_max(radius_m, terminal_m)
+            radius_m.max(terminal_m)
         } else {
             radius_m
         };
@@ -145,7 +138,7 @@ pub fn holding(stop: Option<&StopSeen>) -> Option<usize> {
 }
 
 /// When the vehicle left a stop it was seen at until `last` and away from at `away`. Panics
-/// without `away` (Python asserts).
+/// without `away`.
 pub fn departure(plan: &Plan, stop: &StopSeen, dwell_s: f64) -> Instant {
     let away = stop.away.expect("a stop seen away");
     let gap = away - stop.last;

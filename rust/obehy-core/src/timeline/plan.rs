@@ -1,20 +1,13 @@
 //! A journey's timetable laid on its path: trigger points and when the vehicle is due where.
-//! Port of `realtime/timeline/plan.py`, operation for operation.
 //!
 //! Built once per trip and service date ([`PlanCache`]) and read by the tracker and the
 //! estimates. `BASE_PLAN.md` sections 20.4 (lateness against the timetable window of a place)
 //! and 20.7 (trigger points).
 //!
-//! Float comparisons that decide (R4 hazard list): exact equality of neighbouring call
-//! distances (`stop_zones`, `Timetable::new`, `last_at_point` in stops), `bisect_right` over the
-//! span starts and trigger distances, `<=`/`>=`/`<` against trigger points. All take their
-//! operands from the path, which is bit-identical to Python's (`timeline_path` tests), and the
-//! arithmetic before them is the same IEEE operations in the same order, so they decide alike.
-//!
 //! Memory: [`PlanCache`] holds paths by trip and plans by (trip, service date). Plans are all
-//! dropped once there are more than [`MAX_PLANS`] (Python's module constant, kept as is) and
-//! everything on a release change; [`PlanCache::sweep`] keeps only the trips the index keeps
-//! and plans from a date on (the runner sweeps with the index).
+//! dropped once there are more than [`MAX_PLANS`] and everything on a release change;
+//! [`PlanCache::sweep`] keeps only the trips the index keeps and plans from a date on (the runner
+//! sweeps with the index).
 
 use rustc_hash::FxHashMap as HashMap;
 use std::sync::Arc;
@@ -24,7 +17,6 @@ use crate::config::policy::ProgressPolicy;
 use crate::geo::LonLat;
 use crate::index::{Id, Index, IndexMiss, Trip};
 use crate::model::EventKind;
-use crate::py::num::{py_max, py_min};
 use crate::time::{Date, Instant, ServiceTime, micros, scaled_micros};
 use crate::timeline::path::{Path, bisect_right, build_path};
 use crate::timeline::runtimes::HopPlan;
@@ -89,20 +81,14 @@ pub fn stop_zones(path: &Path, policy: &Policy) -> Vec<StopZone> {
                     arrival = Some(distance - radius); // visits at the origin
                 }
             } else {
-                arrival = Some(py_max(
-                    distance - radius,
-                    (distances[i - 1] + distance) / 2.0,
-                ));
+                arrival = Some((distance - radius).max((distances[i - 1] + distance) / 2.0));
             }
         }
         if (i as i64) < last {
             if distances[i + 1] == distance {
                 departure = Some(arrival.unwrap_or(distance - radius));
             } else {
-                departure = Some(py_min(
-                    distance + margin,
-                    (distance + distances[i + 1]) / 2.0,
-                ));
+                departure = Some((distance + margin).min((distance + distances[i + 1]) / 2.0));
             }
         }
         zones.push(StopZone {
@@ -466,7 +452,7 @@ pub const MAX_PLANS: usize = 50_000;
 ///
 /// Eviction: every plan when there are more than [`MAX_PLANS`] before an insertion; everything
 /// when the index's release changes; [`PlanCache::sweep`] for the rest. Paths have no limit of
-/// their own between sweeps, as in Python.
+/// their own between sweeps.
 #[derive(Debug, Default)]
 pub struct PlanCache {
     release_id: String,

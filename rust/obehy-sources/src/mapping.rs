@@ -1,11 +1,11 @@
 //! The declarative mapping of `[channel.decode]` (obehy_core::config::decode): a JSON
-//! payload's entities to observations, with Python's semantics at every step (decode spec §4).
+//! payload's entities to observations (decode spec §4).
 //!
 //! A [`Mapping`] is compiled once from the manifest: value names become slots, templates and
 //! patterns are parsed, normalizers bound. Per payload: the document is checked and its values
 //! read, guards may drop it whole, then each entity's values are evaluated in order (a
-//! required value missing drops the entity, `skip`/`keep` are checked as soon as Python checks
-//! them), its profile chosen, and its facts made. Profiles with a selector collect their
+//! required value missing drops the entity, `skip`/`keep` are checked as soon as their values
+//! are known), its profile chosen, and its facts made. Profiles with a selector collect their
 //! entities and choose one per group after the last entity. Observations come out in entity
 //! order.
 
@@ -13,18 +13,15 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use indexmap::IndexMap;
 use obehy_core::config::decode::{
-    ByValue, Case, Decode, FactBody, FactSpec, FeedName, Gate, Guard, Invalid, Match, OrChoice,
-    Required, Root, Rule, Scalar, Selector, ValueRule, ValueSpec,
+    ByValue, Case, Decode, FactBody, FactGroups, FactSpec, FeedName, Gate, Guard, Invalid, Match,
+    OrChoice, Required, Root, Rule, Scalar, Selector, ValueRule, ValueSpec,
 };
 use obehy_core::model::{
     Delay, DelayReference, Destination, Fact, Feed, Interval, LineRef, NextPoint, NextStopName,
     NextStopPrediction, Observation, PointEvent, Position, RawRef, ServiceDay, SourceDeparture,
     SourceState, TripCancelled, TripKey, TripStatus, VehicleAttribute, VehicleKey,
 };
-use obehy_core::py::num::py_round_digits;
-use obehy_core::py::text::{self, PyInt};
 use obehy_core::time::{
     Date, Instant, Layout, TimeDelta, iso, read_digits_as_local, read_local, resolve_clock,
     within_skew,
@@ -34,7 +31,7 @@ use regex::Regex;
 use crate::error::PayloadError;
 use crate::krovak::Transformer;
 use crate::normalize::{self, Norm};
-use crate::reader::json::{self, Json, JsonError};
+use crate::reader::json::{self, Value};
 use crate::value::{Val, float_int, matches};
 
 /// What a decoder needs besides the body: reception, the policy's clock skew.
@@ -94,12 +91,12 @@ fn parse_path(path: &str) -> Vec<Seg> {
         .collect()
 }
 
-fn lookup<'j>(root: &'j Json, path: &[Seg]) -> Option<&'j Json> {
+fn lookup<'j>(root: &'j Value, path: &[Seg]) -> Option<&'j Value> {
     let mut at = root;
     for seg in path {
         at = match (seg, at) {
-            (Seg::Key(k), Json::Object(o)) => o.get(k)?,
-            (Seg::Index(i), Json::Array(a)) => a.get(*i)?,
+            (Seg::Key(k), Value::Object(o)) => o.get(k)?,
+            (Seg::Index(i), Value::Array(a)) => a.get(*i)?,
             _ => return None,
         };
     }
@@ -112,7 +109,7 @@ enum Part {
     Lit(String),
     /// `{name}`.
     Text(Ref),
-    /// `{name:d}`: Python `int()`.
+    /// `{name:d}`: an integer.
     Int(Ref),
     /// `{name:0Nd}`.
     Padded(Ref, usize),
@@ -122,7 +119,7 @@ enum Part {
 pub(crate) struct Template(Vec<Part>);
 
 impl Template {
-    /// The text, None when a value is absent; an error where Python's `int()` raises.
+    /// The text, None when a value is absent; an error when an integer part is none.
     fn eval(&self, slots: &Slots) -> Result<Option<String>, PayloadError> {
         let mut out = String::new();
         for part in &self.0 {
@@ -133,11 +130,11 @@ impl Template {
                     None => return Ok(None),
                 },
                 Part::Int(r) => match get(slots, r) {
-                    Some(v) => out.push_str(&v.to_int()?.text()),
+                    Some(v) => out.push_str(&v.to_int()?.to_string()),
                     None => return Ok(None),
                 },
                 Part::Padded(r, width) => match get(slots, r) {
-                    Some(v) => out.push_str(&v.to_int()?.zero_padded(*width)),
+                    Some(v) => out.push_str(&format!("{:0width$}", v.to_int()?)),
                     None => return Ok(None),
                 },
             }
@@ -146,7 +143,7 @@ impl Template {
     }
 }
 
-/// A coercion (`as`), Python's reading of a JSON value.
+/// A coercion (`as`): how a JSON value is read.
 #[derive(Debug, Clone)]
 enum Coerce {
     Raw,
@@ -154,7 +151,7 @@ enum Coerce {
     Int,
     /// A JSON integer or an integer string (`decoding.integer`).
     Integer,
-    /// Python's `int(value)` (DÚK).
+    /// An integer, a float (truncated), a bool or an integer string (DÚK).
     PyInt,
     /// A JSON number or a numeric string, never a bool (`decoding.number`).
     Number,
@@ -164,15 +161,15 @@ enum Coerce {
     Text,
     /// A string, stripped, not empty.
     Trimmed,
-    /// A string of digits (`str.isdigit`).
+    /// A string of ASCII digits.
     Digits,
     /// A 5- or 6-digit SR70 code as its 5 digits.
     Sr70,
     /// `YYYYMMDD` as a date.
     Yyyymmdd,
-    /// Two numbers, neither 0 (a bool is a number here: `isinstance(x, int | float)`).
+    /// Two numbers, neither 0.
     Pair,
-    /// `datetime.fromisoformat`, aware only.
+    /// An ISO time with an offset.
     Iso,
     /// ISO digits read as local time whatever the offset (ARRIVA-Q1).
     IsoLocalDigits,
@@ -180,7 +177,7 @@ enum Coerce {
     Local(Layout),
     /// A bare `HH:MM` near a reference.
     Hhmm,
-    /// Python's `float(text)`, an error if it raises.
+    /// A number in a string, an error if it is none.
     Float,
 }
 
@@ -210,56 +207,39 @@ fn coerce_named(name: &str) -> Result<Coerce, CompileError> {
     })
 }
 
-fn json_number(j: &Json) -> Option<Result<f64, PayloadError>> {
-    match j {
-        Json::Int(n) => Some(Ok(*n as f64)),
-        Json::BigInt(t) => Some(
-            PyInt::Big(t.to_string())
-                .to_f64()
-                .ok_or_else(|| PayloadError {
-                    class: "OverflowError",
-                    message: "int too large to convert to float".into(),
-                }),
-        ),
-        Json::Float(x) => Some(Ok(*x)),
-        _ => None,
-    }
+fn json_int(j: &Value) -> Option<i64> {
+    j.as_i64()
 }
 
-fn json_int(j: &Json) -> Option<PyInt> {
-    match j {
-        Json::Int(n) => Some(PyInt::Small(i128::from(*n))),
-        Json::BigInt(t) => Some(int_text(t)),
-        _ => None,
-    }
+fn int_text(t: &str) -> Option<i64> {
+    t.trim().parse().ok()
 }
 
-fn int_text(t: &str) -> PyInt {
-    PyInt::from_digits(t.starts_with('-'), t.trim_start_matches('-'))
+fn float_text(t: &str) -> Option<f64> {
+    t.trim().parse().ok()
 }
 
-fn hhmm(text: &str) -> Option<i64> {
-    let t = text::strip(text);
-    let (h, m) = t.split_once(':')?;
-    let hc = h.chars().count();
-    if !(1..=2).contains(&hc) || m.chars().count() != 2 {
+fn digits(t: &str) -> bool {
+    !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// `HH:MM` (or `H:MM`) as microseconds after midnight.
+pub(crate) fn hhmm(text: &str) -> Option<i64> {
+    let (h, m) = text.trim().split_once(':')?;
+    if !(1..=2).contains(&h.len()) || m.len() != 2 || !digits(h) || !digits(m) {
         return None;
     }
-    if !h.chars().all(text::is_decimal_char) || !m.chars().all(text::is_decimal_char) {
-        return None;
-    }
-    let hours = text::int_from_str(h)?.small()?;
-    let minutes = text::int_from_str(m)?.small()?;
+    let (hours, minutes): (i64, i64) = (h.parse().ok()?, m.parse().ok()?);
     if hours > 23 || minutes > 59 {
         return None;
     }
-    Some(((hours * 60 + minutes) * 60_000_000) as i64)
+    Some((hours * 60 + minutes) * 60_000_000)
 }
 
 impl Coerce {
     fn apply(
         &self,
-        j: &Json,
+        j: &Value,
         invalid: Invalid,
         near: Option<Instant>,
         ctx: &Context,
@@ -268,78 +248,54 @@ impl Coerce {
         Ok(match self {
             Coerce::Raw => Some(Val::Json(j.clone())),
             Coerce::Int => json_int(j).map(Val::Int),
-            Coerce::Integer => match j {
-                Json::Str(t) => text::int_from_str(t).map(Val::Int),
-                other => json_int(other).map(Val::Int),
-            },
+            Coerce::Integer => s.map_or_else(|| json_int(j), int_text).map(Val::Int),
             Coerce::PyInt => match j {
-                Json::Bool(b) => Some(Val::int(i128::from(*b))),
-                Json::Float(x) if x.is_nan() => None,
-                Json::Float(x) => Some(Val::Int(float_int(*x)?)),
-                Json::Str(t) => text::int_from_str(t).map(Val::Int),
-                other => json_int(other).map(Val::Int),
-            },
-            Coerce::Number => match j {
-                Json::Str(t) => text::float_from_str(t).map(Val::Float),
-                other => json_number(other).transpose()?.map(Val::Float),
-            },
-            Coerce::Real => json_number(j).transpose()?.map(Val::Float),
-            Coerce::Bool => match j {
-                Json::Bool(b) => Some(Val::Bool(*b)),
+                Value::Bool(b) => Some(Val::Int(i64::from(*b))),
+                Value::String(t) => int_text(t).map(Val::Int),
+                Value::Number(n) => n
+                    .as_i64()
+                    .or_else(|| n.as_f64().and_then(float_int))
+                    .map(Val::Int),
                 _ => None,
             },
+            Coerce::Number => s.map_or_else(|| j.as_f64(), float_text).map(Val::Float),
+            Coerce::Real => j.as_f64().map(Val::Float),
+            Coerce::Bool => j.as_bool().map(Val::Bool),
             Coerce::Text => s.map(|t| Val::Text(t.to_owned())),
             Coerce::Trimmed => s
-                .map(text::strip)
+                .map(str::trim)
                 .filter(|t| !t.is_empty())
                 .map(|t| Val::Text(t.to_owned())),
-            Coerce::Digits => s
-                .filter(|t| text::isdigit(t))
-                .map(|t| Val::Text(t.to_owned())),
+            Coerce::Digits => s.filter(|t| digits(t)).map(|t| Val::Text(t.to_owned())),
             Coerce::Sr70 => s
-                .filter(|t| text::isdigit(t) && matches!(t.chars().count(), 5 | 6))
-                .map(|t| Val::Text(t.chars().take(5).collect())),
-            Coerce::Yyyymmdd => s.and_then(|t| {
-                let c: Vec<char> = t.chars().collect();
-                let part = |a: usize, b: usize| -> Option<i128> {
-                    text::int_from_str(&c.get(a..b.min(c.len()))?.iter().collect::<String>())?
-                        .small()
-                };
-                let (y, m, d) = (part(0, 4)?, part(4, 6)?, part(6, c.len())?);
-                Date::new(
-                    i32::try_from(y).ok()?,
-                    u32::try_from(m).ok()?,
-                    u32::try_from(d).ok()?,
-                )
-                .map(Val::Date)
-            }),
-            Coerce::Pair => match j {
-                Json::Array(a) if a.len() == 2 => {
-                    let num = |x: &Json| match x {
-                        Json::Bool(b) => Some(f64::from(u8::from(*b))),
-                        other => json_number(other).and_then(Result::ok),
-                    };
-                    match (num(&a[0]), num(&a[1])) {
-                        (Some(x), Some(y)) if x != 0.0 && y != 0.0 => Some(Val::Pair(x, y)),
-                        _ => None,
-                    }
-                }
+                .filter(|t| digits(t) && matches!(t.len(), 5 | 6))
+                .map(|t| Val::Text(t[..5].to_owned())),
+            Coerce::Yyyymmdd => s
+                .filter(|t| t.len() == 8 && digits(t))
+                .and_then(|t| {
+                    Date::new(
+                        t[..4].parse().ok()?,
+                        t[4..6].parse().ok()?,
+                        t[6..].parse().ok()?,
+                    )
+                })
+                .map(Val::Date),
+            Coerce::Pair => match j.as_array().map(Vec::as_slice) {
+                Some([x, y]) => match (x.as_f64(), y.as_f64()) {
+                    (Some(x), Some(y)) if x != 0.0 && y != 0.0 => Some(Val::Pair(x, y)),
+                    _ => None,
+                },
                 _ => None,
             },
             Coerce::Iso => match s.filter(|t| !t.is_empty()) {
                 None => None,
-                Some(t) => match iso::parse_datetime(t) {
+                Some(t) => match iso::parse_datetime(t)
+                    .and_then(|parsed| parsed.offset_us.map(|_| parsed.instant()).transpose())
+                {
+                    Ok(at) => at.map(Val::Instant),
                     Err(e) => match invalid {
-                        Invalid::Fail => return Err(PayloadError::value(e.0)),
+                        Invalid::Fail => return Err(PayloadError::new(e.0)),
                         Invalid::None => None,
-                    },
-                    Ok(parsed) if parsed.offset_us.is_none() => None,
-                    Ok(parsed) => match parsed.instant() {
-                        Ok(at) => Some(Val::Instant(at)),
-                        Err(e) => match invalid {
-                            Invalid::Fail => return Err(PayloadError::value(e.0)),
-                            Invalid::None => None,
-                        },
                     },
                 },
             },
@@ -354,38 +310,33 @@ impl Coerce {
                 .and_then(|clock| resolve_clock(clock, near.unwrap_or(ctx.received_at)))
                 .map(Val::Instant),
             Coerce::Float => match s {
-                Some(t) => Some(Val::Float(
-                    text::float_from_str(t).ok_or_else(|| PayloadError::float_literal(t))?,
-                )),
+                Some(t) => Some(Val::Float(float_text(t).ok_or_else(|| not_a_number(t))?)),
                 None => None,
             },
         })
     }
 
-    /// A regex capture read as this coercion: text, `float()` or `int()` (an error if Python's
-    /// would raise).
+    /// A regex capture read as this coercion: text, a number or an integer (an error if it is
+    /// none).
     fn capture(&self, t: &str) -> Result<Option<Val>, PayloadError> {
         Ok(Some(match self {
-            Coerce::Float => {
-                Val::Float(text::float_from_str(t).ok_or_else(|| PayloadError::float_literal(t))?)
-            }
+            Coerce::Float => Val::Float(float_text(t).ok_or_else(|| not_a_number(t))?),
             Coerce::PyInt | Coerce::Int | Coerce::Integer => {
-                Val::Int(text::int_from_str(t).ok_or_else(|| PayloadError::int_literal(t))?)
+                Val::Int(int_text(t).ok_or_else(|| not_a_number(t))?)
             }
             _ => Val::Text(t.to_owned()),
         }))
     }
 }
 
-/// Python's `re.match(pattern, text)`: anchored at the start; a final `$` also matches
-/// before a final newline.
-pub(crate) fn py_regex(pattern: &str) -> Result<Regex, CompileError> {
+fn not_a_number(t: &str) -> PayloadError {
+    PayloadError::new(format!("not a number: {t:?}"))
+}
+
+/// A manifest pattern, matched at the start of the text.
+pub(crate) fn pattern(pattern: &str) -> Result<Regex, CompileError> {
     let body = pattern.strip_prefix('^').unwrap_or(pattern);
-    let (body, end) = match body.strip_suffix('$') {
-        Some(b) if !b.ends_with('\\') => (b, r"\n?\z"),
-        _ => (body, ""),
-    };
-    Regex::new(&format!("^(?:{body}){end}"))
+    Regex::new(&format!("^(?:{body})"))
         .map_err(|e| CompileError(format!("pattern {pattern:?}: {e}")))
 }
 
@@ -607,7 +558,7 @@ pub struct Mapping {
 pub(crate) struct Compiler<'a> {
     names: HashMap<String, usize>,
     slots: usize,
-    groups: &'a IndexMap<String, Vec<FactSpec>>,
+    groups: &'a FactGroups,
     files: Files<'a>,
     catalogues: HashMap<String, Arc<HashMap<String, Vec<String>>>>,
 }
@@ -731,7 +682,7 @@ impl Compiler<'_> {
         let regex = match &r.regex {
             None => None,
             Some(p) => {
-                let compiled = py_regex(p)?;
+                let compiled = pattern(p)?;
                 let slots = r.captures.iter().map(|c| self.define(c)).collect();
                 let captures_as = r.captures_as.as_deref().map(coerce_named).transpose()?;
                 Some((compiled, slots, captures_as))
@@ -1182,25 +1133,25 @@ impl Mapping {
         channel: &str,
         ctx: &Context,
     ) -> Result<Vec<Observation>, PayloadError> {
-        let document = json::loads(body).map_err(|e| json_failure(&self.json_error, e))?;
+        let document = json::parse(body, &self.json_error)?;
         match self.root {
-            Some(Root::Object) if !matches!(document, Json::Object(_)) => {
-                return Err(PayloadError::payload(&self.root_error));
+            Some(Root::Object) if !document.is_object() => {
+                return Err(PayloadError::new(&self.root_error));
             }
             Some(Root::Array) => match &document {
-                Json::Array(a) if !(self.non_empty && a.is_empty()) => {}
-                _ => return Err(PayloadError::payload(&self.root_error)),
+                Value::Array(a) if !(self.non_empty && a.is_empty()) => {}
+                _ => return Err(PayloadError::new(&self.root_error)),
             },
             _ => {}
         }
-        let Some(Json::Array(entities)) = lookup(&document, &self.entities) else {
-            return Err(PayloadError::payload(&self.entities_error));
+        let Some(Value::Array(entities)) = lookup(&document, &self.entities) else {
+            return Err(PayloadError::new(&self.entities_error));
         };
         let mut base: Vec<Option<Val>> = vec![None; self.slots];
         for cs in &self.document {
             let found = self.evaluate(&cs.value, &document, &base, ctx)?;
             if found.missing(cs.required) {
-                return Err(PayloadError::payload(&self.entities_error));
+                return Err(PayloadError::new(&self.entities_error));
             }
             found.store(&mut base, cs.slot);
         }
@@ -1213,7 +1164,7 @@ impl Mapping {
         let mut selected: Vec<Vec<(usize, Vec<Option<Val>>)>> =
             vec![Vec::new(); self.profiles.len()];
         'entities: for (item, entity) in entities.iter().enumerate() {
-            if !matches!(entity, Json::Object(_)) {
+            if !entity.is_object() {
                 continue;
             }
             let mut slots = base.clone();
@@ -1294,7 +1245,7 @@ impl Mapping {
     fn evaluate(
         &self,
         value: &CValue,
-        entity: &Json,
+        entity: &Value,
         slots: &Slots,
         ctx: &Context,
     ) -> Result<Evaluated, PayloadError> {
@@ -1316,7 +1267,7 @@ impl Mapping {
     fn one(
         &self,
         one: &One,
-        entity: &Json,
+        entity: &Value,
         slots: &Slots,
         ctx: &Context,
     ) -> Result<Evaluated, PayloadError> {
@@ -1332,7 +1283,7 @@ impl Mapping {
     fn rule(
         &self,
         r: &CRule,
-        entity: &Json,
+        entity: &Value,
         slots: &Slots,
         ctx: &Context,
     ) -> Result<Evaluated, PayloadError> {
@@ -1366,7 +1317,7 @@ impl Mapping {
         match input.as_ref() {
             // Strings and JSON go through trim and the coercion.
             Val::Json(j) => self.finish(r, Cow::Owned(j.clone()), slots, ctx),
-            Val::Text(s) => self.finish(r, Cow::Owned(Json::Str(s.clone())), slots, ctx),
+            Val::Text(s) => self.finish(r, Cow::Owned(Value::String(s.clone())), slots, ctx),
             // Other values (times, numbers made by a normalizer) pass as they are.
             other if r.coerce.is_none() => self.post(r, Some(other.clone()), ctx),
             other => self.finish(r, Cow::Owned(other.to_json()), slots, ctx),
@@ -1377,12 +1328,12 @@ impl Mapping {
     fn finish(
         &self,
         r: &CRule,
-        j: Cow<'_, Json>,
+        j: Cow<'_, Value>,
         slots: &Slots,
         ctx: &Context,
     ) -> Result<Evaluated, PayloadError> {
         let j = match (r.trim, j.as_ref()) {
-            (true, Json::Str(s)) => Cow::Owned(Json::Str(text::strip(s).to_owned())),
+            (true, Value::String(s)) => Cow::Owned(Value::String(s.trim().to_owned())),
             _ => j,
         };
         let near = r
@@ -1393,7 +1344,7 @@ impl Mapping {
         let value = match &r.coerce {
             Some(c) => c.apply(&j, r.invalid, near, ctx)?,
             None => Some(match j.into_owned() {
-                Json::Str(s) => Val::Text(s),
+                Value::String(s) => Val::Text(s),
                 other => Val::Json(other),
             }),
         };
@@ -1411,7 +1362,7 @@ impl Mapping {
         let Some(value) = value else {
             return Ok(out);
         };
-        if r.none.iter().any(|s| crate::value::py_eq(&value, s)) {
+        if r.none.iter().any(|s| value.equals(s)) {
             return Ok(out);
         }
         if let (Some(bound), Some(at)) = (r.none_before, value.as_instant())
@@ -1549,15 +1500,12 @@ impl Mapping {
                 }
             };
         }
-        let text_of = |v: &Val| match v {
-            Val::Bool(b) => (if *b { "true" } else { "false" }).to_owned(),
-            other => other.text(),
-        };
+        let text_of = |v: &Val| v.text();
         let instant = |v: Option<Cow<'_, Val>>| v.and_then(|v| v.as_instant());
         let float = |v: Option<Cow<'_, Val>>| -> Option<f64> {
             v.and_then(|v| match v.as_ref() {
                 Val::Float(x) => Some(*x),
-                Val::Int(n) => n.to_f64(),
+                Val::Int(n) => Some(*n as f64),
                 _ => None,
             })
         };
@@ -1613,7 +1561,7 @@ impl Mapping {
                         return Ok(None);
                     };
                     let (lon, lat) = self.krovak.transform(*x, *y);
-                    (py_round_digits(lat, *places), py_round_digits(lon, *places))
+                    (round_to(lat, *places), round_to(lon, *places))
                 } else {
                     let (Some(lat_in), Some(lon_in)) = (lat, lon) else {
                         return Ok(None);
@@ -1639,10 +1587,7 @@ impl Mapping {
                     Got::Null | Got::Missing => None,
                 };
                 let seconds = match value {
-                    Some(v) => match v.to_int()?.small().and_then(|n| i64::try_from(n).ok()) {
-                        Some(n) => n * scale,
-                        None => return Ok(None),
-                    },
+                    Some(v) => v.to_int()? * scale,
                     None => match default {
                         Some(d) => d * scale,
                         None => return Ok(None),
@@ -1768,11 +1713,10 @@ fn feed_of(f: FeedName) -> Feed {
     }
 }
 
-fn json_failure(prefix: &str, e: JsonError) -> PayloadError {
-    match e {
-        JsonError::Value(m) => PayloadError::value(m),
-        other => PayloadError::payload(format!("{prefix}: {}", other.message())),
-    }
+/// `x` rounded to `places` decimals.
+fn round_to(x: f64, places: usize) -> f64 {
+    let scale = 10_f64.powi(places as i32);
+    (x * scale).round() / scale
 }
 
 fn select_view(b: &BlockCurrent) -> normalize::BlockView<'_> {
@@ -1792,32 +1736,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn patterns_match_as_pythons_re_match() {
-        let id = py_regex(r"^TR/([^/]+)/(\d{8})$").unwrap();
+    fn patterns_match_at_the_start() {
+        let id = pattern(r"^TR/([^/]+)/(\d{8})$").unwrap();
         assert!(id.is_match("TR/1154/20261012"));
-        assert!(id.is_match("TR/1154/20261012\n"));
-        assert!(!id.is_match("TR/1154/20261012\n\n"));
+        assert!(!id.is_match(
+            "TR/1154/20261012
+"
+        ));
         assert!(!id.is_match("xTR/1154/20261012"));
-        assert!(py_regex(r"^\d{6}$").unwrap().is_match("٠١٢٣٤٥"));
-        assert!(py_regex("a").unwrap().is_match("ab"));
+        assert!(pattern("a").unwrap().is_match("ab"));
     }
 
     #[test]
     fn durations_and_paths() {
         assert_eq!(duration("5m").unwrap(), TimeDelta::from_minutes(5));
         assert_eq!(duration("59s").unwrap(), TimeDelta::from_seconds(59));
-        let doc = json::loads(br#"[{"a": [1, {"b": 2}]}]"#).unwrap();
-        assert_eq!(lookup(&doc, &parse_path("0.a.1.b")), Some(&Json::Int(2)));
+        let doc: Value = serde_json::from_str(r#"[{"a": [1, {"b": 2}]}]"#).unwrap();
+        assert_eq!(lookup(&doc, &parse_path("0.a.1.b")), Some(&Value::from(2)));
         assert_eq!(lookup(&doc, &parse_path("a")), None);
-        let obj = json::loads(br#"{"0": 1}"#).unwrap();
+        let obj: Value = serde_json::from_str(r#"{"0": 1}"#).unwrap();
         assert_eq!(lookup(&obj, &parse_path("0")), None);
     }
 
     #[test]
-    fn hhmm_reads_like_python() {
+    fn clock_times() {
         assert_eq!(hhmm(" 7:05 "), Some(7 * 3_600_000_000 + 5 * 60_000_000));
         assert_eq!(hhmm("24:00"), None);
         assert_eq!(hhmm("7:5"), None);
         assert_eq!(hhmm("07:05:00"), None);
+        assert_eq!(round_to(50.123_456_5, 6), 50.123_457);
     }
 }

@@ -1,4 +1,4 @@
-//! `Rows` from PostgreSQL `static.*` of one load: port of `index_sql.SqlRows`.
+//! `Rows` from PostgreSQL `static.*` of one load.
 //!
 //! Queries read `static.*` by `load_id` rather than `active.*`, so replay can use a retained
 //! release that is not the active one; the live worker passes the active publication's loads.

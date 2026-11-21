@@ -1,5 +1,5 @@
 """Retention and the disk guard (`obehy jobs`): what the jobs read of the archive, the
-partitions and the policy. They stay Python after the switch to the Rust worker."""
+partitions and the policy, as the Rust worker (`obehy-rt`) names and lays them out."""
 
 from __future__ import annotations
 
@@ -67,3 +67,22 @@ def test_the_archive_is_pruned_per_source(tmp_path: Path) -> None:
         "2026-10-21",
         "2026-10-22",
     ]
+
+
+def test_prune_deletes_only_day_directories_before_the_cutoff(tmp_path: Path) -> None:
+    for day in ("duk/vehicles/2026-10-05", "duk/vehicles/2026-10-06", "pid/vehicles/2026-10-05"):
+        (tmp_path / day / "objects").mkdir(parents=True)
+        (tmp_path / day / "index.jsonl").write_text("{}", encoding="utf-8")
+    (tmp_path / "duk" / "vehicles" / "notes").mkdir()
+
+    pruned = prune_archive(tmp_path, date(2026, 10, 6))
+
+    assert sorted(path.relative_to(tmp_path).as_posix() for path in pruned) == [
+        "duk/vehicles/2026-10-05",
+        "pid/vehicles/2026-10-05",
+    ]
+    assert sorted(p.name for p in (tmp_path / "duk" / "vehicles").iterdir()) == [
+        "2026-10-06",
+        "notes",
+    ]
+    assert prune_archive(tmp_path / "missing", date(2026, 10, 6)) == []

@@ -1,4 +1,5 @@
-"""The project API against a loaded and activated fixture release with realtime state rows."""
+"""The project API against a loaded and activated fixture release with realtime state rows,
+written with SQL as the Rust worker writes them (`tests/db/worker_rows.py`)."""
 
 from __future__ import annotations
 
@@ -13,28 +14,18 @@ import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from google.transit import gtfs_realtime_pb2 as rt
-from psycopg.rows import DictRow, dict_row
+from psycopg.types.json import Jsonb
 
 from obehy.api.app import create_app
 from obehy.api.db import Snapshot
-from obehy.realtime import record
-from obehy.realtime.alerts import Alert, AlertEntity, Period
-from obehy.realtime.archive import ArchiveWriter, Poll
-from obehy.realtime.compositions import TripView, Unit
-from obehy.realtime.emit.alerts import AlertFeed, write_alerts
-from obehy.realtime.emit.compositions import write_composition
-from obehy.realtime.emit.vehicles import VehicleBook
 from obehy.realtime.jobs import prune_alerts
-from obehy.realtime.manifest import Channel
-from obehy.realtime.runtime.lookups import LookupBroker, read_view
-from obehy.realtime.times import Instant, instant, local_date
 from obehy.reference import duk_register, vehicle_list
 from obehy.reference.load import load_dataset
 from obehy.release import activate as activation
 from obehy.release.contract import load_contract
 from obehy.release.load import load_release
 from tests.db.serving_fixture import Rows, czptt_rows, jdf_rows, write_release
+from tests.db.worker_rows import Alert, write_alerts
 
 pytestmark = pytest.mark.postgres
 
@@ -192,13 +183,9 @@ _ALERT = Alert(
     cause="CONSTRUCTION",
     effect="DETOUR",
     severity="UNKNOWN_SEVERITY",
-    periods=(Period(None, None),),
-    header=(("cs", "Česká Lípa"),),
-    description=(("cs", "Linka 1 jede odklonem."),),
-    entities=(
-        AlertEntity("route", "pid:gtfs_route_id", "L1"),
-        AlertEntity("route", "pid:gtfs_route_id", "L1001"),
-    ),
+    header={"cs": "Česká Lípa"},
+    description={"cs": "Linka 1 jede odklonem."},
+    entities=(("route", "pid:gtfs_route_id", "L1"), ("route", "pid:gtfs_route_id", "L1001")),
 )
 _INFOTEXT = Alert(
     source="pid",
@@ -207,15 +194,93 @@ _INFOTEXT = Alert(
     cause="UNKNOWN_CAUSE",
     effect="UNKNOWN_EFFECT",
     severity="SEVERE",
-    periods=(Period(None, None),),
-    header=(("cs", "Zastávka přesunuta."), ("en", "Stop moved.")),
-    entities=(AlertEntity("stop", "pid:gtfs_stop_id", "U1Z1"),),
-    details=(("display_type", "general"),),
+    header={"cs": "Zastávka přesunuta.", "en": "Stop moved."},
+    entities=(("stop", "pid:gtfs_stop_id", "U1Z1"),),
+    details={"display_type": "general"},
+)
+
+# What the worker's vehicle book makes of this fixture's reports and registry: bus 1001 is
+# duk:1001 by its own ID, MPV net's report by the plate the registry binds to it; the profile
+# merges the DÚK register, our own list and the live attributes (the low-floor one disagrees).
+_IDENTITIES = (
+    ("duk", "1001", "duk:1001", "source"),
+    ("mpvnet", "4U1 2345", "duk:1001", "identifier"),
+    ("duk", "1002", "duk:1002", None),
+    ("duk", "1003", "duk:1003", None),
+    ("sz", "7", "sz:7", None),
 )
 
 
-def local_now() -> Instant:
-    return instant(datetime.now(UTC))
+def _statement(value: str, origin: str, source: str, live: bool) -> dict[str, Any]:
+    return {"value": value, "origin": origin, "source": source, "observed_at": live or None}
+
+
+def _attribute(name: str, *statements: dict[str, Any], conflict: bool = False) -> dict[str, Any]:
+    first = statements[0]
+    return {"attribute": name, **first, "conflict": conflict, "statements": list(statements)}
+
+
+_PROFILE_ATTRIBUTES = [
+    _attribute("air_conditioning", _statement("true", "live", "duk", True)),
+    _attribute("alternative_fuel", _statement("false", "curated", "duk-register", False)),
+    _attribute("contactless_payment", _statement("false", "curated", "duk-register", False)),
+    _attribute("fleet_number", _statement("1001", "curated", "duk-register", False)),
+    _attribute(
+        "licence_plate",
+        _statement("4U1 2345", "curated", "vehicles", False),
+        _statement("4U1 2345", "live", "mpvnet", True),
+    ),
+    _attribute(
+        "low_floor",
+        _statement("true", "curated", "duk-register", False),
+        _statement("false", "live", "duk", True),
+        conflict=True,
+    ),
+    _attribute("manufacturer", _statement("Iveco", "model", "duk-register", False)),
+    _attribute("model", _statement("Crossway LE LINE 13M", "model", "duk-register", False)),
+    _attribute(
+        "operator",
+        _statement("Arriva", "curated", "vehicles", False),
+        _statement("AKV bus", "curated", "duk-register", False),
+        conflict=True,
+    ),
+    _attribute("usb", _statement("false", "curated", "duk-register", False)),
+    _attribute("year", _statement("2014", "curated", "duk-register", False)),
+]
+
+
+def _profile_attributes(stated: str) -> list[dict[str, Any]]:
+    """The attributes with the live statements' times (`observed_at` true above) set."""
+
+    def timed(item: dict[str, Any]) -> dict[str, Any]:
+        return {**item, "observed_at": stated if item["observed_at"] else None}
+
+    return [
+        {**timed(a), "statements": [timed(s) for s in a["statements"]]} for a in _PROFILE_ATTRIBUTES
+    ]
+
+
+def _identify_vehicles(connection: psycopg.Connection) -> None:
+    """What the worker writes each tick: which vehicle each report is, and the profiles."""
+
+    for source, vehicle, vehicle_id, bound_by in _IDENTITIES:
+        connection.execute(
+            "UPDATE rt.vehicle_state_current SET vehicle_id = %s, bound_by = %s"
+            " WHERE source = %s AND source_vehicle_id = %s",
+            (vehicle_id, bound_by, source, vehicle),
+        )
+    row = connection.execute("SELECT max(last_seen) FROM rt.vehicle_attribute_observed").fetchone()
+    assert row is not None
+    stated = cast(datetime, row[0]).astimezone(UTC).isoformat()
+    connection.execute(
+        "INSERT INTO rt.vehicle_profile (vehicle_id, registered, public_label, manufacturer,"
+        " model, low_floor, air_conditioning, wheelchair_accessible, operator, licence_plate,"
+        " fleet_number, datasets, sources, attributes, last_stated) VALUES ('duk:1001', true,"
+        " NULL, 'Iveco', 'Crossway LE LINE 13M', true, true, NULL, 'Arriva', '4U1 2345', '1001',"
+        " '{vehicles,duk-register}', '{duk,mpvnet}', %s,"
+        " (SELECT max(last_seen) FROM rt.vehicle_attribute_observed))",
+        (Jsonb(_profile_attributes(stated)),),
+    )
 
 
 def _call(sequence: int, location: str, status: str, at: str | None) -> dict[str, Any]:
@@ -492,20 +557,8 @@ def client(
     )
     # PID alerts: line 1 detoured (also naming a rail line no key resolves), and an infotext at
     # the stop.
-    write_alerts(connection, "pid", "alerts", [_ALERT], local_now())
-    write_alerts(connection, "pid", "infotexts", [_INFOTEXT], local_now())
-    # What the worker does each tick: which vehicle each report is, and the profiles.
-    book = VehicleBook.load(connection)
-    for source, vehicle, seen in connection.execute(
-        "SELECT source, source_vehicle_id, last_seen FROM rt.vehicle_state_current"
-    ).fetchall():
-        vehicle_id, bound_by = book.identify((source, vehicle), local_date(seen))
-        connection.execute(
-            "UPDATE rt.vehicle_state_current SET vehicle_id = %s, bound_by = %s"
-            " WHERE source = %s AND source_vehicle_id = %s",
-            (vehicle_id, bound_by, source, vehicle),
-        )
-    book.write(connection, [])
+    write_alerts(connection, [_ALERT, _INFOTEXT])
+    _identify_vehicles(connection)
     with TestClient(create_app(database_url), follow_redirects=False) as test_client:
         yield test_client
 
@@ -1428,9 +1481,9 @@ def test_a_trip_has_only_the_severe_alerts_of_its_stops(
     client: TestClient, connection: psycopg.Connection
 ) -> None:
     minor = replace(
-        _INFOTEXT, alert_id="infotext-2", severity="INFO", header=(("cs", "Lavička opravena."),)
+        _INFOTEXT, alert_id="infotext-2", severity="INFO", header={"cs": "Lavička opravena."}
     )
-    write_alerts(connection, "pid", "infotexts", [_INFOTEXT, minor], local_now())
+    write_alerts(connection, [_INFOTEXT, minor])
     board = _get(client, "/stop-places/jdf:stop:1/departures", start="2026-10-06T06:05:00+02:00")
     assert [a["alert_id"] for a in board["alerts"]] == [
         "pid:infotext-1",
@@ -1443,50 +1496,100 @@ def test_a_trip_has_only_the_severe_alerts_of_its_stops(
     assert [a["alert_id"] for a in trip["alerts"]] == ["pid:infotext-1", "pid:alert-1"]
 
 
-def test_a_withdrawn_alert_leaves_lists_and_feeds(
+def test_a_withdrawn_alert_leaves_lists_until_the_jobs_delete_it(
     client: TestClient, connection: psycopg.Connection
 ) -> None:
-    feed = AlertFeed()
-    now = local_now()
-    jdf = [rt.FeedEntity.FromString(e) for e in feed.entities(connection, "jdf", now)]
-    assert [e.id for e in jdf] == ["alert:pid:alert-1", "alert:pid:infotext-1"]
-    assert [e.route_id for e in jdf[0].alert.informed_entity] == ["jdf:route:000001"]
-    assert feed.entities(connection, "czptt", now) == []
-    first = _get(client, "/alerts/pid:alert-1")["changed_at"]
-    write_alerts(connection, "pid", "alerts", [_ALERT], local_now())  # unchanged
-    assert _get(client, "/alerts/pid:alert-1")["changed_at"] == first
-    write_alerts(connection, "pid", "alerts", [], local_now())  # gone from the source
+    assert _get(client, "/alerts/pid:alert-1")["withdrawn_at"] is None
+    # Gone from the source's poll: the worker withdraws it.
+    connection.execute("UPDATE rt.alert SET withdrawn_at = now() WHERE alert_id = 'alert-1'")
     assert [a["alert_id"] for a in _get(client, "/alerts")["alerts"]] == ["pid:infotext-1"]
     assert _get(client, "/alerts/pid:alert-1")["withdrawn_at"] is not None
-    feed.dirty = True
-    assert [e.id for e in map(rt.FeedEntity.FromString, feed.entities(connection, "jdf", now))] == [
-        "alert:pid:infotext-1"
-    ]
-    assert prune_alerts(connection, local_now() + timedelta(seconds=1)) == 1
+    assert prune_alerts(connection, datetime.now(UTC) + timedelta(seconds=1)) == 1
     _get(client, "/alerts/pid:alert-1", 404)
 
 
-COMPOSITION = Path(__file__).resolve().parents[1] / "realtime" / "compositions" / "cd-607.json"
-# The 7th, at 06:10 in Prague: ČD answers for trains around today.
-ON_THE_DAY = instant(datetime(2026, 10, 7, 4, 10, tzinfo=UTC))
+def _unit(sequence: int, kind: str, **values: Any) -> dict[str, Any]:
+    return {
+        "sequence": sequence,
+        "kind": kind,
+        "vehicle_type": None,
+        "coach_number": None,
+        "classes": [],
+        "features": [],
+        "texts": {},
+        "details": {},
+        **values,
+    }
 
 
-def _dict_connection(database_url: str) -> psycopg.Connection[DictRow]:
-    return psycopg.Connection[DictRow].connect(database_url, autocommit=True, row_factory=dict_row)
+# ČD's answer for train 6600 from Zákupy (tests/realtime/compositions/cd-607.json, cut short).
+_CD_UNITS = [
+    _unit(1, "locomotive", details={"type": "#3937", "label": "Lokomotiva"}),
+    _unit(
+        2,
+        "coach",
+        vehicle_type="Bdmpz 896",
+        coach_number="367",
+        classes=[2],
+        features=["bicycle_reservation_required", "open_saloon", "wifi", "power_sockets"],
+        texts={"2": "Vůz 2. třídy", "povkolo": "Jízdní kolo s povinnou rezervací"},
+    ),
+    _unit(
+        3,
+        "coach",
+        vehicle_type="Ampz 894",
+        coach_number="372",
+        classes=[1],
+        features=["open_saloon", "wifi", "power_sockets"],
+    ),
+]
 
 
-def _broker(database_url: str, tmp_path: Path, fetched: list[str]) -> LookupBroker:
-    def fetcher(channel: Channel) -> Poll:
-        fetched.append(channel.url)
-        now = datetime.now(UTC)
-        return Poll(now, now, 200, COMPOSITION.read_bytes())
+def _composition(
+    connection: psycopg.Connection,
+    start: tuple[str, int],
+    end: tuple[str, int] | None,
+    units: list[dict[str, Any]],
+    observed: datetime | None = None,
+) -> int:
+    """A composition of train 6600 on the 7th from ČD, holding from `start` (until `end`), as
+    the lookup broker stores an answer."""
 
-    return LookupBroker(
-        _dict_connection(database_url),
-        record.load_lookups(),
-        fetcher,
-        ArchiveWriter(tmp_path / "raw"),
-        clock=lambda: ON_THE_DAY,
+    row = connection.execute(
+        "INSERT INTO rt.composition (feed, key_namespace, key, service_date, source,"
+        " from_location, from_visit, to_location, to_visit, digest, first_seen, observed_at,"
+        " fetch_id) VALUES ('czptt', 'czptt:train_number', '6600', '2026-10-07', 'cd', %s, %s,"
+        " %s, %s, %s, coalesce(%s, now()), coalesce(%s, now()), 1) RETURNING composition_id",
+        (*start, *(end or (None, None)), json.dumps(units, sort_keys=True), observed, observed),
+    ).fetchone()
+    assert row is not None
+    for unit in units:
+        connection.execute(
+            "INSERT INTO rt.composition_unit (composition_id, sequence, kind, role, vehicle_type,"
+            " coach_number, classes, features, texts, details)"
+            " VALUES (%s, %s, %s, 'train', %s, %s, %s, %s, %s, %s)",
+            (
+                row[0],
+                unit["sequence"],
+                unit["kind"],
+                unit["vehicle_type"],
+                unit["coach_number"],
+                unit["classes"],
+                unit["features"],
+                Jsonb(unit["texts"]),
+                Jsonb(unit["details"]),
+            ),
+        )
+    return int(row[0])
+
+
+def _answered(connection: psycopg.Connection, trip_id: str, outcomes: dict[str, Any]) -> None:
+    """The broker's answer to the API's request for `trip_id`'s composition."""
+
+    connection.execute(
+        "UPDATE rt.lookup_request SET pending = false, outcomes = %s, answered_at = now()"
+        " WHERE kind = 'composition' AND trip_id = %s",
+        (Jsonb(outcomes), trip_id),
     )
 
 
@@ -1510,8 +1613,8 @@ def _fresh_for(client: TestClient, seconds: int) -> None:
     app.state.limits = replace(app.state.limits, composition_fresh_s=seconds)
 
 
-def test_a_composition_is_asked_then_answered_by_the_broker(
-    client: TestClient, database_url: str, tmp_path: Path
+def test_a_composition_is_asked_then_shown_once_answered(
+    client: TestClient, connection: psycopg.Connection
 ) -> None:
     path = "/trips/czptt:trip:1:2/2026-10-07/composition"
     response = client.get(f"/api/v1{path}")
@@ -1519,110 +1622,101 @@ def test_a_composition_is_asked_then_answered_by_the_broker(
     asked = response.json()
     assert (asked["status"], asked["units"], asked["sources"]) == ("pending", [], [])
     _get(client, path, 202)  # still pending: asked once
-    fetched: list[str] = []
-    broker = _broker(database_url, tmp_path, fetched)
-    with broker.connection:
-        assert broker.serve() == 1
-        # The part runs from Zákupy, which the train has not left: asked from there, once.
-        assert len(fetched) == 1 and "%22SR70%22%3A%225454002%22" in fetched[0]
-        answer = _get(client, path)
-        assert answer["status"] == "fresh"
-        assert answer["sources"] == [
-            {
-                "lookup": "cd/composition",
-                "source": "cd",
-                "label": {"cs": "České dráhy", "en": "České dráhy"},
-                "outcome": "answered",
-                "reason": None,
-            }
-        ]
-        units = answer["units"]
-        assert [(u["kind"], u["vehicle_type"]) for u in units][:2] == [
-            ("locomotive", None),
-            ("coach", "Bdmpz 896"),
-        ]
-        bicycles = units[1]
-        assert (bicycles["coach_number"], bicycles["classes"], bicycles["open"]) == (
-            "367",
-            [2],
-            True,
-        )
-        assert bicycles["from_call"]["location_id"] == "czptt:location:CZ54002"
-        assert bicycles["to_call"]["location_id"] == "czptt:location:CZ54003"
-        assert bicycles["features"][0] == {
-            "feature": "bicycle_reservation_required",
-            "label": {
-                "cs": "Jízdní kolo s povinnou rezervací",
-                "en": "Bicycle reservation required",
-            },
-            "icon": "bicycle_reservation",
-            "text": None,
+    assert connection.execute(
+        "SELECT feed, trip_id, service_date::text, from_location, pending FROM rt.lookup_request"
+    ).fetchall() == [("czptt", "czptt:trip:1:2", "2026-10-07", "", True)]
+    # The part runs from Zákupy, which the train has not left: answered from there.
+    _composition(connection, ("czptt:location:CZ54002", 1), None, _CD_UNITS)
+    _answered(
+        connection,
+        "czptt:trip:1:2",
+        {"cd/composition": {"outcome": "answered", "cache_key": "6600/2026-10-07/5454002"}},
+    )
+    answer = _get(client, path)
+    assert answer["status"] == "fresh"
+    assert answer["sources"] == [
+        {
+            "lookup": "cd/composition",
+            "source": "cd",
+            "label": {"cs": "České dráhy", "en": "České dráhy"},
+            "outcome": "answered",
+            "reason": None,
         }
-        assert [[v["unit"] for v in s["vehicles"]] for s in answer["segments"]] == [list(range(6))]
-        # One segment, one stretch; the rider is in it, from Zákupy. The locomotive heads it.
-        assert [s["segments"] for s in answer["stretches"]] == [[0]]
-        assert (answer["here_segment"], answer["here_stretch"]) == (0, 0)
-        assert answer["segments"][0]["vehicles"][0]["cab"] == {"front": True, "rear": False}
-        # Older than fresh: served stale and asked again; the broker reuses its cached answer.
-        _fresh_for(client, 0)
-        stale = _get(client, path)
-        assert stale["status"] == "stale" and len(stale["units"]) == 6
-        assert broker.serve() == 1 and len(fetched) == 1
-        # A bus: no source answers it.
-        _get(client, "/trips/jdf:trip:1/2026-10-06/composition", 202)
-        assert broker.serve() == 1 and len(fetched) == 1
-        _fresh_for(client, 300)
-        bus = _get(client, "/trips/jdf:trip:1/2026-10-06/composition")
-        assert (bus["status"], bus["sources"]) == ("not_available", [])
-        # The run's first part has left its only departing call: the formation it arrives
-        # with, asked from there.
-        _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition", 202)
-        assert broker.serve() == 1 and len(fetched) == 2
-        assert "%22SR70%22%3A%225454000%22" in fetched[1]
-        left = _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition")
-        assert left["status"] == "fresh" and left["units"]
-        _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition", 404, **{"from": "jdf:stop:1"})
-        logged = broker.connection.execute(
-            "SELECT lookup, cache_key, outcome FROM rt.lookup_fetch"
-        ).fetchall()
-        assert logged == [
-            {
-                "lookup": "composition",
+    ]
+    units = answer["units"]
+    assert [(u["kind"], u["vehicle_type"]) for u in units] == [
+        ("locomotive", None),
+        ("coach", "Bdmpz 896"),
+        ("coach", "Ampz 894"),
+    ]
+    bicycles = units[1]
+    assert (bicycles["coach_number"], bicycles["classes"], bicycles["open"]) == ("367", [2], True)
+    assert bicycles["from_call"]["location_id"] == "czptt:location:CZ54002"
+    assert bicycles["to_call"]["location_id"] == "czptt:location:CZ54003"
+    assert bicycles["features"][0] == {
+        "feature": "bicycle_reservation_required",
+        "label": {
+            "cs": "Jízdní kolo s povinnou rezervací",
+            "en": "Bicycle reservation required",
+        },
+        "icon": "bicycle_reservation",
+        "text": None,
+    }
+    assert [[v["unit"] for v in s["vehicles"]] for s in answer["segments"]] == [[0, 1, 2]]
+    # One segment, one stretch; the rider is in it, from Zákupy. The locomotive heads it.
+    assert [s["segments"] for s in answer["stretches"]] == [[0]]
+    assert (answer["here_segment"], answer["here_stretch"]) == (0, 0)
+    assert answer["segments"][0]["vehicles"][0]["cab"] == {"front": True, "rear": False}
+    # Older than fresh: served stale and asked again.
+    _fresh_for(client, 0)
+    stale = _get(client, path)
+    assert stale["status"] == "stale" and len(stale["units"]) == 3
+    assert connection.execute("SELECT pending FROM rt.lookup_request").fetchall() == [(True,)]
+    # A bus: no source answers it.
+    _fresh_for(client, 300)
+    _get(client, "/trips/jdf:trip:1/2026-10-06/composition", 202)
+    _answered(connection, "jdf:trip:1", {})
+    bus = _get(client, "/trips/jdf:trip:1/2026-10-06/composition")
+    assert (bus["status"], bus["sources"]) == ("not_available", [])
+    _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition", 404, **{"from": "jdf:stop:1"})
+
+
+def test_a_failed_lookup_says_why(client: TestClient, connection: psycopg.Connection) -> None:
+    path = "/trips/czptt:trip:1:2/2026-10-07/composition"
+    _get(client, path, 202)
+    _answered(
+        connection,
+        "czptt:trip:1:2",
+        {
+            "cd/composition": {
+                "outcome": "failed",
                 "cache_key": "6600/2026-10-07/5454002",
-                "outcome": "answered",
-            },
-            {
-                "lookup": "composition",
-                "cache_key": "6600/2026-10-07/5454000",
-                "outcome": "answered",
-            },
-        ]
-        assert (tmp_path / "raw" / "cd" / "composition").is_dir()
-
-
-def _units(*types: str) -> list[Unit]:
-    return [Unit(n, "coach", vehicle_type=t) for n, t in enumerate(types, 1)]
+                "reason": "HTTP 503 Service Unavailable",
+            }
+        },
+    )
+    failed = _get(client, path)
+    assert failed["status"] == "not_available"
+    assert (failed["sources"][0]["outcome"], failed["sources"][0]["reason"]) == (
+        "failed",
+        "HTTP 503 Service Unavailable",
+    )
 
 
 def test_answers_from_later_calls_close_earlier_ones_into_segments(
-    client: TestClient, database_url: str
+    client: TestClient, connection: psycopg.Connection
 ) -> None:
-    with _dict_connection(database_url) as connection:
-        view = read_view(connection, "czptt:trip:1:1", date(2026, 10, 7), ON_THE_DAY)
-        assert isinstance(view, TripView)
-        assert view.keys["czptt:tr"] == "Tr:1154:--KADR006600:00:2026"
-        assert [(c.location_id, c.left, dict(c.keys)) for c in view.calls] == [
-            ("czptt:location:CZ54000", True, {"sr70": "54000"}),
-            ("czptt:location:CZ54001", True, {}),
-            ("czptt:location:CZ54002", False, {"sr70": "54002"}),
-        ]
-        origin, passing, _ = view.calls
-        first = write_composition(connection, view, "cd", origin, _units("A", "B"), ON_THE_DAY, 1)
-        # An identical answer from further on extends it; a changed one closes it there.
-        same = write_composition(connection, view, "cd", passing, _units("A", "B"), ON_THE_DAY, 2)
-        assert same == first
-        later = write_composition(connection, view, "cd", passing, _units("A"), ON_THE_DAY, 3)
-        assert later != first
+    # An answer from the origin, closed where a changed one from the second call holds on.
+    observed = datetime(2026, 10, 7, 4, 10, tzinfo=UTC)
+    a, b = _unit(1, "coach", vehicle_type="A"), _unit(2, "coach", vehicle_type="B")
+    _composition(
+        connection,
+        ("czptt:location:CZ54000", 1),
+        ("czptt:location:CZ54001", 1),
+        [a, b],
+        observed,
+    )
+    _composition(connection, ("czptt:location:CZ54001", 1), None, [a], observed)
     answer = _get(client, "/trips/czptt:trip:1:1/2026-10-07/composition")
     assert answer["status"] == "stale"
     spans = [
@@ -1637,43 +1731,3 @@ def test_answers_from_later_calls_close_earlier_ones_into_segments(
     assert pieces == [(1, 2, [0, 1]), (2, 3, [2])]
     # The train changes at the second call: two stretches.
     assert [s["segments"] for s in answer["stretches"]] == [[0], [1]]
-
-
-def test_a_failed_lookup_is_not_repeated_and_the_budget_holds(
-    client: TestClient, database_url: str, tmp_path: Path
-) -> None:
-    fetched: list[str] = []
-
-    def refusing(channel: Channel) -> Poll:
-        fetched.append(channel.url)
-        now = datetime.now(UTC)
-        return Poll(now, now, 503, None, error="HTTP 503 Service Unavailable")
-
-    (lookup,) = record.load_lookups()
-    broker = LookupBroker(
-        _dict_connection(database_url),
-        [replace(lookup, daily_budget=1)],
-        refusing,
-        ArchiveWriter(tmp_path / "raw"),
-        clock=lambda: ON_THE_DAY,
-    )
-    with broker.connection:
-        path = "/trips/czptt:trip:1:2/2026-10-07/composition"
-        _get(client, path, 202)
-        assert broker.serve() == 1 and len(fetched) == 1
-        failed = _get(client, path)
-        assert failed["status"] == "not_available"
-        assert failed["sources"][0]["outcome"] == "failed"
-        assert failed["sources"][0]["reason"] == "HTTP 503 Service Unavailable"
-        # Asked again within retry_s: the failure stands, nothing is sent.
-        _fresh_for(client, 0)
-        _get(client, path, 202)
-        assert broker.serve() == 1 and len(fetched) == 1
-        # Another question (the first part from its origin) once the day's budget is spent:
-        # failed without a request.
-        first = "/trips/czptt:trip:1:1/2026-10-07/composition"
-        _get(client, first, 202, **{"from": "czptt:location:CZ54000"})
-        assert broker.serve() == 1 and len(fetched) == 1
-        _fresh_for(client, 300)
-        spent = _get(client, first, 200, **{"from": "czptt:location:CZ54000"})["sources"][0]
-        assert (spent["outcome"], spent["reason"]) == ("failed", "the daily budget is spent")

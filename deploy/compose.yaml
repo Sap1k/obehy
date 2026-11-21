@@ -1,5 +1,6 @@
-# The Oběhy server: PostGIS, the realtime worker, hourly release updates, nightly jobs, the API
-# and nginx serving the feeds and the API over plain HTTP to your reverse proxy. Put
+# The Oběhy server: PostGIS, the realtime worker (obehy-rt, its own image), hourly release
+# updates, nightly jobs, the API and nginx serving the feeds and the API over plain HTTP to your
+# reverse proxy. Put
 # POSTGRES_PASSWORD (URL-safe), SYSTEM_RAM_GB (the host's RAM in whole GB) and optionally OBEHY_HTTP_PORT (8080),
 # OBEHY_API_WORKERS (4), OBEHY_TAG and GITHUB_TOKEN in .env next to this file. SŽ and ČD are asked only through a proxy list: save it as secrets/sz-proxies.txt here
 # (gitignored) and set OBEHY_EGRESS_PROXY_LIST_FILE=/app/secrets/sz-proxies.txt in .env. PID is
@@ -85,10 +86,18 @@ services:
     <<: *app
     entrypoint: ["sh", "-c", "while :; do /app/deploy/obehy-release-update || echo 'release update failed' >&2; sleep 3600; done"]
 
-  # Exits until a release is active; restarts until the first release update has run.
+  # The realtime worker, obehy-rt (rust/, the Dockerfile's `worker` target): polls the sources
+  # (SŽ and ČD only through the proxy list), writes rt.* and history.*, the raw archive
+  # (data/rt-raw) and the GTFS-RT files (data/gtfs-rt, served by nginx as /srv/gtfs-rt). Exits
+  # until a release is active or on a schema it does not know; restarts until the first release
+  # update and migration have run.
   realtime:
     <<: *app
-    command: ["realtime"]
+    image: ghcr.io/sap1k/obehy-worker:${OBEHY_TAG:-latest}
+    environment:
+      OBEHY_DATABASE_URL: postgresql://obehy:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/obehy
+      OBEHY_EGRESS_PROXY_LIST_FILE: ${OBEHY_EGRESS_PROXY_LIST_FILE:-}
+      OBEHY_SECRET_GOLEMIO: ${OBEHY_SECRET_GOLEMIO:-}
 
   jobs:
     <<: *app

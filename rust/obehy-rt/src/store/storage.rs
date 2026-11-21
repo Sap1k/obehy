@@ -1,8 +1,8 @@
-//! Where realtime rows are stored: port of `emit/storage.py`. `rt.observation` is partitioned
-//! per UTC hour (`observation_YYYYMMDDHH`) and every history table per service date
-//! (`<table>_YYYYMMDD`), so retention drops whole partitions (Python's `realtime/jobs.py`).
-//! Older servers kept daily observation partitions (`observation_YYYYMMDD`); they are
-//! recognized until dropped. `history.term` keeps the strings history refers to by number.
+//! Where realtime rows are stored. `rt.observation` is partitioned per UTC hour
+//! (`observation_YYYYMMDDHH`) and every history table per service date (`<table>_YYYYMMDD`), so
+//! retention drops whole partitions (`obehy jobs`). Older servers kept daily
+//! observation partitions (`observation_YYYYMMDD`); they are recognized until dropped.
+//! `history.term` keeps the strings history refers to by number.
 
 use std::collections::HashMap;
 
@@ -140,7 +140,7 @@ impl Terms {
             return Ok(());
         }
         // One statement: the missing values inserted in sorted order (their numbers in that
-        // order, as Python's two statements in a transaction give them), the others read.
+        // order statements in a transaction give them), the others read.
         let rows = client
             .query(
                 "WITH added AS (INSERT INTO history.term (value) SELECT unnest($1::text[])                  ON CONFLICT (value) DO NOTHING RETURNING value, term_id)                  SELECT value, term_id FROM added UNION ALL                  SELECT value, term_id FROM history.term WHERE value = ANY($1)",

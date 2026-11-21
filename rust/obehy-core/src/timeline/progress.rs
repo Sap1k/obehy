@@ -1,29 +1,18 @@
-//! Progress along a trip's path as map matching over a beam of hypotheses. Port of
-//! `realtime/timeline/progress.py`, operation for operation (its docstring has the model).
+//! Progress along a trip's path as map matching over a beam of hypotheses.
 //!
 //! `BASE_PLAN.md` section 20.4 and `docs/R1_SLICE.md` section 9. Each fix extends every live
 //! hypothesis to each place on the path it may be (one candidate per segment), scored by the
 //! geometry fit, forward speed and the change of lateness; a fix the path does not explain holds
 //! a hypothesis at a fixed cost. The most likely hypothesis is the live position; crossings are
 //! committed once the readings agree (`commit`).
-//!
-//! Float comparisons that decide (each on operands computed as Python computes them, so they
-//! decide alike; the fixtures check every hypothesis bit for bit): `moved <= standing_m`,
-//! `origin <= committed_m`, the backward test `candidate < along - jitter - slack * reckoned`,
-//! `elapsed <= 0`, `max(0, moved) - jitter > speed * elapsed`, `change >= 0`, `short > 0`, the
-//! Viterbi `score > best` (strict: the first live hypothesis wins ties), the prune
-//! `top - log_p > prune` and merge `|a - b| < merge_m`, the sort by (-log_p, along, held), the
-//! history's chained equality, and in `at_origin_or_moving` `along <= departure`,
-//! `a - b > jitter`, `lateness >= earliest`.
 
 use std::sync::Arc;
 
 use crate::config::policy::ProgressPolicy;
-use crate::geo::{LonLat, distance_m, square};
+use crate::geo::{LonLat, distance_m};
 use crate::model::{
     EventKind, Fix, Hypothesis, OffPath, Placement, Position, Progress, StopSeen, Track,
 };
-use crate::py::num::{py_fmod, py_hypot, py_max, py_min};
 use crate::time::{Instant, TimeDelta, micros};
 use crate::timeline::commit::{Crossing, commit};
 use crate::timeline::path::{Candidate, Path, candidates, point_at};
@@ -38,12 +27,6 @@ pub struct Step {
     pub crossed: Vec<Crossing>,
     pub off_route_since: Option<Instant>,
     pub off_route: bool,
-}
-
-/// Python's float `/`: panics on a zero divisor, where Python raises `ZeroDivisionError`.
-fn div(a: f64, b: f64) -> f64 {
-    assert!(b != 0.0, "float division by zero");
-    a / b
 }
 
 fn empty_track() -> Track {
@@ -160,7 +143,7 @@ pub fn update(
     if let Some(t) = track
         && live.is_empty()
     {
-        committed_m = py_max(t.committed_m, floor);
+        committed_m = t.committed_m.max(floor);
     }
     // Nothing committed yet: the first reading may start past the origin.
     let unstarted = track.is_none_or(|t| t.hypotheses.is_empty() && t.committed_m == 0.0);
@@ -302,16 +285,12 @@ pub fn past_first_stop(plan: &Plan, position: &Position, policy: &ProgressPolicy
     .any(|c| c.along_m > after)
 }
 
-/// `min(values)`: the first of equal values; panics when empty, as Python raises.
-fn fold_min(mut values: impl Iterator<Item = f64>) -> f64 {
-    let first = values.next().expect("min() of an empty sequence");
-    values.fold(first, py_min)
+fn fold_min(values: impl Iterator<Item = f64>) -> f64 {
+    values.reduce(f64::min).expect("a value")
 }
 
-/// `max(values)`: the first of equal values; panics when empty.
-fn fold_max(mut values: impl Iterator<Item = f64>) -> f64 {
-    let first = values.next().expect("max() of an empty sequence");
-    values.fold(first, py_max)
+fn fold_max(values: impl Iterator<Item = f64>) -> f64 {
+    values.reduce(f64::max).expect("a value")
 }
 
 /// Where commits start for a new track: nothing before the first fix was observed.
@@ -333,10 +312,10 @@ fn search_window(
         return None;
     }
     let elapsed = fold_max(live.iter().map(|h| (at_us - h.at_us) as f64 / 1e6));
-    let reach = policy.reach_sigmas * py_hypot(&[policy.gps_sigma_m, policy.chord_min_sigma_m]);
+    let reach = policy.reach_sigmas * policy.gps_sigma_m.hypot(policy.chord_min_sigma_m);
     Some((
         fold_min(live.iter().map(|h| h.along_m)) - policy.jitter_m,
-        fold_max(live.iter().map(|h| h.along_m)) + speed * py_max(0.0, elapsed) + reach,
+        fold_max(live.iter().map(|h| h.along_m)) + speed * elapsed.max(0.0) + reach,
     ))
 }
 
@@ -358,7 +337,7 @@ fn start(
         } else {
             policy.start_lateness_sigma_s
         };
-        let prior = -0.5 * square(div(lateness, sigma));
+        let prior = -0.5 * (lateness / sigma).powi(2);
         let fit = emission(candidate, position, &plan.path, policy);
         out.push(Hypothesis {
             along_m: candidate.along_m,
@@ -412,7 +391,7 @@ fn extend(
             let along = if h.reckoned_m > 0.0 {
                 candidate.along_m
             } else {
-                py_max(candidate.along_m, h.along_m)
+                candidate.along_m.max(h.along_m)
             };
             let lateness = timetable.lateness_us(at_us, along);
             let Some(mut step) = transition(h, along, at_us, lateness, speed, policy) else {
@@ -423,7 +402,7 @@ fn extend(
             {
                 let short = shortfall - (along - h.along_m);
                 if short > 0.0 {
-                    step -= 0.5 * square(div(short, move_sigma));
+                    step -= 0.5 * (short / move_sigma).powi(2);
                 }
             }
             let score = h.log_p + step + fit;
@@ -484,11 +463,10 @@ fn held(
             let (trigger, call) = next_arrival(plan, h.along_m);
             let at_call = plan.path.call_distances_m[call];
             let left = distance_m(here, point_at(&plan.path, at_call));
-            along = py_max(
-                h.along_m,
-                py_min(py_min(h.along_m + moved, trigger - 1.0), at_call - left),
-            );
-            lateness = py_max(plan.timetable.lateness_us(at_us, along), h.lateness_s);
+            along = h
+                .along_m
+                .max((h.along_m + moved).min(trigger - 1.0).min(at_call - left));
+            lateness = plan.timetable.lateness_us(at_us, along).max(h.lateness_s);
         }
         out.push(Hypothesis {
             along_m: along,
@@ -525,17 +503,13 @@ fn chord_estimate(
         floor = previous.along_m;
     }
     let (trigger, _) = next_arrival(plan, best.along_m);
-    let ceiling = py_min(
-        trigger,
-        best.along_m + speed * ((at_us - best.at_us) as f64 / 1e6),
-    );
-    let along = py_min(
-        py_max(leg_share(plan, best.along_m, here), floor),
-        py_max(floor, ceiling),
-    );
-    let mut lateness = py_max(plan.timetable.lateness_s(at, along), best.lateness_s);
+    let ceiling = trigger.min(best.along_m + speed * ((at_us - best.at_us) as f64 / 1e6));
+    let along = leg_share(plan, best.along_m, here)
+        .max(floor)
+        .min(floor.max(ceiling));
+    let mut lateness = plan.timetable.lateness_s(at, along).max(best.lateness_s);
     if let Some(previous) = previous {
-        lateness = py_max(lateness, previous.lateness_s);
+        lateness = lateness.max(previous.lateness_s);
     }
     Some(OffPath {
         along_m: along,
@@ -580,7 +554,7 @@ fn next_arrival(plan: &Plan, along_m: f64) -> (f64, usize) {
 /// none more than `prune` behind.
 fn prune(mut extended: Vec<Hypothesis>, policy: &ProgressPolicy) -> Vec<Hypothesis> {
     // sorted(key=(-log_p, along_m, off_path_since is not None)): stable, floats by partial_cmp
-    // (-0.0 and 0.0 equal, as Python's tuple comparison has them).
+    // (-0.0 and 0.0 equal comparison has them).
     let order = |a: f64, b: f64| a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal);
     extended.sort_by(|a, b| {
         order(-a.log_p, -b.log_p)
@@ -638,13 +612,15 @@ fn unmatched(
 /// How far a fix may lie from a segment (one standard deviation): GPS error combined with the
 /// trust of the geometry there (progress.py `_sigma`).
 pub fn sigma(policy: &ProgressPolicy) -> impl Fn(&Path, f64) -> f64 + '_ {
-    let shaped = py_hypot(&[policy.gps_sigma_m, policy.shape_sigma_m]);
+    let shaped = policy.gps_sigma_m.hypot(policy.shape_sigma_m);
     move |path: &Path, segment_m: f64| {
         if path.shaped {
             return shaped;
         }
-        let chord = py_max(policy.chord_min_sigma_m, policy.chord_k * segment_m);
-        py_hypot(&[policy.gps_sigma_m, py_min(policy.chord_max_sigma_m, chord)])
+        let chord = policy.chord_min_sigma_m.max(policy.chord_k * segment_m);
+        policy
+            .gps_sigma_m
+            .hypot(policy.chord_max_sigma_m.min(chord))
     }
 }
 
@@ -656,15 +632,15 @@ fn emission(
     policy: &ProgressPolicy,
 ) -> f64 {
     let mut score =
-        -0.5 * square(div(candidate.lateral_m, candidate.sigma_m)) - candidate.sigma_m.ln();
+        -0.5 * (candidate.lateral_m / candidate.sigma_m).powi(2) - candidate.sigma_m.ln();
     if let Some(bearing) = position.bearing {
-        let turn = (py_fmod(bearing - candidate.heading_deg + 180.0, 360.0) - 180.0).abs();
+        let turn = ((bearing - candidate.heading_deg + 180.0).rem_euclid(360.0) - 180.0).abs();
         let spread = if path.shaped {
             policy.bearing_sigma_deg
         } else {
             policy.chord_bearing_sigma_deg
         };
-        score -= 0.5 * square(div(turn, spread));
+        score -= 0.5 * (turn / spread).powi(2);
     }
     score
 }
@@ -683,7 +659,7 @@ fn transition(
     if elapsed <= 0.0 {
         return None;
     }
-    if py_max(0.0, moved) - policy.jitter_m > speed * elapsed {
+    if moved.max(0.0) - policy.jitter_m > speed * elapsed {
         return None;
     }
     let change = lateness_s - h.lateness_s;
@@ -692,5 +668,5 @@ fn transition(
     } else {
         policy.gain_sigma_base_s + policy.gain_sigma_rate * elapsed
     };
-    Some(-0.5 * square(div(change, spread)))
+    Some(-0.5 * (change / spread).powi(2))
 }

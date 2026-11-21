@@ -1,5 +1,5 @@
-//! A [`Store`] that records the writer's rows instead of sending them: port of
-//! `emit/recording.py` (`obehy rt compare --level output`).
+//! A [`Store`] that records the writer's rows instead of sending them (`obehy-rt compare --level
+//! output`).
 //!
 //! Every row the SQL store would be sent becomes a record in `pending`, in the order the writer
 //! produced it; the harness takes them with `take` and adds `at`. The vehicle book starts as on
@@ -16,12 +16,13 @@ use super::{
     ASSIGNMENT_COLUMNS, CANCELLATION_COLUMNS, EVENT_COLUMNS, LINK_COLUMNS, OBSERVATION_COLUMNS,
     PLATFORM_COLUMNS, Prepare, StateTable, Store, StoreResult,
 };
-use crate::canonical::{C, utc_text};
+use crate::canonical::{obj, opt_text, text, time, utc_text};
+use serde_json::Value;
 
 /// A row as an object of its columns.
-pub fn named(columns: &[&str], row: &Row) -> C {
+pub fn named(columns: &[&str], row: &Row) -> Value {
     assert_eq!(columns.len(), row.len(), "a row has one cell per column");
-    C::Obj(
+    Value::Object(
         columns
             .iter()
             .zip(row)
@@ -31,109 +32,112 @@ pub fn named(columns: &[&str], row: &Row) -> C {
 }
 
 /// `canonical.plain` of a `JourneyKey`.
-pub fn journey_plain(journey: &JourneyKey) -> C {
-    C::obj([
-        ("@type", C::str("JourneyKey")),
-        ("feed", C::str(journey.feed.as_str())),
-        ("namespace", C::str(&journey.namespace)),
-        ("key", C::str(&journey.key)),
-        ("service_date", C::str(journey.service_date.isoformat())),
+pub fn journey_plain(journey: &JourneyKey) -> Value {
+    obj([
+        ("@type", text("JourneyKey")),
+        ("feed", text(journey.feed.as_str())),
+        ("namespace", text(&journey.namespace)),
+        ("key", text(&journey.key)),
+        ("service_date", text(journey.service_date.isoformat())),
     ])
 }
 
-fn opt_int(value: Option<i32>) -> C {
-    value.map_or(C::Null, |v| C::Int(i128::from(v)))
+fn opt_int(value: Option<i32>) -> Value {
+    value.map_or(Value::Null, Value::from)
 }
 
 /// `canonical.plain` of a `SnapshotJourney`.
-pub fn snapshot_plain(s: &SnapshotJourney) -> C {
+pub fn snapshot_plain(s: &SnapshotJourney) -> Value {
     let calls = s
         .calls
         .iter()
         .map(|c| {
-            C::obj([
-                ("@type", C::str("ScheduledCall")),
-                ("ordinal", C::Int(i128::from(c.ordinal))),
-                ("location_id", C::str(&c.location_id)),
-                ("visit_n", C::Int(i128::from(c.visit_n))),
-                ("passenger_service", C::Bool(c.passenger_service)),
+            obj([
+                ("@type", text("ScheduledCall")),
+                ("ordinal", Value::from(c.ordinal)),
+                ("location_id", text(&c.location_id)),
+                ("visit_n", Value::from(c.visit_n)),
+                ("passenger_service", Value::Bool(c.passenger_service)),
                 ("scheduled_arrival", opt_int(c.scheduled_arrival)),
                 ("scheduled_departure", opt_int(c.scheduled_departure)),
-                ("name", C::str(&c.name)),
+                ("name", text(&c.name)),
             ])
         })
         .collect();
-    C::obj([
-        ("@type", C::str("SnapshotJourney")),
+    obj([
+        ("@type", text("SnapshotJourney")),
         ("journey", journey_plain(&s.journey)),
-        ("at", C::str(utc_text(s.at))),
-        ("release_id", C::str(&s.release_id)),
-        ("trip_id", C::str(&s.trip_id)),
-        ("route_name", C::str(&s.route_name)),
-        ("headsign", C::opt_str(s.headsign.as_deref())),
-        ("calls", C::List(calls)),
-        ("run_key", C::opt_str(s.run_key.as_deref())),
-        ("route_id", C::opt_str(s.route_id.as_deref())),
-        ("mode", C::opt_str(s.mode.as_deref())),
-        ("agency_id", C::opt_str(s.agency_id.as_deref())),
+        ("at", text(utc_text(s.at))),
+        ("release_id", text(&s.release_id)),
+        ("trip_id", text(&s.trip_id)),
+        ("route_name", text(&s.route_name)),
+        ("headsign", opt_text(s.headsign.as_deref())),
+        ("calls", Value::Array(calls)),
+        ("run_key", opt_text(s.run_key.as_deref())),
+        ("route_id", opt_text(s.route_id.as_deref())),
+        ("mode", opt_text(s.mode.as_deref())),
+        ("agency_id", opt_text(s.agency_id.as_deref())),
     ])
 }
 
 /// `canonical.plain` of an `Evidence`.
-pub fn evidence_plain(e: &Evidence) -> C {
-    C::obj([
-        ("@type", C::str("Evidence")),
-        ("first_seen", C::str(utc_text(e.first_seen))),
-        ("last_seen", C::str(utc_text(e.last_seen))),
-        ("fixes", C::Int(i128::from(e.fixes))),
+pub fn evidence_plain(e: &Evidence) -> Value {
+    obj([
+        ("@type", text("Evidence")),
+        ("first_seen", text(utc_text(e.first_seen))),
+        ("last_seen", text(utc_text(e.last_seen))),
+        ("fixes", Value::from(e.fixes)),
         ("journey", journey_plain(&e.journey)),
-        ("confirmed", C::Bool(e.confirmed)),
+        ("confirmed", Value::Bool(e.confirmed)),
     ])
 }
 
 /// `canonical.plain` of a `Profile`.
-pub fn profile_plain(p: &ProfileRow) -> C {
-    C::obj([
-        ("@type", C::str("Profile")),
-        ("vehicle_id", C::str(&p.vehicle_id)),
-        ("registered", C::Bool(p.registered)),
-        ("public_label", C::opt_str(p.public_label.as_deref())),
+pub fn profile_plain(p: &ProfileRow) -> Value {
+    obj([
+        ("@type", text("Profile")),
+        ("vehicle_id", text(&p.vehicle_id)),
+        ("registered", Value::Bool(p.registered)),
+        ("public_label", opt_text(p.public_label.as_deref())),
         (
             "flags",
-            C::Obj(
+            Value::Object(
                 p.flags
                     .iter()
-                    .map(|(k, v)| (k.clone(), v.map_or(C::Null, C::Bool)))
+                    .map(|(k, v)| (k.clone(), v.map_or(Value::Null, Value::Bool)))
                     .collect(),
             ),
         ),
         (
             "texts",
-            C::Obj(
+            Value::Object(
                 p.texts
                     .iter()
-                    .map(|(k, v)| (k.clone(), C::opt_str(v.as_deref())))
+                    .map(|(k, v)| (k.clone(), opt_text(v.as_deref())))
                     .collect(),
             ),
         ),
-        ("datasets", C::List(p.datasets.iter().map(C::str).collect())),
-        ("sources", C::List(p.sources.iter().map(C::str).collect())),
         (
-            "attributes",
-            C::List(p.attributes.iter().map(C::from_py).collect()),
+            "datasets",
+            Value::Array(p.datasets.iter().map(text).collect()),
         ),
-        ("last_stated", C::time(p.last_stated)),
+        (
+            "sources",
+            Value::Array(p.sources.iter().map(text).collect()),
+        ),
+        ("attributes", Value::Array(p.attributes.to_vec())),
+        ("last_stated", time(p.last_stated)),
     ])
 }
 
-fn report(r: &(String, String)) -> C {
-    C::List(vec![C::str(&r.0), C::str(&r.1)])
+fn report(r: &(String, String)) -> Value {
+    Value::Array(vec![text(&r.0), text(&r.1)])
 }
 
 /// The rows the SQL store would be sent, as records.
 #[derive(Debug, Default)]
 pub struct RecordingStore {
-    pub pending: Vec<C>,
+    pub pending: Vec<Value>,
     /// `rt.physical_vehicles`' rows, recorded when the writer opens.
     pub physical: Vec<(String, String, bool)>,
 }
@@ -147,32 +151,32 @@ impl RecordingStore {
     }
 
     /// The records made since the last call.
-    pub fn take(&mut self) -> Vec<C> {
+    pub fn take(&mut self) -> Vec<Value> {
         std::mem::take(&mut self.pending)
     }
 
     fn rows(&mut self, kind: &str, columns: &[&str], rows: &[Row]) {
         self.pending.extend(
             rows.iter()
-                .map(|row| C::obj([("kind", C::str(kind)), ("row", named(columns, row))])),
+                .map(|row| obj([("kind", text(kind)), ("row", named(columns, row))])),
         );
     }
 }
 
 impl Store for RecordingStore {
     fn open(&mut self, _: &Derivation) -> StoreResult<StoredVehicles> {
-        let rows: Vec<C> = self
+        let rows: Vec<Value> = self
             .physical
             .iter()
             .map(|(source, mode, physical)| {
-                C::obj([
-                    ("kind", C::str("physical_vehicles")),
+                obj([
+                    ("kind", text("physical_vehicles")),
                     (
                         "row",
-                        C::obj([
-                            ("source", C::str(source)),
-                            ("mode", C::str(mode)),
-                            ("physical", C::Bool(*physical)),
+                        obj([
+                            ("source", text(source)),
+                            ("mode", text(mode)),
+                            ("physical", Value::Bool(*physical)),
                         ]),
                     ),
                 ])
@@ -207,8 +211,8 @@ impl Store for RecordingStore {
 
     fn snapshots(&mut self, snapshots: &[&SnapshotJourney]) -> StoreResult<()> {
         for snapshot in snapshots {
-            self.pending.push(C::obj([
-                ("kind", C::str("journey_schedule")),
+            self.pending.push(obj([
+                ("kind", text("journey_schedule")),
                 ("snapshot", snapshot_plain(snapshot)),
             ]));
         }
@@ -242,32 +246,32 @@ impl Store for RecordingStore {
 
     fn vehicles(&mut self, rows: &VehicleRows) -> StoreResult<()> {
         for a in &rows.attributes {
-            self.pending.push(C::obj([
-                ("kind", C::str("vehicle_attribute")),
+            self.pending.push(obj([
+                ("kind", text("vehicle_attribute")),
                 (
                     "row",
-                    C::obj([
-                        ("source", C::str(&a.source)),
-                        ("source_vehicle_id", C::str(&a.source_vehicle_id)),
-                        ("attribute", C::str(&a.attribute)),
-                        ("value", C::str(&a.value)),
-                        ("observed_at", C::str(utc_text(a.observed_at))),
+                    obj([
+                        ("source", text(&a.source)),
+                        ("source_vehicle_id", text(&a.source_vehicle_id)),
+                        ("attribute", text(&a.attribute)),
+                        ("value", text(&a.value)),
+                        ("observed_at", text(utc_text(a.observed_at))),
                     ]),
                 ),
             ]));
         }
         for (a, b) in &rows.gone {
-            self.pending.push(C::obj([
-                ("kind", C::str("vehicle_pairing")),
-                ("op", C::str("delete")),
+            self.pending.push(obj([
+                ("kind", text("vehicle_pairing")),
+                ("op", text("delete")),
                 ("a", report(a)),
                 ("b", report(b)),
             ]));
         }
         for ((a, b), evidence) in &rows.kept {
-            self.pending.push(C::obj([
-                ("kind", C::str("vehicle_pairing")),
-                ("op", C::str("upsert")),
+            self.pending.push(obj([
+                ("kind", text("vehicle_pairing")),
+                ("op", text("upsert")),
                 ("a", report(a)),
                 ("b", report(b)),
                 ("evidence", evidence_plain(evidence)),
@@ -275,11 +279,11 @@ impl Store for RecordingStore {
         }
         if rows.rewrite {
             self.pending
-                .push(C::obj([("kind", C::str("vehicle_profile_reset"))]));
+                .push(obj([("kind", text("vehicle_profile_reset"))]));
         }
         for p in &rows.profiles {
-            self.pending.push(C::obj([
-                ("kind", C::str("vehicle_profile")),
+            self.pending.push(obj([
+                ("kind", text("vehicle_profile")),
                 ("profile", profile_plain(p)),
             ]));
         }
@@ -287,17 +291,17 @@ impl Store for RecordingStore {
     }
 
     fn replace_state(&mut self, table: StateTable, feed: Feed, rows: &[Row]) -> StoreResult<()> {
-        self.pending.push(C::obj([
-            ("kind", C::str("state")),
-            ("table", C::str(table.name)),
-            ("op", C::str("replace")),
-            ("feed", C::str(feed.as_str())),
+        self.pending.push(obj([
+            ("kind", text("state")),
+            ("table", text(table.name)),
+            ("op", text("replace")),
+            ("feed", text(feed.as_str())),
         ]));
         for row in rows {
-            self.pending.push(C::obj([
-                ("kind", C::str("state")),
-                ("table", C::str(table.name)),
-                ("op", C::str("insert")),
+            self.pending.push(obj([
+                ("kind", text("state")),
+                ("table", text(table.name)),
+                ("op", text("insert")),
                 ("row", named(table.columns, row)),
             ]));
         }
@@ -306,10 +310,10 @@ impl Store for RecordingStore {
 
     fn delete_state(&mut self, table: StateTable, keys: &[Row]) -> StoreResult<()> {
         for key in keys {
-            self.pending.push(C::obj([
-                ("kind", C::str("state")),
-                ("table", C::str(table.name)),
-                ("op", C::str("delete")),
+            self.pending.push(obj([
+                ("kind", text("state")),
+                ("table", text(table.name)),
+                ("op", text("delete")),
                 ("key", named(table.key, key)),
             ]));
         }
@@ -318,10 +322,10 @@ impl Store for RecordingStore {
 
     fn upsert_state(&mut self, table: StateTable, rows: &[Row]) -> StoreResult<()> {
         for row in rows {
-            self.pending.push(C::obj([
-                ("kind", C::str("state")),
-                ("table", C::str(table.name)),
-                ("op", C::str("upsert")),
+            self.pending.push(obj([
+                ("kind", text("state")),
+                ("table", text(table.name)),
+                ("op", text("upsert")),
                 ("row", named(table.columns, row)),
             ]));
         }
@@ -329,11 +333,11 @@ impl Store for RecordingStore {
     }
 
     fn clear_history(&mut self, days: &[Date]) -> StoreResult<()> {
-        self.pending.push(C::obj([
-            ("kind", C::str("clear_history")),
+        self.pending.push(obj([
+            ("kind", text("clear_history")),
             (
                 "days",
-                C::List(days.iter().map(|d| C::str(d.isoformat())).collect()),
+                Value::Array(days.iter().map(|d| text(d.isoformat())).collect()),
             ),
         ]));
         Ok(())

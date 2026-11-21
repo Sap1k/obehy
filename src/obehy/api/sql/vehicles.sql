@@ -8,7 +8,7 @@
 -- its journey, then the state, then the source), so they do not flip with whichever report is
 -- fresher; its position comes from the report standing for its journey, else its newest fix (by
 -- the fix's own time: the SŽ map's report is heard every poll, its position changes seldom). A
--- viewport lists only vehicles standing for their journey (emit/represent.py): the SŽ map's train
+-- viewport lists only vehicles standing for their journey (obehy-core publish/represent.rs): the SŽ map's train
 -- and the unit's GPS are one train.
 --
 -- A search (`text`, its `words`) finds them by line, train number, headsign, fleet number or

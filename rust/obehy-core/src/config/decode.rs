@@ -1,6 +1,6 @@
 //! `[channel.decode]`: how a channel's payload becomes facts (docs/RUST_PORT.md,
 //! "Config-driven sources"; the design is rust/docs/DECODE_SPEC.md, settled here on the eight
-//! sources). Only the Rust worker reads it; Python's `manifest.py` ignores it.
+//! sources). Only the worker reads it.
 //!
 //! Every table is read strictly (unknown keys are errors). The shape:
 //!
@@ -15,13 +15,14 @@
 //! - `[values]`, evaluated per entity in order: a `path` in the entity, a value `from` another
 //!   (`label.Linka`: a field of a map or record value), a `template`, the `first_of` templates,
 //!   a named normalizer (`fn`, with its quirk ID), or a choice by another value (`by` and
-//!   `cases`). Modifiers: `trim`, `as` (a coercion with Python's semantics), `none`, `none_before`,
+//!   `cases`). Modifiers: `trim`, `as` (a coercion), `none`, `none_before`,
 //!   `invalid`, `regex` and `captures`, `near`, `fresh`, `when`/`unless`, `required`.
 //! - `skip`/`keep`, `feed`, `observed_at`, then `fact` (or `[profile.*]`, each with its own
 //!   facts and an optional `select`or across entities) with reusable `[groups]`.
 //!
 //! A choice anywhere is `{ by = "<value>", cases = [{ match = <scalar or list>, ... }, ...] }`;
-//! a case without `match` is the default. Matching is Python's `==` (`1 == 1.0 == true`).
+//! a case without `match` is the default. Numbers match by value (`1` matches `1.0`), texts by
+//! text, booleans by truth.
 
 use indexmap::IndexMap;
 use serde::de::{DeserializeOwned, Error as _};
@@ -52,7 +53,7 @@ pub struct Decode {
     pub feed: Option<OrChoice<FeedName>>,
     pub observed_at: Option<ObservedAt>,
     #[serde(default)]
-    pub groups: IndexMap<String, Vec<FactSpec>>,
+    pub groups: FactGroups,
     #[serde(default)]
     pub profile: IndexMap<String, Profile>,
     #[serde(default)]
@@ -83,7 +84,7 @@ pub enum Root {
     Array,
 }
 
-/// Payload error texts, as Python's connector words them.
+/// Payload error texts.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Errors {
@@ -111,8 +112,11 @@ pub struct ObservedAt {
     pub fresh: bool,
 }
 
-/// `name = scalar or [scalars]`, every entry matching (Python `==`).
+/// `name = scalar or [scalars]`, every entry matching.
 pub type ByValue = IndexMap<String, Match>;
+
+/// Named fact groups (`[channel.decode.groups]`).
+pub type FactGroups = IndexMap<String, Vec<FactSpec>>;
 
 /// A scalar or a list of scalars (any of them).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -248,10 +252,10 @@ impl<'de> Deserialize<'de> for Required {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Invalid {
-    /// Absent (Python catches the ValueError).
+    /// Absent.
     #[default]
     None,
-    /// The whole payload is undecodable (Python lets the ValueError out).
+    /// The whole payload is undecodable.
     Fail,
 }
 
@@ -546,7 +550,7 @@ impl CaseBody for FactBody {}
 
 /// The facts of `facts.py`, read from values. A field naming a value may end in `?`: the
 /// fact is made without it (null); otherwise an absent value means no fact. Templates are
-/// `{name}`, `{name:d}` (Python `int()`) and `{name:06d}`.
+/// `{name}`, `{name:d}` (an integer) and `{name:06d}`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FactBody {

@@ -1,12 +1,11 @@
-//! Versioned realtime policy (`src/obehy/data/realtime/policy-v18.toml`): port of
-//! `realtime/policy.py`. Every value is required (a missing key is a load error); the sections
-//! Python reads field by field reject unknown keys, as Python does; `[delay]`, `[warm_replay]`,
-//! `[emit]` and the root take extra keys silently, as Python does.
+//! Versioned realtime policy (`src/obehy/data/realtime/policy-v18.toml`). Every value is required
+//! (a missing key is a load error); sections read field by field reject unknown keys; `[delay]`,
+//! `[warm_replay]`, `[emit]` and the root take extra keys silently.
 //!
 //! Names follow the TOML: Python's flattened `policy.delay_discard_below_s` is
 //! `policy.delay.discard_below_s`, `warm_replay_mode` is `warm_replay.mode`, `emit_tick_s` is
 //! `emit.tick_s` (and `sweep_index_every_s`, `keep_index_s`, `compact_index_at_s` live in
-//! `emit`). Per-mode values ([`ByMode`]) are floats, as Python's are.
+//! `emit`). Per-mode values ([`ByMode`]) are floats.
 
 use std::collections::BTreeMap;
 
@@ -15,7 +14,7 @@ use serde::Deserialize;
 use super::ConfigError;
 use crate::time::TimeDelta;
 
-/// The policy file of this code (Python's `POLICY`).
+/// The policy file of this code.
 pub const POLICY_FILE: &str = "policy-v18.toml";
 
 /// A value with per-route-mode (or per-source) overrides: a table with `default`.
@@ -36,12 +35,12 @@ impl ByMode {
 
     /// The largest value of any mode.
     pub fn longest(&self) -> f64 {
-        self.overrides.iter().fold(self.default, |most, (_, v)| {
-            crate::py::num::py_max(most, *v)
-        })
+        self.overrides
+            .iter()
+            .fold(self.default, |most, (_, v)| most.max(*v))
     }
 
-    /// `timedelta(seconds=value)` for a mode (CPython's float rounding).
+    /// The value for a mode as a duration.
     pub fn delta(&self, mode: &str) -> TimeDelta {
         TimeDelta::from_secs_f64(self.get(mode))
     }

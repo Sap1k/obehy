@@ -35,6 +35,8 @@ MANIFESTS = sorted(SOURCES.glob("*.toml"))
 def test_the_shipped_files_are_found() -> None:
     assert POLICY in POLICIES
     assert len(MANIFESTS) >= 8
+    # Shared with obehy-rt, which finds the repository (or the image's /app) by this directory.
+    assert SOURCES == DATA / "sources" and (DATA / "sql" / "lookup_view.sql").is_file()
 
 
 @pytest.mark.parametrize("path", POLICIES, ids=lambda p: p.name)
@@ -43,7 +45,7 @@ def test_every_policy_file_loads(path: Path) -> None:
     assert policy.journey_namespaces and len(set(policy.journey_namespaces)) == len(
         policy.journey_namespaces
     )
-    assert policy.vehicle_day_gap_s > 0
+    assert policy.vehicle_day_gap_s > 0 and policy.keyless_episode_gap_s > 0
     assert policy.retention.observation_hours > 0
     assert policy.retention.longest_raw_days >= policy.retention.raw_days("any-source") >= 1
     assert 0 < policy.guard.min_history_days <= policy.retention.history_days

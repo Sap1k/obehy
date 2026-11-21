@@ -1,4 +1,4 @@
-//! The writer's rows to PostgreSQL: port of `emit/sql_store.py`.
+//! The writer's rows to PostgreSQL.
 //!
 //! Round trips are what a write costs on a remote server, so statements are prepared once per
 //! connection and rows are pipelined: sent together and executed in order, as psycopg's

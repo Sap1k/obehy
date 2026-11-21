@@ -1,5 +1,5 @@
 //! Two sources reporting one vehicle with nothing to bind them: the same journey, side by side
-//! (BASE_PLAN.md section 27). Port of `realtime/emit/pairing.py`. Pure; the store writes it.
+//! (BASE_PLAN.md section 27). Pure; the store writes it.
 //!
 //! When two reports from different sources run the same journey with fixes close in time and
 //! place (`[pairing]` in the vehicle vocabulary), the evidence builds up; once confirmed they
@@ -9,14 +9,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use indexmap::IndexMap;
-
 use crate::geo::distance_m;
 use crate::model::JourneyKey;
-use crate::py::text::repr_str;
 use crate::time::Instant;
 
-/// A source's report of a vehicle: (source, source vehicle ID), ordered as Python's tuple.
+/// A source's report of a vehicle: (source, source vehicle ID).
 pub type Report = (String, String);
 /// Two reports, the lesser first.
 pub type Pair = (Report, Report);
@@ -52,21 +49,6 @@ pub struct Evidence {
     pub confirmed: bool,
 }
 
-/// `repr(journey)`: Python orders a tick's journeys by it (any total order would do: a pair
-/// is decided once per tick; kept for parity).
-fn journey_repr(journey: &JourneyKey) -> String {
-    let day = journey.service_date;
-    format!(
-        "JourneyKey(feed={}, namespace={}, key={}, service_date=datetime.date({}, {}, {}))",
-        repr_str(journey.feed.as_str()),
-        repr_str(&journey.namespace),
-        repr_str(&journey.key),
-        day.year(),
-        day.month(),
-        day.day()
-    )
-}
-
 /// The pairs of reports with evidence, and the changes not yet asked for.
 ///
 /// Eviction: a pair leaves `pairs` when apart, on other journeys, or `hold_s` after its last
@@ -95,17 +77,12 @@ impl Pairings {
         let s = self.settings;
         let mut moved = BTreeSet::new();
         let mut journeys: BTreeMap<&Report, &JourneyKey> = BTreeMap::new();
-        let mut by_journey: IndexMap<&JourneyKey, Vec<&Fix>> = IndexMap::new();
+        let mut by_journey: BTreeMap<&JourneyKey, Vec<&Fix>> = BTreeMap::new();
         for f in fixes {
             journeys.insert(&f.report, &f.journey);
             by_journey.entry(&f.journey).or_default().push(f);
         }
-        let mut groups: Vec<(String, &JourneyKey, Vec<&Fix>)> = by_journey
-            .into_iter()
-            .map(|(j, group)| (journey_repr(j), j, group))
-            .collect();
-        groups.sort_by(|a, b| a.0.cmp(&b.0));
-        for (_, journey, mut group) in groups {
+        for (journey, mut group) in by_journey {
             group.sort_by(|a, b| a.report.cmp(&b.report));
             for (i, a) in group.iter().enumerate() {
                 for b in &group[i + 1..] {

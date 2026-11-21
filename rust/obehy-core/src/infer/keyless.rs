@@ -1,6 +1,5 @@
-//! Keyless inference (R5): port of `realtime/infer/keyless/__init__.py`. A vehicle without a
-//! trip key bound by what it shows (BASE_PLAN.md section 19.2; the first source is Arriva
-//! Express, docs/sources/arriva-express.md).
+//! Keyless inference (R5). A vehicle without a trip key bound by what it shows (BASE_PLAN.md
+//! section 19.2; the first source is Arriva Express, docs/sources/arriva-express.md).
 //!
 //! Candidates come from the line and are hard-filtered by destination and time
 //! ([`candidates`]). The episode's departures, else the current fix, give each a time residual

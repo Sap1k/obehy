@@ -1,14 +1,14 @@
 //! The worker end to end (docs/RUST_PORT.md R8): `run_worker` polls a local HTTP stub that
 //! serves archived DÚK payloads (`../rt-data/rt-raw`, 2026-10-06 07:00 Prague) on a simulated
-//! clock, into a small test database holding a bounded subset of a real release
-//! (`rust/tools/store_db.py release`). Checked: observations, history and state rows and the
+//! clock, into a small test database holding a bounded subset of a real release (the rows the
+//! window's keys reach, `rust/tools/store_db.py release`). Checked: observations, history and state rows and the
 //! GTFS-RT file appear, and they are what replay of the worker's own archive writes into a
 //! second database through the same runner and output; the worker refuses a schema it does not
 //! know; a release activated mid-run is switched to. Every database made is dropped; without a
 //! test database URL, a release or the archive, the tests pass without running. No request
 //! leaves 127.0.0.1.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -18,7 +18,7 @@ use std::time::Duration;
 use obehy_core::config::manifest::{RECORDER_FILTERS, load_sources};
 use obehy_core::config::{Channel, Policy, Source};
 use obehy_core::core::CORE_VERSION;
-use obehy_core::model::{Derivation, Feed};
+use obehy_core::model::{Derivation, Feed, LineRef, TripKey};
 use obehy_core::publish::alerts::AlertEntities;
 use obehy_core::runner::{Runner, Ticks};
 use obehy_core::time::{Date, Instant, TimeDelta};
@@ -145,25 +145,70 @@ impl Drop for TestDb {
 
 /// The bounded subset release loaded and activated in each database (by name); its run ID.
 fn load_release(names: &[String]) -> String {
+    let scratch = Scratch::new("plan");
+    let plan = scratch.0.join("plan.json");
+    std::fs::write(&plan, subset_plan().to_string()).unwrap();
     let mut args = vec!["release"];
     args.extend(names.iter().map(String::as_str));
-    args.extend([
-        "--release",
-        RELEASE,
-        "--archive",
-        ARCHIVE,
-        "--source",
-        "duk",
-        "--channel",
-        "vehicles",
-        "--since",
-        SINCE,
-        "--until",
-        UNTIL,
-        "--feed",
-        "jdf",
-    ]);
+    args.extend(["--plan", plan.to_str().unwrap()]);
     tool(&args)
+}
+
+/// What the subset release is cut by: the trip keys of the window's DÚK observations in `jdf`,
+/// and the lines of those without one, as the runner asks the index for them.
+fn subset_plan() -> serde_json::Value {
+    let paths = Paths::discover().unwrap();
+    let sources = load_sources(&paths.sources(), &RECORDER_FILTERS).unwrap();
+    let channels: Vec<Channel> = sources
+        .iter()
+        .flat_map(|s| s.channels.clone())
+        .filter(|c| c.source == "duk" && c.channel == "vehicles")
+        .collect();
+    let package = paths.root.join("src/obehy");
+    let files = |name: &str| std::fs::read_to_string(package.join(name)).map_err(|e| e.to_string());
+    let decoders = Decoders::new(&sources, &files).unwrap();
+    let skew = paths.load_policy().unwrap().time.max_clock_skew();
+    let window = Window {
+        archive: repo().join(ARCHIVE),
+        start: DAY,
+        end: DAY,
+        channels,
+        since: Some(at(SINCE)),
+        until: Some(at(UNTIL)),
+        all_feeds: true,
+    };
+    let mut refs = BTreeSet::new();
+    let mut lines = BTreeSet::new();
+    decoded_polls(
+        &window,
+        &decoders,
+        skew,
+        1,
+        |poll| {
+            for observation in poll.observations.iter().flatten() {
+                if observation.feed != Feed::Jdf {
+                    continue;
+                }
+                for key in observation.all::<TripKey>() {
+                    refs.insert([key.namespace.clone(), key.key.clone()]);
+                }
+                if observation.first::<TripKey>().is_none() {
+                    for line in observation.all::<LineRef>() {
+                        lines.insert([line.namespace.clone(), line.value.clone()]);
+                    }
+                }
+            }
+            Ok(())
+        },
+        &DecodeTimes::default(),
+    )
+    .unwrap();
+    serde_json::json!({
+        "feed": "jdf",
+        "release": repo().join(RELEASE),
+        "refs": refs,
+        "lines": lines,
+    })
 }
 
 /// A directory of its own under the system's temporary directory, removed with the value.

@@ -1,8 +1,8 @@
-//! Compositions and the lookups that answer them: port of `realtime/compositions.py`
-//! (BASE_PLAN.md sections 18.2 and 28). A lookup is `plan(subject, view)` (pure), a fetch by
-//! the broker, and `decode(bytes, request)` (pure); compositions are not core state. Pure.
+//! Compositions and the lookups that answer them (BASE_PLAN.md sections 18.2 and 28). A lookup is
+//! `plan(subject, view)` (pure), a fetch by the broker, and `decode(bytes, request)` (pure);
+//! compositions are not core state. Pure.
 
-use indexmap::IndexMap;
+use std::collections::BTreeMap;
 
 use crate::time::{Date, Instant};
 
@@ -26,7 +26,7 @@ pub struct ViewCall {
     /// Live state says the train has left it.
     pub left: bool,
     /// namespace -> identifier (sr70).
-    pub keys: IndexMap<String, String>,
+    pub keys: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,7 +36,7 @@ pub struct TripView {
     pub service_date: Date,
     pub now: Instant,
     /// namespace -> identifier: czptt:train_number, czptt:tr.
-    pub keys: IndexMap<String, String>,
+    pub keys: BTreeMap<String, String>,
     pub calls: Vec<ViewCall>,
 }
 

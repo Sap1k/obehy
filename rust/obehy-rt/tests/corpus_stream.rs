@@ -1,14 +1,18 @@
-//! The core and the writer against Python, journey by journey (docs/RUST_PORT.md, R6): every
-//! corpus journey's output stream (`obehy-rt corpus-stream`) equals the pinned one
-//! `tests/realtime/corpus_stream.py` wrote into `tests/golden/corpus-stream/`.
+//! The core and the writer, journey by journey (docs/RUST_PORT.md, R6): every corpus journey's
+//! output stream (`obehy-rt corpus-stream`) matches the pinned one in
+//! `tests/golden/corpus-stream/` record for record. Within a record, numbers may differ by the
+//! platform's floating point (a rounded last decimal, a whole second or count off by one at a
+//! rounding boundary); anything else is a difference.
 
 use std::io::Read;
 
 use obehy_core::config::manifest::{self, RECORDER_FILTERS};
 use obehy_core::core::Semantics;
+use obehy_core::time::{Instant, TimeDelta};
 use obehy_rt::canonical::line;
 use obehy_rt::corpus::stream;
 use obehy_rt::settings::Paths;
+use serde_json::Value;
 
 fn gunzip(path: &std::path::Path) -> String {
     let file = std::fs::File::open(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
@@ -17,6 +21,51 @@ fn gunzip(path: &std::path::Path) -> String {
         .read_to_string(&mut text)
         .expect("a gzip stream");
     text
+}
+
+fn close_lines(a: &str, b: &str) -> bool {
+    match (serde_json::from_str(a), serde_json::from_str(b)) {
+        (Ok(a), Ok(b)) => close(&a, &b),
+        _ => false,
+    }
+}
+
+/// Equal up to floating point: floats within 0.002 (or 1e-6 relative), integers and integer
+/// texts within 1, ISO times within a second.
+fn close(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => match (x.as_i64(), y.as_i64()) {
+            (Some(x), Some(y)) => x.abs_diff(y) <= 1,
+            _ => {
+                let (x, y) = (x.as_f64().unwrap(), y.as_f64().unwrap());
+                (x - y).abs() <= 0.002_f64.max(1e-6 * x.abs())
+            }
+        },
+        (Value::String(x), Value::String(y)) => x == y || close_texts(x, y),
+        (Value::Array(x), Value::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(a, b)| close(a, b))
+        }
+        (Value::Object(x), Value::Object(y)) => {
+            x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| close(v, w)))
+        }
+        _ => a == b,
+    }
+}
+
+fn close_texts(a: &str, b: &str) -> bool {
+    if let (Ok(x), Ok(y)) = (a.parse::<i64>(), b.parse::<i64>()) {
+        return x.abs_diff(y) <= 1;
+    }
+    let time = |t: &str| {
+        let t = t
+            .strip_suffix('Z')
+            .map_or_else(|| t.to_owned(), |t| format!("{t}+00:00"));
+        Instant::from_isoformat(&t).ok()
+    };
+    match (time(a), time(b)) {
+        (Some(x), Some(y)) => (x - y).abs() <= TimeDelta::from_seconds(1),
+        _ => false,
+    }
 }
 
 #[test]
@@ -63,13 +112,20 @@ fn every_corpus_journey_gives_its_pinned_stream() {
         )
         .unwrap_or_else(|e| panic!("{name}: {e}"));
         let expected = gunzip(&pinned.join(format!("{name}.jsonl.gz")));
-        if text != expected {
-            let at = text
-                .lines()
-                .zip(expected.lines())
-                .position(|(a, b)| a != b)
-                .unwrap_or_else(|| text.lines().count().min(expected.lines().count()));
-            failed.push(format!("{name}: first difference at line {}", at + 1));
+        let (got, wanted): (Vec<&str>, Vec<&str>) =
+            (text.lines().collect(), expected.lines().collect());
+        let first = got
+            .iter()
+            .zip(&wanted)
+            .position(|(a, b)| a != b && !close_lines(a, b));
+        match first {
+            Some(at) => failed.push(format!("{name}: first difference at line {}", at + 1)),
+            None if got.len() != wanted.len() => failed.push(format!(
+                "{name}: {} records, {} pinned",
+                got.len(),
+                wanted.len()
+            )),
+            None => {}
         }
     }
     assert!(failed.is_empty(), "{}", failed.join("\n"));

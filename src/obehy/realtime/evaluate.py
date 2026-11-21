@@ -1,10 +1,10 @@
 """Shadow evaluation of rail predictors during replay (docs/R2_SLICE.md section 11, item 5).
 
-Read from the output stream's `predictor_sample` records (`emit/samples.py`, every five minutes):
-for each running rail run with a source prediction, each predictor's arrival at the predicted
-next stop is noted; once that arrival happens (an actual event), the errors are scored. The
-policy's predictor is chosen from this report, never guessed. Pure: it reads records, never the
-core.
+Read from the output stream's `predictor_sample` records (`obehy-rt compare --diagnostics`,
+every five minutes): for each running rail run with a source prediction, each predictor's
+arrival at the predicted next stop is noted; once that arrival happens (an actual event), the
+errors are scored. The policy's predictor is chosen from this report, never guessed. Pure: it
+reads records, never the core.
 """
 
 from __future__ import annotations

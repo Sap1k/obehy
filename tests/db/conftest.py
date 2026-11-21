@@ -13,9 +13,9 @@ import psycopg
 import pytest
 from psycopg import conninfo, sql
 
-from obehy.realtime.emit.vehicles import write_physical_policy
 from obehy.release.migrate import migrate
 from obehy.runtime_config import load_test_database_url
+from tests.db.worker_rows import write_physical_policy
 
 
 def _url(base: str, database: str) -> str:
@@ -52,7 +52,7 @@ def template_database(admin_url: str) -> Iterator[str]:
     try:
         with psycopg.connect(_url(admin_url, name), autocommit=True) as connection:
             migrate(connection)
-            # What the worker writes at start, so the API reads the manifests' policy.
+            # What the Rust worker writes at start, so the API reads the manifests' policy.
             write_physical_policy(connection)
         yield name
     finally:

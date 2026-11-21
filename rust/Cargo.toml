@@ -21,13 +21,14 @@ indexmap = "2.14"
 # A fast hasher for maps whose iteration order does not depend on it (IndexMap keeps insertion
 # order) or that are never iterated.
 rustc-hash = "2.1"
-# Time zones only: Europe/Prague is read from the TZif file Python's `tzdata` ships
-# (obehy-core/tzdata/), never from a bundled or system database (see obehy-core/src/time/zone.rs).
-jiff = { version = "1.0", default-features = false, features = ["std"] }
+# Europe/Prague from the IANA database jiff bundles, the same on every platform.
+jiff = { version = "1.0", default-features = false, features = ["std", "tzdb-bundle-always"] }
 regex = "1.13"
 serde = { version = "1.0", features = ["derive"] }
-# float_roundtrip: parse floats correctly rounded, as Python's json does.
-serde_json = { version = "1.0", features = ["float_roundtrip"] }
+# preserve_order: objects keep document order (payloads, and the JSON written).
+serde_json = { version = "1.0", features = ["float_roundtrip", "preserve_order"] }
+# The SŽ station board's HTML.
+scraper = { version = "0.29", default-features = false }
 thiserror = "2.0"
 # preserve_order: tables keep document order, as tomllib's dicts do (request headers).
 toml = { version = "1.2", features = ["preserve_order"] }
@@ -36,7 +37,6 @@ arrow-array = "60.1"
 arrow-schema = "60.1"
 bytes = "1.12"
 parquet = { version = "60.1", default-features = false, features = ["arrow", "snap"] }
-stats_alloc = "0.1.10"
 tokio = { version = "1.54", features = ["rt", "macros"] }
 tokio-postgres = "0.7.18"
 # R2, the connectors: GTFS-RT alerts (obehy-sources); the archive's zstd objects and gzip
@@ -45,11 +45,11 @@ prost = { version = "0.14", default-features = false, features = ["derive", "std
 zstd = "0.13"
 flate2 = "1.1"
 # R8, the I/O shell (obehy-rt only): HTTP/1.1 with rustls and no automatic decompression (the
-# runtime decodes gzip itself, as Python does), the archive's sha256 names.
+# runtime decodes gzip itself), the archive's sha256 names.
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 hyper = "1"
 sha2 = "0.11"
-# Thread CPU time per worker phase (phases.py's `time.thread_time()`).
+# Thread CPU time per worker phase.
 cpu-time = "1.0"
 # R7/R8, the store and the lookup broker (obehy-rt only): binary COPY streams, pipelined
 # statements, LISTEN notifications.

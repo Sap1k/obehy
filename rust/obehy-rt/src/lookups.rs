@@ -1,5 +1,5 @@
-//! The lookup broker (BASE_PLAN.md section 18.2): port of `runtime/lookups.py`. It answers what
-//! the API was asked (`rt.lookup_request`) through the lookup connectors.
+//! The lookup broker (BASE_PLAN.md section 18.2). It answers what the API was asked
+//! (`rt.lookup_request`) through the lookup connectors.
 //!
 //! The API records a request and NOTIFYs `obehy_lookup`; the broker wakes on it, or every
 //! [`SWEEP_S`], and for each pending request and each lookup of its kind covering the trip's
@@ -18,19 +18,17 @@
 //! A request is answered once every lookup has its outcome. The broker is a task of its own with
 //! its own connection; a slow upstream answer delays only other lookups.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use futures_util::StreamExt;
-use indexmap::IndexMap;
 use obehy_core::compositions::{NotAvailable, Subject, TripView, Unit, UpstreamRequest, ViewCall};
 use obehy_core::config::Channel;
 use obehy_core::config::manifest::{Lookup, Rate};
 use obehy_core::config::policy::JourneyPolicy;
-use obehy_core::py::json::PyJson;
 use obehy_core::time::{Date, Instant, ServiceTime, TimeDelta, local_date};
 use obehy_sources::cd;
 use obehy_sources::error::PayloadError;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use tokio_postgres::{AsyncMessage, Client, Config, NoTls};
 
 use crate::archive::ArchiveWriter;
@@ -49,9 +47,10 @@ pub const BATCH: i64 = 50;
 pub const LOCATION_NAMESPACES: [&str; 1] = ["sr70"];
 
 /// `sql/lookup_view.sql`, shared with Python (named placeholders numbered at use).
-pub const LOOKUP_VIEW_SQL: &str = include_str!("../../../src/obehy/realtime/sql/lookup_view.sql");
+pub const LOOKUP_VIEW_SQL: &str =
+    include_str!("../../../src/obehy/data/realtime/sql/lookup_view.sql");
 
-/// A lookup connector: `plan` and `decode` (the Python `CONNECTORS` table).
+/// A lookup connector: `plan` and `decode`.
 pub type Plan = fn(&Subject, &TripView) -> Result<UpstreamRequest, NotAvailable>;
 pub type Decode = fn(&[u8], &UpstreamRequest) -> Result<Vec<Unit>, PayloadError>;
 
@@ -122,7 +121,7 @@ pub fn numbered(sql: &str, names: &[&str]) -> String {
     out
 }
 
-fn string_map(value: &Value) -> IndexMap<String, String> {
+fn string_map(value: &Value) -> BTreeMap<String, String> {
     value
         .as_object()
         .map(|o| {
@@ -462,14 +461,13 @@ impl<F: Fetcher> LookupBroker<F> {
             ..lookup.request.clone()
         };
         let poll = self.fetcher.fetch(&request, None).await;
-        let mut request_json = vec![("cache_key".to_owned(), PyJson::str(&planned.cache_key))];
+        let mut request_json = Map::new();
+        request_json.insert("cache_key".into(), json!(planned.cache_key));
         for (k, v) in &planned.params {
-            match request_json.iter_mut().find(|(key, _)| key == k) {
-                Some(slot) => slot.1 = PyJson::str(v),
-                None => request_json.push((k.clone(), PyJson::str(v))),
-            }
+            request_json.insert(k.clone(), json!(v));
         }
-        let extra = [("request".to_owned(), PyJson::from_pairs(request_json))];
+        let mut extra = Map::new();
+        extra.insert("request".into(), Value::Object(request_json));
         let stored = self
             .archive
             .append(

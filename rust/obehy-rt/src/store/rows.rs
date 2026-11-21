@@ -8,8 +8,9 @@ use obehy_core::model::{
     CallState, Feed, Instance, JourneyKey, LinkJourneys, ObservationResult, PartSpan,
     RecordCancellation, RecordPlatform, VehicleKey, WriteEvent,
 };
-use obehy_core::py::json::PyJson;
 use obehy_core::time::Instant;
+
+use serde_json::{Value, json};
 
 use super::cells::{Cell, Row};
 
@@ -113,10 +114,10 @@ pub fn part_row(i: &Instance, part: &PartSpan, release_id: &str) -> Row {
     row
 }
 
-/// The calls' JSON (`json.dumps([_call_json(c, i <= left) ...])`), as a value.
-pub fn calls_json(instance: &Instance) -> PyJson {
+/// The calls' JSON.
+pub fn calls_json(instance: &Instance) -> Value {
     let left = instance.left_index();
-    PyJson::List(
+    Value::Array(
         instance
             .calls
             .iter()
@@ -126,7 +127,7 @@ pub fn calls_json(instance: &Instance) -> PyJson {
     )
 }
 
-pub fn trip_row(i: &Instance, calls: Arc<PyJson>) -> Row {
+pub fn trip_row(i: &Instance, calls: Arc<Value>) -> Row {
     let mut row: Row = key_cells(&i.journey).into();
     row.extend([
         Cell::text(&i.release_id),
@@ -142,63 +143,45 @@ pub fn trip_row(i: &Instance, calls: Arc<PyJson>) -> Row {
     row
 }
 
-fn iso(value: Option<Instant>) -> PyJson {
-    value.map_or(PyJson::Null, |at| PyJson::str(at.isoformat()))
-}
-
 /// Which sources the journey's realtime came from (the API's provenance), by source.
-pub fn sources_json(i: &Instance) -> PyJson {
+pub fn sources_json(i: &Instance) -> Value {
     let mut tracks: Vec<_> = i.sources.iter().collect();
     tracks.sort_by(|a, b| a.source.cmp(&b.source));
-    PyJson::List(
+    Value::Array(
         tracks
             .into_iter()
             .map(|t| {
-                PyJson::object([
-                    ("source", PyJson::str(&t.source)),
-                    ("heard_at", iso(Some(t.heard_at))),
-                    ("position_at", iso(t.position_at)),
-                    ("delay_s", PyJson::opt(t.delay_s, PyJson::Int)),
-                    (
-                        "leads_position",
-                        PyJson::Bool(i.track_source.as_deref() == Some(t.source.as_str())),
-                    ),
-                ])
+                json!({
+                    "source": t.source,
+                    "heard_at": t.heard_at,
+                    "position_at": t.position_at,
+                    "delay_s": t.delay_s,
+                    "leads_position": i.track_source.as_deref() == Some(t.source.as_str()),
+                })
             })
             .collect(),
     )
 }
 
 /// A call's current state; `passed`: the vehicle has left it (`Instance.left_index`).
-pub fn call_json(call: &CallState, passed: bool) -> PyJson {
-    PyJson::object([
-        ("sequence", PyJson::Int(call.sequence)),
-        ("location_id", PyJson::str(&call.location_id)),
-        ("visit_n", PyJson::Int(i64::from(call.visit_n))),
-        ("status", PyJson::lit(call.status.as_str())),
-        ("passed", PyJson::Bool(passed)),
-        ("estimated_arrival", iso(call.estimated_arrival)),
-        ("estimated_departure", iso(call.estimated_departure)),
-        (
-            "source_class",
-            PyJson::opt(call.source_class, |c| PyJson::lit(c.as_str())),
-        ),
-        ("passenger", PyJson::Bool(call.passenger)),
-        (
-            "platform",
-            PyJson::opt(call.platform.as_ref(), |p| {
-                PyJson::object([
-                    ("value", PyJson::str(&p.value)),
-                    ("label", PyJson::lit(p.label.as_str())),
-                    (
-                        "boarding_point_id",
-                        PyJson::opt(p.boarding_point_id.as_deref(), PyJson::str),
-                    ),
-                    ("source", PyJson::str(&p.source)),
-                ])
-            }),
-        ),
-    ])
+pub fn call_json(call: &CallState, passed: bool) -> Value {
+    json!({
+        "sequence": call.sequence,
+        "location_id": call.location_id,
+        "visit_n": call.visit_n,
+        "status": call.status,
+        "passed": passed,
+        "estimated_arrival": call.estimated_arrival,
+        "estimated_departure": call.estimated_departure,
+        "source_class": call.source_class,
+        "passenger": call.passenger,
+        "platform": call.platform.as_ref().map(|p| json!({
+            "value": p.value,
+            "label": p.label,
+            "boarding_point_id": p.boarding_point_id,
+            "source": p.source,
+        })),
+    })
 }
 
 /// Where a vehicle row draws the vehicle: its own fix, or the journey's (`represents`).

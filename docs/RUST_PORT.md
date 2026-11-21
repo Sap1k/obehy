@@ -8,6 +8,22 @@ meet only where they already meet today: the database, a few files, and the conf
 runs. Nothing here changes behaviour: the Rust worker is done when it writes exactly what the
 Python one wrote from the same input, and then the Python one goes.
 
+**Status: done (2026-11-21).** R0–R8 are in, byte-identical to the Python worker on every
+harness, and the switch is made: the image runs `obehy-rt worker`, and the Python worker, its
+connectors, its tests and the Python harness are deleted. What follows is the plan as it was
+carried out, kept for its reasons; "Python today" and "until the switch" read as history.
+
+**After the switch (2026-11-21): parity emulation removed.** With the Python worker gone,
+byte-identical output stopped being a goal, and the code that only reproduced Python's exact
+behaviour went: `obehy_core::py` (Python's Unicode tables, `json.dumps`, float repr, `int()`
+and `float()` of text), `timedelta`'s half-even rounding, CPython's `hypot`, the UCRT `pow`
+workaround, GEOS's Douglas-Peucker details, PROJ's per-point choice of the Křovák operation
+(one operation now, EPSG:5239), the vendored tzdata (jiff's bundled database instead), a
+hand-written `json.loads` and CPython's `html.parser` (serde_json and scraper instead), and
+the Python-pinned parity fixtures and examples. The rules are unchanged; the pinned streams were
+rewritten from Rust once, the differences being rounding (a microsecond, a second at a half),
+last float digits and Křovák positions outside Czechia's area (about a metre).
+
 ## Why a separate program, not a Python extension
 
 The first version of this plan ported only the core and called it from Python through PyO3.
@@ -377,9 +393,9 @@ that is cheap; the whole worker is judged by the harness.
 | R7 | `publish`, `vehicles`, `store`; warm start from `rt.observation` | the output harness in full; a window replayed into the test database by each gives the same rows; warm start rebuilds the same state, under a minute; the memory soak passes |
 | R8 | `archive`, `worker`: scheduler, fetch, egress, demand polling, the lookup broker, alerts, phase timing | fetching and egress tested against a local HTTP server, including SŽ's fail-closed rule and the proxy list's reload; one live day on the dev database without a difference against a Python replay of the same archive; live CPU and memory at target |
 
-Then **the switch**: the image runs `obehy-rt worker`; live and replay switch together; the
-Python worker, its connectors and its tests are deleted, with `obehy rt compare` and the Python
-facts decoders going last. AGENTS.md's rule is "no twin implementations": until the switch the
+Then **the switch** (done 2026-11-21): the image runs `obehy-rt worker`; live and replay
+switch together; the Python worker, its connectors and its tests are deleted, with `obehy rt
+compare` and the Python facts decoders going last. AGENTS.md's rule is "no twin implementations": until the switch the
 Python worker is the reference under test only and is never run live alongside Rust; after it,
 it is not kept as a fallback.
 
@@ -393,7 +409,9 @@ What stays and what goes, prepared so that the switch only deletes (the import-l
   `disk_guard.py`, `gtfs_rt_check.py`, the diagnostics `replay_report.py`, `quality.py`,
   `quality_checks.py`, `evaluate.py`, `keyless_report.py`, `journey_view.py`, and
   `compare_check.py`, `jsonl.py`, `names.py`; `commands.py` cut down to `obehy jobs`,
-  `obehy rt report --from-stream`, `check-gtfs-rt`, `compare-diff` and `corpus pin`.
+  `obehy rt report --from-stream`, `check-gtfs-rt`, `compare-diff` and `corpus pin`
+  (`compare_check.py` and `compare-diff` went after the switch: `obehy-rt compare --check`
+  reports where two streams part).
 - **Goes:** `alerts`, `archive`, `bench`, `compositions`, `core`, `facts`, `geo`, `index`,
   `index_files`, `index_sql`, `logs`, `manifest`, `model`, `model_json`, `phases`,
   `platforms`, `policy`, `record`, `replay`, `runner`, `runs`, `times`, `warm`, `worker`, and
@@ -406,13 +424,24 @@ What stays and what goes, prepared so that the switch only deletes (the import-l
 - **Files both read, which must survive:** `src/obehy/data/realtime/` (policy, SR70 catalogue)
   and `src/obehy/data/vehicles/attributes.toml` stay where they are. The manifests
   (`src/obehy/realtime/sources/*.toml`) and the SQL compiled into `obehy-rt`
-  (`src/obehy/realtime/sql/`) live in directories emptied of Python; they move, in the switch's
-  commit, to `src/obehy/data/realtime/sources/` and `src/obehy/data/realtime/sql/`, with
+  (`src/obehy/realtime/sql/`) lived in directories emptied of Python; they moved, in the
+  switch, to `src/obehy/data/realtime/sources/` and `src/obehy/data/realtime/sql/`, with
   `realtime_config.SOURCES`, `obehy-rt`'s `Paths` (and the repository root it finds by them),
   its `include_str!` paths and the `Dockerfile`'s `COPY` lines.
 - **The image:** the `Dockerfile`'s `worker` target is `obehy-rt worker` in Debian trixie
   (glibc) with those files under `/app` as in the repository; compose's `realtime` service
-  takes it in place of `command: ["realtime"]`.
+  takes it (`ghcr.io/sap1k/obehy-worker`, published by CI next to the server image) in place of
+  `command: ["realtime"]`.
+- **How the switch came out:** `obehy rt corpus pin` stays (it only copies archive days).
+  The Python harness script `tests/realtime/compare_windows.py` went (no Rust test used it);
+  its four windows, which the pinned `tests/realtime/compare/` streams were written from, are
+  listed in `rust/README.md`. The fixture generators in `rust/tools/` went; their outputs are
+  frozen references. `rust/tools/store_db.py` stays, cut to what the Rust database tests need
+  of Python (create and migrate a test database, load a subset release from a plan the Rust
+  test makes, the broker fixture, a dump). `tests/db/test_api.py` and the jobs tests write the
+  worker's rows with SQL (`tests/db/worker_rows.py`); the diagnostics' tests use hand-written
+  stream records. The stream contract that was `compare.py`'s docstring is the module doc of
+  `rust/obehy-rt/src/compare.rs`.
 
 ## Carrying the rules over
 
@@ -427,15 +456,12 @@ What stays and what goes, prepared so that the switch only deletes (the import-l
 - **The core stays synchronous.** The shell is async (tokio); the core and the decoders are
   plain functions it calls.
 - **Determinism.** Output in sorted order (`BTreeMap`, or sorting before emitting), never hash
-  order. Where the Python worker relies on dict insertion order, Rust keeps it explicitly
-  (`IndexMap`); the harness finds the places.
-- **Floats.** `sin`, `cos` and `atan2` may differ in the last bit between Python's libm and
-  Rust's (`geo.py`, `timeline/path.py`, `timeline/progress.py`, about ten calls). The harness
-  rounds at the edges (metres to 0.01, seconds to whole), and every place the core compares a
-  float against a threshold is listed in R4, so a last-bit difference cannot flip a decision
-  unseen. Křovák goes through proj in both.
-- **Time zones.** `chrono-tz` and `zoneinfo` must read the same tzdata: pin both to one release
-  and check it in the time tests.
+  order. (During the port, Python's dict insertion order was kept with `IndexMap`; after the
+  switch the core state is ordered by key.)
+- **Floats.** Plain `f64` and the platform libm; the canonical stream rounds at the edges
+  (metres to 0.01, seconds to 0.001) and the corpus test allows a last rounded digit.
+- **Time zones.** Europe/Prague from jiff's bundled IANA database (during the port: Python's
+  own TZif file, so both read one release).
 - **Policy, not constants**, in Rust as in Python; so are the manifests' mappings.
 - **Quirks stay in sources.** The core gets facts; every normalizer names its quirk.
 - **SQL stays the place for sets.** The writer writes in sets and the views stay in SQL; the
@@ -446,14 +472,15 @@ What stays and what goes, prepared so that the switch only deletes (the import-l
 ## Building and shipping
 
 - **Locally:** the stable toolchain through `rustup`, `x86_64-pc-windows-msvc`, linking with the
-  installed VS2026 MSVC (no compilers in WSL). `cargo build` in `rust/`; the Python harness
-  calls the built `obehy-rt` as a subprocess.
-- **CI:** `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test` next to the Python
-  checks; both harness levels against the pinned reference on every change to `rust/` or
-  `realtime/`.
-- **The image:** the `Dockerfile` gains a Rust build stage producing `obehy-rt`, in a worker
-  image of its own; the API image loses the worker. Changing compose, the server and nginx is
-  the user's to do; the GTFS-RT files keep their paths.
+  installed VS2026 MSVC (no compilers in WSL). `cargo build` in `rust/`.
+- **CI:** `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` and a release build on
+  Linux next to the Python checks (the tests ran on Windows while they were pinned to UCRT's
+  libm); the corpus streams are a cargo test, the compare windows need the local archives and
+  are checked by hand (`rust/README.md`).
+- **The image:** the `Dockerfile` has a Rust build stage producing `obehy-rt`, in a worker image
+  of its own (`worker` target, `ghcr.io/sap1k/obehy-worker`); the server image has no worker.
+  Pulling the new images and restarting compose on the server is the user's to do; the GTFS-RT
+  files keep their paths.
 
 ## What to decide before starting
 

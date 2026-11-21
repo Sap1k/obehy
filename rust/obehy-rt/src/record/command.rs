@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use obehy_core::config::Channel;
 use obehy_core::config::manifest::{RECORDER_FILTERS, load_sources, select_channels};
-use obehy_core::py::text::strip;
 
 use super::{DemandSetup, Filters, RecordOptions, SUMMARY_INTERVAL_S, parse_duration, record};
 use crate::demand::{StationDemand, active_loads, connect, full_codes};
@@ -49,7 +48,7 @@ pub struct SourceList(pub Vec<String>);
 fn parse_list(text: &str) -> Result<SourceList, String> {
     Ok(SourceList(
         text.split(',')
-            .map(|s| strip(s).to_owned())
+            .map(|s| s.trim().to_owned())
             .filter(|s| !s.is_empty())
             .collect(),
     ))

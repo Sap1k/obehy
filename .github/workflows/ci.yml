@@ -40,13 +40,10 @@ jobs:
       # The frontend's types come from this document: it must match the API.
       - run: uv run obehy api openapi --out web/openapi.json && git diff --exit-code web/openapi.json
 
-  # The realtime worker in Rust (rust/, docs/RUST_PORT.md). Its tests run on Windows, the
-  # reference platform until the switch: the Python parity fixtures (geo, path, progress,
-  # estimate, runtimes, infer and publish parity, libm.json, the corpus goldens) were generated
-  # there, and f64 sin/cos/atan2/exp come from the platform libm, UCRT on both sides
-  # (rust/docs/PORTING_HAZARDS.md, "Platform libm"). glibc may differ from them in the last bit.
+  # The realtime worker in Rust (rust/, docs/RUST_PORT.md), on Linux as the worker image runs
+  # it (Dockerfile, target `worker`): lints, tests and the release binary.
   rust:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: rust
@@ -63,25 +60,6 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
-
-  # The same workspace on Linux, where the worker image runs (Dockerfile, target `worker`):
-  # lints with the Linux cfg and builds the release binary. No tests here: see `rust`.
-  rust-linux:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
-      - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo build --release --locked -p obehy-rt
 
   web:
@@ -106,10 +84,11 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # The server image (Dockerfile, deploy/compose.yaml) and the web image (web/Dockerfile: nginx
-  # with the app), published for every green main.
+  # The server image, the worker image (Dockerfile targets `server` and `worker`,
+  # deploy/compose.yaml) and the web image (web/Dockerfile: nginx with the app), published for
+  # every green main.
   image:
-    needs: [test, web]
+    needs: [test, rust, web]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -119,8 +98,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: false
-      # Nothing here pulls from Docker Hub: the base image is on GHCR and BuildKit comes from
-      # Google's Docker Hub mirror.
+      # Nothing here pulls from Docker Hub: the server's base image is on GHCR; the worker's
+      # (rust, debian) and BuildKit come from Google's Docker Hub mirror.
       - uses: docker/setup-buildx-action@v4
         with:
           driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
@@ -139,11 +118,28 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
+          target: server
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - id: worker-meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}-worker
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: worker
+          push: true
+          tags: ${{ steps.worker-meta.outputs.tags }}
+          labels: ${{ steps.worker-meta.outputs.labels }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
       - id: web-meta
         uses: docker/metadata-action@v6
         with:
@@ -165,6 +161,11 @@ jobs:
           image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-$GITHUB_SHA"
           docker run --rm "$image" release fetch --help
           docker run --rm --entrypoint sh "$image" -c 'date && ls -la /app/data /app/deploy'
+          # The worker finds its manifests, policy and SQL under /app as in the repository.
+          worker="ghcr.io/${GITHUB_REPOSITORY,,}-worker:sha-$GITHUB_SHA"
+          docker run --rm "$worker" worker --help
+          docker run --rm --entrypoint sh "$worker" \
+            -c 'date && ls /app/src/obehy/data/realtime/sources/duk.toml /app/data/rt-raw'
           # With a volume at /srv, as deploy/compose.yaml mounts the data there.
           web="ghcr.io/${GITHUB_REPOSITORY,,}-web:sha-$GITHUB_SHA"
           docker run --rm -v "$RUNNER_TEMP:/srv:ro" --entrypoint sh "$web" \

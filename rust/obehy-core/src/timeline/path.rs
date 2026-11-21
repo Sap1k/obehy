@@ -1,5 +1,4 @@
-//! A trip's path in metres: shape vertices, distances and where each call lies on it. Port of
-//! `realtime/timeline/path.py`, operation for operation in Python's evaluation order.
+//! A trip's path in metres: shape vertices, distances and where each call lies on it.
 //!
 //! Without a shape the path runs straight through the call locations. Calls without coordinates
 //! get a distance interpolated by schedule time between their neighbours. Projection uses a local
@@ -7,13 +6,11 @@
 //!
 //! The API is over plain coordinates, not the index's types: [`build_path`] takes each call's
 //! location (its `placed_at`), the shape's vertices and distances, and a closure giving a call's
-//! schedule time (`Call.time`, which raises `IndexMiss` without one). Shape simplification is
-//! GEOS's Douglas-Peucker ([`douglas_peucker`], GEOS 3.13.1 as shapely 2.1.2 bundles it), so the
-//! kept vertices are the ones `shapely.simplify(..., preserve_topology=False)` keeps.
+//! schedule time (`Call.time`, an error without one). Shapes are simplified with
+//! Douglas-Peucker ([`douglas_peucker`]).
 
 use crate::config::policy::ProgressPolicy;
 use crate::geo::{EARTH_RADIUS_M, LonLat, cumulative_m, degrees, radians};
-use crate::py::num::{py_fmod, py_hypot, py_max, py_min};
 
 /// Per segment: start (lon, lat) and its (dlon, dlat), precomputed for projection.
 pub type Segment = (f64, f64, f64, f64);
@@ -86,7 +83,7 @@ fn plane(lat0: f64) -> (f64, f64) {
 /// it, lateral metres, the segment's x and y in metres).
 fn onto(segment: Segment, lon: f64, lat: f64, kx: f64, ky: f64) -> (f64, f64, f64, f64) {
     let (t, ex, ey, ux, uy) = offset(segment, lon, lat, kx, ky);
-    (t, py_hypot(&[ex, ey]), ux, uy)
+    (t, ex.hypot(ey), ux, uy)
 }
 
 /// [`onto`] before the norm: (fraction along, the lateral offset's x and y, the segment's x
@@ -99,7 +96,7 @@ fn offset(segment: Segment, lon: f64, lat: f64, kx: f64, ky: f64) -> (f64, f64, 
     let t = if length2 == 0.0 {
         0.0
     } else {
-        py_max(0.0, py_min(1.0, (px * ux + py * uy) / length2))
+        ((px * ux + py * uy) / length2).clamp(0.0, 1.0)
     };
     (t, px - t * ux, py - t * uy, ux, uy)
 }
@@ -134,7 +131,7 @@ pub fn nearest(path: &Path, lon: f64, lat: f64) -> Option<Projection> {
             {
                 continue;
             }
-            let lateral = py_hypot(&[ex, ey]);
+            let lateral = ex.hypot(ey);
             let better = match best {
                 None => true,
                 Some((p, at)) => lateral < p.lateral_m || (lateral == p.lateral_m && i < *at),
@@ -193,35 +190,17 @@ fn segments(points: &[LonLat]) -> Vec<Segment> {
         .collect()
 }
 
-/// `bisect.bisect_right`, CPython's loop.
+/// The first index whose value is greater than `x`.
 pub(crate) fn bisect_right(a: &[f64], x: f64) -> usize {
-    let (mut lo, mut hi) = (0, a.len());
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        if x < a[mid] {
-            hi = mid;
-        } else {
-            lo = mid + 1;
-        }
-    }
-    lo
+    a.partition_point(|&v| v <= x)
 }
 
-/// `bisect.bisect_left`, CPython's loop.
+/// The first index whose value is not less than `x`.
 fn bisect_left(a: &[f64], x: f64) -> usize {
-    let (mut lo, mut hi) = (0, a.len());
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        if a[mid] < x {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    lo
+    a.partition_point(|&v| v < x)
 }
 
-/// `v[i]` with Python's negative indices; panics where Python raises `IndexError`.
+/// `v[i]`, a negative `i` counted from the end (a one-point path's segment is -1).
 fn at<T: Copy>(v: &[T], i: i64) -> T {
     let j = if i < 0 { i + v.len() as i64 } else { i };
     let j = usize::try_from(j).unwrap_or_else(|_| panic!("index {i} out of range"));
@@ -259,7 +238,7 @@ pub fn point_at(path: &Path, along_m: f64) -> LonLat {
     let t = if span <= 0.0 {
         0.0
     } else {
-        py_min(1.0, py_max(0.0, (along_m - at(distances, i)) / span))
+        ((along_m - at(distances, i)) / span).clamp(0.0, 1.0)
     };
     let ((ax, ay), (bx, by)) = (at(&path.points, i), at(&path.points, i + 1));
     (ax + t * (bx - ax), ay + t * (by - ay))
@@ -270,7 +249,7 @@ pub fn heading_at(path: &Path, along_m: f64) -> f64 {
     let i = segment_at(&path.distances_m, along_m);
     let ((ax, ay), (bx, by)) = (at(&path.points, i), at(&path.points, i + 1));
     let (kx, ky) = plane(ay);
-    py_fmod(degrees(((bx - ax) * kx).atan2((by - ay) * ky)), 360.0)
+    degrees(((bx - ax) * kx).atan2((by - ay) * ky)).rem_euclid(360.0)
 }
 
 pub fn make_path(
@@ -321,9 +300,9 @@ pub fn candidates(
         if (ex * ex + ey * ey).sqrt() > reach * (1.0 + 1e-9) + 1e-6 {
             continue;
         }
-        let lateral = py_hypot(&[ex, ey]);
+        let lateral = ex.hypot(ey);
         if lateral <= reach {
-            let heading = py_fmod(degrees(ux.atan2(uy)), 360.0);
+            let heading = degrees(ux.atan2(uy)).rem_euclid(360.0);
             out.push(Candidate {
                 along_m: start + t * segment,
                 lateral_m: lateral,
@@ -370,7 +349,7 @@ fn stop_candidates(
     out
 }
 
-/// Python's `(a0, a1) < (b0, b1)` on floats: the first unequal pair decides.
+/// `(a0, a1) < (b0, b1)` on floats: the first unequal pair decides.
 fn tuple_lt(a: (f64, f64), b: (f64, f64)) -> bool {
     if a.0 == b.0 { a.1 < b.1 } else { a.0 < b.0 }
 }
@@ -378,7 +357,7 @@ fn tuple_lt(a: (f64, f64), b: (f64, f64)) -> bool {
 type Choice = (f64, f64, Option<(usize, usize)>);
 
 /// Each stop's distance along the path, chosen for all stops at once: in call order, as close
-/// to the shape as possible in total (see path.py `_place_stops`). A stop is left unplaced, at
+/// to the shape as possible in total . A stop is left unplaced, at
 /// the cost `off_m`, when no candidate fits.
 fn place_stops(
     path_points: &[LonLat],
@@ -442,117 +421,66 @@ fn straight(located: &[Option<LonLat>], distances: &[f64]) -> Vec<Option<f64>> {
         .collect()
 }
 
-/// GEOS `Distance::pointToSegment` (3.13.1), op for op.
+/// Planar distance from `p` to the segment `a`-`b`.
 fn point_to_segment(p: LonLat, a: LonLat, b: LonLat) -> f64 {
-    fn distance(p: LonLat, q: LonLat) -> f64 {
-        let dx = p.0 - q.0;
-        let dy = p.1 - q.1;
-        (dx * dx + dy * dy).sqrt()
-    }
-    if a.0 == b.0 && a.1 == b.1 {
-        return distance(p, a);
-    }
-    let r = ((p.0 - a.0) * (b.0 - a.0) + (p.1 - a.1) * (b.1 - a.1))
-        / ((b.0 - a.0) * (b.0 - a.0) + (b.1 - a.1) * (b.1 - a.1));
-    if r <= 0.0 {
-        return distance(p, a);
-    }
-    if r >= 1.0 {
-        return distance(p, b);
-    }
-    let s = ((a.1 - p.1) * (b.0 - a.0) - (a.0 - p.0) * (b.1 - a.1))
-        / ((b.0 - a.0) * (b.0 - a.0) + (b.1 - a.1) * (b.1 - a.1));
-    s.abs() * ((b.0 - a.0) * (b.0 - a.0) + (b.1 - a.1) * (b.1 - a.1)).sqrt()
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let length2 = dx * dx + dy * dy;
+    let t = if length2 == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / length2).clamp(0.0, 1.0)
+    };
+    (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy))
 }
 
-/// `shapely.simplify(LineString(points), tolerance, preserve_topology=False)`: GEOS 3.13.1's
-/// `DouglasPeuckerLineSimplifier` on a LineString (endpoints always kept, so no ring-endpoint
-/// step), returning the kept coordinates. A section's farthest point is the first of equal
-/// distances (`>`); a section whose farthest point is within the tolerance (`<=`) drops its
-/// interior. Panics on a NaN or negative tolerance, where GEOS throws.
-pub fn douglas_peucker(points: &[LonLat], tolerance: f64) -> Vec<LonLat> {
-    assert!(!tolerance.is_nan(), "Tolerance must not be NaN");
-    assert!(tolerance >= 0.0, "Tolerance must be non-negative");
-    if points.is_empty() {
-        return Vec::new();
+/// Douglas-Peucker: the indices of the vertices kept (the ends always), dropping every
+/// vertex of a section within `tolerance` of the line through its ends.
+pub fn douglas_peucker(points: &[LonLat], tolerance: f64) -> Vec<usize> {
+    if points.len() <= 2 {
+        return (0..points.len()).collect();
     }
-    let mut keep = vec![true; points.len()];
-    // GEOS recurses on (i, max) then (max, j); the sections are disjoint, so the stack (popping
-    // in the same order) marks the same points.
+    let mut keep = vec![false; points.len()];
+    keep[0] = true;
+    keep[points.len() - 1] = true;
     let mut sections = vec![(0, points.len() - 1)];
     while let Some((i, j)) = sections.pop() {
-        if i + 1 == j || i == j {
-            continue;
-        }
-        let (a, b) = (points[i], points[j]);
-        let mut max_distance = -1.0;
-        let mut max_index = i;
-        for (k, &point) in points.iter().enumerate().take(j).skip(i + 1) {
-            let distance = point_to_segment(point, a, b);
-            if distance > max_distance {
-                max_distance = distance;
-                max_index = k;
-            }
-        }
-        if max_distance <= tolerance {
-            keep[i + 1..j].fill(false);
-        } else {
-            sections.push((max_index, j));
-            sections.push((i, max_index));
+        // The first of equally far vertices.
+        let farthest = (i + 1..j)
+            .map(|k| (k, point_to_segment(points[k], points[i], points[j])))
+            .reduce(|best, next| if next.1 > best.1 { next } else { best });
+        if let Some((k, distance)) = farthest
+            && distance > tolerance
+        {
+            keep[k] = true;
+            sections.push((i, k));
+            sections.push((k, j));
         }
     }
-    points
-        .iter()
-        .zip(keep)
-        .filter_map(|(&p, k)| k.then_some(p))
-        .collect()
+    (0..points.len()).filter(|&k| keep[k]).collect()
 }
 
 /// Drop vertices within `tolerance_deg` of the line through their neighbours. Kept vertices
 /// keep their original along-path distances, so call distances and progress stay on the same
-/// scale. Kept coordinates map back to the first equal vertex after the previous one, as
-/// path.py does.
+/// scale.
 pub fn simplify(
     points: &[LonLat],
     distances: &[f64],
     tolerance_deg: f64,
 ) -> (Vec<LonLat>, Vec<f64>) {
-    let full = || (points.to_vec(), distances.to_vec());
-    if points.len() <= 2 {
-        return full();
-    }
-    let coordinates = douglas_peucker(points, tolerance_deg);
-    let mut chosen: Vec<usize> = Vec::with_capacity(coordinates.len());
-    let mut cursor = 0;
-    for coordinate in coordinates {
-        while cursor < points.len()
-            && (points[cursor].0 != coordinate.0 || points[cursor].1 != coordinate.1)
-        {
-            cursor += 1;
-        }
-        if cursor == points.len() {
-            return full(); // cannot map back: keep the full shape
-        }
-        chosen.push(cursor);
-        cursor += 1;
-    }
-    if chosen.first() != Some(&0) || chosen.last() != Some(&(points.len() - 1)) {
-        return full();
-    }
+    let kept = douglas_peucker(points, tolerance_deg);
     (
-        chosen.iter().map(|&i| points[i]).collect(),
-        chosen.iter().map(|&i| distances[i]).collect(),
+        kept.iter().map(|&i| points[i]).collect(),
+        kept.iter().map(|&i| distances[i]).collect(),
     )
 }
 
-/// A trip's path (path.py `build_path`), over plain data:
+/// A trip's path, over plain data:
 ///
 /// - `located`: per call, its `placed_at` location's (lon, lat), None without coordinates;
 /// - `shape`: the trip's shape vertices and their distances (`Shape.points`,
 ///   `Shape.distances_m`), None for a trip without a shape;
-/// - `time(i)`: call `i`'s schedule time (`Call.time`); an error (Python's `IndexMiss`) is
-///   returned as is. It is only asked for when the path has two points or more, in call order,
-///   as Python evaluates it.
+/// - `time(i)`: call `i`'s schedule time (`Call.time`); an error (an `IndexMiss`) is
+///   returned as is. It is only asked for when the path has two points or more, in call order.
 pub fn build_path<E>(
     located: &[Option<LonLat>],
     shape: Option<(&[LonLat], &[f64])>,
@@ -614,7 +542,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bisect_matches_python() {
+    fn bisect_finds_the_insertion_points() {
         let a = [0.0, 1.0, 1.0, 2.0];
         assert_eq!(bisect_right(&a, 1.0), 3);
         assert_eq!(bisect_left(&a, 1.0), 1);
@@ -623,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn one_point_paths_read_like_python_negative_indices() {
+    fn one_point_paths_read_their_only_point() {
         let path = make_path(vec![(14.0, 50.0)], vec![0.0], vec![0.0, 0.0], false);
         assert_eq!(point_at(&path, 10.0), (14.0, 50.0));
         assert_eq!(heading_at(&path, 10.0).to_bits(), 0.0_f64.to_bits());

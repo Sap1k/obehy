@@ -1,9 +1,84 @@
-//! `obehy-rt compare`: the exact record of a replay window, the same stream as Python's
-//! `obehy rt compare` (`realtime/compare.py`; docs/RUST_PORT.md, R0 item 1) from the same
-//! arguments. Only `--level facts` so far (R2): every archived poll of the window decoded by
-//! its connector, in `merged_polls` reception order, as `poll`, `payload_error` and `facts`
-//! records in the canonical JSON of [`crate::canonical`]. `--level output` comes with the core
-//! (R6).
+//! `obehy-rt compare`: the exact record of a replay window (docs/RUST_PORT.md, R0 item 1). The
+//! pinned references (`tests/realtime/compare/`, `tests/golden/corpus-stream/`) are written by
+//! it; `--check REF` tells where a stream parts from one, and `obehy rt report --from-stream`
+//! makes the replay report of a stream written with `--diagnostics`. This is the contract those
+//! readers rely on.
+//!
+//! The window is replay's: the channels, `merged_polls` reception order, `--since`/`--until` and
+//! live feeds unless `--all-feeds`. Output is JSON lines in the canonical form of
+//! [`crate::canonical`] (sorted keys, fixed float decimals by key, UTC `Z` times: the
+//! byte-for-byte contract). A path ending in `.gz` is gzip-compressed with no name and mtime 0,
+//! so equal streams give equal files; compare the decompressed text, not the gzip bytes.
+//!
+//! The first record is the `header`: `compare_version`, `level`, `channels` (sorted
+//! `source/channel`), `from`, `to`, `since`, `until`, `all_feeds`, `fact_schema_version`, and for
+//! `output` also `feeds`, `gtfs_rt_every_s`, `release` (run ID), `core_version`,
+//! `policy_version`, and only when asked `diagnostics: true` and `quality: true` (below).
+//!
+//! **`--level facts`** (connectors only; needs neither a release nor a database). Per archived
+//! poll, in reception order:
+//!
+//! - `poll`: `at` (reception), `source`, `channel`, `sha256`, `status`, `error` (the transport
+//!   error archived), `request` (a demand poll's request, else null), `decoder_version`,
+//!   `outcome`: `decoded` (with `observations`: how many after the live-feed filter), `failed`
+//!   (no body or a failed status) or `undecodable`, followed then by `payload_error`:
+//!   `message` (the decoder's error);
+//! - one `facts` per observation: `item`, `feed`, `observed_at`, `decoder_version` and `facts`:
+//!   the facts JSON of [`obehy_core::model::json`] (floats canonical, its own time strings
+//!   kept). An observation names its poll's source, channel, reception time and payload by
+//!   construction.
+//!
+//! **`--level output`** (needs a release directory; no database). Everything the worker would
+//! write, each record tagged with `at` (simulated time), in the order produced:
+//!
+//! - `effect`: `phase` (`step`: one poll's observations, at its reception; `tick`:
+//!   housekeeping and estimates; `finish`: the final tick at the last poll) and `effect` (the
+//!   core's effect, generic); a step's or tick's effects first, then the rows the writer made of
+//!   them ([`crate::store::RecordingStore`] lists the row kinds);
+//! - every `gtfs_rt_every_s` (on round multiples, as replay snapshots): estimates for every
+//!   feed, the state tables written (`state` rows, and the vehicle rows that settles), then
+//!   `gtfs_rt` per feed: `feed` and `message`, the FeedMessage as protobuf JSON with proto field
+//!   names (64-bit integers as strings, enums by name, float32 as their shortest round-trip
+//!   decimal, then the canonical float rule), vehicles named as the state tables name them;
+//! - after the last poll, the final tick's effects and rows, then the state tables once more.
+//!
+//! Alerts and compositions are not part of the stream: alert channels are not replayed (they do
+//! not pass through the core) and compositions need the lookup broker's database.
+//!
+//! **`--diagnostics`** (output level) adds what the replay report reads, and **`--quality`**
+//! (implies it) also what its quality section reads ([`crate::samples`]). Journeys are journey
+//! keys as in effects; times are instants; lists of journeys are in the feed's instance order
+//! (insertion order, as `refresh` visits them).
+//!
+//! - `poll`, every poll before its step's effects (also a failed or undecodable one): the facts
+//!   level's `poll` record (no `payload_error`), a decoded one also with `feeds`: its
+//!   observations per feed;
+//! - `predictor_sample`, on round multiples of 300 s (at the first tick at or after each, with
+//!   the sample time as `at`), after that tick's effects and journey samples and before its
+//!   snapshot, when the rail feed is replayed: `feed` and `journeys`, each running rail run
+//!   (with parts) having an arrival event or a prediction: `journey`, `arrivals` (`[call index,
+//!   the arrival interval's middle]` of each call with an arrival event) and `predicted`
+//!   (`[predictor, call index, predicted arrival]` per predictor of the policy's `[rail]
+//!   predictor` choices, in that order, that predicts: the anchor prediction, `propagate` the
+//!   `sz` target with the current lateness, only where the call has a scheduled arrival; the
+//!   arrival is that schedule time plus the lateness);
+//! - `journey_sample` (`--quality`), after every tick's effects, per feed in sorted order:
+//!   `feed` and `journeys`, every journey of the feed with `journey`, `trip_id`, `mode`,
+//!   `lifecycle`, `stale`, `lost`, `rail` (has parts), `lead` (has a lead vehicle), `progress`
+//!   (null or `call`: the index reached, `along_m`), `track` (null or `seen_at`, `at_stop`: at a
+//!   call and not seen away, `lateness_s`, `hypotheses`: has any, `off_path`: the best is held
+//!   off the path), `fix` (null unless a track with `seen_at`, a lead vehicle with a position
+//!   and a path of two points or more; else distances from that position: `best_m` to the best
+//!   hypothesis's point or null, `first_m` and `last_m` to the first and last call's point,
+//!   `near`: the calls `call - 1 ..= call + 2` within the policy's departure margin), `n`
+//!   (number of calls), `calls` (`[index, call]` of each call that differs from the journey's
+//!   previous sample, every call on its first or when `n` changed; a call: `arrival`,
+//!   `departure` (the event intervals' middles), `estimated_arrival`, `estimated_departure`,
+//!   `passed_arrival`, `passed_departure`, `passenger`, `status`), `plan` (on the first sample
+//!   and when it changed, else null: `scheduled` `[[arrival, departure], ...]`, `zones`
+//!   `[[arrival_m, departure_m], ...]`, `calls_m`, `shaped`, `points`: how many path points). A
+//!   journey missing from its feed's sample is forgotten, so it comes back whole. Floats here
+//!   are exact (`canonical`'s exact kinds).
 
 use std::fs;
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
@@ -17,15 +92,14 @@ use obehy_core::model::FACT_SCHEMA_VERSION;
 use obehy_core::model::json::facts_to_json;
 use obehy_core::time::{Date, Instant, TimeDelta, iso, wall_instant};
 use obehy_sources::Decoders;
-use obehy_sources::reader::json::{Json, Object};
 use serde_json::Value;
 
 use crate::archive::{ArchivedPoll, iter_polls};
-use crate::canonical::{C, line};
+use crate::canonical::{line, obj, text, time};
 use crate::settings::Paths;
 
 pub const COMPARE_VERSION: i64 = 1;
-/// `replay.SOURCES`: the sources compared when none are named.
+/// The sources compared when none are named.
 pub const SOURCES: [&str; 3] = ["duk", "sz-mapa", "sz-tabule"];
 
 /// The window of a replay: the archive, its channels and the time span, and the release.
@@ -332,59 +406,33 @@ where
     }
 }
 
-/// A JSON value of an index line as the decoders read it.
-pub fn json_of(value: &Value) -> Json {
-    match value {
-        Value::Null => Json::Null,
-        Value::Bool(b) => Json::Bool(*b),
-        Value::Number(n) => n.as_i64().map_or_else(
-            || {
-                n.as_u64().map_or_else(
-                    || Json::Float(n.as_f64().unwrap_or(f64::NAN)),
-                    |u| Json::BigInt(u.to_string().into()),
-                )
-            },
-            Json::Int,
-        ),
-        Value::String(s) => Json::Str(s.clone()),
-        Value::Array(items) => Json::Array(items.iter().map(json_of).collect()),
-        Value::Object(map) => {
-            let mut object = Object::default();
-            for (k, v) in map {
-                object.insert(k.clone(), json_of(v));
-            }
-            Json::Object(object)
-        }
-    }
-}
-
-/// The stream's first record (`replay.header`); the output level adds its fields.
-pub fn header(window: &Window, level: &str) -> C {
+/// The stream's first record; the output level adds its fields.
+pub fn header(window: &Window, level: &str) -> Value {
     let mut names: Vec<String> = window.channels.iter().map(Channel::name).collect();
     names.sort();
-    C::obj([
-        ("kind", C::str("header")),
-        ("compare_version", C::Int(i128::from(COMPARE_VERSION))),
-        ("level", C::str(level)),
-        ("channels", C::List(names.into_iter().map(C::Str).collect())),
-        ("from", C::str(window.start.isoformat())),
-        ("to", C::str(window.end.isoformat())),
-        ("since", C::time(window.since)),
-        ("until", C::time(window.until)),
-        ("all_feeds", C::Bool(window.all_feeds)),
+    obj([
+        ("kind", text("header")),
+        ("compare_version", Value::from(COMPARE_VERSION)),
+        ("level", text(level)),
         (
-            "fact_schema_version",
-            C::Int(i128::from(FACT_SCHEMA_VERSION)),
+            "channels",
+            Value::Array(names.into_iter().map(Value::String).collect()),
         ),
+        ("from", text(window.start.isoformat())),
+        ("to", text(window.end.isoformat())),
+        ("since", time(window.since)),
+        ("until", time(window.until)),
+        ("all_feeds", Value::Bool(window.all_feeds)),
+        ("fact_schema_version", Value::from(FACT_SCHEMA_VERSION)),
     ])
 }
 
-/// The facts level (`compare.facts`).
+/// The facts level.
 pub fn facts(
     window: &Window,
     decoders: &Decoders,
     max_clock_skew: TimeDelta,
-    emit: &mut dyn FnMut(&C) -> io::Result<()>,
+    emit: &mut dyn FnMut(&Value) -> io::Result<()>,
 ) -> io::Result<()> {
     emit(&header(window, "facts"))?;
     for found in merged_polls(window) {
@@ -396,38 +444,37 @@ pub fn facts(
             continue;
         }
         let entry = &poll.entry;
-        let field = |k: &str| entry.get(k).map_or(C::Null, C::from_json);
+        let field = |k: &str| entry.get(k).map_or(Value::Null, Value::clone);
         let request = match entry.get("request") {
-            Some(r @ Value::Object(_)) => C::from_json(r),
-            _ => C::Null,
+            Some(r @ Value::Object(_)) => r.clone(),
+            _ => Value::Null,
         };
         let version = decoders.version(&source, &channel).ok_or_else(|| {
             io::Error::other(format!("no realtime connector decodes {source}/{channel}"))
         })?;
-        let record = |outcome: &str| -> Vec<(String, C)> {
-            vec![
-                ("kind".into(), C::str("poll")),
-                ("at".into(), C::time(Some(at))),
-                ("source".into(), C::str(&source)),
-                ("channel".into(), C::str(&channel)),
-                ("sha256".into(), field("sha256")),
-                ("status".into(), field("status")),
-                ("error".into(), field("error")),
-                ("request".into(), request.clone()),
-                ("decoder_version".into(), C::Int(i128::from(version))),
-                ("outcome".into(), C::str(outcome)),
-            ]
+        let record = |outcome: &str| {
+            obj([
+                ("kind", text("poll")),
+                ("at", time(Some(at))),
+                ("source", text(&source)),
+                ("channel", text(&channel)),
+                ("sha256", field("sha256")),
+                ("status", field("status")),
+                ("error", field("error")),
+                ("request", request.clone()),
+                ("decoder_version", Value::from(version)),
+                ("outcome", text(outcome)),
+            ])
         };
         let body = poll.body().map_err(|e| io::Error::other(e.to_string()))?;
         let (Some(body), true) = (body, poll.succeeded()) else {
-            emit(&C::Obj(record("failed")))?;
+            emit(&record("failed"))?;
             continue;
         };
         let sha256 = entry
             .get("sha256")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let request_json = entry.get("request").map(json_of);
         let decoded = decoders.decode(
             &source,
             &channel,
@@ -435,17 +482,16 @@ pub fn facts(
             sha256,
             at,
             max_clock_skew,
-            request_json.as_ref(),
+            entry.get("request"),
         );
         let observations = match decoded {
             Ok(o) => o,
             Err(error) => {
-                emit(&C::Obj(record("undecodable")))?;
-                emit(&C::obj([
-                    ("kind", C::str("payload_error")),
-                    ("at", C::time(Some(at))),
-                    ("class", C::str(error.class)),
-                    ("message", C::str(&error.message)),
+                emit(&record("undecodable"))?;
+                emit(&obj([
+                    ("kind", text("payload_error")),
+                    ("at", time(Some(at))),
+                    ("message", text(&error.message)),
                 ]))?;
                 continue;
             }
@@ -460,17 +506,17 @@ pub fn facts(
             .filter(|o| window.all_feeds || live.is_live(o.feed.as_str()))
             .collect();
         let mut fields = record("decoded");
-        fields.push(("observations".into(), C::Int(observations.len() as i128)));
-        emit(&C::Obj(fields))?;
+        fields["observations"] = Value::from(observations.len());
+        emit(&fields)?;
         for o in &observations {
-            emit(&C::obj([
-                ("kind", C::str("facts")),
-                ("at", C::time(Some(at))),
-                ("item", C::Int(i128::from(o.raw.item))),
-                ("feed", C::str(o.feed.as_str())),
-                ("observed_at", C::time(o.observed_at)),
-                ("decoder_version", C::Int(i128::from(o.decoder_version))),
-                ("facts", C::from_py(&facts_to_json(&o.facts))),
+            emit(&obj([
+                ("kind", text("facts")),
+                ("at", time(Some(at))),
+                ("item", Value::from(o.raw.item)),
+                ("feed", text(o.feed.as_str())),
+                ("observed_at", time(o.observed_at)),
+                ("decoder_version", Value::from(o.decoder_version)),
+                ("facts", facts_to_json(&o.facts)),
             ]))?;
         }
     }
@@ -481,7 +527,7 @@ pub fn facts(
 /// temporary file; the number of records.
 pub fn write_stream(
     out: &Path,
-    produce: impl FnOnce(&mut dyn FnMut(&C) -> io::Result<()>) -> io::Result<()>,
+    produce: impl FnOnce(&mut dyn FnMut(&Value) -> io::Result<()>) -> io::Result<()>,
 ) -> io::Result<usize> {
     if let Some(parent) = out.parent()
         && !parent.as_os_str().is_empty()
@@ -515,7 +561,7 @@ pub fn write_stream(
     });
     let mut count = 0;
     let mut buffer = String::with_capacity(BUFFER + 4096);
-    let produced = produce(&mut |record: &C| {
+    let produced = produce(&mut |record: &Value| {
         count += 1;
         buffer.push_str(&line(record));
         if buffer.len() >= BUFFER {
@@ -557,8 +603,8 @@ fn kind_of(record: &Value) -> String {
     }
 }
 
-/// Where two compare streams part (`compare_check.diff`, simplified): whether they are the
-/// same, ignoring `KIND.FIELD`s, and a report.
+/// Where two compare streams part: whether they are the same, ignoring `KIND.FIELD`s, and a
+/// report.
 pub fn diff(
     reference: &Path,
     candidate: &Path,

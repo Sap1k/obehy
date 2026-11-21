@@ -1,5 +1,4 @@
-//! The generic poll scheduler: port of `realtime/runtime/scheduler.py`. Runs a channel at its
-//! declared interval, with backoff.
+//! The generic poll scheduler. Runs a channel at its declared interval, with backoff.
 //!
 //! Ticks are fixed-rate; missed ticks are skipped rather than bunched after a slow poll. After
 //! `backoff.after_failures` consecutive failures the interval doubles per failure up to

@@ -1,5 +1,4 @@
 //! Several sources on one rail run (docs/R2_SLICE.md section 5, BASE_PLAN.md section 20.6).
-//! Port of `realtime/timeline/fusion.py`, operation for operation (its docstring has the model).
 //!
 //! No source owns a run; each keeps a [`SourceTrack`] on the instance (sorted by source name),
 //! and each capability is decided on its own: positions feed the one tracker (a lower-ranked
@@ -8,9 +7,6 @@
 //! is the freshest point delay while it is newer than the last GPS fix, else the measured
 //! lateness ([`current_lateness`]); prediction follows `rail.predictor`
 //! ([`anchor_prediction`]).
-//!
-//! Decisions on Python's tie rules: `max(key=delay_at or heard_at)` and `max(key=heard_at)`
-//! keep the first source seen (the lowest name) on ties; `round(lateness_s)` is half to even.
 
 use std::sync::Arc;
 
@@ -22,7 +18,6 @@ use crate::model::{
     NextPoint, NextStopPrediction, Observation, PointEvent, Progress, SourceClass, SourceSemantics,
     SourceTrack, Track, Unresolved, UnresolvedKind, VehicleId, WriteEvent,
 };
-use crate::py::num::{py_max, py_round_int};
 use crate::time::{Instant, TimeDelta};
 use crate::timeline::estimate::Lateness;
 use crate::timeline::plan::Plan;
@@ -241,7 +236,7 @@ pub fn anchor(track: Option<Track>, along_m: f64, policy: &Policy) -> Option<Tra
     let mut track = track?;
     let jitter = policy.progress.jitter_m;
     track.hypotheses.retain(|h| h.along_m >= along_m - jitter);
-    track.committed_m = py_max(track.committed_m, along_m);
+    track.committed_m = track.committed_m.max(along_m);
     Some(track)
 }
 
@@ -387,7 +382,7 @@ pub fn current_lateness(instance: &Instance) -> Lateness {
         && !by_point
     {
         return (
-            Some(TimeDelta::from_seconds(py_round_int(lateness_s))),
+            Some(TimeDelta::from_seconds(lateness_s.round() as i64)),
             Some(SourceClass::Gps),
         );
     }

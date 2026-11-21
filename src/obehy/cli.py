@@ -522,7 +522,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    if args.command in ("rt", "realtime", "jobs"):
+    if args.command in ("rt", "jobs"):
         return realtime_commands.run(args)
     if args.command in ("db", "release"):
         return release_commands.run(args)

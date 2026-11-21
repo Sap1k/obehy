@@ -1,10 +1,8 @@
-//! Policy and connector manifests, read from the same TOML files as Python: ports of
-//! `realtime/policy.py` ([`policy`]) and `realtime/manifest.py` ([`manifest`]).
+//! Policy ([`policy`]) and connector manifests ([`manifest`]).
 //!
 //! The files live in the Python package (`src/obehy/data/realtime/policy-v18.toml`,
-//! `src/obehy/realtime/sources/*.toml`); obehy-rt finds them, this module parses them. TOML
-//! itself: the `toml` crate reads TOML 1.1, tomllib 1.0; a file valid in 1.0 reads the same in
-//! both, but one using 1.1-only syntax would load here and fail in Python.
+//! `src/obehy/data/realtime/sources/*.toml`), which reads a few of their fields too (tomllib,
+//! TOML 1.0: keep the files to TOML 1.0); obehy-rt finds them, this module parses them.
 
 pub mod decode;
 pub mod manifest;

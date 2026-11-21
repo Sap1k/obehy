@@ -1,21 +1,22 @@
-//! Observations and the facts sources state: port of `realtime/facts.py` (docs/R1_SLICE.md
-//! and R2_SLICE.md section 3). A fact's JSON form for `rt.observation` is in
-//! [`super::json`], versioned by [`FACT_SCHEMA_VERSION`].
+//! Observations and the facts sources state (docs/R1_SLICE.md and R2_SLICE.md section 3). A
+//! fact's JSON form for `rt.observation` is its serde form (tagged by `t`), versioned by
+//! [`FACT_SCHEMA_VERSION`] ([`super::json`]).
 
-use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
 
 use crate::time::{Date, Instant, TimeDelta};
 
 /// A static feed: core state is partitioned by it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Feed {
     Jdf,
     Czptt,
 }
 
-/// The feeds in Python's `FEEDS` order (iteration order, not sort order).
+/// Every feed, in order.
 pub const FEEDS: [Feed; 2] = [Feed::Jdf, Feed::Czptt];
 
 impl Feed {
@@ -24,19 +25,6 @@ impl Feed {
             Feed::Jdf => "jdf",
             Feed::Czptt => "czptt",
         }
-    }
-}
-
-// Python orders feeds as strings: "czptt" < "jdf".
-impl Ord for Feed {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.as_str().cmp(other.as_str())
-    }
-}
-
-impl PartialOrd for Feed {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 
@@ -63,7 +51,7 @@ pub const FACT_SCHEMA_VERSION: i64 = 5;
 pub const READABLE_FACT_SCHEMAS: [i64; 2] = [4, 5];
 
 /// A closed interval of instants, ordered by (lo, hi).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Interval {
     pub lo: Instant,
     pub hi: Instant,
@@ -74,8 +62,7 @@ impl Interval {
         Interval { lo, hi }
     }
 
-    /// The middle of the interval: `lo + (hi - lo) / 2`, rounded half to even as Python's
-    /// `timedelta / 2`.
+    /// The middle of the interval.
     pub fn mid(self) -> Instant {
         self.lo + (self.hi - self.lo).div_int(2)
     }
@@ -88,18 +75,20 @@ pub struct RawRef {
     pub item: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct VehicleKey {
+    #[serde(rename = "id")]
     pub source_vehicle_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TripKey {
+    #[serde(rename = "ns")]
     pub namespace: String,
     pub key: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub lat: f64,
     pub lon: f64,
@@ -109,7 +98,7 @@ pub struct Position {
 macro_rules! literal {
     ($(#[$meta:meta])* $name:ident { $($variant:ident = $text:literal),+ $(,)? }) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $name {
             $($variant),+
         }
@@ -131,16 +120,18 @@ macro_rules! literal {
             }
         }
 
-        // Python compares Literal strings: order by text, never by declaration.
-        impl Ord for $name {
-            fn cmp(&self, other: &Self) -> ::std::cmp::Ordering {
-                self.as_str().cmp(other.as_str())
+        impl ::serde::Serialize for $name {
+            fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(self.as_str())
             }
         }
 
-        impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
-                Some(self.cmp(other))
+        impl<'de> ::serde::Deserialize<'de> for $name {
+            fn deserialize<D: ::serde::Deserializer<'de>>(deserializer: D) -> Result<$name, D::Error> {
+                let text = <::std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+                $name::parse(&text).ok_or_else(|| {
+                    ::serde::de::Error::custom(format!("unknown {} {text:?}", stringify!($name)))
+                })
             }
         }
 
@@ -159,14 +150,16 @@ literal! {
     DelayReference { Arrival = "arrival", Departure = "departure", Unknown = "unknown", Point = "point" }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Delay {
+    #[serde(rename = "s")]
     pub seconds: i64,
+    #[serde(rename = "ref")]
     pub reference: DelayReference,
 }
 
 /// A source's own trip state code, interpreted by policy per source.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SourceState {
     pub code: String,
 }
@@ -187,7 +180,7 @@ pub struct SourceSemantics {
 }
 
 impl SourceSemantics {
-    /// The manifest keys, in declaration order (Python's `CORE_SEMANTICS`).
+    /// The manifest keys, in declaration order.
     pub const FIELDS: [&'static str; 4] = [
         "pre_trip_delay_is_elapsed",
         "pre_trip_after_end_is_stale",
@@ -201,7 +194,7 @@ pub const FLOORED_MINUTE: TimeDelta = TimeDelta::from_seconds(59);
 pub const FLOORED_MINUTE_MIDDLE_S: i64 = 30;
 
 /// The departure the source plans for the run of the trip it reports (DÚK `TODepartureDT`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SourceDeparture {
     pub at: Instant,
 }
@@ -211,49 +204,51 @@ literal! {
 }
 
 /// The line a keyless source names (`cis:line`): generates the candidate trips.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct LineRef {
+    #[serde(rename = "ns")]
     pub namespace: String,
     pub value: String,
 }
 
 /// The destination stop's name, matched only against a candidate's own last stop.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Destination {
     pub name: String,
 }
 
 /// The next stop by name; a change means the vehicle has just left the call before it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NextStopName {
     pub name: String,
 }
 
 /// The operating date the source names for the run it reports (SŽ `id`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ServiceDay {
     pub day: Date,
 }
 
 /// The last railway point the source reports the train reached or passed (SŽ `cna`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PointEvent {
     pub name: String,
     pub codes: Vec<String>,
     pub scheduled: Option<Instant>,
+    #[serde(flatten)]
     pub actual: Interval,
     pub standing: bool,
 }
 
 /// The next railway point (SŽ `nna`, `zst_sr70` without its check digit).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NextPoint {
     pub name: String,
     pub sr70: Option<String>,
 }
 
 /// The source's own prediction for the next passenger stop (SŽ `nsn70`, `nst`, `nsp`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NextStopPrediction {
     pub sr70: String,
     pub scheduled: Option<Instant>,
@@ -261,21 +256,22 @@ pub struct NextStopPrediction {
 }
 
 /// What a source says about the vehicle itself (BASE_PLAN.md section 27).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct VehicleAttribute {
+    #[serde(rename = "a")]
     pub attribute: String,
     pub value: String,
 }
 
 /// SŽ's replacement-bus and diversion flags, part of the entry SZ-Q6 compares.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TripStatus {
     pub replacement_bus: bool,
     pub diverted: bool,
 }
 
 /// The source says the trip its keys name does not run (stated without a vehicle).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TripCancelled;
 
 literal! {
@@ -289,7 +285,7 @@ literal! {
 
 /// A station board row (SZT): where the train with this key arrives or departs at the
 /// station (SR70, 5 digits) at its scheduled time.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PlatformAssignment {
     pub station: String,
     pub kind: StopKind,
@@ -298,8 +294,9 @@ pub struct PlatformAssignment {
     pub label: PlatformLabel,
 }
 
-/// The closed union of facts, in `facts.py`'s order.
-#[derive(Debug, Clone, PartialEq)]
+/// The closed union of facts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "snake_case")]
 pub enum Fact {
     VehicleKey(VehicleKey),
     TripKey(TripKey),
@@ -316,6 +313,7 @@ pub enum Fact {
     NextStopPrediction(NextStopPrediction),
     TripStatus(TripStatus),
     TripCancelled(TripCancelled),
+    #[serde(rename = "platform")]
     PlatformAssignment(PlatformAssignment),
     VehicleAttribute(VehicleAttribute),
 }
@@ -401,13 +399,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn feeds_order_as_strings_and_intervals_round_half_even() {
-        assert!(Feed::Czptt < Feed::Jdf);
-        assert!(DelayReference::Unknown > DelayReference::Point);
-        let i = Interval::new(Instant::from_micros(0), Instant::from_micros(5));
-        assert_eq!(i.mid(), Instant::from_micros(2));
-        let i = Interval::new(Instant::from_micros(0), Instant::from_micros(7));
-        assert_eq!(i.mid(), Instant::from_micros(4));
+    fn interval_middle() {
+        let i = Interval::new(Instant::from_micros(0), Instant::from_micros(6));
+        assert_eq!(i.mid(), Instant::from_micros(3));
     }
 
     #[test]

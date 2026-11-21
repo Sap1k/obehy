@@ -2,19 +2,17 @@
 //! `docs/sources/` (decode spec §2). Value normalizers make one value of an entity from
 //! others; [`block_current`] chooses one entity per group across a payload.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, OnceLock};
 
-use indexmap::IndexMap;
 use obehy_core::config::decode::{Normalizer, RecordLayout, Scalar};
-use obehy_core::py::text;
 use obehy_core::time::{Instant, TimeDelta, read_unless_offset_twice};
 use regex::Regex;
 
 use crate::error::PayloadError;
-use crate::mapping::{CompileError, Context, Ref, Slots, duration, get, py_regex};
-use crate::reader::json::Json;
-use crate::value::{Val, py_eq};
+use crate::mapping::{CompileError, Context, Ref, Slots, duration, get, pattern};
+use crate::reader::json::Value;
+use crate::value::Val;
 
 /// A record layout, compiled.
 #[derive(Debug, Clone)]
@@ -69,7 +67,7 @@ pub(crate) enum Norm {
 
 fn layout(c: &RecordLayout) -> Result<Layout, CompileError> {
     let line = match (c.line_field, &c.line_regex) {
-        (Some(f), Some(p)) => Some((f, py_regex(p)?)),
+        (Some(f), Some(p)) => Some((f, pattern(p)?)),
         (None, None) => None,
         _ => return Err(CompileError("line_field and line_regex go together".into())),
     };
@@ -150,7 +148,7 @@ pub(crate) fn compile(
         },
         Normalizer::SignedMinSec { value, regex, .. } => Norm::SignedMinSec {
             value: c.reference(value)?,
-            regex: py_regex(regex)?,
+            regex: pattern(regex)?,
         },
     })
 }
@@ -162,7 +160,7 @@ fn labels_regex() -> &'static Regex {
 
 fn speed_regex() -> &'static Regex {
     static SPEED: OnceLock<Regex> = OnceLock::new();
-    SPEED.get_or_init(|| py_regex(r"^(\d+) km/h$").expect("a valid pattern"))
+    SPEED.get_or_init(|| Regex::new(r"^(\d+) km/h$").expect("a valid pattern"))
 }
 
 pub(crate) fn evaluate(
@@ -187,7 +185,7 @@ pub(crate) fn evaluate(
                         .and_then(|v| v.as_text().map(str::to_owned))
                         .unwrap_or_default();
                     read_unless_offset_twice(&raw, activity, *tolerance)
-                        .map_err(|e| PayloadError::value(e.0))?
+                        .map_err(|e| PayloadError::new(e.0))?
                         .map(Val::Instant)
                 }
                 (gps, _) => gps.map(Val::Instant),
@@ -201,7 +199,7 @@ pub(crate) fn evaluate(
         } => {
             let by_state = get(slots, state).is_some_and(|v| v.as_text() == Some(canceled));
             let by_flag = get(slots, flag).is_some_and(|v| {
-                matches!(v.as_ref(), Val::Json(Json::Bool(true)) | Val::Bool(true))
+                matches!(v.as_ref(), Val::Json(Value::Bool(true)) | Val::Bool(true))
             });
             Some(Val::Bool(by_state || by_flag))
         }
@@ -213,10 +211,10 @@ pub(crate) fn evaluate(
         Norm::MinuteMiddle { value } => get(slots, value)
             .and_then(|v| v.as_instant())
             .map(|at| Val::Instant(at + TimeDelta::from_seconds(30))),
-        // DPMD-Q2: `dict(re.findall(r"<br>([^<:]{1,30}): ([^<]*)", body))`.
+        // DPMD-Q2: the popup's `<br>label: value` pairs, the last of a label kept.
         Norm::PopupLabels { value } => get(slots, value).and_then(|v| {
             let body = v.as_text()?;
-            let mut map = IndexMap::new();
+            let mut map = BTreeMap::new();
             for found in labels_regex().captures_iter(body) {
                 map.insert(found[1].to_owned(), found[2].to_owned());
             }
@@ -233,16 +231,14 @@ pub(crate) fn evaluate(
             }
             let speed = get(slots, speed).map(|v| v.text()).unwrap_or_default();
             let moving = speed_regex()
-                .captures(text::strip(&speed))
-                .and_then(|c| text::int_from_str(&c[1]))
-                .is_some_and(|n| match n {
-                    text::PyInt::Small(n) => n > 0,
-                    text::PyInt::Big(t) => !t.starts_with('-'),
-                });
+                .captures(speed.trim())
+                .is_some_and(|c| c[1].bytes().any(|b| b != b'0'));
             match get(slots, arrow).as_deref() {
-                Some(Val::Json(Json::Str(a))) if moving && text::isdigit(a) => Some(Val::Float(
-                    text::float_from_str(a).ok_or_else(|| PayloadError::float_literal(a))?,
-                )),
+                Some(Val::Json(Value::String(a)))
+                    if moving && !a.is_empty() && a.bytes().all(|b| b.is_ascii_digit()) =>
+                {
+                    a.parse().ok().map(Val::Float)
+                }
                 _ => None,
             }
         }
@@ -262,13 +258,13 @@ pub(crate) fn evaluate(
             let kind = get(slots, kind);
             let is = |t: &str| {
                 kind.as_deref()
-                    .is_some_and(|k| py_eq(k, &Scalar::Text(t.into())))
+                    .is_some_and(|k| k.equals(&Scalar::Text(t.into())))
             };
             let chosen = if is(&bus.t) && fields.len() == bus.fields {
                 let category_ok = bus
                     .category
                     .as_ref()
-                    .is_none_or(|want| get(slots, category).is_some_and(|c| py_eq(&c, want)));
+                    .is_none_or(|want| get(slots, category).is_some_and(|c| c.equals(want)));
                 let line_ok = bus
                     .line
                     .as_ref()
@@ -290,23 +286,23 @@ pub(crate) fn evaluate(
         // MPVNET-Q6: `$z-2~min.~5~s` is -125 s; the letter is not a sign.
         Norm::SignedMinSec { value, regex } => get(slots, value).and_then(|v| {
             let found = regex.captures(v.as_text()?)?;
-            let minutes = text::int_from_str(&found[2])?.small()?;
-            let seconds = text::int_from_str(&found[3])?.small()?;
+            let minutes: i64 = found[2].parse().ok()?;
+            let seconds: i64 = found[3].parse().ok()?;
             let total = minutes * 60 + seconds;
-            Some(Val::int(if found[1].is_empty() { total } else { -total }))
+            Some(Val::Int(if found[1].is_empty() { total } else { -total }))
         }),
     })
 }
 
-/// `NÁZEV20` name → the 5-digit SR70 codes the catalogue gives it, sorted (SZ-Q4): Python's
-/// `csv.reader` over the file read as `utf-8-sig`.
+/// `NÁZEV20` name → the 5-digit SR70 codes the catalogue gives it, sorted (SZ-Q4), from the
+/// catalogue's CSV.
 pub fn name_codes(text: &str) -> HashMap<String, Vec<String>> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut found: HashMap<String, BTreeSet<String>> = HashMap::new();
     for row in csv_rows(text) {
-        if row.len() >= 2 && row[0].chars().count() >= 5 && !text::strip(&row[1]).is_empty() {
+        if row.len() >= 2 && row[0].chars().count() >= 5 && !row[1].trim().is_empty() {
             found
-                .entry(text::strip(&row[1]).to_owned())
+                .entry(row[1].trim().to_owned())
                 .or_default()
                 .insert(row[0].chars().take(5).collect());
         }
@@ -317,7 +313,7 @@ pub fn name_codes(text: &str) -> HashMap<String, Vec<String>> {
         .collect()
 }
 
-/// Python's `csv.reader` (excel dialect) over a text read with `newline=""`.
+/// CSV rows (quoted fields, doubled quotes, CRLF or LF line ends).
 fn csv_rows(text: &str) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut row = Vec::new();
@@ -389,7 +385,7 @@ type Entry = (usize, Vec<Option<Val>>);
 /// the running trip (one on its route over one off it; two still running bind neither), else
 /// the next to start (pre-trip), else the first (after its last trip: no state).
 pub(crate) fn block_current(view: BlockView<'_>, entries: Vec<Entry>) -> Vec<Entry> {
-    let mut groups: IndexMap<String, Vec<Entry>> = IndexMap::new();
+    let mut groups: BTreeMap<String, Vec<Entry>> = BTreeMap::new();
     for entry in entries {
         let key = get(&entry.1, view.group_by)
             .map(|v| v.text())
@@ -450,7 +446,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_catalogue_reads_as_python_csv() {
+    fn the_catalogue_reads_as_csv() {
         let table = name_codes(
             "\u{feff}003012,Milotice n.Op.-AWT,50.0,17.5\r\n330464,\"Bludov km 6,300\",49.9,16.9\r\n003013,Milotice n.Op.-AWT ,1,2\r\n12,short\r\n",
         );

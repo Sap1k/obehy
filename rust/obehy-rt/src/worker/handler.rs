@@ -5,7 +5,7 @@
 //!
 //! Archiving and decoding run on the blocking pool, off the core's thread. Until warm replay is
 //! done the poll is only queued for the core (the backlog: the poller goes on polling); after
-//! it the poller waits for the core to have run it, as Python's poller waits on its lock.
+//! it the poller waits for the core to have run it waits on its lock.
 //!
 //! Each poll takes its ticket ([`super::order::Sequencer`]) before anything else, which may
 //! raise its `received_at` so ticket order is reception order; the core runs polls in ticket
@@ -20,7 +20,7 @@ use obehy_core::config::Channel;
 use obehy_core::model::Observation;
 use obehy_core::time::{Instant, TimeDelta};
 use obehy_sources::Decoders;
-use obehy_sources::reader::json::{Json, Object};
+use serde_json::Value;
 use tokio_postgres::Client;
 
 use super::core_loop::{Message, Reply};
@@ -96,15 +96,8 @@ impl Drop for Ticket {
 
 /// The archived request as a decoder reads it (None when the poll had none, as replay reads an
 /// index entry without one).
-fn request_json(poll: &Poll) -> Option<Json> {
-    if poll.request.is_empty() {
-        return None;
-    }
-    let mut object = Object::default();
-    for (key, value) in &poll.request {
-        object.insert(key.clone(), Json::Str(value.clone()));
-    }
-    Some(Json::Object(object))
+fn request_json(poll: &Poll) -> Option<Value> {
+    (!poll.request.is_empty()).then(|| serde_json::json!(poll.request))
 }
 
 impl PollHandler {

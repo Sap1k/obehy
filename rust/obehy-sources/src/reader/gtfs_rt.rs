@@ -1,7 +1,6 @@
 //! GTFS-RT service alerts as protobuf (`gtfs-realtime.proto`, proto2): only the messages and
 //! fields the alert decoder reads. Fields keep proto2 presence (`Option`), enums stay `i32`
-//! (an unknown value reads as the field's default, as Python's protobuf does for a closed
-//! enum), required fields are not enforced (Python's `ParseFromString` does not either).
+//! (an unknown value reads as the field's default), required fields are not enforced.
 
 use prost::Message;
 

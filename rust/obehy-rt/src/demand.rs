@@ -1,5 +1,4 @@
 //! Demand polling: request what is needed now, within a budget (docs/R2_SLICE.md section 7).
-//! Port of `realtime/runtime/demand.py`.
 //!
 //! The first demand channel is SŽ's station boards (`station_boards`): one request per station,
 //! covering about an hour of its trains. Due passenger calls at stations with at least

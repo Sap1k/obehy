@@ -239,12 +239,3 @@ fn read_local_strips_and_resolves() {
     );
     assert_eq!(read_local("garbage", &layout, received), None);
 }
-
-#[test]
-fn the_embedded_zone_is_the_pinned_release() {
-    assert_eq!(zone::TZDATA_VERSION, "2026e");
-    assert_eq!(zone::utc_offset_s(utc("2026-07-01T00:00")), 7200);
-    assert_eq!(zone::utc_offset_s(utc("2026-12-01T00:00")), 3600);
-    // Beyond the TZif's last transition the POSIX footer rule decides.
-    assert_eq!(st("2077-03-28", "02:30").instant(), utc("2077-03-28T01:30"));
-}

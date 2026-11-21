@@ -1,5 +1,4 @@
-//! `obehy-rt record`: poll realtime channels and archive their payloads without processing them
-//! (port of `realtime/record.py` and `commands._record`).
+//! `obehy-rt record`: poll realtime channels and archive their payloads without processing them.
 //!
 //! The only exception is a channel with a named filter, which drops entries Oběhy never uses
 //! before the payload is stored (Arriva's fleet-wide feed is reduced to Arriva Express, DPMD's
@@ -15,8 +14,7 @@ use indexmap::IndexMap;
 use obehy_core::config::Channel;
 use obehy_core::config::manifest::RECORDER_FILTERS;
 use obehy_core::config::policy::BoardPolicy;
-use obehy_core::py::json::PyJson;
-use obehy_core::py::text::{float_from_str, is_decimal_char, repr_str, strip};
+use serde_json::{Map, Value};
 use tokio::task::JoinSet;
 
 use crate::archive::{ArchiveWriter, Poll, sha256_hex};
@@ -115,41 +113,40 @@ pub fn archived_payload(
     channel: &Channel,
     poll: &Poll,
     filters: &Filters,
-) -> (Option<Vec<u8>>, Vec<(String, PyJson)>) {
+) -> (Option<Vec<u8>>, Map<String, Value>) {
+    let mut extra = Map::new();
     let Some(name) = &channel.filter else {
-        return (poll.body.clone(), Vec::new());
+        return (poll.body.clone(), extra);
     };
     let Some(filter) = filters.get(name) else {
         // Refused at start; a worker that got here stores the payload as sent, and says so.
-        return (
-            poll.body.clone(),
-            vec![(
-                "filter_error".to_owned(),
-                PyJson::str(format!("filter {name} not available")),
-            )],
+        extra.insert(
+            "filter_error".into(),
+            format!("filter {name} not available").into(),
         );
+        return (poll.body.clone(), extra);
     };
-    let mut extra = vec![("filter".to_owned(), PyJson::str(filter.label(name)))];
+    extra.insert("filter".into(), filter.label(name).into());
     let Some(body) = poll.body.as_deref().filter(|_| poll.ok()) else {
         return (poll.body.clone(), extra);
     };
-    extra.push(("source_bytes".to_owned(), PyJson::Int(body.len() as i64)));
-    extra.push(("source_sha256".to_owned(), PyJson::str(sha256_hex(body))));
+    extra.insert("source_bytes".into(), body.len().into());
+    extra.insert("source_sha256".into(), sha256_hex(body).into());
     match (filter.apply)(body) {
         Err(FilterError(message)) => {
             // Store the unfiltered payload so that a schema change is never lost silently.
-            extra.push(("filter_error".to_owned(), PyJson::str(message)));
+            extra.insert("filter_error".into(), message.into());
             (Some(body.to_vec()), extra)
         }
         Ok(filtered) => {
-            extra.push(("kept".to_owned(), PyJson::Int(filtered.kept)));
-            extra.push(("dropped".to_owned(), PyJson::Int(filtered.dropped)));
+            extra.insert("kept".into(), filtered.kept.into());
+            extra.insert("dropped".into(), filtered.dropped.into());
             (Some(filtered.body), extra)
         }
     }
 }
 
-/// `{:,}`.
+/// `1,234,567`.
 fn thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::new();
@@ -216,12 +213,7 @@ pub fn archive_poll(
 ) -> std::io::Result<ArchivedBody> {
     let (body, mut extra) = archived_payload(channel, poll, filters);
     if !poll.request.is_empty() {
-        let request = poll
-            .request
-            .iter()
-            .map(|(k, v)| (k.clone(), PyJson::str(v.as_str())))
-            .collect();
-        extra.push(("request".to_owned(), PyJson::from_pairs(request)));
+        extra.insert("request".into(), serde_json::json!(poll.request));
     }
     let stored = writer.append(
         &channel.source,
@@ -238,7 +230,7 @@ pub fn archive_poll(
         stats.new_objects += 1;
         stats.stored_bytes += stored.new_object_bytes as u64;
     }
-    if let Some((_, PyJson::Str(message))) = extra.iter().find(|(k, _)| k == "filter_error") {
+    if let Some(Value::String(message)) = extra.get("filter_error") {
         stats.filter_errors += 1;
         log(&format!(
             "{}: filter error, stored unfiltered: {message}",
@@ -444,36 +436,28 @@ pub async fn record<F: Fetcher, D: DueSource + 'static>(
     Ok(stats)
 }
 
-/// `parse_duration`: `90s`, `30m`, `6h`, `2d` (a decimal number allowed) in seconds.
+/// `90s`, `30m`, `6h`, `2d` (a decimal number allowed) in seconds.
 pub fn parse_duration(text: &str) -> Result<f64, String> {
-    let invalid = || {
-        format!(
-            "invalid duration {}; use e.g. 90s, 30m, 6h or 2d",
-            repr_str(text)
-        )
-    };
-    let stripped = strip(text);
-    let mut chars: Vec<char> = stripped.chars().collect();
-    let unit = chars.pop().ok_or_else(invalid)?;
-    let factor = match unit {
-        's' => 1.0,
-        'm' => 60.0,
-        'h' => 3600.0,
-        'd' => 86400.0,
+    let invalid = || format!("invalid duration {text:?}; use e.g. 90s, 30m, 6h or 2d");
+    let text = text.trim();
+    let (number, factor) = match text.char_indices().last() {
+        Some((at, 's')) => (&text[..at], 1.0),
+        Some((at, 'm')) => (&text[..at], 60.0),
+        Some((at, 'h')) => (&text[..at], 3600.0),
+        Some((at, 'd')) => (&text[..at], 86400.0),
         _ => return Err(invalid()),
     };
-    let number: String = chars.iter().collect();
-    let (whole, fraction) = match number.split_once('.') {
-        Some((w, f)) => (w, Some(f)),
-        None => (number.as_str(), None),
-    };
-    let digits = |s: &str| !s.is_empty() && s.chars().all(is_decimal_char);
-    if !digits(whole) || fraction.is_some_and(|f| !digits(f)) {
+    let plain = number
+        .split_once('.')
+        .map_or((number, "0"), |(whole, fraction)| (whole, fraction));
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    if !digits(plain.0) || !digits(plain.1) {
         return Err(invalid());
     }
-    float_from_str(&number)
+    number
+        .parse::<f64>()
         .map(|value| value * factor)
-        .ok_or_else(invalid)
+        .map_err(|_| invalid())
 }
 
 #[cfg(test)]

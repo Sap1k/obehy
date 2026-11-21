@@ -301,7 +301,7 @@ async fn an_https_channel_tunnels_through_the_proxy_without_a_user_agent() {
     );
     assert_eq!(pool.benched(), [0]);
     assert!(
-        logs.all().contains("egress: proxy #0 benched (URLError)"),
+        logs.all().contains("egress: proxy #0 benched (connect)"),
         "{}",
         logs.all()
     );
@@ -436,7 +436,7 @@ async fn the_proxy_list_is_reread_when_due_and_a_broken_list_keeps_the_pool() {
         "{text}"
     );
     assert!(
-        text.contains("proxy list unreadable (FileNotFoundError)"),
+        text.contains("proxy list unreadable (entity not found)"),
         "{text}"
     );
     assert!(!text.contains("p@ss") && !text.contains(&list.to_string_lossy().into_owned()));
@@ -455,7 +455,7 @@ async fn a_hanging_server_times_out_and_a_hanging_proxy_is_benched() {
     let took = started.elapsed();
     assert_eq!(
         poll.error.as_deref(),
-        Some("TimeoutError: timed out"),
+        Some("timeout: timed out"),
         "{poll:?}"
     );
     assert!(poll.status.is_none());
@@ -468,9 +468,9 @@ async fn a_hanging_server_times_out_and_a_hanging_proxy_is_benched() {
     let poll = egress(Some(Arc::clone(&pool)))
         .fetch(&sz("http://sz.invalid/trains", 0.3), None)
         .await;
-    assert_eq!(poll.error.as_deref(), Some("TimeoutError: timed out"));
+    assert_eq!(poll.error.as_deref(), Some("timeout: timed out"));
     assert_eq!(pool.benched(), [0]);
-    assert!(logs.all().contains("proxy #0 benched (TimeoutError)"));
+    assert!(logs.all().contains("proxy #0 benched (timeout)"));
 }
 
 #[tokio::test]
@@ -497,7 +497,7 @@ async fn an_unreachable_proxy_is_benched_and_the_next_one_used() {
     assert!(poll.ok(), "{poll:?}");
     assert_eq!(pool.benched(), [0]);
     assert!(
-        logs.all().contains("proxy #0 benched (URLError)"),
+        logs.all().contains("proxy #0 benched (connect)"),
         "{}",
         logs.all()
     );

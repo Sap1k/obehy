@@ -1,5 +1,5 @@
 -- The current vehicles on trips, each on its service date (`trip_ids` and `service_dates`
--- pairwise), by trip, the one standing for the journey first (emit/represent.py), then freshest
+-- pairwise), by trip, the one standing for the journey first (obehy-core publish/represent.rs), then freshest
 -- first: one per vehicle (two sources' reports of one vehicle are one), its report standing for
 -- the journey else its newest fix, every source reporting it and whether its ID is a vehicle on
 -- the trip's mode, its traits. Boards, trips, lines and enriched legs show the first of a trip.

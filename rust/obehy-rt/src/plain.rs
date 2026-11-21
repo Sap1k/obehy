@@ -4,108 +4,112 @@
 
 use obehy_core::model::{Effect, Interval, Observation, Platform, VehicleId};
 
-use crate::canonical::{C, utc_text};
+use crate::canonical::{obj, opt_text, text, time, utc_text};
 use crate::store::recording::{journey_plain, snapshot_plain};
+use serde_json::Value;
 
-pub fn observation_ref(o: &Observation) -> C {
-    C::obj([
-        ("@type", C::str("ObservationRef")),
-        ("source", C::str(&o.source)),
-        ("channel", C::str(&o.channel)),
-        ("received_at", C::str(utc_text(o.received_at))),
-        ("sha256", C::str(&o.raw.sha256)),
-        ("item", C::Int(i128::from(o.raw.item))),
+pub fn observation_ref(o: &Observation) -> Value {
+    obj([
+        ("@type", text("ObservationRef")),
+        ("source", text(&o.source)),
+        ("channel", text(&o.channel)),
+        ("received_at", text(utc_text(o.received_at))),
+        ("sha256", text(&o.raw.sha256)),
+        ("item", Value::from(o.raw.item)),
     ])
 }
 
-pub fn vehicle_plain(v: &VehicleId) -> C {
-    C::obj([
-        ("@type", C::str("VehicleId")),
-        ("source", C::str(&v.source)),
-        ("source_vehicle_id", C::str(&v.source_vehicle_id)),
+pub fn vehicle_plain(v: &VehicleId) -> Value {
+    obj([
+        ("@type", text("VehicleId")),
+        ("source", text(&v.source)),
+        ("source_vehicle_id", text(&v.source_vehicle_id)),
     ])
 }
 
-pub fn interval_plain(i: &Interval) -> C {
-    C::obj([
-        ("@type", C::str("Interval")),
-        ("lo", C::str(utc_text(i.lo))),
-        ("hi", C::str(utc_text(i.hi))),
+pub fn interval_plain(i: &Interval) -> Value {
+    obj([
+        ("@type", text("Interval")),
+        ("lo", text(utc_text(i.lo))),
+        ("hi", text(utc_text(i.hi))),
     ])
 }
 
-pub fn platform_plain(p: &Platform) -> C {
-    C::obj([
-        ("@type", C::str("Platform")),
-        ("value", C::str(&p.value)),
-        ("label", C::str(p.label.as_str())),
+pub fn platform_plain(p: &Platform) -> Value {
+    obj([
+        ("@type", text("Platform")),
+        ("value", text(&p.value)),
+        ("label", text(p.label.as_str())),
         (
             "boarding_point_id",
-            C::opt_str(p.boarding_point_id.as_deref()),
+            opt_text(p.boarding_point_id.as_deref()),
         ),
-        ("assigned_at", C::str(utc_text(p.assigned_at))),
-        ("source", C::str(&p.source)),
+        ("assigned_at", text(utc_text(p.assigned_at))),
+        ("source", text(&p.source)),
     ])
 }
 
-pub fn effect_plain(effect: &Effect) -> C {
+pub fn effect_plain(effect: &Effect) -> Value {
     match effect {
         Effect::SnapshotJourney(s) => snapshot_plain(s),
-        Effect::WriteEvent(e) => C::obj([
-            ("@type", C::str("WriteEvent")),
+        Effect::WriteEvent(e) => obj([
+            ("@type", text("WriteEvent")),
             ("journey", journey_plain(&e.journey)),
-            ("location_id", C::str(&e.location_id)),
-            ("visit_n", C::Int(i128::from(e.visit_n))),
-            ("kind", C::str(e.kind.as_str())),
+            ("location_id", text(&e.location_id)),
+            ("visit_n", Value::from(e.visit_n)),
+            ("kind", text(e.kind.as_str())),
             ("interval", interval_plain(&e.interval)),
-            ("method", C::str(e.method.as_str())),
-            ("source", C::str(&e.source)),
+            ("method", text(e.method.as_str())),
+            ("source", text(&e.source)),
         ]),
-        Effect::AssignVehicle(a) => C::obj([
-            ("@type", C::str("AssignVehicle")),
+        Effect::AssignVehicle(a) => obj([
+            ("@type", text("AssignVehicle")),
             ("vehicle", vehicle_plain(&a.vehicle)),
             ("journey", journey_plain(&a.journey)),
-            ("at", C::str(utc_text(a.at))),
-            ("method", C::str(a.method.as_str())),
+            ("at", text(utc_text(a.at))),
+            ("method", text(a.method.as_str())),
         ]),
-        Effect::ObservationResult(r) => C::obj([
-            ("@type", C::str("ObservationResult")),
+        Effect::ObservationResult(r) => obj([
+            ("@type", text("ObservationResult")),
             ("observation", observation_ref(&r.observation)),
-            ("journey", r.journey.as_ref().map_or(C::Null, journey_plain)),
-            ("reason", C::opt_str(r.reason.map(|x| x.as_str()))),
+            (
+                "journey",
+                r.journey.as_ref().map_or(Value::Null, journey_plain),
+            ),
+            ("reason", opt_text(r.reason.map(|x| x.as_str()))),
             (
                 "public",
-                C::List(r.public.iter().map(journey_plain).collect()),
+                Value::Array(r.public.iter().map(journey_plain).collect()),
             ),
-            ("state_since", C::time(r.state_since)),
-            ("method", C::str(r.method.as_str())),
+            ("state_since", time(r.state_since)),
+            ("method", text(r.method.as_str())),
         ]),
-        Effect::LinkJourneys(l) => C::obj([
-            ("@type", C::str("LinkJourneys")),
+        Effect::LinkJourneys(l) => obj([
+            ("@type", text("LinkJourneys")),
             ("source", journey_plain(&l.source)),
             ("target", journey_plain(&l.target)),
-            ("kind", C::str(l.kind.as_str())),
+            ("kind", text(l.kind.as_str())),
         ]),
-        Effect::RecordPlatform(p) => C::obj([
-            ("@type", C::str("RecordPlatform")),
+        Effect::RecordPlatform(p) => obj([
+            ("@type", text("RecordPlatform")),
             ("journey", journey_plain(&p.journey)),
-            ("location_id", C::str(&p.location_id)),
-            ("visit_n", C::Int(i128::from(p.visit_n))),
-            ("kind", C::str(p.kind.as_str())),
+            ("location_id", text(&p.location_id)),
+            ("visit_n", Value::from(p.visit_n)),
+            ("kind", text(p.kind.as_str())),
             ("platform", platform_plain(&p.platform)),
         ]),
-        Effect::RecordCancellation(c) => C::obj([
-            ("@type", C::str("RecordCancellation")),
+        Effect::RecordCancellation(c) => obj([
+            ("@type", text("RecordCancellation")),
             ("journey", journey_plain(&c.journey)),
-            ("source", C::str(&c.source)),
-            ("at", C::str(utc_text(c.at))),
-            ("cancelled", C::Bool(c.cancelled)),
+            ("source", text(&c.source)),
+            ("at", text(utc_text(c.at))),
+            ("cancelled", Value::Bool(c.cancelled)),
         ]),
-        Effect::Unresolved(u) => C::obj([
-            ("@type", C::str("Unresolved")),
+        Effect::Unresolved(u) => obj([
+            ("@type", text("Unresolved")),
             ("observation", observation_ref(&u.observation)),
-            ("kind", C::str(u.kind.as_str())),
-            ("name", C::str(&u.name)),
+            ("kind", text(u.kind.as_str())),
+            ("name", text(&u.name)),
         ]),
     }
 }

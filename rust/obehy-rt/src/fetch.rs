@@ -1,5 +1,4 @@
-//! One HTTP request of a channel, as a [`Poll`] (successful or not): port of
-//! `realtime/runtime/fetch.py`.
+//! One HTTP request of a channel, as a [`Poll`] (successful or not).
 //!
 //! A proxied channel is never fetched directly: [`fetch`] refuses it, and only
 //! [`crate::egress::Egress`] sends it, through the proxy pool (docs/R2_SLICE.md section 7). A
@@ -34,7 +33,7 @@ pub const EPOCH_MS: &str = "{epoch_ms}";
 /// `pipeline.download.USER_AGENT`, sent on direct requests.
 pub const USER_AGENT: &str = "Obehy/0.1 (+https://obehy.cz)";
 const FORM: &str = "application/x-www-form-urlencoded";
-/// Clients kept per (proxy, timeout); as `lru_cache(maxsize=256)` on the Python openers.
+/// Clients kept per (proxy, timeout), at most 256.
 const MAX_CLIENTS: usize = 256;
 
 /// The wall clock of polls (`times.now`); tests step their own.
@@ -61,7 +60,7 @@ impl std::fmt::Debug for Proxy {
 }
 
 impl Proxy {
-    /// The proxy URL Python builds, credentials quoted: `http://user:p%40ss@host:port`.
+    /// The proxy URL, credentials quoted: `http://user:p%40ss@host:port`.
     pub fn url(&self) -> String {
         format!(
             "http://{}:{}@{}:{}",
@@ -191,14 +190,14 @@ impl Http {
             None => builder.no_proxy(),
             Some(p) => {
                 let proxy = reqwest::Proxy::all(format!("http://{}:{}", p.host, p.port))
-                    .map_err(|_| "ValueError: invalid proxy address".to_owned())?
+                    .map_err(|_| "invalid: proxy address".to_owned())?
                     .basic_auth(&p.user, &p.password);
                 builder.proxy(proxy)
             }
         };
         let client = builder
             .build()
-            .map_err(|e| format!("OSError: {}", error_chain(&e)))?;
+            .map_err(|e| format!("transport: {}", error_chain(&e)))?;
         if clients.len() >= MAX_CLIENTS {
             clients.clear();
         }
@@ -238,21 +237,21 @@ fn is_timeout(error: &reqwest::Error) -> bool {
     false
 }
 
-/// The Python exception text a transport failure maps to: the name is what the egress benches
-/// a proxy for (`TimeoutError`, `URLError`, `OSError`).
+/// A transport failure as `<kind>: <detail>`: the kind is what the egress benches a proxy for
+/// (`timeout`, `connect`, `transport`).
 fn transport_error(error: &reqwest::Error) -> String {
     if is_timeout(error) {
-        "TimeoutError: timed out".to_owned()
+        "timeout: timed out".to_owned()
     } else if error.is_connect() {
-        format!("URLError: <urlopen error {}>", error_chain(error))
+        format!("connect: {}", error_chain(error))
     } else if error.is_builder() {
-        format!("ValueError: {}", error_chain(error))
+        format!("invalid: {}", error_chain(error))
     } else {
-        format!("OSError: {}", error_chain(error))
+        format!("transport: {}", error_chain(error))
     }
 }
 
-/// A header value as Python reads it: Latin-1.
+/// A header value, read as Latin-1.
 fn latin1(value: &HeaderValue) -> String {
     value.as_bytes().iter().map(|&b| b as char).collect()
 }
@@ -288,15 +287,15 @@ fn gunzip(body: &[u8]) -> Result<Vec<u8>, String> {
 
 fn build(client: &reqwest::Client, request: &Request) -> Result<reqwest::RequestBuilder, String> {
     let method = reqwest::Method::from_bytes(request.method.as_bytes())
-        .map_err(|_| format!("ValueError: invalid method {:?}", request.method))?;
-    let url = reqwest::Url::parse(&request.url)
-        .map_err(|_| format!("ValueError: unknown url type: {:?}", request.url))?;
+        .map_err(|_| format!("invalid: method {:?}", request.method))?;
+    let url =
+        reqwest::Url::parse(&request.url).map_err(|_| format!("invalid: url {:?}", request.url))?;
     let mut headers = HeaderMap::new();
     let mut has_type = false;
     let mut has_encoding = false;
     for (name, value) in &request.headers {
         let name = HeaderName::from_bytes(name.as_bytes())
-            .map_err(|_| format!("ValueError: Invalid header name {name:?}"))?;
+            .map_err(|_| format!("invalid: header name {name:?}"))?;
         let value = HeaderValue::from_str(value)
             .map_err(|_| "ValueError: Invalid header value".to_owned())?;
         has_type |= name == reqwest::header::CONTENT_TYPE;

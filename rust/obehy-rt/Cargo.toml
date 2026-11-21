@@ -45,5 +45,4 @@ mimalloc = ["dep:mimalloc"]
 workspace = true
 
 [dev-dependencies]
-stats_alloc.workspace = true
 tokio = { workspace = true, features = ["net", "io-util"] }

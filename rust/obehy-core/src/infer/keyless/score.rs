@@ -1,5 +1,4 @@
-//! Time evidence for one keyless candidate (R5): port of `realtime/infer/keyless/score.py`
-//! (BASE_PLAN.md section 19.2, step 3).
+//! Time evidence for one keyless candidate (R5) (BASE_PLAN.md section 19.2, step 3).
 //!
 //! - **Departures.** Each departure of the episode is placed on the candidate: the stop left is
 //!   the first passenger call with that name after the previous departure's. The residual is how
@@ -19,7 +18,6 @@ use crate::index::{Call, Index, IndexMiss, Trip};
 use crate::infer::keyed::Match;
 use crate::model::{Delay, Departure, Interval, KeylessEpisode, Observation, Position};
 use crate::names::normal;
-use crate::py::num::py_min;
 use crate::time::{Instant, ServiceTime};
 use crate::timeline::path::project_all;
 use crate::timeline::plan::PlanCache;
@@ -161,5 +159,5 @@ pub fn position_residual(
     let residuals = ranged
         .iter()
         .map(|p| (plan.timetable.lateness_s(at, p.along_m) - expected).abs());
-    Ok(residuals.reduce(py_min))
+    Ok(residuals.reduce(f64::min))
 }

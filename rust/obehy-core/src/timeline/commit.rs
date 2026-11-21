@@ -1,5 +1,4 @@
-//! Committing crossings of trigger points once the tracker's readings agree. Port of
-//! `realtime/timeline/commit.py`, operation for operation.
+//! Committing crossings of trigger points once the tracker's readings agree.
 //!
 //! `BASE_PLAN.md` section 20.4 ("Commit when all agree") and `docs/R1_SLICE.md` section 9,
 //! step 6. A crossing is committed in path order when every reading that is not negligible has
@@ -7,19 +6,11 @@
 //! timetable time; it is recorded as an event (history) when the fixes are close enough to say
 //! when it happened, or, further apart, as an inferred one when the vehicle was about as late at
 //! both (then the timetable says when it passed); realtime gets its time either way.
-//!
-//! Float comparisons that decide: `log_p >= -agree_within` (log_p relative to the best, from
-//! `progress`), `before.along < x <= after.along` in brackets, `along_m >= reached`,
-//! `placement.along_m <= frontier`, the share clamp, `most - least > max_inferred_spread_s` and
-//! `total_seconds() > max_extrapolate_s`. Each compares values computed by the same IEEE
-//! operations in the same order as Python, so a decision can only differ if an input does; the
-//! fixtures check every input and output bit for bit.
 
 use std::sync::Arc;
 
 use crate::config::policy::ProgressPolicy;
 use crate::model::{EventKind, EventMethod, Hypothesis, Interval, Placement, StopSeen};
-use crate::py::num::{py_max, py_min};
 use crate::time::{Instant, TimeDelta};
 use crate::timeline::plan::{Plan, Trigger};
 use crate::timeline::stops::{departure, holding};
@@ -170,7 +161,7 @@ pub fn commit(
             && stop.call as usize == trigger.call
         {
             if trigger.kind == EventKind::Arrival {
-                when = min_instant(when, stop.first);
+                when = when.min(stop.first);
             } else if let Some(away) = stop.away {
                 // Between the last fix at the stop and the first one away.
                 when = departure(plan, stop, dwell_s);
@@ -229,21 +220,8 @@ pub fn commit(
     }
 }
 
-/// `min(values)` over a non-empty iterator: the first of equal values. Panics when empty
-/// (Python raises).
-fn fold_min(mut values: impl Iterator<Item = f64>) -> f64 {
-    let first = values.next().expect("min() of an empty sequence");
-    values.fold(first, py_min)
-}
-
-/// `min(a, b)` of instants: `b` only if it is earlier.
-fn min_instant(a: Instant, b: Instant) -> Instant {
-    if b < a { b } else { a }
-}
-
-/// `max(a, b)` of instants: `b` only if it is later.
-fn max_instant(a: Instant, b: Instant) -> Instant {
-    if b > a { b } else { a }
+fn fold_min(values: impl Iterator<Item = f64>) -> f64 {
+    values.reduce(f64::min).expect("a value")
 }
 
 /// The readings a commit needs to agree: all but the negligible ones, or only the most likely
@@ -260,7 +238,7 @@ fn deciding<'a>(
     let oldest = deciding
         .iter()
         .map(|h| h.history[0].at)
-        .reduce(min_instant)
+        .min()
         .expect("min() of an empty sequence");
     if deciding.len() > 1 && at - oldest > TimeDelta::from_seconds(policy.max_commit_lag_s) {
         return deciding[..1].to_vec();
@@ -297,7 +275,7 @@ fn crossing_time(bracket: Bracket, trigger: &Trigger, plan: &Plan, dwell_s: f64)
         (Some(planned), Some(s0), Some(s1)) if s1 > s0 => (planned - s0).div_delta(s1 - s0),
         _ => (trigger.along_m - before.along_m) / (after.along_m - before.along_m),
     };
-    let when = before.at + (after.at - before.at).mul_f64(py_min(1.0, py_max(0.0, share)));
+    let when = before.at + (after.at - before.at).mul_f64(share.clamp(0.0, 1.0));
     let (Some(s0), Some(s1)) = (s0, s1) else {
         return when;
     };
@@ -319,9 +297,9 @@ fn crossing_time(bracket: Bracket, trigger: &Trigger, plan: &Plan, dwell_s: f64)
         return when;
     }
     if left {
-        return max_instant(when, before.at + credit);
+        return when.max(before.at + credit);
     }
-    min_instant(when, after.at - credit)
+    when.min(after.at - credit)
 }
 
 /// When a crossing between fixes too far apart to observe it happened, if the vehicle was about
@@ -343,14 +321,12 @@ fn inferred(
     if most - least > policy.max_inferred_spread_s as f64 {
         return None;
     }
-    let lo = max_instant(
-        before.at,
-        min_instant(when, planned + TimeDelta::from_secs_f64(least)),
-    );
-    let hi = min_instant(
-        after.at,
-        max_instant(when, planned + TimeDelta::from_secs_f64(most)),
-    );
+    let lo = before
+        .at
+        .max(when.min(planned + TimeDelta::from_secs_f64(least)));
+    let hi = after
+        .at
+        .min(when.max(planned + TimeDelta::from_secs_f64(most)));
     Some(if lo <= hi {
         Interval::new(lo, hi)
     } else {
@@ -362,7 +338,7 @@ fn inferred(
 /// shifted by the lateness at its last fixes (their range), if the last is at most
 /// `max_extrapolate_s` of timetable time before it and the lateness over its fixes on the final
 /// leg kept (at most `max_inferred_spread_s` apart). From the last fix on; None otherwise.
-/// Panics on a plan without calls (Python's `scheduled[-1]` raises).
+/// Panics on a plan without calls.
 pub fn terminus(plan: &Plan, history: &[Placement], policy: &ProgressPolicy) -> Option<Interval> {
     assert!(!plan.scheduled.is_empty(), "tuple index out of range");
     let last = plan.scheduled.len() - 1;
@@ -391,13 +367,13 @@ pub fn terminus(plan: &Plan, history: &[Placement], policy: &ProgressPolicy) -> 
         .iter()
         .map(|p| plan.timetable.lateness_s(p.at, p.along_m))
         .collect();
-    let most = lateness[1..].iter().copied().fold(lateness[0], py_max);
-    let least = lateness[1..].iter().copied().fold(lateness[0], py_min);
+    let most = lateness[1..].iter().copied().fold(lateness[0], f64::max);
+    let least = lateness[1..].iter().copied().fold(lateness[0], f64::min);
     if most - least > policy.max_inferred_spread_s as f64 {
         return None;
     }
-    let lo = max_instant(fix.at, planned + TimeDelta::from_secs_f64(least));
-    let hi = max_instant(fix.at, planned + TimeDelta::from_secs_f64(most));
+    let lo = fix.at.max(planned + TimeDelta::from_secs_f64(least));
+    let hi = fix.at.max(planned + TimeDelta::from_secs_f64(most));
     Some(Interval::new(lo, hi))
 }
 
@@ -415,9 +391,9 @@ fn before_first(
         return None;
     }
     let lateness = TimeDelta::from_secs_f64(plan.timetable.lateness_s(first.at, first.along_m));
-    let lo = min_instant(planned, planned + lateness);
-    let hi = min_instant(first.at, planned + lateness.max(TimeDelta::ZERO));
-    Some(Interval::new(min_instant(lo, hi), hi))
+    let lo = planned.min(planned + lateness);
+    let hi = first.at.min(planned + lateness.max(TimeDelta::ZERO));
+    Some(Interval::new(lo.min(hi), hi))
 }
 
 /// Whether the history was observed before `along_m` but not yet past it.

@@ -1,6 +1,5 @@
-//! The core's thread: the one place the runner, the writer and the GTFS-RT emitters live. Python
-//! guards its runner with one asyncio lock shared by polls, ticks and rebases; here they are
-//! messages on one queue, run on a thread of its own (the core and the store are synchronous),
+//! The core's thread: the one place the runner, the writer and the GTFS-RT emitters live. Polls,
+//! ticks and rebases are messages on one queue, run on a thread of its own (the core and the store are synchronous),
 //! so the async side never blocks on the core. Polls and timer ticks carry tickets and run in
 //! ticket order, which is reception order, as replay runs them ([`super::order`]); the other
 //! messages run as they arrive.
@@ -13,8 +12,7 @@
 //! 4. Serve messages until [`Message::Stop`]; then what the reorder buffer still holds, in
 //!    order, and a last tick at the clock's time, emitted.
 //!
-//! Any error here is fatal: the thread ends, the worker stops and the process exits non-zero
-//! (Python's poller ends on the same errors and takes the worker with it).
+//! Any error here is fatal: the thread ends, the worker stops and the process exits non-zero.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -122,7 +120,7 @@ impl std::fmt::Debug for CoreSetup {
     }
 }
 
-/// The writer of `loads`' release (a new one at each switch, as Python's `_writer`).
+/// The writer of `loads`' release (a new one at each switch.
 pub fn open_writer(setup: &CoreSetup, loads: &ReleaseLoads) -> Result<LiveWriter, WorkerError> {
     let store = PgStore::connect_config(&setup.config, setup.physical.clone())?;
     let derivation = Derivation {

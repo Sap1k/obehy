@@ -1,6 +1,6 @@
-//! The index's rows (R3): `obehy_core::index::Rows` from PostgreSQL `static.*` ([`sql`], port of
-//! `index_sql.SqlRows`) and from a release directory's serving Parquet ([`serving`] over
-//! [`parquet`], port of `index_files.FileRows`). Both answer each question as the SQL does.
+//! The index's rows (R3): `obehy_core::index::Rows` from PostgreSQL `static.*` ([`sql`]) and from a
+//! release directory's serving Parquet ([`serving`] over [`parquet`]). Both answer each question as
+//! the SQL does.
 
 pub mod parquet;
 pub mod serving;

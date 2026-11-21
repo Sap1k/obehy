@@ -1,5 +1,5 @@
-//! The release index the core reads: static data per trip key, loaded lazily (R3, port of
-//! `realtime/index.py`; the loader logic of `index_sql.py` is [`loader`]).
+//! The release index the core reads: static data per trip key, loaded lazily (R3; the loader logic
+//! of `index_sql.py` is [`loader`]).
 //!
 //! The worker and replay fill an [`Index`] through an [`IndexLoader`] before each step, for keys
 //! not seen yet; the rows come from a [`Rows`] implementation in obehy-rt (PostgreSQL `static.*`
@@ -17,7 +17,6 @@
 //! trip's calls are one flat slice, a shape two flat slices; every map has its eviction rule
 //! stated next to it in [`Index`], and [`Index::sweep`] drops in place and shrinks.
 
-pub mod dump;
 pub mod loader;
 pub mod pool;
 mod store;
@@ -33,7 +32,7 @@ pub use store::{DateSet, Index, calls_at_station, run_trip};
 
 use crate::time::Date;
 
-/// A source key: (namespace, identifier). Orders as Python's `(str, str)` tuple.
+/// A source key: (namespace, identifier). Orders, str)` tuple.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct KeyRef {
     pub namespace: Id,
@@ -78,7 +77,7 @@ pub fn parent_ref(key: &KeyRef) -> Option<KeyRef> {
     Some(KeyRef::new(parent, line))
 }
 
-/// The core asked for static data that was never loaded (Python's `IndexMiss`).
+/// The core asked for static data that was never loaded.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]
 pub struct IndexMiss(pub String);

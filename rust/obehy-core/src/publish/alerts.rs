@@ -1,6 +1,5 @@
-//! Each feed's GTFS-RT `Alert` entities (BASE_PLAN.md section 25): port of the GTFS-RT part of
-//! `realtime/emit/alerts.py` (`alert_entity`, `_over`, `AlertFeed` without its query). Writing
-//! `rt.alert` and reading `alert_feed.sql` are the store's.
+//! Each feed's GTFS-RT `Alert` entities (BASE_PLAN.md section 25) (`alert_entity`, `_over`,
+//! `AlertFeed` without its query). Writing `rt.alert` and reading `alert_feed.sql` are the store's.
 //!
 //! A feed carries the alerts not withdrawn and not over with at least one entity resolved in
 //! that feed (`rt.alert_target`), informing only those entities, under our IDs.
@@ -32,7 +31,7 @@ pub struct AlertTarget {
 }
 
 /// One row of `alert_feed.sql`: an alert in one feed. `entities` and `details` take no part in
-/// the entity; they are kept because a change of any column re-encodes it, as in Python.
+/// the entity; they are kept because a change of any column re-encodes it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AlertRow {
     pub source: String,
@@ -108,7 +107,7 @@ impl AlertRow {
 
     fn epoch(&self, value: &str) -> Result<i64, AlertError> {
         Instant::from_isoformat(value)
-            .map(Instant::timestamp_int)
+            .map(Instant::unix_seconds)
             .map_err(|e| self.error(e.to_string()))
     }
 }

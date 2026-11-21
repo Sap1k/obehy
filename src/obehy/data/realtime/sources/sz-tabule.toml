@@ -1,0 +1,24 @@
+# SŽ station boards (docs/sources/sz-tabule.md), decoded by obehy-sources (`sz_tabule.rs`). Read
+# on demand per station: only while trains are due there, within the [boards] policy budget.
+source = "sz-tabule"
+manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "SŽ station boards"
+covers = "Platforms of trains due at a station, where they are tracks; read only while trains are due there."
+
+[[channel]]
+name = "board"
+# SŽ blocks addresses running services: proxied and anonymous only (docs/R2_SLICE.md 7).
+proxied = true
+poll = { kind = "demand", query = "station_boards" }
+backoff = { after_failures = 3, max_s = 900 }
+timeout_s = 15
+request = { method = "POST", url = 'https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers\InfoTabule&&action=loadTabule', headers = { "Content-Type" = "application/x-www-form-urlencoded; charset=UTF-8" }, body = 'SR70={sr70}&module=Layers%5CInfoTabule&action=loadTabule' }
+feeds = ["czptt"]
+capabilities = ["trip_key", "platform"]
+
+# A station board is one poll, rows across two tables: a code decoder (Rust worker).
+[channel.decode]
+version = 2
+reader = "html"
+decoder = "sz-tabule"

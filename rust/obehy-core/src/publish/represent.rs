@@ -1,6 +1,5 @@
-//! Which vehicles stand for their journey (BASE_PLAN.md section 30): port of
-//! `realtime/emit/represent.py`. One marker per journey on the map, as GTFS-RT publishes one
-//! vehicle per journey.
+//! Which vehicles stand for their journey (BASE_PLAN.md section 30). One marker per journey on the
+//! map, as GTFS-RT publishes one vehicle per journey.
 //!
 //! A bus reported by several sources (DÚK and a city's own feed) stands once, as the vehicles
 //! of the source shown (`shown_source`: kept while its fixes are fresh). A rail run is one train

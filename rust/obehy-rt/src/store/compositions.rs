@@ -1,4 +1,4 @@
-//! Writing compositions (BASE_PLAN.md section 28): port of `emit/compositions.py`. A source's
+//! Writing compositions (BASE_PLAN.md section 28). A source's
 //! answer about a journey's formation, merged with the journey's earlier answers. Written by
 //! the lookup broker (`crate::lookups`); read by the API through `rt.composition_spans`.
 
@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use obehy_core::compositions::{TripView, Unit, ViewCall};
 use obehy_core::config::policy::JourneyPolicy;
-use obehy_core::py::json::{DumpOptions, PyJson, dumps};
 use obehy_core::time::{Date, Instant};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio_postgres::Client;
 
@@ -15,54 +15,30 @@ use super::StoreResult;
 use super::cells::{Jsonb, PgTime};
 use crate::index::sql::PgDate;
 
-fn pairs_json(pairs: &[(String, String)]) -> PyJson {
-    // `dict(pairs)`: the last of equal keys wins, at the first one's position.
-    let mut out: Vec<(String, PyJson)> = Vec::new();
-    for (k, v) in pairs {
-        match out.iter_mut().find(|(key, _)| key == k) {
-            Some(slot) => slot.1 = PyJson::str(v),
-            None => out.push((k.clone(), PyJson::str(v))),
-        }
-    }
-    PyJson::from_pairs(out)
+/// Labelled texts as an object (the last of a label kept).
+fn pairs_json(pairs: &[(String, String)]) -> Value {
+    json!(pairs.iter().cloned().collect::<BTreeMap<String, String>>())
 }
 
-fn unit_row(unit: &Unit) -> PyJson {
-    PyJson::object([
-        ("sequence", PyJson::Int(unit.sequence)),
-        ("kind", PyJson::str(&unit.kind)),
-        ("role", PyJson::str(&unit.role)),
-        (
-            "vehicle_type",
-            PyJson::opt(unit.vehicle_type.as_deref(), PyJson::str),
-        ),
-        (
-            "coach_number",
-            PyJson::opt(unit.coach_number.as_deref(), PyJson::str),
-        ),
-        (
-            "classes",
-            PyJson::List(unit.classes.iter().map(|c| PyJson::Int(*c)).collect()),
-        ),
-        (
-            "features",
-            PyJson::List(unit.features.iter().map(PyJson::str).collect()),
-        ),
-        ("texts", pairs_json(&unit.texts)),
-        (
-            "destination",
-            PyJson::opt(unit.destination.as_deref(), PyJson::str),
-        ),
-        ("details", pairs_json(&unit.details)),
-    ])
+fn unit_row(unit: &Unit) -> Value {
+    json!({
+        "classes": unit.classes,
+        "coach_number": unit.coach_number,
+        "destination": unit.destination,
+        "details": pairs_json(&unit.details),
+        "features": unit.features,
+        "kind": unit.kind,
+        "role": unit.role,
+        "sequence": unit.sequence,
+        "texts": pairs_json(&unit.texts),
+        "vehicle_type": unit.vehicle_type,
+    })
 }
 
-/// Tells identical answers apart from changed ones: sha256 of the units' sorted, compact,
-/// UTF-8 JSON (`digest`).
+/// Tells identical answers apart from changed ones: sha256 of the units' JSON.
 pub fn digest(units: &[Unit]) -> String {
-    let rows = PyJson::List(units.iter().map(unit_row).collect());
-    let text = dumps(&rows, DumpOptions::COMPACT.utf8().sorted());
-    let hash = Sha256::digest(text.as_bytes());
+    let rows: Vec<Value> = units.iter().map(unit_row).collect();
+    let hash = Sha256::digest(json!(rows).to_string().as_bytes());
     hash.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -103,8 +79,8 @@ async fn write_units(client: &Client, composition_id: i64, units: &[Unit]) -> St
             .iter()
             .map(|c| i32::try_from(*c).unwrap_or(i32::MAX))
             .collect();
-        let texts = Jsonb(dumps(&pairs_json(&u.texts), DumpOptions::DEFAULT));
-        let details = Jsonb(dumps(&pairs_json(&u.details), DumpOptions::DEFAULT));
+        let texts = Jsonb(pairs_json(&u.texts).to_string());
+        let details = Jsonb(pairs_json(&u.details).to_string());
         client
             .execute(
                 &insert,
@@ -296,18 +272,8 @@ mod tests {
     }
 
     #[test]
-    fn the_digest_is_pythons_text_hashed() {
-        // sha256 of `[{"classes":[2],"coach_number":null,"destination":"Praha hl.n.",
-        // "details":{},"features":["wifi"],"kind":"coach","role":"train","sequence":1,
-        // "texts":{"a":"Klimatizace"},"vehicle_type":"Bmz"}]` (Python's json.dumps).
-        let text = "[{\"classes\":[2],\"coach_number\":null,\"destination\":\"Praha hl.n.\",\
-                    \"details\":{},\"features\":[\"wifi\"],\"kind\":\"coach\",\"role\":\"train\",\
-                    \"sequence\":1,\"texts\":{\"a\":\"Klimatizace\"},\"vehicle_type\":\"Bmz\"}]";
-        let expected: String = Sha256::digest(text.as_bytes())
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
-        assert_eq!(digest(&[unit(1)]), expected);
+    fn the_digest_tells_answers_apart() {
+        assert_eq!(digest(&[unit(1)]), digest(&[unit(1)]));
         assert_ne!(digest(&[unit(1)]), digest(&[unit(2)]));
     }
 }

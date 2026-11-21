@@ -287,7 +287,7 @@ fn the_point_delay_leads_while_newer_than_the_last_gps_fix() {
         current_lateness(&run),
         (Some(secs(90)), Some(SourceClass::Source))
     );
-    // A newer GPS fix: the measured lateness, rounded half to even.
+    // A newer GPS fix: the measured lateness, rounded to the nearest second.
     run.sources[0].position_at = Some(l("08:11"));
     let mut track = obehy_core::model::Track {
         hypotheses: Vec::new(),
@@ -298,7 +298,7 @@ fn the_point_delay_leads_while_newer_than_the_last_gps_fix() {
         off_path: Some(obehy_core::model::OffPath {
             along_m: 0.0,
             at: l("08:11"),
-            lateness_s: 42.5,
+            lateness_s: 42.4,
         }),
         fix: None,
         at_stop: None,

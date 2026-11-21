@@ -1,13 +1,13 @@
 //! `obehy-rt corpus-stream`: the output-level stream of each corpus journey
-//! (`tests/realtime/corpus/<name>.json.gz`), the same as `tests/realtime/corpus_stream.py`
-//! writes into `tests/golden/corpus-stream/<name>.jsonl.gz` (read its docstring), so the core
-//! is compared journey by journey.
+//! (`tests/realtime/corpus/<name>.json.gz`), compared with the pinned one in
+//! `tests/golden/corpus-stream/<name>.jsonl.gz` (rewritten by this command with `--out` after a
+//! deliberate change of behaviour), so the core is checked journey by journey.
 //!
-//! Each journey runs as `corpus.run` runs it: its observations in `(received_at, source,
+//! Each journey runs its observations in `(received_at, source,
 //! item)` order, a tick every `emit.tick_s` on round multiples from the first observation until
 //! 35 min after the last, each tick refreshing and then estimating, with the shipped
 //! manifests' semantics and the default policy. A trace is an index slice plus the journey's
-//! observations, read as `tests/realtime/traces.py`'s `from_json` reads it.
+//! observations.
 
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ use obehy_core::timeline::SourceProgress;
 use obehy_core::timeline::plan::PlanCache;
 use serde_json::Value;
 
-use crate::canonical::C;
+use crate::canonical::{obj, text};
 use crate::compare::{diff, write_stream};
 use crate::output::{Emit, HarnessBook, Recording, effect_records, harness_book};
 use crate::settings::Paths;
@@ -270,7 +270,7 @@ impl Journal for Lines<'_, '_> {
 
     fn tick(&mut self, state: &FeedState, _index: &Index, now: Instant) -> io::Result<()> {
         self.last = Some(now);
-        if now.timestamp_int().rem_euclid(STATE_EVERY_S) == 0 {
+        if now.unix_seconds().rem_euclid(STATE_EVERY_S) == 0 {
             self.recording.write_state(&[(state.feed, state)])?;
             self.recording.flush(Some(now), self.emit)?;
             let record = self.recording.gtfs_rt(state, now, &self.policy.lifecycle)?;
@@ -290,12 +290,12 @@ pub fn stream(
     emit: Emit,
 ) -> io::Result<()> {
     let (mut index, observations) = from_json(&read_gz_json(trace)?);
-    emit(&C::obj([
-        ("kind", C::str("header")),
-        ("corpus", C::str(name)),
-        ("feed", C::str(index.feed.as_str())),
-        ("core_version", C::str(CORE_VERSION)),
-        ("policy_version", C::str(&policy.version)),
+    emit(&obj([
+        ("kind", text("header")),
+        ("corpus", text(name)),
+        ("feed", text(index.feed.as_str())),
+        ("core_version", text(CORE_VERSION)),
+        ("policy_version", text(&policy.version)),
     ]))?;
     let derivation = Derivation {
         core_version: CORE_VERSION.to_owned(),

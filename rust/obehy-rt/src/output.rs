@@ -1,10 +1,11 @@
-//! `obehy-rt compare --level output`: everything the worker would write from a window, the
-//! same stream as `compare.output` in Python (read `realtime/compare.py`'s docstring: record
-//! kinds, order, the `at` of each). Every effect of every step and tick (`phase` `step`,
+//! `obehy-rt compare --level output`: everything the worker would write from a window (the
+//! record kinds, their order and the `at` of each are in [`crate::compare`]'s module doc). Every
+//! effect of every step and tick (`phase` `step`,
 //! `tick`, `finish`) in the order produced, each followed by the rows the writer made of it;
 //! every `gtfs_rt_every_s` (on round multiples) estimates for every feed, the state tables and
 //! a `gtfs_rt` record per feed; after the last poll the final tick's effects and rows.
 
+use std::collections::BTreeMap;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,7 +21,7 @@ use obehy_core::vehicles::vocabulary::VOCABULARY_FILE;
 use obehy_core::vehicles::{VehicleBook, Vocabulary};
 use obehy_sources::Decoders;
 
-use crate::canonical::C;
+use crate::canonical::{obj, text, time};
 use crate::compare::{Window, header};
 use crate::gtfs_json::message_dict;
 use crate::phases::Phases;
@@ -32,6 +33,7 @@ use crate::samples::{JourneySampler, PREDICTOR_SAMPLE_EVERY_S, predictor_sample}
 use crate::settings::Paths;
 use crate::store::vehicles::{Book, PlainBook, StoredVehicles, book, physical_rows};
 use crate::store::{RecordingStore, Writer};
+use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -46,7 +48,7 @@ pub struct Options {
     pub quality: bool,
 }
 
-pub type Emit<'a> = &'a mut dyn FnMut(&C) -> io::Result<()>;
+pub type Emit<'a> = &'a mut dyn FnMut(&Value) -> io::Result<()>;
 
 /// The channels' core semantics, by (source, channel).
 pub fn semantics_of(window: &Window) -> Semantics {
@@ -91,12 +93,12 @@ pub fn harness_book() -> io::Result<impl FnOnce(StoredVehicles) -> HarnessBook> 
 }
 
 /// `record | {"at": at}`.
-pub fn with_at(record: C, at: Option<Instant>) -> C {
+pub fn with_at(record: Value, at: Option<Instant>) -> Value {
     match record {
-        C::Obj(mut fields) => {
-            fields.retain(|(k, _)| k != "at");
-            fields.push(("at".to_owned(), C::time(at)));
-            C::Obj(fields)
+        Value::Object(mut fields) => {
+            fields.shift_remove("at");
+            fields.insert("at".to_owned(), time(at));
+            Value::Object(fields)
         }
         other => other,
     }
@@ -146,15 +148,15 @@ impl<B: Book + Named> Recording<B> {
         state: &FeedState,
         at: Instant,
         policy: &LifecyclePolicy,
-    ) -> io::Result<C> {
+    ) -> io::Result<Value> {
         let book = &self.writer.vehicles;
         let identity = |v: &VehicleId| book.vehicle_id(v);
         let payload =
             FeedEmitter::new(policy.clone()).serialize::<&[u8]>(state, at, &[], &identity);
-        Ok(C::obj([
-            ("kind", C::str("gtfs_rt")),
-            ("at", C::time(Some(at))),
-            ("feed", C::str(state.feed.as_str())),
+        Ok(obj([
+            ("kind", text("gtfs_rt")),
+            ("at", time(Some(at))),
+            ("feed", text(state.feed.as_str())),
             ("message", message_dict(&payload).map_err(io_error)?),
         ]))
     }
@@ -163,10 +165,10 @@ impl<B: Book + Named> Recording<B> {
 /// A step's or tick's effects as `effect` records with their `phase`.
 pub fn effect_records(emit: Emit, at: Instant, phase: &str, effects: &[Effect]) -> io::Result<()> {
     for effect in effects {
-        emit(&C::obj([
-            ("kind", C::str("effect")),
-            ("at", C::time(Some(at))),
-            ("phase", C::str(phase)),
+        emit(&obj([
+            ("kind", text("effect")),
+            ("at", time(Some(at))),
+            ("phase", text(phase)),
             ("effect", effect_plain(effect)),
         ]))?;
     }
@@ -193,26 +195,23 @@ struct Recorder<'a, B: Book> {
 
 /// A poll's `poll` record at the output level, with its observations per feed
 /// (`replay.poll_record(output=True)`).
-pub fn poll_record(poll: &DecodedPoll) -> C {
-    let field = |k: &str| poll.entry.get(k).map_or(C::Null, C::from_json);
+pub fn poll_record(poll: &DecodedPoll) -> Value {
+    let field = |k: &str| poll.entry.get(k).map_or(Value::Null, Value::clone);
     let request = match poll.entry.get("request") {
-        Some(r @ serde_json::Value::Object(_)) => C::from_json(r),
-        _ => C::Null,
+        Some(r @ serde_json::Value::Object(_)) => r.clone(),
+        _ => Value::Null,
     };
-    let mut fields = vec![
-        ("kind".to_owned(), C::str("poll")),
-        ("at".to_owned(), C::time(Some(poll.at))),
-        ("source".to_owned(), C::str(&poll.source)),
-        ("channel".to_owned(), C::str(&poll.channel)),
-        ("sha256".to_owned(), field("sha256")),
-        ("status".to_owned(), field("status")),
-        ("error".to_owned(), field("error")),
-        ("request".to_owned(), request),
-        (
-            "decoder_version".to_owned(),
-            C::Int(i128::from(poll.decoder_version)),
-        ),
-    ];
+    let mut record = obj([
+        ("kind", text("poll")),
+        ("at", time(Some(poll.at))),
+        ("source", text(&poll.source)),
+        ("channel", text(&poll.channel)),
+        ("sha256", field("sha256")),
+        ("status", field("status")),
+        ("error", field("error")),
+        ("request", request),
+        ("decoder_version", Value::from(poll.decoder_version)),
+    ]);
     match &poll.observations {
         None => {
             let outcome = if poll.error.is_none() {
@@ -220,26 +219,19 @@ pub fn poll_record(poll: &DecodedPoll) -> C {
             } else {
                 "undecodable"
             };
-            fields.push(("outcome".to_owned(), C::str(outcome)));
+            record["outcome"] = text(outcome);
         }
         Some(observations) => {
-            let mut feeds: Vec<(String, C)> = Vec::new();
+            let mut feeds: BTreeMap<&str, usize> = BTreeMap::new();
             for o in observations {
-                let name = o.feed.as_str();
-                match feeds.iter_mut().find(|(f, _)| f == name) {
-                    Some((_, C::Int(n))) => *n += 1,
-                    _ => feeds.push((name.to_owned(), C::Int(1))),
-                }
+                *feeds.entry(o.feed.as_str()).or_default() += 1;
             }
-            fields.push(("outcome".to_owned(), C::str("decoded")));
-            fields.push((
-                "observations".to_owned(),
-                C::Int(observations.len() as i128),
-            ));
-            fields.push(("feeds".to_owned(), C::Obj(feeds)));
+            record["outcome"] = text("decoded");
+            record["observations"] = Value::from(observations.len());
+            record["feeds"] = serde_json::json!(feeds);
         }
     }
-    C::Obj(fields)
+    record
 }
 
 type Timed = Runner<FileLoads, Phases>;
@@ -368,27 +360,25 @@ pub fn output_from(
     let policy = runner.policy.clone();
     let loads = runner.loads.clone();
     let mut head = header(window, "output");
-    if let C::Obj(fields) = &mut head {
+    if let Value::Object(fields) = &mut head {
         fields.extend([
             (
                 "feeds".to_owned(),
-                C::List(options.feeds.iter().map(|f| C::str(f.as_str())).collect()),
+                Value::Array(options.feeds.iter().map(|f| text(f.as_str())).collect()),
             ),
             (
                 "gtfs_rt_every_s".to_owned(),
-                options
-                    .gtfs_rt_every_s
-                    .map_or(C::Null, |e| C::Int(i128::from(e))),
+                options.gtfs_rt_every_s.map_or(Value::Null, Value::from),
             ),
-            ("release".to_owned(), C::str(&loads.run_id)),
-            ("core_version".to_owned(), C::str(CORE_VERSION)),
-            ("policy_version".to_owned(), C::str(&policy.version)),
+            ("release".to_owned(), text(&loads.run_id)),
+            ("core_version".to_owned(), text(CORE_VERSION)),
+            ("policy_version".to_owned(), text(&policy.version)),
         ]);
         if options.diagnostics || options.quality {
-            fields.push(("diagnostics".to_owned(), C::Bool(true)));
+            fields.insert("diagnostics".to_owned(), Value::Bool(true));
         }
         if options.quality {
-            fields.push(("quality".to_owned(), C::Bool(true)));
+            fields.insert("quality".to_owned(), Value::Bool(true));
         }
     }
     emit(&head)?;

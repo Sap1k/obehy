@@ -1,8 +1,7 @@
-//! Core effects and state as rows: port of `emit/db.py`'s `Writer`.
+//! Core effects and state as rows.
 //!
 //! `write` turns one batch's effects into rows, `write_state` keeps the current-state tables
-//! in step with core state; each is one transaction of the store. Ordering kept from Python:
-//! partitions and terms are prepared outside the transaction (so a rolled-back write never
+//! in step with core state; each is one transaction of the store. Partitions and terms are prepared outside the transaction (so a rolled-back write never
 //! leaves a term number known but not stored); within it observations, snapshots, events, then
 //! the live attributes (`Book::observe`, before assignments: what a report states may name its
 //! vehicle), assignments, links, platforms, cancellations and the book's rows.
@@ -15,9 +14,10 @@ use obehy_core::model::{
     ObservationResult, PartSpan, VehicleId, VehicleKey,
 };
 use obehy_core::publish::{representing, shown};
-use obehy_core::py::json::PyJson;
 use obehy_core::runs::{current_part, published_parts};
 use obehy_core::time::{Date, Instant, TimeDelta, local_date};
+
+use serde_json::Value;
 
 use super::cells::{Cell, Row};
 use super::rows::{
@@ -45,7 +45,7 @@ struct Written {
 struct TripWritten {
     row: Row,
     calls: Arc<[CallState]>,
-    json: Arc<PyJson>,
+    json: Arc<Value>,
     inputs: TripInputs,
     /// Published parts by trip ID, sorted: (trip ID, row).
     parts: Vec<(String, Row)>,

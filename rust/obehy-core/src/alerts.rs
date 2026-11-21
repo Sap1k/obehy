@@ -1,6 +1,5 @@
-//! Alerts from any source, in one shape: port of `realtime/alerts.py` (BASE_PLAN.md section
-//! 25). Decoded by the alert channels' decoders (obehy-sources), written by the store, never
-//! passed through the core. Pure.
+//! Alerts from any source, in one shape (BASE_PLAN.md section 25). Decoded by the alert channels'
+//! decoders (obehy-sources), written by the store, never passed through the core. Pure.
 
 use crate::time::{Date, Instant};
 

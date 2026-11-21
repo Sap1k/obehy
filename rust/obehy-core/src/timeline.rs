@@ -1,16 +1,10 @@
-//! The timeline engine: progress, events and estimates of one journey instance. Port of
-//! `realtime/timeline/__init__.py` (its docstring has the model): [`advance`] applies one bound
-//! observation to its instance.
+//! The timeline engine: progress, events and estimates of one journey instance: [`advance`] applies
+//! one bound observation to its instance.
 //!
 //! GPS progress (map matching over the trip's path, [`progress`]) drives actual events,
 //! committed once unambiguous, and the lateness the tracker measures drives predictions
 //! ([`estimate`]); the source's own delay is the fallback. Several sources on one journey are
 //! fused by [`fusion`].
-//!
-//! Float comparisons that decide (R4 hazard list): `observation.at <= seen` (repeated),
-//! `sigma_m <= gps_sigma_m` (precise), the nearest projection `min(key=lateral_m)` (the first
-//! segment wins ties), `along < best - sigma` (behind), `max(along, held)` on a shape and
-//! `along < held - jitter` off it, `fresh` against whole seconds.
 
 pub mod commit;
 pub mod estimate;
@@ -31,7 +25,6 @@ use crate::model::{
     Interval, Lifecycle, Observation, PointEvent, Position, Published, SourceSemantics,
     SourceState, Unresolved, UnresolvedKind, WriteEvent,
 };
-use crate::py::num::py_max;
 use crate::time::Instant;
 use crate::timeline::commit::Crossing;
 use crate::timeline::fusion::{
@@ -283,7 +276,7 @@ fn publish(
             && before.snapped
             && let Some(held) = held
         {
-            along = py_max(along, held);
+            along = along.max(held);
         }
         let (lon, lat) = point_at(path, along);
         return Published {

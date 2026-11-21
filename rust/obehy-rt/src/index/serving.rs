@@ -1,4 +1,4 @@
-//! `Rows` from one feed's serving tables held in memory: port of `index_files.FileRows`.
+//! `Rows` from one feed's serving tables held in memory.
 //!
 //! The tables are those `obehy release load` copies into `static.*`; each method answers what
 //! its SQL counterpart in `index_sql.SqlRows` selects, including what `release.load` derives on

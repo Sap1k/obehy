@@ -8,8 +8,8 @@
 
 use obehy_core::config::manifest::Source;
 use obehy_core::model::{Feed, FeedState, JourneyKey, ObservationResult};
-use obehy_core::py::json::PyJson;
 use obehy_core::time::{Date, Instant};
+use serde_json::{Value, json};
 
 /// (source, source vehicle ID).
 pub type Report = (String, String);
@@ -47,7 +47,7 @@ pub struct ProfileRow {
     pub datasets: Vec<String>,
     pub sources: Vec<String>,
     /// Each attribute's JSON object (statements, the pick, conflicts).
-    pub attributes: Vec<PyJson>,
+    pub attributes: Vec<Value>,
     pub last_stated: Option<Instant>,
 }
 
@@ -170,16 +170,13 @@ pub fn physical_rows(sources: &[Source]) -> Vec<(String, String, bool)> {
 }
 
 /// A journey as `rt.vehicle_pairing.journey` stores it.
-pub fn journey_json(journey: &JourneyKey) -> PyJson {
-    PyJson::object([
-        ("feed", PyJson::lit(journey.feed.as_str())),
-        ("namespace", PyJson::str(&journey.namespace)),
-        ("key", PyJson::str(&journey.key)),
-        (
-            "service_date",
-            PyJson::str(journey.service_date.isoformat()),
-        ),
-    ])
+pub fn journey_json(journey: &JourneyKey) -> Value {
+    json!({
+        "feed": journey.feed.as_str(),
+        "namespace": journey.namespace,
+        "key": journey.key,
+        "service_date": journey.service_date,
+    })
 }
 
 /// A book that knows nothing and identifies every report by its source form: the writer's book
@@ -306,32 +303,21 @@ pub fn book(stored: StoredVehicles, vocabulary: Vocabulary) -> VehicleBook {
     VehicleBook::load(registry(stored.registry), vocabulary, pairs, attributes)
 }
 
-fn statement_json(s: &Statement) -> Vec<(String, PyJson)> {
-    vec![
-        ("value".into(), PyJson::str(&s.value)),
-        ("origin".into(), PyJson::str(s.origin.as_str())),
-        ("source".into(), PyJson::str(&s.source)),
-        (
-            "observed_at".into(),
-            PyJson::opt(s.observed_at, |at| PyJson::str(at.isoformat())),
-        ),
-    ]
+fn statement_json(s: &Statement) -> Value {
+    json!({
+        "value": s.value,
+        "origin": s.origin.as_str(),
+        "source": s.source,
+        "observed_at": s.observed_at,
+    })
 }
 
-fn attribute_json(attribute: &str, p: &Picked) -> PyJson {
+fn attribute_json(attribute: &str, p: &Picked) -> Value {
     let mut out = statement_json(&p.winner);
-    out.push(("attribute".into(), PyJson::str(attribute)));
-    out.push(("conflict".into(), PyJson::Bool(p.conflict)));
-    out.push((
-        "statements".into(),
-        PyJson::List(
-            p.statements
-                .iter()
-                .map(|s| PyJson::from_pairs(statement_json(s)))
-                .collect(),
-        ),
-    ));
-    PyJson::from_pairs(out)
+    out["attribute"] = json!(attribute);
+    out["conflict"] = json!(p.conflict);
+    out["statements"] = p.statements.iter().map(statement_json).collect();
+    out
 }
 
 /// A profile as its row (`precedence.Profile`, attributes as their JSON).

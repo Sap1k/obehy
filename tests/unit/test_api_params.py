@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -18,8 +18,13 @@ from obehy.api.params import (
     search_words,
 )
 from obehy.api.trips import by_key_path, trip_path
-from obehy.realtime_config import ServiceTime
-from tests.realtime.observations import local
+from obehy.realtime_config import PRAGUE, Instant, ServiceTime, instant
+
+
+def local(text: str) -> Instant:
+    """`2026-10-09 00:20` read as Europe/Prague wall-clock time."""
+
+    return instant(datetime.fromisoformat(text).replace(tzinfo=PRAGUE))
 
 
 def test_bbox_is_west_south_east_north_within_the_area_cap() -> None:

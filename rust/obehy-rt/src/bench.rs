@@ -1,7 +1,7 @@
-//! `obehy-rt bench --from-files`: the live worker's per-poll and per-tick path over archived
-//! polls (port of `realtime/bench.py` without the database): decode, core, the writer's rows
-//! (made and dropped by a [`NullStore`]), and the emit tick (estimates, state tables, GTFS-RT
-//! files) on a simulated clock, with the index read from the release's serving files.
+//! `obehy-rt bench --from-files`: the live worker's per-poll and per-tick path over archived polls:
+//! decode, core, the writer's rows (made and dropped by a [`NullStore`]), and the emit tick
+//! (estimates, state tables, GTFS-RT files) on a simulated clock, with the index read from the
+//! release's serving files.
 //!
 //! - CPU and wall time per phase, also as a share of one core over the simulated time and per
 //!   observation; observations a second over the whole run (decoding runs on a pool ahead of

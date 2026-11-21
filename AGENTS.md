@@ -36,31 +36,41 @@
 ## Realtime code rules
 
 These keep the realtime core small, testable and free of the midnight/DST bugs that sink Czech
-realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
+realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons; `docs/RUST_PORT.md` says
+where each part runs.
 
-- **Layering.** `realtime/core.py`, `infer/`, `timeline/` and `model.py` import no database,
-  network or filesystem code; `sources/` (connectors) imports no `infer/` or `timeline/`. The
-  import-linter contract enforces this.
-- **No twin implementations.** Live operation and `obehy rt replay` run the same core. Analysis
-  is an `obehy rt …` subcommand or a script that imports `obehy`; never re-implement core rules
-  in a scratch script.
-- **Time.** Only `realtime/times.py` and the edge it builds on, `realtime_config.py`, convert
-  times. Use `Instant` (aware UTC) and `ServiceTime` (service date + wall-clock seconds from
-  local midnight). No naive datetimes. Key everything by service
-  date, never by calendar date. An instance's date is chosen once and never re-derived.
+- **Where it lives.** The realtime worker is the Rust workspace in `rust/` (`obehy-core`,
+  `obehy-sources`, `obehy-rt`; `rust/README.md`), shipped as the `worker` image target and
+  run as `obehy-rt worker`. Python keeps the API, releases and migrations, `obehy jobs`, the
+  GTFS-RT check and the replay diagnostics, which read the worker's output stream
+  (`obehy rt report --from-stream`). The database is the boundary; the policy,
+  the connector manifests (`src/obehy/data/realtime/sources/`) and the SQL the worker compiles
+  in (`src/obehy/data/realtime/sql/`) are the only files both read. Python reads its few
+  fields through `obehy/realtime_config.py`; Rust owns both schemas.
+- **Layering.** `obehy-core` uses no I/O crate and `obehy-sources` neither I/O nor an async
+  runtime; only `obehy-rt` has tokio, PostgreSQL and HTTP (`obehy-rt/tests/
+  dependency_direction.rs` checks it). The core stays synchronous; the shell calls it.
+- **No twin implementations.** Live operation, `obehy-rt replay` and `compare` run the same
+  core; there is no Python worker or fallback. Analysis reads the output stream or the
+  database (an `obehy rt …` subcommand, an `obehy-rt` command or a script); never re-implement
+  core rules in a scratch script.
+- **Time.** Only `obehy-core::time` converts times in the worker, and `realtime_config.py` at
+  the Python edge. Use `Instant` (aware UTC) and `ServiceTime` (service date + wall-clock
+  seconds from local midnight). No naive datetimes. Key everything by service date, never by
+  calendar date. An instance's date is chosen once and never re-derived.
 - **IDs are opaque.** Never parse a public ID (for example the `yymmdd` in a trip ID); resolve
   through `source_key`. History is keyed by journey `(feed, key namespace, key, service date)`
   and never references `static.*`.
 - **Keyed sources are literal.** No reinterpretation heuristics in the core: a key whose trip
-  does not run is unmatched. Keyless inference stays in `infer/keyless/`.
-- **SQL for sets, Python for the hot path.** Logic over many rows at once (index building,
-  history aggregation, circulation learning, evaluation, API queries) is SQL in PostgreSQL. Only
-  the per-vehicle state machine is Python.
+  does not run is unmatched. Keyless inference stays in `infer/keyless`.
+- **SQL for sets, Rust for the hot path.** Logic over many rows at once (index building,
+  history aggregation, circulation learning, evaluation, API queries) is SQL in PostgreSQL; the
+  writer writes in sets. Only the per-vehicle state machine runs in the worker's loop.
 - **Policy, not constants.** Thresholds, margins and tolerances live in versioned policy TOML
-  under `src/obehy/data/`, not as module constants.
-- **Connectors declare, the runtime executes.** A connector declares its channels and lookups
-  and implements only `fetch`, `decode` and `plan`. Scheduling, rate limits, budgets and
-  caching are the generic runtime's; the API never calls upstream.
+  under `src/obehy/data/`, not as constants, in Rust as in Python.
+- **Connectors declare, the runtime executes.** A connector is its manifest: channels, lookups,
+  `[channel.decode]` (or a named code decoder in `obehy-sources`). Scheduling, rate limits,
+  budgets, egress and caching are the generic runtime's; the API never calls upstream.
 - **The API refers to trips by the feed's `trip_id` + service date** and to vehicles by
   `vehicle_id`; source keys are lookup aliases only. History and realtime state are keyed by
   journey: rail journeys are train number + service date, joined by `journey_link` where the
@@ -69,11 +79,14 @@ realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
 - **Curated data is git-reviewed files + `obehy ref import`.** `ref.*` is a mirror. The vehicle
   datasets (our own list, the DÚK register) live in `jrunify-ext-geodata/vehicles/`.
 - **Quirk ledger.** Every source quirk (a catch-22 of Czech data) gets an ID in its dossier's
-  **Quirks** section (`DUK-Q3`), is normalized in the connector, and has a scenario test named
-  after the ID.
-- Frozen, slotted dataclasses; pyright strict for `realtime/`; modules stay under about 500
-  lines; output is emitted in sorted, deterministic order; replay is golden-tested on pinned
-  corpora.
+  **Quirks** section (`DUK-Q3`), is normalized in `obehy-sources` (every normalizer names its
+  quirk), and has a test named after the ID.
+- Output is emitted in sorted, deterministic order (`BTreeMap` or sorted before emitting, never
+  hash order); modules stay small; replay is checked against the pinned streams
+  (`tests/golden/corpus-stream/`, `tests/realtime/compare/`, written by `obehy-rt`). A
+  deliberate change of behaviour rewrites the affected pinned streams in the same change and
+  says why. The worker is plain, idempotent Rust: no emulation of Python's numbers, text or
+  library quirks (it was removed after the switch).
 
 ## Documentation roles
 
@@ -107,7 +120,12 @@ realtime projects. `BASE_PLAN.md` sections 18–22 give the reasons.
 - Run the narrowest relevant checks first, then broader ones when practical:
   `uv run pytest tests/unit -q` (plus `tests/db` with `OBEHY_TEST_DATABASE_URL`),
   `uv run ruff check src tests`, `uv run ruff format --check src tests`, `uv run pyright`,
-  `uv run lint-imports` (add each new pure realtime module to its contract in `pyproject.toml`).
+  `uv run lint-imports` (add each new pure module to its contract in `pyproject.toml`).
+- The worker, in `rust/`: `cargo fmt --all --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (its
+  database tests run with `OBEHY_TEST_DATABASE_URL` or `[database] test_url`, through
+  `rust/tools/store_db.py`, and drop what they make). Use your own `CARGO_TARGET_DIR` when
+  another build may be running.
 - JrUtil: `dotnet test jrutil.tests/jrutil.tests.fsproj -c Release --no-restore` in the standalone
   checkout; report the exact command and result.
 - Inspect JrUtil log output as well as the exit code: conversion commands may log entity-level

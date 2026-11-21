@@ -1,14 +1,15 @@
-//! Alerts to PostgreSQL (BASE_PLAN.md section 25): the writing half of `emit/alerts.py`, and the
-//! read of `sql/alert_feed.sql` the GTFS-RT alert feed is made from.
+//! Alerts to PostgreSQL (BASE_PLAN.md section 25), and the read of `sql/alert_feed.sql` the
+//! GTFS-RT alert feed is made from.
 //!
 //! `write_alerts` keeps `rt.alert` for one channel's poll, which states its whole current set:
 //! each alert is upserted (`changed_at` moves only when its content changes, or it returns), and
 //! the channel's alerts missing from the poll are withdrawn.
 
+use std::collections::BTreeMap;
+
 use obehy_core::alerts::{Alert, Texts};
-use obehy_core::py::json::{DumpOptions, PyJson, dumps};
 use obehy_core::time::Instant;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio_postgres::Client;
 use tokio_postgres::types::ToSql;
 
@@ -31,7 +32,8 @@ pub const CONTENT: [&str; 11] = [
 ];
 
 /// `sql/alert_feed.sql`, shared with Python.
-pub const ALERT_FEED_SQL: &str = include_str!("../../../../src/obehy/realtime/sql/alert_feed.sql");
+pub const ALERT_FEED_SQL: &str =
+    include_str!("../../../../src/obehy/data/realtime/sql/alert_feed.sql");
 
 fn columns(prefix: &str) -> String {
     CONTENT
@@ -60,65 +62,43 @@ pub fn upsert_sql() -> String {
     )
 }
 
-fn pairs(value: &Texts) -> PyJson {
-    let mut out: Vec<(String, PyJson)> = Vec::new();
-    for (k, v) in value {
-        match out.iter_mut().find(|(key, _)| key == k) {
-            Some(slot) => slot.1 = PyJson::str(v),
-            None => out.push((k.clone(), PyJson::str(v))),
-        }
-    }
-    PyJson::from_pairs(out)
-}
-
-/// `json.dumps(dict(value), ensure_ascii=False, sort_keys=True)`.
+/// Texts by language (the last of a language kept).
 fn texts(value: &Texts) -> Jsonb {
-    Jsonb(dumps(&pairs(value), DumpOptions::DEFAULT.utf8().sorted()))
+    let map: BTreeMap<&str, &str> = value
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    Jsonb(json!(map).to_string())
 }
 
-fn iso(value: Option<Instant>) -> PyJson {
-    value.map_or(PyJson::Null, |at| PyJson::str(at.isoformat()))
-}
-
-/// The content columns of an alert after source, alert ID and channel (`_row` without the
-/// three times).
+/// The content columns of an alert after source, alert ID and channel.
 fn content(alert: &Alert) -> Vec<Jsonb> {
-    let periods = PyJson::List(
-        alert
-            .periods
-            .iter()
-            .map(|p| PyJson::object([("start", iso(p.start)), ("end", iso(p.end))]))
-            .collect(),
-    );
-    let entities = PyJson::List(
-        alert
-            .entities
-            .iter()
-            .map(|e| {
-                PyJson::object([
-                    ("kind", PyJson::str(&e.kind)),
-                    ("namespace", PyJson::str(&e.namespace)),
-                    ("identifier", PyJson::str(&e.identifier)),
-                    (
-                        "service_date",
-                        PyJson::opt(e.service_date, |d| PyJson::str(d.isoformat())),
-                    ),
-                ])
+    let periods: Vec<Value> = alert
+        .periods
+        .iter()
+        .map(|p| json!({"start": p.start, "end": p.end}))
+        .collect();
+    let entities: Vec<Value> = alert
+        .entities
+        .iter()
+        .map(|e| {
+            json!({
+                "kind": e.kind,
+                "namespace": e.namespace,
+                "identifier": e.identifier,
+                "service_date": e.service_date,
             })
-            .collect(),
-    );
+        })
+        .collect();
     vec![
-        Jsonb(dumps(&periods, DumpOptions::DEFAULT)),
+        Jsonb(json!(periods).to_string()),
         texts(&alert.header),
         texts(&alert.description),
         texts(&alert.url),
         texts(&alert.cause_detail),
         texts(&alert.effect_detail),
-        Jsonb(dumps(&entities, DumpOptions::DEFAULT.utf8())),
-        Jsonb(dumps(
-            &pairs(&alert.details),
-            DumpOptions::DEFAULT.utf8().sorted(),
-        )),
+        Jsonb(json!(entities).to_string()),
+        texts(&alert.details),
     ]
 }
 

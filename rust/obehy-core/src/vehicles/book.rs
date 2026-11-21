@@ -1,5 +1,5 @@
-//! Vehicles beyond their positions (BASE_PLAN.md section 27): port of
-//! `realtime/emit/vehicles.py` without its SQL (the store reads and writes what this decides).
+//! Vehicles beyond their positions (BASE_PLAN.md section 27) without its SQL (the store reads and
+//! writes what this decides).
 //!
 //! Which vehicle each source report is, the attributes sources state live, and each vehicle's
 //! profile. A report on a rail run is the train its number names, `train:<number>` (DUK-Q8).

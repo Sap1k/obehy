@@ -1,7 +1,6 @@
-//! Calendar dates and naive date-times (Python's `date` and naive `datetime`), proleptic
-//! Gregorian, years 1..=9999 as Python allows.
+//! Calendar dates and naive date-times, proleptic Gregorian, years 1..=9999.
 
-use std::fmt;
+use std::fmt::{self, Write as _};
 
 use super::{MICROS_PER_DAY, TimeError, iso};
 
@@ -44,7 +43,7 @@ pub(crate) const fn days_in_month(year: i32, month: u32) -> u32 {
 pub struct Date(i32);
 
 impl Date {
-    /// The date, or None outside Python's range or the calendar.
+    /// The date, or None outside years 1..=9999 or the calendar.
     pub const fn new(year: i32, month: u32, day: u32) -> Option<Date> {
         if year < 1 || year > 9999 || month < 1 || month > 12 {
             return None;
@@ -83,13 +82,13 @@ impl Date {
         civil_from_days(self.0).2
     }
 
-    /// `date + timedelta(days=n)`.
+    /// The date `days` later.
     #[must_use]
     pub const fn add_days(self, days: i32) -> Date {
         Date(self.0 + days)
     }
 
-    /// `(self - other).days`.
+    /// Days from `other` to this date.
     pub const fn days_since(self, other: Date) -> i32 {
         self.0 - other.0
     }
@@ -99,7 +98,7 @@ impl Date {
         NaiveDateTime(self.0 as i64 * MICROS_PER_DAY)
     }
 
-    /// `date.isoformat()`: `2026-10-08`.
+    /// `2026-10-08`.
     pub fn isoformat(self) -> String {
         let mut text = String::with_capacity(10);
         self.write_iso(&mut text);
@@ -109,17 +108,10 @@ impl Date {
     /// [`Date::isoformat`] onto `out`.
     pub fn write_iso(self, out: &mut String) {
         let (year, month, day) = civil_from_days(self.0);
-        match u32::try_from(year) {
-            Ok(year) => push_padded(out, year, 4),
-            Err(_) => out.push_str(&format!("{year:04}")),
-        }
-        out.push('-');
-        push_padded(out, month, 2);
-        out.push('-');
-        push_padded(out, day, 2);
+        write!(out, "{year:04}-{month:02}-{day:02}").expect("writing to a string");
     }
 
-    /// `date.fromisoformat(text)` (Python 3.13: `YYYY-MM-DD`, `YYYYMMDD` and ISO week dates).
+    /// An ISO date (`2026-10-08`).
     pub fn from_isoformat(text: &str) -> Result<Date, TimeError> {
         iso::parse_date(text)
     }
@@ -131,13 +123,26 @@ impl fmt::Display for Date {
     }
 }
 
+impl serde::Serialize for Date {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Date {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Date, D::Error> {
+        let text = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Date::from_isoformat(&text).map_err(serde::de::Error::custom)
+    }
+}
+
 /// A naive date-time (a local wall clock): microseconds since 1970-01-01T00:00 on its own
 /// clock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NaiveDateTime(i64);
 
 impl NaiveDateTime {
-    /// The date-time, or None if a field is out of range (Python's `datetime(...)`).
+    /// The date-time, or None if a field is out of range.
     pub fn new(date: Date, hour: u32, minute: u32, second: u32, micro: u32) -> Option<Self> {
         if hour > 23 || minute > 59 || second > 59 || micro > 999_999 {
             return None;
@@ -182,7 +187,7 @@ impl NaiveDateTime {
         )
     }
 
-    /// `datetime.isoformat()` of a naive datetime: `2026-10-08T22:30:00[.ffffff]`.
+    /// `2026-10-08T22:30:00[.ffffff]`.
     pub fn isoformat(self) -> String {
         let mut text = String::with_capacity(26);
         self.write_iso(&mut text);
@@ -193,37 +198,10 @@ impl NaiveDateTime {
     pub fn write_iso(self, out: &mut String) {
         let (hour, minute, second, micro) = self.hms_micro();
         self.date().write_iso(out);
-        out.push('T');
-        push_padded(out, hour, 2);
-        out.push(':');
-        push_padded(out, minute, 2);
-        out.push(':');
-        push_padded(out, second, 2);
+        write!(out, "T{hour:02}:{minute:02}:{second:02}").expect("writing to a string");
         if micro != 0 {
-            out.push('.');
-            push_padded(out, micro, 6);
+            write!(out, ".{micro:06}").expect("writing to a string");
         }
-    }
-}
-
-/// `value` in decimal, zero-padded to `width` digits (`{value:0width$}`).
-fn push_padded(out: &mut String, value: u32, width: usize) {
-    let mut digits = [0u8; 10];
-    let mut n = value;
-    let mut at = digits.len();
-    loop {
-        at -= 1;
-        digits[at] = b'0' + (n % 10) as u8;
-        n /= 10;
-        if n == 0 {
-            break;
-        }
-    }
-    for _ in (digits.len() - at)..width {
-        out.push('0');
-    }
-    for &d in &digits[at..] {
-        out.push(char::from(d));
     }
 }
 
@@ -238,7 +216,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn civil_days_round_trip_over_the_whole_python_range() {
+    fn civil_days_round_trip_over_the_whole_range() {
         let first = days_from_civil(1, 1, 1);
         let last = days_from_civil(9999, 12, 31);
         let mut expected = (1, 1, 1);

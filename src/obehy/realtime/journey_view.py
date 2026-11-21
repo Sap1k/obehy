@@ -1,7 +1,7 @@
-"""The replay diagnostics' view of `journey_sample` records (`emit/samples.py`; the shapes are in
-`compare.py`'s docstring): each journey of a sample with its whole calls and plan, rebuilt from
-records that carry only what changed. Pure: it reads records, never the core, so the
-diagnostics run the same on a stream written by Python or by the Rust worker.
+"""The replay diagnostics' view of `journey_sample` records (`obehy-rt compare --quality`; the
+shapes are in the module docs of `rust/obehy-rt/src/compare.rs`): each journey of a sample with
+its whole calls and plan, rebuilt from records that carry only what changed. Pure: it reads
+records, never the core.
 """
 
 from __future__ import annotations

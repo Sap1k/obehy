@@ -1,4 +1,4 @@
-"""Replay diagnostics for keyless sources (`infer/keyless`): coverage per episode.
+"""Replay diagnostics for keyless sources (`obehy-core` `infer/keyless`): coverage per episode.
 
 A group is one vehicle's run of observations with the same line and destination, split after
 `episode_gap_s` without one, as the inference's episodes are. `report.json` gets the counts;

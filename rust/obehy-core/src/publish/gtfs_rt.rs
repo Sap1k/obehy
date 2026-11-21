@@ -1,14 +1,11 @@
-//! Per-feed GTFS-RT from core state (BASE_PLAN.md section 30): port of
-//! `realtime/emit/gtfs_rt.py`. Matched vehicles only.
+//! Per-feed GTFS-RT from core state (BASE_PLAN.md section 30). Matched vehicles only.
 //!
-//! The bytes are exactly Python's: each entity is `SerializeToString(deterministic=True)` of a
-//! proto2 message (fields in field-number order, a set field written even at its default), the
-//! message a header field and entity fields framed by hand ([`field`]). prost writes fields in
-//! tag order and keeps proto2 presence through `Option`, so the messages below are the
-//! `gtfs-realtime.proto` fields Python sets, each `Option` set exactly where Python assigns.
-//! Coordinates and bearings are proto `float`: `f64 as f32`, rounded to nearest as C's cast.
+//! Each entity is encoded once (and cached while its inputs stay the same); the message is a
+//! header field and the entity fields framed by hand ([`field`]). prost writes fields in tag
+//! order and keeps proto2 presence through `Option`: a set field is written even at its
+//! default. Coordinates and bearings are proto `float` (`f64 as f32`).
 //!
-//! What is published (the Python module's docstring has the reasons): a live journey's
+//! What is published: a live journey's
 //! TripUpdate per published part with its vehicle; a finished one keeps the calls it made, no
 //! vehicle, for `lifecycle.publish_finished_s` after its last call; a lost one the calls it made
 //! and `NO_DATA` for every call ahead; a cancelled one `CANCELED` without calls. Vehicle
@@ -218,10 +215,10 @@ fn is_timed(status: CallStatus) -> bool {
 
 /// `int(value.timestamp())`.
 fn epoch(value: Instant) -> i64 {
-    value.timestamp_int()
+    value.unix_seconds()
 }
 
-/// A protobuf `uint64` from Python's int: negative would raise in Python.
+/// A protobuf `uint64`; panics on a negative value.
 fn unsigned(value: i64) -> u64 {
     u64::try_from(value).expect("a uint64 field takes no negative value")
 }
@@ -412,7 +409,7 @@ fn cancelled(instance: &Instance, part: &PartSpan) -> Vec<u8> {
 }
 
 /// What a journey's TripUpdate entities are made of; equal inputs give equal bytes. The calls
-/// compare by pointer (they are shared and replaced on change, as Python's tuples, and the
+/// compare by pointer (they are shared and replaced on change,, and the
 /// cache holds its `Arc`, so a pointer cannot be reused while cached): a miss only recomputes.
 #[derive(Debug)]
 struct TripInputs {
@@ -450,7 +447,7 @@ impl TripInputs {
 /// registry.
 pub type Identity<'a> = &'a dyn Fn(&VehicleId) -> String;
 
-/// A vehicle by its source form, `<source>:<source_vehicle_id>` (Python's `str`).
+/// A vehicle by its source form, `<source>:<source_vehicle_id>`.
 pub fn source_form(vehicle: &VehicleId) -> String {
     vehicle.to_string()
 }
@@ -459,7 +456,7 @@ pub fn source_form(vehicle: &VehicleId) -> String {
 /// their inputs are unchanged.
 ///
 /// Eviction: the cache holds exactly the journeys published by the last `serialize` (rebuilt
-/// each call, as Python's `trips`). Vehicle positions are not cached: an entity is a few fields
+/// each call. Vehicle positions are not cached: an entity is a few fields
 /// and building it costs what checking its inputs would.
 #[derive(Debug)]
 pub struct FeedEmitter {

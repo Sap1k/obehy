@@ -1,6 +1,5 @@
 //! The store, warm start's reader and the lookup broker against PostgreSQL (docs/RUST_PORT.md
-//! R7/R8; the Rust side of `tests/db/test_realtime_history.py` and `test_api.py`'s broker
-//! tests). Each test makes a small migrated database from the test database URL
+//! R7/R8; the Python worker's history and broker tests, ported). Each test makes a small migrated database from the test database URL
 //! (`OBEHY_TEST_DATABASE_URL` or `[database] test_url`) through `rust/tools/store_db.py` and
 //! drops it afterwards; without a URL the tests pass without running. No request leaves
 //! 127.0.0.1.

@@ -1,5 +1,4 @@
-//! Machine-local settings, read as Python reads them (`runtime_config.py`, `egress.py`): the
-//! database URL, the realtime secrets and the egress proxy list, each from the environment
+//! Machine-local settings, the same ones Python's `runtime_config.py` reads: the database URL, the realtime secrets and the egress proxy list, each from the environment
 //! before the gitignored `config/obehy.local.toml`; and where the shared data files are (the
 //! manifests, the policy, the SR70 catalogue), found from the repository layout.
 //!
@@ -10,7 +9,6 @@ use std::path::{Path, PathBuf};
 
 use obehy_core::config::Policy;
 use obehy_core::config::policy::POLICY_FILE;
-use obehy_core::py::text::strip;
 use toml::{Table, Value};
 
 pub const DATABASE_URL_ENV: &str = "OBEHY_DATABASE_URL";
@@ -69,10 +67,10 @@ impl Env for MapEnv {
     }
 }
 
-/// `os.environ.get(name, "").strip()`, None when empty.
+/// An environment variable, trimmed; None when empty.
 fn env_value(env: &dyn Env, name: &str) -> Option<String> {
     env.var(name)
-        .map(|v| strip(&v).to_owned())
+        .map(|v| v.trim().to_owned())
         .filter(|v| !v.is_empty())
 }
 
@@ -83,8 +81,8 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// The repository holding `src/obehy/realtime/sources`: the current directory or one above
-    /// it, else the executable's directory or one above it.
+    /// The repository (or the image's `/app`) holding `src/obehy/data/realtime/sources`: the
+    /// current directory or one above it, else the executable's directory or one above it.
     pub fn discover() -> Result<Paths, ConfigurationError> {
         let mut starts = Vec::new();
         if let Ok(cwd) = std::env::current_dir() {
@@ -107,15 +105,15 @@ impl Paths {
             }
         }
         Err(ConfigurationError(
-            "cannot find the Oběhy repository (src/obehy/realtime/sources) above the current \
+            "cannot find the Oběhy repository (src/obehy/data/realtime/sources) above the current \
              directory or the executable"
                 .to_owned(),
         ))
     }
 
-    /// The connector manifests (`manifest.SOURCES`).
+    /// The connector manifests.
     pub fn sources(&self) -> PathBuf {
-        self.root.join("src/obehy/realtime/sources")
+        self.root.join("src/obehy/data/realtime/sources")
     }
 
     pub fn data(&self) -> PathBuf {
@@ -337,7 +335,7 @@ pub fn load_database_url(config: &Path, env: &dyn Env) -> Result<String, Configu
     let Some(database) = document.get("database").and_then(Value::as_table) else {
         return Err(ConfigurationError("Missing [database] table".to_owned()));
     };
-    match database.get("url").and_then(Value::as_str).map(strip) {
+    match database.get("url").and_then(Value::as_str).map(str::trim) {
         Some(url) if !url.is_empty() => Ok(expandvars(url, env)),
         _ => Err(ConfigurationError(format!(
             "Missing non-empty 'url' in [database] of {}",
@@ -358,7 +356,7 @@ pub fn load_test_database_url(config: &Path, env: &dyn Env) -> Option<String> {
         .as_table()?
         .get("test_url")?
         .as_str()
-        .map(strip)?;
+        .map(str::trim)?;
     (!url.is_empty()).then(|| expandvars(url, env))
 }
 
@@ -392,7 +390,7 @@ pub fn load_secrets<'a>(
             if found.contains_key(name) {
                 continue;
             }
-            if let Some(value) = table.get(name).and_then(Value::as_str).map(strip)
+            if let Some(value) = table.get(name).and_then(Value::as_str).map(str::trim)
                 && !value.is_empty()
             {
                 found.insert(name.to_owned(), value.to_owned());
@@ -435,7 +433,7 @@ pub fn load_proxy_list(
         table
             .get("proxy_list_file")
             .and_then(Value::as_str)
-            .map(|s| strip(s).to_owned())
+            .map(|s| s.trim().to_owned())
             .filter(|s| !s.is_empty())
     });
     Ok(saved.map(|s| expandvars(&s, env)))

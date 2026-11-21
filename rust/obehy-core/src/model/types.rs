@@ -1,11 +1,7 @@
-//! Core realtime types (docs/R1_SLICE.md section 1): identity, instance state, effects. Port
-//! of `realtime/model.py`, as plain data.
-//!
-//! Python's `evolve` helpers are struct update syntax here (`Instance { lifecycle, ..old }`).
-//! Containers that Python iterates in insertion order (`FeedState.vehicles`, `.instances`) are
-//! `IndexMap`s; remove with `shift_remove` to keep Python's order.
+//! Core realtime types (docs/R1_SLICE.md section 1): identity, instance state, effects, as
+//! plain data.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::sync::Arc;
 
@@ -13,8 +9,7 @@ use indexmap::IndexMap;
 
 use super::facts::*;
 
-/// An `IndexMap` with a fast hasher: iteration follows insertion, never the hash, so the
-/// hasher cannot change any output.
+/// An `IndexMap` with a fast hasher: iteration follows insertion, never the hash.
 pub type FastIndexMap<K, V> = IndexMap<K, V, rustc_hash::FxBuildHasher>;
 use crate::time::{Date, Instant};
 
@@ -32,7 +27,7 @@ impl fmt::Display for VehicleId {
 }
 
 /// The public and history identity of an operating instance (BASE_PLAN.md section 29),
-/// ordered by (feed, namespace, key, service date) as the Python dataclass.
+/// ordered by (feed, namespace, key, service date).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct JourneyKey {
     pub feed: Feed,
@@ -483,8 +478,8 @@ pub struct Traversal {
 #[derive(Debug, Clone)]
 pub struct FeedState {
     pub feed: Feed,
-    pub vehicles: FastIndexMap<VehicleId, VehicleState>,
-    pub instances: FastIndexMap<JourneyKey, Instance>,
+    pub vehicles: BTreeMap<VehicleId, VehicleState>,
+    pub instances: BTreeMap<JourneyKey, Instance>,
     /// Journeys whose estimates are out of date (only ever iterated sorted).
     pub dirty: BTreeSet<JourneyKey>,
     /// Recent traversals of each hop, oldest first (insertion order kept).
@@ -495,8 +490,8 @@ impl FeedState {
     pub fn new(feed: Feed) -> FeedState {
         FeedState {
             feed,
-            vehicles: FastIndexMap::default(),
-            instances: FastIndexMap::default(),
+            vehicles: BTreeMap::new(),
+            instances: BTreeMap::new(),
             dirty: BTreeSet::new(),
             hops: FastIndexMap::default(),
         }

@@ -1,5 +1,5 @@
-//! PID alerts from Golemio (docs/sources/pid.md, Alerts): port of
-//! `realtime/sources/pid_alerts.py`, the code decoders `pid-alerts` (the VYMI events as a
+//! PID alerts from Golemio (docs/sources/pid.md, Alerts): the code decoders `pid-alerts` (the
+//! VYMI events as a
 //! GTFS-RT alerts dataset) and `pid-infotexts` (the infotexts departure boards show, with a
 //! daily window expanded into periods, PID-Q10).
 
@@ -8,7 +8,7 @@ use obehy_core::time::{Date, Instant, ServiceTime, iso, local_date};
 
 use crate::error::PayloadError;
 use crate::reader::gtfs_rt::{self, cause_name, effect_name, severity_name};
-use crate::reader::json::{self, Json};
+use crate::reader::json::{self, Value, truthy};
 
 pub const SOURCE: &str = "pid";
 pub const ALERTS: &str = "alerts";
@@ -40,78 +40,37 @@ fn translated(value: Option<&gtfs_rt::TranslatedString>) -> Texts {
     found
 }
 
-/// `datetime.fromtimestamp(epoch, UTC)`.
+/// Seconds since the epoch.
 fn at(epoch: u64) -> Result<Instant, PayloadError> {
-    let seconds = i64::try_from(epoch)
+    i64::try_from(epoch)
         .ok()
         .filter(|s| *s < 253_402_300_800)
-        .ok_or_else(|| PayloadError::value(format!("year is out of range ({epoch})")))?;
-    Ok(Instant::from_unix_seconds(seconds))
+        .map(Instant::from_unix_seconds)
+        .ok_or_else(|| PayloadError::new(format!("time out of range ({epoch})")))
 }
 
+/// `YYYYMMDD`.
 fn day(start: &str) -> Result<Date, PayloadError> {
-    let c: Vec<char> = start.chars().collect();
-    let part = |a: usize, b: usize| -> Result<i32, PayloadError> {
-        let s: String = c
-            .get(a..b.min(c.len()))
-            .unwrap_or_default()
-            .iter()
-            .collect();
-        obehy_core::py::text::int_from_str(&s)
-            .and_then(|n| n.small())
-            .and_then(|n| i32::try_from(n).ok())
-            .ok_or_else(|| PayloadError::int_literal(&s))
-    };
-    let (y, m, d) = (part(0, 4)?, part(4, 6)?, part(6, c.len())?);
-    let ok = |n: i32| u32::try_from(n).ok();
-    ok(m)
-        .zip(ok(d))
-        .and_then(|(m, d)| Date::new(y, m, d))
-        .ok_or_else(|| PayloadError::value("day is out of range for month"))
+    let bad = || PayloadError::new(format!("bad start date {start:?}"));
+    if start.len() != 8 || !start.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(bad());
+    }
+    let part = |range: std::ops::Range<usize>| start[range].parse().map_err(|_| bad());
+    Date::new(part(0..4)? as i32, part(4..6)?, part(6..8)?).ok_or_else(bad)
 }
 
-/// Entities deduplicated and sorted by `(kind, identifier, service_date or "")`; a trip named
-/// both with and without a date cannot be compared in Python (TypeError).
-fn sorted_entities(found: Vec<AlertEntity>) -> Result<Vec<AlertEntity>, PayloadError> {
-    let mut unique: Vec<AlertEntity> = Vec::new();
-    for e in found {
-        if !unique.contains(&e) {
-            unique.push(e);
-        }
-    }
-    for a in &unique {
-        for b in &unique {
-            if a.kind == b.kind
-                && a.identifier == b.identifier
-                && a.service_date.is_some() != b.service_date.is_some()
-            {
-                return Err(PayloadError {
-                    class: "TypeError",
-                    message: "'<' not supported between instances of 'datetime.date' and 'str'"
-                        .into(),
-                });
-            }
-        }
-    }
-    unique.sort_by(|a, b| {
-        (a.kind.as_str(), a.identifier.as_str(), a.service_date).cmp(&(
-            b.kind.as_str(),
-            b.identifier.as_str(),
-            b.service_date,
-        ))
+/// Entities deduplicated and sorted by `(kind, identifier, service_date)`.
+fn sorted_entities(mut found: Vec<AlertEntity>) -> Result<Vec<AlertEntity>, PayloadError> {
+    found.sort_by(|a, b| {
+        (&a.kind, &a.identifier, a.service_date).cmp(&(&b.kind, &b.identifier, b.service_date))
     });
-    Ok(unique)
+    found.dedup();
+    Ok(found)
 }
 
 /// A GTFS-RT alerts dataset; entities without an alert, and deleted ones, are skipped.
 pub fn decode_alerts(body: &[u8], _received_at: Instant) -> Result<Vec<Alert>, PayloadError> {
-    let message = gtfs_rt::parse(body)
-        .map_err(|_| {
-            // upb's text for any malformed message.
-            PayloadError::payload(
-                "not a GTFS-RT message: Error parsing message with type 'transit_realtime.FeedMessage': Wire format was corrupt",
-            )
-        })?;
+    let message = gtfs_rt::parse(body).map_err(|_| PayloadError::new("not a GTFS-RT message"))?;
     let mut alerts = Vec::new();
     for entity in &message.entity {
         let Some(a) = &entity.alert else {
@@ -192,58 +151,45 @@ pub fn decode_alerts(body: &[u8], _received_at: Instant) -> Result<Vec<Alert>, P
 }
 
 /// An infotext's time: aware ISO or none; anything else that is no ISO time is an error.
-fn time(value: Option<&Json>) -> Result<Option<Instant>, PayloadError> {
-    let Some(text) = value.and_then(Json::as_str).filter(|t| !t.is_empty()) else {
+fn time(value: Option<&Value>) -> Result<Option<Instant>, PayloadError> {
+    let Some(text) = value.and_then(Value::as_str).filter(|t| !t.is_empty()) else {
         return Ok(None);
     };
-    let parsed = iso::parse_datetime(text).map_err(|e| PayloadError::value(e.0))?;
+    let parsed = iso::parse_datetime(text).map_err(|e| PayloadError::new(e.0))?;
     if parsed.offset_us.is_none() {
         return Ok(None);
     }
     parsed
         .instant()
         .map(Some)
-        .map_err(|e| PayloadError::value(e.0))
+        .map_err(|e| PayloadError::new(e.0))
 }
 
-/// `HH:MM:SS` as seconds; anything else is Python's ValueError.
+/// `HH:MM:SS` as seconds.
 fn seconds(clock: &str) -> Result<i32, PayloadError> {
-    let parts: Vec<&str> = clock.split(':').collect();
-    if parts.len() != 3 {
-        let message = if parts.len() < 3 {
-            format!(
-                "not enough values to unpack (expected 3, got {})",
-                parts.len()
-            )
-        } else {
-            "too many values to unpack (expected 3)".to_owned()
-        };
-        return Err(PayloadError::value(message));
+    let bad = || PayloadError::new(format!("bad clock time {clock:?}"));
+    let parts: Vec<i32> = clock
+        .split(':')
+        .map(|p| p.trim().parse().map_err(|_| bad()))
+        .collect::<Result<_, _>>()?;
+    match parts[..] {
+        [h, m, s] => Ok(h * 3600 + m * 60 + s),
+        _ => Err(bad()),
     }
-    let mut total: i64 = 0;
-    for (part, scale) in parts.iter().zip([3600, 60, 1]) {
-        let n = obehy_core::py::text::int_from_str(part)
-            .ok_or_else(|| PayloadError::int_literal(part))?
-            .small()
-            .and_then(|n| i64::try_from(n).ok())
-            .ok_or_else(|| PayloadError::value("seconds out of range"))?;
-        total += n * scale;
-    }
-    i32::try_from(total).map_err(|_| PayloadError::value("seconds out of range"))
 }
 
 fn periods(
     start: Option<Instant>,
     end: Option<Instant>,
-    repeat: Option<&Json>,
+    repeat: Option<&Value>,
     received_at: Instant,
 ) -> Result<Vec<Period>, PayloadError> {
     let begin = repeat
         .and_then(|r| r.get("time_start"))
-        .and_then(Json::as_str);
+        .and_then(Value::as_str);
     let finish = repeat
         .and_then(|r| r.get("time_end"))
-        .and_then(Json::as_str);
+        .and_then(Value::as_str);
     let (Some(begin), Some(finish)) = (begin, finish) else {
         return Ok(vec![Period { start, end }]);
     };
@@ -264,8 +210,8 @@ fn periods(
             continue;
         }
         found.push(Period {
-            start: Some(start.map_or(ws, |s| if s > ws { s } else { ws })),
-            end: Some(end.map_or(we, |e| if e < we { e } else { we })),
+            start: Some(start.map_or(ws, |s| s.max(ws))),
+            end: Some(end.map_or(we, |e| e.min(we))),
         });
     }
     Ok(found)
@@ -273,19 +219,12 @@ fn periods(
 
 /// The infotexts list; entries without an id or a text are skipped.
 pub fn decode_infotexts(body: &[u8], received_at: Instant) -> Result<Vec<Alert>, PayloadError> {
-    let document = json::loads(body).map_err(|e| match e {
-        json::JsonError::Value(m) => PayloadError::value(m),
-        other => PayloadError::payload(format!("not JSON: {}", other.message())),
-    })?;
-    let Json::Array(items) = document else {
-        return Err(PayloadError::payload("infotexts are not a list"));
+    let Value::Array(items) = json::parse(body, "not JSON")? else {
+        return Err(PayloadError::new("infotexts are not a list"));
     };
     let mut alerts = Vec::new();
     for item in &items {
-        if !matches!(item, Json::Object(_)) {
-            continue;
-        }
-        let (Some(Json::Str(identifier)), Some(Json::Str(text))) =
+        let (Some(Value::String(identifier)), Some(Value::String(text))) =
             (item.get("id"), item.get("text"))
         else {
             continue;
@@ -293,14 +232,14 @@ pub fn decode_infotexts(body: &[u8], received_at: Instant) -> Result<Vec<Alert>,
         if text.is_empty() {
             continue;
         }
-        let stops: &[Json] = match item.get("related_stops") {
-            Some(Json::Array(s)) => s,
-            _ => &[],
-        };
-        let repeat = item.get("repeat").filter(|r| r.truthy());
+        let stops = item
+            .get("related_stops")
+            .and_then(Value::as_array)
+            .map_or(&[][..], Vec::as_slice);
+        let repeat = item.get("repeat").filter(|r| truthy(r));
         let mut entities: Vec<AlertEntity> = Vec::new();
         for stop in stops {
-            if let Some(Json::Str(id)) = stop.get("id") {
+            if let Some(Value::String(id)) = stop.get("id") {
                 let entity = AlertEntity {
                     kind: "stop".into(),
                     namespace: STOPS.into(),
@@ -313,13 +252,13 @@ pub fn decode_infotexts(body: &[u8], received_at: Instant) -> Result<Vec<Alert>,
             }
         }
         entities.sort_by(|a, b| a.identifier.cmp(&b.identifier));
-        let severity = match item.get("priority").map(Json::py_str).as_deref() {
+        let severity = match item.get("priority").map(json::text).as_deref() {
             Some("low") => "INFO",
             Some("normal") => "WARNING",
             Some("high") => "SEVERE",
             _ => "UNKNOWN_SEVERITY",
         };
-        let text_en = item.get("text_en").and_then(Json::as_str);
+        let text_en = item.get("text_en").and_then(Value::as_str);
         alerts.push(Alert {
             source: SOURCE.into(),
             channel: INFOTEXTS.into(),
@@ -340,7 +279,7 @@ pub fn decode_infotexts(body: &[u8], received_at: Instant) -> Result<Vec<Alert>,
             effect_detail: Vec::new(),
             entities,
             details: match item.get("display_type") {
-                Some(Json::Str(d)) => vec![("display_type".into(), d.clone())],
+                Some(Value::String(d)) => vec![("display_type".into(), d.clone())],
                 _ => Vec::new(),
             },
         });

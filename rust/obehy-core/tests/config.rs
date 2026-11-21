@@ -1,17 +1,15 @@
-//! Policy and manifests: every shipped file loads, to the same values Python loads
-//! (`tools/gen_fixtures.py` dumps Python's dataclasses), and the refusals of
-//! `tests/unit/realtime/test_foundation.py` and `tests/unit/test_rt_record.py` hold.
+//! Policy and manifests: every shipped file loads, and the refusals of the Python worker's
+//! `test_foundation.py` and `test_rt_record.py` hold.
 
 mod common;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use obehy_core::config::manifest::{self, Channel, Lookup, RECORDER_FILTERS, Source};
-use obehy_core::config::policy::{ByMode, POLICY_FILE, WarmReplayMode};
+use obehy_core::config::manifest::{self, Channel, RECORDER_FILTERS};
+use obehy_core::config::policy::{POLICY_FILE, WarmReplayMode};
 use obehy_core::config::{ConfigError, Policy};
 use obehy_core::model::SourceSemantics;
-use serde_json::{Value, json};
 
 fn policy_path() -> PathBuf {
     common::repo()
@@ -20,133 +18,11 @@ fn policy_path() -> PathBuf {
 }
 
 fn sources_dir() -> PathBuf {
-    common::repo().join("src/obehy/realtime/sources")
+    common::repo().join("src/obehy/data/realtime/sources")
 }
 
 fn policy_text() -> String {
     std::fs::read_to_string(policy_path()).unwrap()
-}
-
-fn by_mode(value: &ByMode) -> Value {
-    json!({"default": value.default, "overrides": value.overrides.iter().map(|(n, v)| json!([n, v])).collect::<Vec<_>>()})
-}
-
-/// Python's `dataclasses.asdict(load_policy())`, from the Rust policy.
-fn policy_as_python(p: &Policy) -> Value {
-    let t = &p.time;
-    let l = &p.lifecycle;
-    let g = &p.progress;
-    let d = &p.prediction;
-    let mut shared = p.journey.shared.clone();
-    shared.sort();
-    json!({
-        "version": p.version,
-        "journey": {"namespaces": p.journey.namespaces, "shared": shared},
-        "time": {"pre_trip_s": by_mode(&t.pre_trip_s), "max_delay_s": by_mode(&t.max_delay_s),
-                 "vehicle_day_gap_s": t.vehicle_day_gap_s, "max_clock_skew_s": t.max_clock_skew_s},
-        "lifecycle": {"stale_after_s": by_mode(&l.stale_after_s), "predict_without_data_s": by_mode(&l.predict_without_data_s),
-                      "arrival_radius_m": l.arrival_radius_m, "departure_margin_m": l.departure_margin_m,
-                      "terminal_radius_m": l.terminal_radius_m, "publish_finished_s": by_mode(&l.publish_finished_s),
-                      "forget_after_s": l.forget_after_s},
-        "progress": {"gps_sigma_m": g.gps_sigma_m, "shape_sigma_m": g.shape_sigma_m, "chord_min_sigma_m": g.chord_min_sigma_m,
-                     "chord_k": g.chord_k, "chord_max_sigma_m": g.chord_max_sigma_m, "reach_sigmas": g.reach_sigmas,
-                     "bearing_sigma_deg": g.bearing_sigma_deg, "chord_bearing_sigma_deg": g.chord_bearing_sigma_deg,
-                     "jitter_m": g.jitter_m, "off_path_log_p": g.off_path_log_p, "max_speed_mps": by_mode(&g.max_speed_mps),
-                     "loss_sigma_base_s": g.loss_sigma_base_s, "loss_sigma_rate": g.loss_sigma_rate,
-                     "gain_sigma_base_s": g.gain_sigma_base_s, "gain_sigma_rate": g.gain_sigma_rate,
-                     "start_lateness_sigma_s": g.start_lateness_sigma_s, "start_early_sigma_s": g.start_early_sigma_s,
-                     "beam": g.beam, "prune": g.prune, "agree_within": g.agree_within, "max_commit_lag_s": g.max_commit_lag_s,
-                     "max_event_interval_s": g.max_event_interval_s, "max_inferred_spread_s": g.max_inferred_spread_s,
-                     "max_extrapolate_s": g.max_extrapolate_s, "off_route_hold_s": g.off_route_hold_s,
-                     "move_sigma_m": g.move_sigma_m, "move_slack_m": g.move_slack_m, "reckon_slack": g.reckon_slack,
-                     "standing_m": g.standing_m, "stop_ahead_calls": g.stop_ahead_calls, "stop_off_shape_m": g.stop_off_shape_m,
-                     "shape_simplify_deg": g.shape_simplify_deg, "merge_m": g.merge_m},
-        "prediction": {"min_dwell_s": by_mode(&d.min_dwell_s), "long_dwell_s": by_mode(&d.long_dwell_s),
-                       "min_long_dwell_s": by_mode(&d.min_long_dwell_s), "max_early_departure_s": by_mode(&d.max_early_departure_s),
-                       "runtime_decay_s": d.runtime_decay_s, "runtime_prior_weight": d.runtime_prior_weight,
-                       "runtime_ratio_max": d.runtime_ratio_max, "runtime_keep_decays": d.runtime_keep_decays,
-                       "publish_deadband_s": by_mode(&d.publish_deadband_s), "floor_fresh_s": by_mode(&d.floor_fresh_s),
-                       "dwell_credit_s": by_mode(&d.dwell_credit_s), "early_keep": by_mode(&d.early_keep)},
-        "delay_discard_below_s": p.delay.discard_below_s,
-        "warm_replay_mode": match p.warm_replay.mode { WarmReplayMode::Vehicles => "vehicles", WarmReplayMode::Window => "window" },
-        "warm_replay_max_hours": p.warm_replay.max_hours,
-        "emit_tick_s": p.emit.tick_s,
-        "sweep_index_every_s": p.emit.sweep_index_every_s,
-        "keep_index_s": p.emit.keep_index_s,
-        "compact_index_at_s": p.emit.compact_index_at_s,
-        "retention": {"observation_hours": p.retention.observation_hours, "raw_days": by_mode(&p.retention.raw_days),
-                      "history_days": p.retention.history_days},
-        "guard": {"free_gb": p.guard.free_gb, "min_raw_days": p.guard.min_raw_days, "min_history_days": p.guard.min_history_days},
-        "egress": {"refresh_s": p.egress.refresh_s, "cooldown_s": p.egress.cooldown_s},
-        "rail": {"position_preference": p.rail.position_preference, "position_fresh_s": p.rail.position_fresh_s,
-                 "position_sigma_m": by_mode(&p.rail.position_sigma_m), "event_tolerance_s": p.rail.event_tolerance_s,
-                 "predictor": p.rail.predictor.as_str()},
-        "boards": {"min_boarding_points": p.boards.min_boarding_points, "window_min": p.boards.window_min,
-                   "due_refresh_s": p.boards.due_refresh_s, "early_min": p.boards.early_min, "near_min": p.boards.near_min,
-                   "near_refresh_s": p.boards.near_refresh_s, "imminent_min": p.boards.imminent_min,
-                   "imminent_refresh_s": p.boards.imminent_refresh_s, "ceiling_per_min": p.boards.ceiling_per_min,
-                   "slowdown_s": p.boards.slowdown_s, "slow_latency_factor": p.boards.slow_latency_factor},
-        "keyless": {"candidate_window_s": p.keyless.candidate_window_s, "episode_gap_s": p.keyless.episode_gap_s,
-                    "accept_s": p.keyless.accept_s, "gps_accept_s": p.keyless.gps_accept_s, "margin_s": p.keyless.margin_s,
-                    "max_path_distance_m": p.keyless.max_path_distance_m, "departure_radius_m": p.keyless.departure_radius_m,
-                    "confirm_departures": p.keyless.confirm_departures},
-    })
-}
-
-fn semantics(s: &SourceSemantics) -> Value {
-    json!({"pre_trip_delay_is_elapsed": s.pre_trip_delay_is_elapsed, "pre_trip_after_end_is_stale": s.pre_trip_after_end_is_stale,
-           "unchanged_entry_is_no_news": s.unchanged_entry_is_no_news, "delay_floor_minute": s.delay_floor_minute})
-}
-
-fn channel(c: &Channel) -> Value {
-    json!({
-        "source": c.source, "channel": c.channel, "method": c.method, "url": c.url,
-        "interval_s": c.interval_s, "timeout_s": c.timeout_s,
-        "headers": c.headers.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<_, _>>(),
-        "body": c.body.as_ref().map(|b| String::from_utf8(b.clone()).unwrap()),
-        "filter": c.filter, "backoff_after": c.backoff_after, "max_backoff_s": c.max_backoff_s,
-        "feeds": c.feeds, "live_feeds": c.live_feeds, "capabilities": c.capabilities,
-        "core_semantics": semantics(&c.core_semantics), "proxied": c.proxied, "demand": c.demand,
-        "auth": c.auth.as_ref().map(|a| json!({"header": a.header, "secret": a.secret})),
-        "cursor": c.cursor.as_ref().map(|k| json!({"header": k.header, "param": k.param, "max_age_s": k.max_age_s})),
-    })
-}
-
-fn lookup(l: &Lookup) -> Value {
-    json!({
-        "source": l.source, "name": l.name, "kind": l.kind, "feeds": l.feeds, "request": channel(&l.request),
-        "ttl_s": l.ttl_s, "not_found_ttl_s": l.not_found_ttl_s, "retry_s": l.retry_s,
-        "rate": {"per_minute": l.rate.per_minute, "burst": l.rate.burst}, "daily_budget": l.daily_budget,
-        "applies": {"keys": l.applies.keys.iter().map(|(n, r)| json!([n, r.as_str()])).collect::<Vec<_>>(),
-                    "days_around": l.applies.days_around},
-    })
-}
-
-fn source(s: &Source) -> Value {
-    json!({
-        "source": s.source, "title": s.title, "covers": s.covers,
-        "channels": s.channels.iter().map(channel).collect::<Vec<_>>(),
-        "lookups": s.lookups.iter().map(lookup).collect::<Vec<_>>(),
-        "physical_vehicles": s.physical_vehicles.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<_, _>>(),
-    })
-}
-
-#[test]
-fn the_policy_and_every_manifest_load_as_in_python() {
-    let expected = common::json("config.json");
-    assert_eq!(expected["policy_file"], POLICY_FILE);
-    let policy = Policy::load(&policy_path()).unwrap();
-    assert_eq!(policy_as_python(&policy), expected["policy"]);
-    let filters: Vec<&str> = expected["filters"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|f| f.as_str().unwrap())
-        .collect();
-    assert_eq!(filters, RECORDER_FILTERS);
-    let sources = manifest::load_sources(&sources_dir(), &RECORDER_FILTERS).unwrap();
-    let got: Vec<Value> = sources.iter().map(source).collect();
-    assert_eq!(Value::Array(got), expected["sources"]);
 }
 
 /// `test_foundation.test_policy_loads_and_resolves_modes` and the journey key test.
@@ -462,7 +338,7 @@ fn manifest_errors() {
 
 #[test]
 fn every_shipped_decode_section_loads() {
-    let dir = common::repo().join("src/obehy/realtime/sources");
+    let dir = common::repo().join("src/obehy/data/realtime/sources");
     let sources = manifest::load_sources(&dir, &RECORDER_FILTERS).expect("manifests load");
     for source in &sources {
         for channel in &source.channels {

@@ -1,8 +1,7 @@
 """`report.json` (and `keyless.jsonl`) of a replay, read from its output stream: the records of
-`obehy rt compare --level output --diagnostics` (`compare.py`'s docstring has their shapes), fed
-one at a time in stream order. `obehy rt replay` feeds them as it runs; `obehy rt report
---from-stream` reads them from a file, also one the Rust worker wrote. Nothing here reads the
-core.
+`obehy-rt compare --level output --diagnostics` (their shapes are in the module docs of
+`rust/obehy-rt/src/compare.rs`), fed one at a time in stream order. `obehy rt report
+--from-stream` reads them from a file. Nothing here reads the core.
 
 The report:
 

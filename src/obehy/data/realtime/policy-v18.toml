@@ -39,7 +39,7 @@ arrival_radius_m = 60
 departure_margin_m = 40
 # Bus stations and stands lie up to a few hundred metres from the coordinates the timetable
 # gives a first or last stop, often off the path: a vehicle standing within this of either is at
-# it (`timeline/stops.py`). Arriva Express parks about 320 m from its Prague terminus.
+# it (`timeline/stops`). Arriva Express parks about 320 m from its Prague terminus.
 terminal_radius_m = 400
 # A finished journey keeps its trip update (the calls it made) this long after its last call,
 # so consumers do not revert it to the timetable; a lost one keeps its calls made until forgotten.
@@ -197,12 +197,12 @@ tick_s = 10
 sweep_index_every_s = 3600
 keep_index_s = 14400
 compact_index_at_s = 12600
-# The Rust worker's vehicle book forgets a (source, vehicle) report no observation named for this
-# long (a returning one is identified afresh). Python never forgets and ignores this key.
+# The worker's vehicle book forgets a (source, vehicle) report no observation named for this
+# long (a returning one is identified afresh).
 forget_reports_s = 172800
-# The Rust worker hands polls to the core in the order they were received, as replay runs them;
+# The worker hands polls to the core in the order they were received, as replay runs them;
 # a poll still being archived or decoded after this long no longer holds back the polls and ticks
-# received after it (logged; it runs when it comes). Python ignores this key.
+# received after it (logged; it runs when it comes).
 poll_stall_s = 30
 
 [retention]

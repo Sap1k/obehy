@@ -1,11 +1,6 @@
-//! Connector manifests, `realtime/sources/<source>.toml`: port of `realtime/manifest.py`
-//! (docs/R1_SLICE.md section 4). Checked key by key as Python checks them, in the same order
-//! and with the same messages, so a manifest is accepted or refused alike by both: unknown
-//! keys pass everywhere except `[channel.semantics]` (and a stray `egress`), defaults are
-//! Python's.
-//!
-//! Patterns in `applies.keys` are compiled with the `regex` crate; Python compiles them with
-//! `re` (the shipped one, `^Tr:1154:`, means the same in both).
+//! Connector manifests, `data/realtime/sources/<source>.toml` (docs/R1_SLICE.md section 4), checked
+//! key by key: unknown keys pass everywhere except `[channel.semantics]` (and a stray `egress`).
+//! Patterns in `applies.keys` are compiled with the `regex` crate.
 
 use std::path::Path;
 
@@ -202,15 +197,13 @@ fn fail<T>(message: String) -> Result<T, ConfigError> {
     Err(ConfigError::Manifest(message))
 }
 
-/// Python's `repr` of a key name in messages.
+/// A key name in messages.
 fn quoted(key: &str) -> String {
     format!("'{key}'")
 }
 
-/// `_IDENTIFIER.match`: `^[a-z0-9][a-z0-9-]*$`, where Python's `$` also matches before a final
-/// newline.
+/// `^[a-z0-9][a-z0-9-]*$`.
 fn identifier(text: &str) -> bool {
-    let text = text.strip_suffix('\n').unwrap_or(text);
     let mut chars = text.chars();
     chars
         .next()
@@ -238,9 +231,7 @@ fn positive(t: &Table, key: &str, at: &str) -> Result<f64, ConfigError> {
         Some(Value::Float(x)) => *x,
         _ => f64::NAN,
     };
-    // Python: `value <= 0` refuses; NaN passes that test (TOML `nan`), as here.
-    let refused = value <= 0.0;
-    if matches!(t.get(key), Some(Value::Integer(_) | Value::Float(_))) && !refused {
+    if value > 0.0 {
         return Ok(value);
     }
     fail(format!("{at}: {} must be a positive number", quoted(key)))

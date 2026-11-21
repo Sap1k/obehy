@@ -110,7 +110,7 @@ impl Vocabulary {
     }
 
     /// An identifier as compared (a plate: letters and digits, upper case). Panics on a scheme
-    /// that is not one (Python raises).
+    /// that is not one.
     pub fn normalise(&self, scheme: &str, value: &str) -> String {
         match self.identifiers.get(scheme).map(String::as_str) {
             Some("letters_digits") => value

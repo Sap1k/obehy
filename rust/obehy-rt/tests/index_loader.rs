@@ -1,8 +1,7 @@
-//! The index loader over serving tables (R3): `tests/unit/realtime/test_index_running_only.py`
-//! and the loader cases of `tests/db/test_realtime_index.py`, with the tables built in memory
-//! as `tests/realtime/builder.py`'s `serving_rows` and `tests/db/serving_fixture.py` write them.
-//! The same loader over PostgreSQL and over the real releases' Parquet is checked against
-//! Python by `rust/tools/index_crosscheck.py`.
+//! The index loader over serving tables (R3): the Python worker's `test_index_running_only.py`
+//! and the loader cases of its `test_realtime_index.py`, with the tables built in memory as its
+//! timetable builder and `tests/db/serving_fixture.py` wrote them. The loader over PostgreSQL
+//! and over a release's Parquet read the same rows (`examples/index_parity.rs`).
 
 use obehy_core::index::{IndexLoader, KeyRef};
 use obehy_core::model::Feed;

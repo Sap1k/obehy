@@ -2,12 +2,11 @@
 config, without the realtime worker (docs/RUST_PORT.md, "What runs where").
 
 - Prague time at the edge: `PRAGUE`, `Instant`, `instant`, `ServiceTime`, `local_date` and the
-  UTC text of the output stream. The worker's own conversions (`realtime/times.py`) build on
-  these until the switch; after it this is the only Python module that converts times.
+  UTC text of the output stream. This is the only Python module that converts times.
 - A few policy values (`policy-vNN.toml`): the journey namespaces, the vehicle-day gap, the
-  retention windows and the disk guard.
-- From the connector manifests (`realtime/sources/*.toml`): the sources' descriptions and live
-  feeds (the public feed list) and the declared lookups (which trips the API offers a lazy
+  retention windows, the disk guard and the keyless episode gap the replay report reads.
+- From the connector manifests (`data/realtime/sources/*.toml`): the sources' descriptions and
+  live feeds (the public feed list) and the declared lookups (which trips the API offers a lazy
   detail for).
 
 Only those fields are read, and only they are checked; the rest of both schemas is the Rust
@@ -29,7 +28,7 @@ from zoneinfo import ZoneInfo
 _PACKAGE = Path(__file__).resolve().parent
 DATA = _PACKAGE / "data" / "realtime"
 POLICY = DATA / "policy-v18.toml"
-SOURCES = _PACKAGE / "realtime" / "sources"
+SOURCES = DATA / "sources"
 
 FEED_NAMES = ("jdf", "czptt")
 PREDICTORS = ("anchor_change", "sz", "propagate")  # policy `[rail] predictor`
@@ -210,6 +209,7 @@ class PolicyValues:
     vehicle_day_gap_s: int  # a vehicle's day ends at a gap this long (circulations)
     retention: Retention
     guard: Guard
+    keyless_episode_gap_s: int  # the replay report's keyless episodes (`[keyless]`)
 
 
 def read_policy(path: Path) -> PolicyValues:
@@ -229,6 +229,7 @@ def read_policy(path: Path) -> PolicyValues:
     retention = _table(document, "retention", where)
     raw_days = _table(retention, "raw_days", f"{where}retention.")
     guard = _table(document, "guard", where)
+    keyless = _table(document, "keyless", where)
     return PolicyValues(
         journey_namespaces=tuple(cast(list[str], namespaces)),
         vehicle_day_gap_s=_integer(time_table, "vehicle_day_gap_s", f"{where}time."),
@@ -249,6 +250,7 @@ def read_policy(path: Path) -> PolicyValues:
             min_raw_days=_integer(guard, "min_raw_days", f"{where}guard."),
             min_history_days=_integer(guard, "min_history_days", f"{where}guard."),
         ),
+        keyless_episode_gap_s=_integer(keyless, "episode_gap_s", f"{where}keyless."),
     )
 
 

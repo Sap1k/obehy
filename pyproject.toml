@@ -9,11 +9,9 @@ dependencies = [
   "gtfs-realtime-bindings>=3.0.0",
   "psycopg[binary,pool]>=3.3,<4",
   "pyarrow>=25,<26",
-  "pyproj>=3.7,<4",
   "rich>=14,<15",
   "shapely>=2.1,<3",
   "uvicorn[standard]>=0.54,<1",
-  "zstandard>=0.23,<1",
 ]
 
 [project.scripts]
@@ -70,145 +68,49 @@ exclude = ["converters"]
 root_package = "obehy"
 include_external_packages = true
 
+# The realtime worker is the Rust binary obehy-rt (rust/, docs/RUST_PORT.md); its crates' own
+# dependency direction is checked by rust/obehy-rt/tests/dependency_direction.rs. What stays
+# Python of the realtime side reads what it leaves: the database, the output stream, the files.
 [[tool.importlinter.contracts]]
-name = "The realtime core is pure: no database, network, filesystem services or connectors"
+name = "The realtime config and diagnostics are pure: no database, network or release side"
 type = "forbidden"
 source_modules = [
-    "obehy.realtime.model",
-    "obehy.realtime.facts",
-    "obehy.realtime.index",
-    "obehy.realtime.geo",
-    "obehy.realtime.times",
-    "obehy.realtime.core",
-    "obehy.realtime.infer",
-    "obehy.realtime.timeline",
-    "obehy.realtime.policy",
-    "obehy.realtime.model_json",
-    "obehy.realtime.runs",
+    "obehy.realtime_config",
+    "obehy.realtime.disk_guard",
     "obehy.realtime.evaluate",
+    "obehy.realtime.journey_view",
+    "obehy.realtime.keyless_report",
+    "obehy.realtime.names",
     "obehy.realtime.quality",
     "obehy.realtime.quality_checks",
-    "obehy.realtime.journey_view",
-    "obehy.realtime.names",
-    "obehy.realtime.platforms",
-    "obehy.realtime.compositions",
-    "obehy.realtime.disk_guard",
-    "obehy.realtime.canonical",
-    "obehy.realtime_config",
 ]
 forbidden_modules = [
     "psycopg",
     "urllib",
     "asyncio",
-    "obehy.release",
-    "obehy.pipeline",
-    "obehy.realtime.archive",
-    "obehy.realtime.record",
-]
-
-[[tool.importlinter.contracts]]
-name = "The API reads the database only: no realtime core, connectors or worker"
-type = "forbidden"
-source_modules = ["obehy.api"]
-forbidden_modules = [
-    "obehy.realtime.core",
-    "obehy.realtime.infer",
-    "obehy.realtime.timeline",
-    "obehy.realtime.sources",
-    "obehy.realtime.runtime",
-    "obehy.realtime.worker",
-    "obehy.realtime.emit",
-    "obehy.pipeline",
-]
-
-[[tool.importlinter.contracts]]
-name = "The replay diagnostics read the output stream, never the core (docs/RUST_PORT.md R0)"
-type = "forbidden"
-source_modules = [
-    "obehy.realtime.replay_report",
-    "obehy.realtime.quality",
-    "obehy.realtime.quality_checks",
-    "obehy.realtime.evaluate",
-    "obehy.realtime.keyless_report",
-    "obehy.realtime.journey_view",
-]
-forbidden_modules = [
-    "obehy.realtime.core",
-    "obehy.realtime.model",
-    "obehy.realtime.infer",
-    "obehy.realtime.timeline",
-    "obehy.realtime.index",
-    "obehy.realtime.runner",
-    "obehy.realtime.replay",
-    "obehy.realtime.emit",
-]
-
-# Everything that stays Python after the switch to the Rust worker (docs/RUST_PORT.md, "The
-# switch") imports nothing that is deleted with the Python worker.
-[[tool.importlinter.contracts]]
-name = "What survives the switch imports nothing deleted with the Python worker"
-type = "forbidden"
-source_modules = [
     "obehy.api",
     "obehy.release",
-    "obehy.reference",
-    "obehy.realtime_config",
-    "obehy.realtime.jobs",
-    "obehy.realtime.disk_guard",
-    "obehy.realtime.gtfs_rt_check",
+    "obehy.pipeline",
+]
+
+[[tool.importlinter.contracts]]
+name = "The API reads the database only: nothing of the realtime side but its config"
+type = "forbidden"
+source_modules = ["obehy.api"]
+forbidden_modules = ["obehy.realtime", "obehy.pipeline"]
+
+[[tool.importlinter.contracts]]
+name = "The replay diagnostics read the output stream: no database, API or release side"
+type = "forbidden"
+source_modules = [
     "obehy.realtime.replay_report",
-    "obehy.realtime.quality",
-    "obehy.realtime.quality_checks",
-    "obehy.realtime.evaluate",
-    "obehy.realtime.keyless_report",
-    "obehy.realtime.journey_view",
-    "obehy.realtime.compare_check",
+    "obehy.realtime.gtfs_rt_check",
     "obehy.realtime.jsonl",
-    "obehy.realtime.names",
 ]
-forbidden_modules = [
-    "obehy.realtime.alerts",
-    "obehy.realtime.archive",
-    "obehy.realtime.bench",
-    "obehy.realtime.canonical",
-    "obehy.realtime.commands",
-    "obehy.realtime.compare",
-    "obehy.realtime.compositions",
-    "obehy.realtime.core",
-    "obehy.realtime.emit",
-    "obehy.realtime.facts",
-    "obehy.realtime.geo",
-    "obehy.realtime.index",
-    "obehy.realtime.index_files",
-    "obehy.realtime.index_sql",
-    "obehy.realtime.infer",
-    "obehy.realtime.logs",
-    "obehy.realtime.manifest",
-    "obehy.realtime.model",
-    "obehy.realtime.model_json",
-    "obehy.realtime.phases",
-    "obehy.realtime.platforms",
-    "obehy.realtime.policy",
-    "obehy.realtime.record",
-    "obehy.realtime.replay",
-    "obehy.realtime.runner",
-    "obehy.realtime.runs",
-    "obehy.realtime.runtime",
-    "obehy.realtime.sources",
-    "obehy.realtime.timeline",
-    "obehy.realtime.times",
-    "obehy.realtime.warm",
-    "obehy.realtime.worker",
-]
+forbidden_modules = ["psycopg", "obehy.api", "obehy.release", "obehy.realtime.jobs"]
 
 [[tool.importlinter.contracts]]
 name = "Reference datasets are files and SQL: no realtime or API"
 type = "forbidden"
 source_modules = ["obehy.reference"]
 forbidden_modules = ["obehy.realtime", "obehy.api"]
-
-[[tool.importlinter.contracts]]
-name = "Connectors only declare and decode: no inference, timeline or core"
-type = "forbidden"
-source_modules = ["obehy.realtime.sources"]
-forbidden_modules = ["obehy.realtime.core", "obehy.realtime.infer", "obehy.realtime.timeline"]

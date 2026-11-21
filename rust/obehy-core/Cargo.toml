@@ -16,13 +16,13 @@ regex.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-# runs.py's opaque run vehicle IDs.
+# The opaque run vehicle IDs (runs).
 sha2.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
-# The parity fixtures are gzip.
+# The corpus traces are gzip.
 flate2.workspace = true
 
 [lints]

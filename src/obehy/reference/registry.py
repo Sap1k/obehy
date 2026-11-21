@@ -5,7 +5,8 @@ A report is a registered vehicle when a key valid on the day binds it: its sourc
 first, else an identifier it states (licence plate, EVN, series number: any source), in the
 vocabulary's order. Where two datasets' keys claim it, the better dataset (lower priority)
 wins. An unbound report is its own vehicle, `<source>:<source_vehicle_id>`. The registry binds
-only by these curated keys (co-located reports are paired elsewhere, emit/pairing.py).
+only by these curated keys (co-located reports are paired elsewhere: the worker's
+`vehicles/pairing.rs`).
 """
 
 from __future__ import annotations

@@ -1,5 +1,4 @@
-//! Platform assignments from station boards (docs/R2_SLICE.md section 6). Port of
-//! `realtime/platforms.py`. Pure.
+//! Platform assignments from station boards (docs/R2_SLICE.md section 6). Pure.
 //!
 //! A board row binds by train number and the date of its scheduled time like any keyed
 //! observation, but carries no vehicle: it never creates or moves one. It attaches to the run's
@@ -70,7 +69,7 @@ fn result(
 /// `bind` binds it as `core._bind` does (it may build run trips in the index);
 /// `open_instance` opens the matched journey's instance in `state` if it has none
 /// (`core._open`) and returns its effects. Panics on an observation without a platform
-/// assignment, or when `open_instance` leaves no instance (Python asserts / raises).
+/// assignment, or when `open_instance` leaves no instance.
 pub fn apply_platform(
     state: &mut FeedState,
     observation: &Arc<Observation>,

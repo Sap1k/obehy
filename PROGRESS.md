@@ -260,6 +260,9 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   Step 10 (PID, R3): Golemio vehicle positions connector (2026-10-15), live on jdf and
   czptt after the server capture replayed at 97–100 % per mode (`docs/sources/pid.md`).
   GTFS-RT alerts and departures later.
+  The worker is Rust since 2026-11-21 (`obehy-rt`, `rust/`, `docs/RUST_PORT.md`; its own
+  image, `ghcr.io/sap1k/obehy-worker`); the Python worker is deleted. Open: the server on the
+  new image, its live CPU and memory, the memory soak in the Linux image.
 - **Pin 2026-10-25** (DST fall-back) from the running recorder as the first permanent replay
   corpus.
 
@@ -312,6 +315,26 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
   - the composition strip's check on prod once the proxy list is renamed (below).
 
 ## Recent log
+
+- **2026-11-21** — Rust worker simplified: the Python parity emulation went (`obehy_core::py`,
+  `timedelta` half-even rounding, CPython `hypot`, the UCRT `pow` workaround, GEOS/PROJ quirks,
+  the vendored tzdata, the hand-written `json.loads` and `html.parser`, insertion-ordered core
+  state, the parity fixtures and examples, `obehy rt compare-diff`); facts JSON is serde. Pinned
+  streams rewritten from Rust (same records; differences are rounding, last digits and SŽ
+  positions outside Czechia's Křovák area, ≤1 m). CI: one Linux Rust job. fmt, clippy, all
+  Rust tests (database tests included) and the Python unit checks pass; not run live.
+- **2026-11-21** — The realtime worker in Rust, and the switch (docs/RUST_PORT.md). R0–R8:
+  `obehy-core`, `obehy-sources`, `obehy-rt` (worker, record, replay, warm, bench, compare),
+  byte-identical to the Python worker on the facts and output harness (four windows, 106
+  corpus streams), the store, warm start and a worker-vs-replay database check; core 15–18×,
+  warm start 42–62× faster. Switch: the Python worker, connectors, harness and their tests
+  deleted; manifests and SQL moved to `src/obehy/data/realtime/{sources,sql}/`; `obehy rt`
+  keeps `report --from-stream`, `compare-diff`, `check-gtfs-rt`, `corpus pin`, and `obehy jobs`
+  stays; compose's `realtime` runs the worker image, CI publishes it. API and jobs DB tests
+  write the worker's rows with SQL; diagnostics tests use hand-written streams; Rust fixtures
+  frozen. Validated: Python unit and DB tests, ruff, pyright, lint-imports; cargo fmt, clippy,
+  test (DB tests included). Not checked: `docker build` (no Docker locally), the server on the
+  new image.
 
 - **2026-11-21** — R0 items 5 and 3 (docs/RUST_PORT.md). The replay diagnostics (`report.json`:
   counts, key groups, predictors, keyless, `--quality`) read the output stream, not the core:

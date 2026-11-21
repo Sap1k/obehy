@@ -5,6 +5,14 @@ Design survey of `src/obehy/realtime/sources/*`, `times.py`, `model_json.py`, `e
 adjust the shape where the code proves it wrong, but facts output must stay byte-identical to the
 Python connectors (and payload errors must match: only error vs no error matters, not the text).
 
+**After the switch (2026-11-21).** The Python connectors are gone and byte-identity is no longer
+a goal: the Python semantics this survey lists (§4.2's built-ins, `json.loads`, CPython's
+`html.parser`, `re`'s `$`, `int()`/`float()` of Unicode digits, Python `==` across bool and int,
+PROJ's per-point operation choice) were replaced by plain Rust: serde_json (keys in document
+order), scraper for the boards, `str::trim`/`parse`, ASCII digits, numbers matched by value and
+booleans by truth, one Křovák operation (§5). The manifest shape and the quirks are unchanged;
+the sections below remain the design record.
+
 ## 0. Conventions
 
 - `values.<name>`: per entity, evaluated in declaration order. `path` dotted from the entity
@@ -383,7 +391,7 @@ pub enum Coerce { Raw, Int, IntOrDigits, PyInt, PyFloat, Number, Real, RealNb, B
    and dict order matter). DPMD literal NUMBER `-?\d+(?:\.\d+)?`: float if it has `.`, else int,
    no exponent (dpmd.py:47, 100-104).
 
-### 4.2 Python built-ins (a `py` module, table-tested)
+### 4.2 Python built-ins (as surveyed; replaced by plain Rust after the switch)
 - `str.strip()/split()`: Python whitespace = `char::is_whitespace` plus `\x1c`-`\x1f`.
 - `str.isdigit()`: Unicode Numeric_Type Decimal or Digit (`²` true). `int(str)`: Decimal only,
   surrounding whitespace, sign, `_` between digits. So `²` passes isdigit and fails int(): that
@@ -436,32 +444,19 @@ pub enum Coerce { Raw, Int, IntOrDigits, PyInt, PyFloat, Number, Real, RealNb, B
 
 ## 5. SŽ Křovák (SZ-Q1)
 sz.py:55-57 `Transformer.from_crs("EPSG:5514","EPSG:4326", always_xy=True)`; sz.py:204
-`lon, lat = transform(float(x), float(y))` (East-North, negative, PROJ default krovak without
-`+czech`); sz.py:211 `round(lat, 6), round(lon, 6)` (Python round is correctly rounded on the
-binary value — `format!("{:.6}")` then parse reproduces it). Bearing not rounded.
+`lon, lat = transform(float(x), float(y))` (East-North, negative); sz.py:211 `round(lat, 6),
+round(lon, 6)`. Bearing not rounded.
 
-PROJ 9.8.1 picks one of four operations **per point** (keep operations whose source-CRS bbox
-contains the point; lowest accuracy wins; equal accuracy → smaller area; tie → first listed).
-Boxes found by bisection (inclusive; x = easting, y = northing in EPSG:5514). Choose in order:
-1. S-JTSK→WGS 84 (4), Slovakia: x∈[-598456.5382383128, -164288.7463043341],
-   y∈[-1353322.8862039084, -1116718.8694003904]: Helmert `x=485 y=169.5 z=483.8 rx=7.786
-   ry=4.398 rz=4.103 s=0 convention=position_vector` (covers Břeclav, Zlín, Uherské Hradiště).
-2. (5), Czechia: x∈[-935779.7018432004, -418730.0012848261],
-   y∈[-1244199.8543909981, -911137.7509007935]: `x=572.213 y=85.334 z=461.94 rx=-4.9732
-   ry=-1.529 rz=-5.2484 s=3.5378 convention=coordinate_frame` (wins over 1 by list order at equal
-   accuracy and area… but 1 is checked first where it applies — verify against pyproj).
-3. Otherwise (3): `x=589 y=76 z=480` translation only.
-Every operation: `inv krovak (lat_0=49.5 lon_0=24.8333333333333 alpha=30.2881397527778 k=0.9999
-bessel)` → push v_3 → cart bessel (h=0) → helmert (default small-angle rotation matrix, not
-+exact) → inv cart WGS84 → pop v_3 → unitconvert rad→deg (`xy_factor = 1.0 / DEG_TO_RAD`
-computed once). Port PROJ 9.8.1 krovak.cpp (iterative inverse), cart.cpp, helmert.cpp,
-unitconvert.cpp literally. Fixture: pyproj outputs at 17 significant digits before rounding,
-points on both sides of each box edge, and every distinct (x, y) in a day of sz-mapa archive;
-report any rounded value that flips.
+PROJ picks one of four operations per point by area of use. As built after the switch
+(`obehy-sources/src/krovak.rs`): one operation everywhere, S-JTSK to WGS 84 (5) (EPSG:5239,
+Czechia, about 1 m): inverse Křovák on Bessel, geocentric, the seven-parameter Helmert
+(`x=572.213 y=85.334 z=461.94 rx=-4.9732 ry=-1.529 rz=-5.2484 s=3.5378`, coordinate frame),
+geodetic on WGS 84 (Bowring). Inside Czechia's area it agrees with PROJ to about 1e-11 degrees;
+outside it (PROJ's Slovak and fallback operations) positions move by up to about a metre.
 
 ## 6. As built (R2, 2026-11-21)
 
-The manifests (`src/obehy/realtime/sources/*.toml`) hold the final shape; the Rust types are in
+The manifests (`src/obehy/data/realtime/sources/*.toml`) hold the final shape; the Rust types are in
 `obehy-core/src/config/decode.rs` (read strictly), the engine in `obehy-sources/src/mapping.rs`.
 Where the code moved away from the sketch above:
 
@@ -490,10 +485,4 @@ Where the code moved away from the sketch above:
 Declarative: DÚK, PID positions, SŽ map (with Křovák), DPMD (over the recorder filter's JSON),
 the four MPV net portals (one `[decode.portal]`), Arriva Express. Code: SŽ boards, PID alerts
 and infotexts, ČD compositions, and the two recorder filters (`arriva_express::recorded`,
-`dpmd::recorded`). Křovák (§5) is pure Rust and bit-identical to pyproj on every distinct
-position of 2026-10-12 and on both sides of every box edge.
-
-Accepted divergence: a lone UTF-16 surrogate (in a `\u` escape or encoded in the bytes) is a
-payload error in Rust, a string in Python; no archived payload has one (every compared window
-is identical). Python's `\d` in `strptime` and the Unicode version of `\d` in patterns
-(Python 15.1, `regex` 16) differ only for digits no source sends.
+`dpmd::recorded`). Křovák (§5) is pure Rust.

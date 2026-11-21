@@ -1,80 +1,66 @@
-//! A GTFS-RT `FeedMessage` as the compare harness writes it: Python's
-//! `json_format.MessageToDict(message, preserving_proto_field_name=True)`. Only fields that
+//! A GTFS-RT `FeedMessage` as JSON for the output stream: proto field names, only fields that
 //! are set (proto2 presence; empty repeated fields left out), 64-bit integers as strings, enums
-//! by name, `float` fields as the shortest decimal of up to 9 significant digits that reads
-//! back as the same float32 (`type_checkers.ToShortestFloat`); the canonical float rule then
-//! rounds them by key.
+//! by name, `float` fields as the shortest decimal that reads back as the same float32; the
+//! canonical float rule then rounds them by key.
 
 use obehy_core::publish::gtfs_rt::proto;
 use prost::Message;
+use serde_json::{Map, Value};
 
-use crate::canonical::C;
-
-struct Fields(Vec<(String, C)>);
+struct Fields(Map<String, Value>);
 
 impl Fields {
     fn new() -> Fields {
-        Fields(Vec::new())
+        Fields(Map::new())
     }
 
-    fn put(&mut self, name: &str, value: Option<C>) {
+    fn put(&mut self, name: &str, value: Option<Value>) {
         if let Some(value) = value {
-            self.0.push((name.to_owned(), value));
+            self.0.insert(name.to_owned(), value);
         }
     }
 
-    fn list(&mut self, name: &str, values: Vec<C>) {
+    fn list(&mut self, name: &str, values: Vec<Value>) {
         if !values.is_empty() {
-            self.0.push((name.to_owned(), C::List(values)));
+            self.0.insert(name.to_owned(), Value::Array(values));
         }
     }
 
-    fn done(self) -> C {
-        C::Obj(self.0)
+    fn done(self) -> Value {
+        Value::Object(self.0)
     }
 }
 
-fn text(value: &Option<String>) -> Option<C> {
-    value.as_ref().map(C::str)
+fn string(value: &Option<String>) -> Option<Value> {
+    value.clone().map(Value::String)
 }
 
-fn int(value: Option<i64>) -> Option<C> {
-    value.map(|v| C::Int(i128::from(v)))
+fn int(value: Option<i64>) -> Option<Value> {
+    value.map(Value::from)
 }
 
-fn long(value: Option<i64>) -> Option<C> {
-    value.map(|v| C::Str(v.to_string()))
+fn long(value: Option<i64>) -> Option<Value> {
+    value.map(|v| Value::String(v.to_string()))
 }
 
-fn ulong(value: Option<u64>) -> Option<C> {
-    value.map(|v| C::Str(v.to_string()))
+fn ulong(value: Option<u64>) -> Option<Value> {
+    value.map(|v| Value::String(v.to_string()))
 }
 
-fn enum_name(value: Option<i32>, names: &[(i32, &str)]) -> Option<C> {
+fn enum_name(value: Option<i32>, names: &[(i32, &str)]) -> Option<Value> {
     value.map(|v| match names.iter().find(|(n, _)| *n == v) {
-        Some((_, name)) => C::str(*name),
-        None => C::Int(i128::from(v)),
+        Some((_, name)) => Value::from(*name),
+        None => Value::from(v),
     })
 }
 
-/// `ToShortestFloat`: the first of `'%.{6..9}g' % value` that reads back as the same float32.
+/// The shortest decimal that reads back as the same float32, as an f64.
 pub fn shortest_float(value: f32) -> f64 {
-    let wide = f64::from(value);
-    if !wide.is_finite() {
-        return wide;
-    }
-    for precision in 6..=9 {
-        let text = format!("{:.*e}", precision - 1, wide);
-        let parsed: f64 = text.parse().expect("a formatted float");
-        if parsed as f32 == value {
-            return parsed;
-        }
-    }
-    wide
+    value.to_string().parse().unwrap_or(f64::from(value))
 }
 
-fn float(value: Option<f32>) -> Option<C> {
-    value.map(|v| C::Float(shortest_float(v)))
+fn float(value: Option<f32>) -> Option<Value> {
+    value.map(|v| Value::from(shortest_float(v)))
 }
 
 const TRIP_RELATIONSHIP: &[(i32, &str)] = &[
@@ -128,10 +114,10 @@ const SEVERITY: &[(i32, &str)] = &[
     (4, "SEVERE"),
 ];
 
-fn trip(t: &proto::TripDescriptor) -> C {
+fn trip(t: &proto::TripDescriptor) -> Value {
     let mut f = Fields::new();
-    f.put("trip_id", text(&t.trip_id));
-    f.put("start_date", text(&t.start_date));
+    f.put("trip_id", string(&t.trip_id));
+    f.put("start_date", string(&t.start_date));
     f.put(
         "schedule_relationship",
         enum_name(t.schedule_relationship, TRIP_RELATIONSHIP),
@@ -139,20 +125,20 @@ fn trip(t: &proto::TripDescriptor) -> C {
     f.done()
 }
 
-fn vehicle(v: &proto::VehicleDescriptor) -> C {
+fn vehicle(v: &proto::VehicleDescriptor) -> Value {
     let mut f = Fields::new();
-    f.put("id", text(&v.id));
-    f.put("label", text(&v.label));
+    f.put("id", string(&v.id));
+    f.put("label", string(&v.label));
     f.done()
 }
 
-fn event(e: &proto::StopTimeEvent) -> C {
+fn event(e: &proto::StopTimeEvent) -> Value {
     let mut f = Fields::new();
     f.put("time", long(e.time));
     f.done()
 }
 
-fn stop_time_update(u: &proto::StopTimeUpdate) -> C {
+fn stop_time_update(u: &proto::StopTimeUpdate) -> Value {
     let mut f = Fields::new();
     f.put("stop_sequence", int(u.stop_sequence.map(i64::from)));
     f.put("arrival", u.arrival.as_ref().map(event));
@@ -165,14 +151,14 @@ fn stop_time_update(u: &proto::StopTimeUpdate) -> C {
         "stop_time_properties",
         u.stop_time_properties.as_ref().map(|p| {
             let mut g = Fields::new();
-            g.put("assigned_stop_id", text(&p.assigned_stop_id));
+            g.put("assigned_stop_id", string(&p.assigned_stop_id));
             g.done()
         }),
     );
     f.done()
 }
 
-fn trip_update(t: &proto::TripUpdate) -> C {
+fn trip_update(t: &proto::TripUpdate) -> Value {
     let mut f = Fields::new();
     f.put("trip", t.trip.as_ref().map(trip));
     f.list(
@@ -184,7 +170,7 @@ fn trip_update(t: &proto::TripUpdate) -> C {
     f.done()
 }
 
-fn vehicle_position(v: &proto::VehiclePosition) -> C {
+fn vehicle_position(v: &proto::VehiclePosition) -> Value {
     let mut f = Fields::new();
     f.put("trip", v.trip.as_ref().map(trip));
     f.put(
@@ -202,7 +188,7 @@ fn vehicle_position(v: &proto::VehiclePosition) -> C {
     f.done()
 }
 
-fn translated(t: &proto::TranslatedString) -> C {
+fn translated(t: &proto::TranslatedString) -> Value {
     let mut f = Fields::new();
     f.list(
         "translation",
@@ -210,8 +196,8 @@ fn translated(t: &proto::TranslatedString) -> C {
             .iter()
             .map(|t| {
                 let mut g = Fields::new();
-                g.put("text", text(&t.text));
-                g.put("language", text(&t.language));
+                g.put("text", string(&t.text));
+                g.put("language", string(&t.language));
                 g.done()
             })
             .collect(),
@@ -219,7 +205,7 @@ fn translated(t: &proto::TranslatedString) -> C {
     f.done()
 }
 
-fn alert(a: &proto::Alert) -> C {
+fn alert(a: &proto::Alert) -> Value {
     let mut f = Fields::new();
     f.list(
         "active_period",
@@ -239,9 +225,9 @@ fn alert(a: &proto::Alert) -> C {
             .iter()
             .map(|e| {
                 let mut g = Fields::new();
-                g.put("route_id", text(&e.route_id));
+                g.put("route_id", string(&e.route_id));
                 g.put("trip", e.trip.as_ref().map(trip));
-                g.put("stop_id", text(&e.stop_id));
+                g.put("stop_id", string(&e.stop_id));
                 g.done()
             })
             .collect(),
@@ -261,14 +247,14 @@ fn alert(a: &proto::Alert) -> C {
 }
 
 /// `MessageToDict` of a serialized `FeedMessage`.
-pub fn message_dict(bytes: &[u8]) -> Result<C, prost::DecodeError> {
+pub fn message_dict(bytes: &[u8]) -> Result<Value, prost::DecodeError> {
     let message = proto::FeedMessage::decode(bytes)?;
     let mut f = Fields::new();
     f.put(
         "header",
         message.header.as_ref().map(|h| {
             let mut g = Fields::new();
-            g.put("gtfs_realtime_version", text(&h.gtfs_realtime_version));
+            g.put("gtfs_realtime_version", string(&h.gtfs_realtime_version));
             g.put(
                 "incrementality",
                 enum_name(h.incrementality, INCREMENTALITY),
@@ -284,7 +270,7 @@ pub fn message_dict(bytes: &[u8]) -> Result<C, prost::DecodeError> {
             .iter()
             .map(|e| {
                 let mut g = Fields::new();
-                g.put("id", text(&e.id));
+                g.put("id", string(&e.id));
                 g.put("trip_update", e.trip_update.as_ref().map(trip_update));
                 g.put("vehicle", e.vehicle.as_ref().map(vehicle_position));
                 g.put("alert", e.alert.as_ref().map(alert));

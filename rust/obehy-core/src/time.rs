@@ -1,15 +1,13 @@
-//! The only module that converts realtime times: port of `realtime/times.py` (BASE_PLAN.md
-//! section 19.3).
+//! The only module that converts realtime times (BASE_PLAN.md section 19.3).
 //!
-//! [`Instant`] is a UTC instant in exact microseconds, as Python's aware `datetime`. A
+//! [`Instant`] is a UTC instant in whole microseconds. A
 //! [`ServiceTime`] is a schedule time: wall-clock seconds from local midnight of the service
 //! date, exactly as JrUtil writes it (values past 86400 continue into the next day). Reading a
 //! wall-clock time on a DST night is approximate by design: the repeated autumn hour takes its
-//! first occurrence and the skipped spring hour is read with the pre-change offset (Python's
-//! `fold=0`). Source local times are stricter: a time that does not exist is rejected.
+//! first occurrence and the skipped spring hour is read with the pre-change offset. Source local
+//! times are stricter: a time that does not exist is rejected.
 //!
-//! Arithmetic happens on UTC instants only, in whole microseconds, rounded exactly as Python's
-//! `timedelta` rounds ([`TimeDelta`]).
+//! Arithmetic happens on UTC instants only, in whole microseconds ([`TimeDelta`]).
 
 mod civil;
 mod delta;
@@ -26,8 +24,7 @@ pub use strptime::Layout;
 const MICROS_PER_SECOND: i64 = 1_000_000;
 const MICROS_PER_DAY: i64 = 86_400 * MICROS_PER_SECOND;
 
-/// A value that cannot be a valid time in its declared meaning (Python's `TimeError` and the
-/// `ValueError`s of `datetime`).
+/// A value that cannot be a valid time in its declared meaning.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]
 pub struct TimeError(pub String);
@@ -38,7 +35,7 @@ impl TimeError {
     }
 }
 
-/// A UTC instant: exact microseconds since 1970-01-01T00:00Z (Python's aware UTC `datetime`).
+/// A UTC instant: microseconds since 1970-01-01T00:00Z.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Instant(i64);
 
@@ -47,8 +44,7 @@ impl Instant {
         Instant(micros)
     }
 
-    /// Exact microseconds since the epoch (`times.micros`): a difference of two divided by
-    /// 1_000_000 is bit-identical to `timedelta.total_seconds()`.
+    /// Microseconds since the epoch.
     pub const fn micros(self) -> i64 {
         self.0
     }
@@ -67,14 +63,12 @@ impl Instant {
         NaiveDateTime::from_micros(self.0)
     }
 
-    /// Python's `int(at.timestamp())`: float seconds, truncated toward zero.
-    pub fn timestamp_int(self) -> i64 {
-        // `timestamp()` is a correctly rounded int/int division; exact for |micros| < 2^53.
-        (self.0 as f64 / 1e6) as i64
+    /// Whole seconds since the epoch (rounded down).
+    pub const fn unix_seconds(self) -> i64 {
+        self.0.div_euclid(MICROS_PER_SECOND)
     }
 
-    /// `datetime.isoformat()` of an aware UTC datetime: `2026-10-08T22:30:00+00:00`, with
-    /// `.ffffff` only when the microseconds are not zero.
+    /// `2026-10-08T22:30:00+00:00`, with `.ffffff` only when the microseconds are not zero.
     pub fn isoformat(self) -> String {
         let mut text = String::with_capacity(32);
         self.utc().write_iso(&mut text);
@@ -82,7 +76,7 @@ impl Instant {
         text
     }
 
-    /// `instant(datetime.fromisoformat(text))`: a naive time is an error.
+    /// An ISO time with an offset; a naive time is an error.
     pub fn from_isoformat(text: &str) -> Result<Instant, TimeError> {
         iso::parse_datetime(text)?.instant()
     }
@@ -91,6 +85,19 @@ impl Instant {
 impl fmt::Display for Instant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.isoformat())
+    }
+}
+
+impl serde::Serialize for Instant {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Instant {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Instant, D::Error> {
+        let text = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Instant::from_isoformat(&text).map_err(serde::de::Error::custom)
     }
 }
 
@@ -137,7 +144,7 @@ impl ServiceTime {
             .service_date
             .midnight()
             .plus_micros(i64::from(self.seconds) * 1_000_000);
-        zone::fold0(wall)
+        zone::earlier(wall)
     }
 }
 
@@ -158,7 +165,7 @@ pub fn local_wall(value: Instant) -> NaiveDateTime {
 /// The instant of a Europe/Prague wall-clock time given without an offset (a command line's);
 /// the first of a repeated hour. An aware time is just [`Instant`].
 pub fn wall_instant(wall: NaiveDateTime) -> Instant {
-    zone::fold0(wall)
+    zone::earlier(wall)
 }
 
 /// The Europe/Prague calendar date of an instant.
@@ -172,13 +179,12 @@ pub fn candidate_service_dates(value: Instant) -> [Date; 3] {
     [today.add_days(-1), today, today.add_days(1)]
 }
 
-/// Exact microseconds since the epoch (`times.micros`).
+/// Microseconds since the epoch.
 pub const fn micros(value: Instant) -> i64 {
     value.micros()
 }
 
-/// `delta_us` microseconds times `factor`, rounded as `timedelta * float` rounds (exactly,
-/// half to even): `times.scaled_micros`.
+/// `delta_us` microseconds times `factor`, rounded to the nearest microsecond.
 pub fn scaled_micros(delta_us: i64, factor: f64) -> i64 {
     TimeDelta::from_micros(delta_us).mul_f64(factor).micros()
 }
@@ -186,7 +192,7 @@ pub fn scaled_micros(delta_us: i64, factor: f64) -> i64 {
 /// The first instant after `at` on a round multiple of `every_s` seconds (emit ticks).
 pub fn next_multiple(at: Instant, every_s: i64) -> Instant {
     assert!(every_s > 0, "next_multiple needs a positive period");
-    Instant::from_unix_seconds((at.timestamp_int().div_euclid(every_s) + 1) * every_s)
+    Instant::from_unix_seconds((at.unix_seconds().div_euclid(every_s) + 1) * every_s)
 }
 
 /// Every instant that reads as the naive local time `wall`: none (the skipped hour), one, or
@@ -196,7 +202,6 @@ pub fn readings(wall: NaiveDateTime) -> Vec<Instant> {
 }
 
 fn closest(readings: &[Instant], received_at: Instant) -> Option<Instant> {
-    // Python's `min` keeps the first of equal keys; the key includes the reading, so no ties.
     readings
         .iter()
         .copied()
@@ -212,7 +217,7 @@ pub fn resolve_local(wall: NaiveDateTime, received_at: Instant) -> Option<Instan
 /// A source's local date-time text in `strptime` layout (SZ-Q2: `md`), resolved like
 /// [`resolve_local`]; None if it does not parse or does not exist.
 pub fn read_local(text: &str, layout: &Layout, received_at: Instant) -> Option<Instant> {
-    let wall = layout.parse(py_strip(text))?;
+    let wall = layout.parse(text)?;
     resolve_local(wall, received_at)
 }
 
@@ -262,12 +267,6 @@ pub fn read_digits_as_local(
 /// Whether a source time is plausible: no further from reception than the policy allows.
 pub fn within_skew(value: Instant, received_at: Instant, max_skew: TimeDelta) -> bool {
     (value - received_at).abs() <= max_skew
-}
-
-/// Python's `str.strip()` without arguments: Unicode whitespace as `str.isspace` sees it,
-/// which also counts the separators U+001C..U+001F.
-pub fn py_strip(text: &str) -> &str {
-    text.trim_matches(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
 }
 
 #[cfg(test)]

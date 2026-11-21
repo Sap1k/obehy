@@ -1,5 +1,5 @@
-"""JSON-lines files of `obehy rt compare` and the replay diagnostics: text, gzip when the name ends
-in `.gz` (deterministic: no name, mtime 0, so equal streams give equal files)."""
+"""JSON-lines files of `obehy-rt compare` and the replay diagnostics: text, gzip when the name
+ends in `.gz` (deterministic: no name, mtime 0, so equal streams give equal files)."""
 
 from __future__ import annotations
 

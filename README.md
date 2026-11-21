@@ -35,15 +35,26 @@ paths for the work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkou
 JrUtil checkout or an executable command. Every national command accepts `--config PATH`;
 there is no sibling-checkout or parent-directory fallback.
 
-## Recording realtime payloads
+## The realtime worker binary
 
-`obehy rt record` polls every realtime source with a connector manifest and archives their
-payloads, unprocessed, for later replay. Channels are declared per connector in
-`src/obehy/realtime/sources/<source>.toml`. Recording needs no `obehy.local.toml`:
+The realtime worker is `obehy-rt`, a Rust program in `rust/` (`docs/RUST_PORT.md`,
+`rust/README.md`); Python keeps the API, releases, migrations, the jobs and the diagnostics that
+read the worker's output. Build it with the stable toolchain (on Windows, linking with the
+installed MSVC) and run it from the repository, where it finds the manifests and the policy:
 
 ```bash
-uv run obehy rt record --once                      # one poll per channel, smoke test
-nohup uv run obehy rt record --archive data/rt-raw > rt-record.log 2>&1 &
+cd rust && cargo build --release -p obehy-rt     # rust/target/release/obehy-rt
+```
+
+## Recording realtime payloads
+
+`obehy-rt record` polls every realtime source with a connector manifest and archives their
+payloads, unprocessed, for later replay. Channels are declared per connector in
+`src/obehy/data/realtime/sources/<source>.toml`. Recording needs no `obehy.local.toml`:
+
+```bash
+obehy-rt record --once                      # one poll per channel, smoke test
+nohup obehy-rt record --archive data/rt-raw > rt-record.log 2>&1 &
 ```
 
 `--sources duk,sz-mapa` limits the sources and `--duration 2d` stops after a set time. The
@@ -240,8 +251,9 @@ run) while the disk lacks room for another copy plus the realtime guard's free s
 
 ## Running the server
 
-CI publishes `ghcr.io/sap1k/obehy:latest` (and `:sha-<commit>`) from the `Dockerfile` for
-every green push to main. `deploy/compose.yaml` runs the server from it: PostGIS, migrations,
+CI publishes `ghcr.io/sap1k/obehy:latest` (the Python side) and
+`ghcr.io/sap1k/obehy-worker:latest` (`obehy-rt worker`), with `:sha-<commit>`, from the
+`Dockerfile`'s `server` and `worker` targets for every green push to main. `deploy/compose.yaml` runs the server from it: PostGIS, migrations,
 an hourly release update, the realtime worker, the nightly jobs and nginx serving over plain
 HTTP to your reverse proxy, which owns TLS and the hostname. `/get-feeds/` lists every feed
 under a stable name (`cz-jdf-gtfs.zip`, `cz-jdf-filtered-gtfs.zip`, `cz-czptt-gtfs.zip` from
@@ -261,7 +273,7 @@ docker compose up -d
 ```
 
 The first release update downloads and loads a full release; the worker restarts until it is
-active. The package must be public on GitHub (or `docker login ghcr.io` on the server).
+active. The packages must be public on GitHub (or `docker login ghcr.io` on the server).
 
 ## Running the API
 
@@ -347,32 +359,36 @@ uv run obehy ref import station-pairs --path D:\src\jrunify-ext-geodata\stops\st
 
 ## Replaying realtime payloads
 
-`obehy rt replay` runs archived payloads through the same pipeline as the live worker, with a
-simulated clock, against a release in the database (a release directory is loaded first if it
-is not there yet; no activation is needed):
+`obehy-rt replay` runs archived payloads through the same pipeline as the live worker, with a
+simulated clock, against a release directory's serving files:
 
 ```powershell
-uv run obehy rt replay --release <release-dir|run-id> --from 2026-10-05 --to 2026-10-06 `
+obehy-rt replay --from-files <release-dir> --from 2026-10-05 --to 2026-10-06 `
   --archive ../rt-data/rt-raw --out ../work/replay --gtfs-rt-every 60 [--write-history]
 ```
 
-It writes `report.json` (results by reason and, per DÚK fleet, the share of running key groups
-bound to a journey) and GTFS-RT snapshots. `--write-history` rebuilds `rt.observation` and the
-history of the replayed days. `obehy rt corpus pin` copies archive days into a pinned corpus.
-
-`obehy rt bench` times the live worker's own path (archive, decode, core, estimates, GTFS-RT)
-over archived polls, without database writes, and writes `bench.json` with CPU per phase as a
-share of a core plus hourly memory and container sizes (`--profile` adds a cProfile dump):
+It writes GTFS-RT snapshots; `--write-history` rebuilds `rt.observation` and the history of the
+replayed days in the database. The replay report (results by reason and, per DÚK fleet, the
+share of running key groups bound to a journey; prediction quality with `--quality`) is made
+by Python from the worker's output stream:
 
 ```powershell
-uv run obehy rt bench --release <run-id> --from 2026-10-12 --to 2026-10-12 --sources dpmd,mpvnet `
-  --since 2026-10-12T04:00Z --until 2026-10-12T05:00Z --out ../work/bench/peak
+obehy-rt compare --level output --from-files <release-dir> --from 2026-10-12 --to 2026-10-12 `
+  --sources dpmd --archive data/rt-raw --diagnostics --quality --out ../work/dpmd.jsonl.gz
+uv run obehy rt report --from-stream ../work/dpmd.jsonl.gz --out ../work/dpmd-report
 ```
+
+`obehy-rt compare ... --check <reference.jsonl.gz>` tells where a stream parts from a reference.
+
+`obehy rt corpus pin` copies archive days into a pinned corpus. `obehy-rt bench --from-files
+<release-dir> ... --out DIR` times the live worker's own path (decode, core, estimates, rows,
+GTFS-RT) over archived polls without database writes and writes `bench.json` with CPU per
+phase and hourly memory.
 
 ## Running the realtime worker
 
 ```powershell
-uv run obehy realtime --archive data/rt-raw --gtfs-rt data/gtfs-rt
+obehy-rt worker --archive data/rt-raw --gtfs-rt data/gtfs-rt
 ```
 
 The worker needs an active release. It rebuilds its state from the last hours of stored
@@ -397,7 +413,7 @@ the data disk by deleting the oldest raw days, then history days. The design is 
 `docs/R1_SLICE.md` and, for rail, `docs/R2_SLICE.md`.
 
 The worker also answers what the API is asked to look up (`rt.lookup_request`): ČD train
-compositions (`src/obehy/realtime/sources/cd.toml`, `docs/sources/cd.md`), one request per
+compositions (`src/obehy/data/realtime/sources/cd.toml`, `docs/sources/cd.md`), one request per
 train and station, at most 6 a minute and 1000 a day, each answer archived under
 `data/rt-raw/cd/composition`. `obehy jobs nightly` deletes lookup requests and their fetch
 records after `raw_days`; compositions are kept.

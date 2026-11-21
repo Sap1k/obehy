@@ -1,4 +1,4 @@
-//! Proxied, anonymous egress (docs/R2_SLICE.md section 7): port of `realtime/runtime/egress.py`.
+//! Proxied, anonymous egress (docs/R2_SLICE.md section 7).
 //!
 //! SŽ IP-bans addresses that run services against it, so a channel declaring `proxied = true`
 //! (SŽ, ČD) is only ever sent through the proxy pool, with no User-Agent and no header but the
@@ -25,7 +25,6 @@ use std::sync::{Arc, Mutex};
 
 use obehy_core::config::Channel;
 use obehy_core::config::policy::EgressPolicy;
-use obehy_core::py::text::{isdigit, strip};
 use obehy_core::time::{Instant, TimeDelta};
 
 use crate::archive::Poll;
@@ -38,47 +37,15 @@ use crate::settings::{
 
 pub const BENCH_STATUSES: [u16; 3] = [403, 407, 429];
 
-/// `str.splitlines()`: every line boundary Python knows.
-fn splitlines(text: &str) -> Vec<&str> {
-    let mut lines = Vec::new();
-    let mut start = 0;
-    let mut chars = text.char_indices().peekable();
-    while let Some((at, c)) = chars.next() {
-        let boundary = matches!(
-            c,
-            '\n' | '\r'
-                | '\u{0b}'
-                | '\u{0c}'
-                | '\u{1c}'
-                | '\u{1d}'
-                | '\u{1e}'
-                | '\u{85}'
-                | '\u{2028}'
-                | '\u{2029}'
-        );
-        if boundary {
-            lines.push(&text[start..at]);
-            let mut end = at + c.len_utf8();
-            if c == '\r' && chars.peek().is_some_and(|&(_, n)| n == '\n') {
-                chars.next();
-                end += 1;
-            }
-            start = end;
-        }
-    }
-    if start < text.len() {
-        lines.push(&text[start..]);
-    }
-    lines
-}
-
 /// Proxies from `ip:port:username:password` lines; malformed lines are skipped.
 pub fn parse_proxy_list(text: &str) -> Vec<Proxy> {
-    splitlines(text)
-        .into_iter()
+    text.lines()
         .filter_map(|line| {
-            let parts: Vec<&str> = strip(line).split(':').collect();
-            if parts.len() != 4 || parts.iter().any(|p| p.is_empty()) || !isdigit(parts[1]) {
+            let parts: Vec<&str> = line.trim().split(':').collect();
+            if parts.len() != 4
+                || parts.iter().any(|p| p.is_empty())
+                || !parts[1].bytes().all(|b| b.is_ascii_digit())
+            {
                 return None;
             }
             Some(Proxy {
@@ -91,16 +58,10 @@ pub fn parse_proxy_list(text: &str) -> Vec<Proxy> {
         .collect()
 }
 
-/// Why a list could not be read, as Python names the exception (never its text, which may
-/// quote the secret file).
-fn read_failure(error: &std::io::Error) -> &'static str {
-    match error.kind() {
-        std::io::ErrorKind::NotFound => "FileNotFoundError",
-        std::io::ErrorKind::PermissionDenied => "PermissionError",
-        std::io::ErrorKind::IsADirectory => "IsADirectoryError",
-        std::io::ErrorKind::InvalidData => "UnicodeDecodeError",
-        _ => "OSError",
-    }
+/// Why a list could not be read: the error's kind (never its text, which may quote the secret
+/// file).
+fn read_failure(error: &std::io::Error) -> String {
+    error.kind().to_string()
 }
 
 pub type ReadList = Box<dyn Fn(&str) -> std::io::Result<String> + Send + Sync>;
@@ -471,7 +432,7 @@ mod tests {
         let proxies = parse_proxy_list(text);
         let urls: Vec<String> = proxies.iter().map(Proxy::url).collect();
         assert_eq!(urls, ["http://bob:p%40ss@10.0.0.2:8080"]);
-        let crlf = parse_proxy_list(" 10.0.0.1:1:a:b \r\n10.0.0.2:2:c:d\u{2028}10.0.0.3:3:e:f");
+        let crlf = parse_proxy_list(" 10.0.0.1:1:a:b \r\n10.0.0.2:2:c:d\n10.0.0.3:3:e:f");
         assert_eq!(crlf.len(), 3);
     }
 
@@ -512,7 +473,7 @@ mod tests {
         pool.refresh();
         assert_eq!(
             logs.lock().unwrap().as_slice(),
-            ["egress: proxy list unreadable (FileNotFoundError)"]
+            ["egress: proxy list unreadable (entity not found)"]
         );
         assert!(pool.pick().is_none());
     }
@@ -520,8 +481,8 @@ mod tests {
     #[test]
     fn bench_reasons() {
         let at = Instant::from_micros(0);
-        let mut poll = Poll::failed(at, at, "TimeoutError: timed out");
-        assert_eq!(bench_reason(&poll).as_deref(), Some("TimeoutError"));
+        let mut poll = Poll::failed(at, at, "timeout: timed out");
+        assert_eq!(bench_reason(&poll).as_deref(), Some("timeout"));
         poll.error = Some("HTTP 407 Proxy Authentication Required".into());
         poll.status = Some(407);
         assert_eq!(bench_reason(&poll).as_deref(), Some("HTTP 407"));

@@ -20,11 +20,11 @@ use obehy_core::index::RowsError;
 use obehy_core::model::{Effect, Feed, Observation};
 use obehy_core::runner::{Loads, Phases, RunError, Runner, Ticks};
 use obehy_core::time::{Instant, TimeDelta, next_multiple};
-use obehy_sources::reader::json::Json;
+
 use obehy_sources::{Decoders, PayloadError};
 use serde_json::{Map, Value};
 
-use crate::compare::{Window, json_of, merged_polls};
+use crate::compare::{Window, merged_polls};
 use crate::index::{ServingRows, release_run_id, serving_dir};
 
 impl Phases for crate::phases::Phases {
@@ -85,7 +85,7 @@ impl Loads for FileLoads {
 }
 
 /// One archived poll of the window and its observations; None for a failed poll or, with the
-/// decoder's error (class, message), an undecodable payload.
+/// decoder's error, an undecodable payload.
 #[derive(Debug, Clone)]
 pub struct DecodedPoll {
     pub at: Instant,
@@ -93,7 +93,7 @@ pub struct DecodedPoll {
     pub channel: String,
     pub entry: Map<String, Value>,
     pub observations: Option<Vec<Arc<Observation>>>,
-    pub error: Option<(String, String)>,
+    pub error: Option<String>,
     /// The channel's decoder version.
     pub decoder_version: i64,
 }
@@ -175,7 +175,7 @@ fn decode_poll(
             .get("sha256")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let request = poll.entry.get("request").map(json_of);
+        let request = poll.entry.get("request");
         let channel = window
             .channels
             .iter()
@@ -185,10 +185,10 @@ fn decode_poll(
             body: &body,
             sha256,
             received_at: at,
-            request: request.as_ref(),
+            request,
         };
         match decode_payload(decoders, channel, &payload, skew, window.all_feeds) {
-            Err(error) => decoded.error = Some((error.class.to_owned(), error.message)),
+            Err(error) => decoded.error = Some(error.message),
             Ok(observations) => decoded.observations = Some(observations),
         }
     }
@@ -203,7 +203,7 @@ pub struct Payload<'a> {
     pub body: &'a [u8],
     pub sha256: &'a str,
     pub received_at: Instant,
-    pub request: Option<&'a Json>,
+    pub request: Option<&'a Value>,
 }
 
 /// A facts channel's payload decoded, only the observations of the channel's live feeds unless
@@ -362,7 +362,7 @@ pub trait Sink<L: Loads, P: Phases> {
 }
 
 /// The simulated clock: the runner's ticks, and with them a snapshot every `every_s` on round
-/// multiples (at most one per tick, as Python's `Clock`).
+/// multiples (at most one per tick.
 #[derive(Debug, Clone)]
 pub struct Clock {
     pub ticks: Ticks,

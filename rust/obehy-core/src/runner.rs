@@ -1,8 +1,6 @@
-//! The one pipeline the worker and replay share: decoded observations → core → effects. Port
-//! of `realtime/runner.py` without its I/O: the index's rows come from a [`Loads`] (Parquet or
-//! PostgreSQL, in obehy-rt), and the effects go back to the caller, which writes them (the
-//! Python runner hands them to its writer at the same points; writing never feeds back into
-//! the core). The GTFS-RT files and state tables of an emitting tick are the shell's too.
+//! The one pipeline the worker and replay share: decoded observations → core → effects, without
+//! I/O: the index's rows come from a [`Loads`] (Parquet or PostgreSQL, in obehy-rt), and the
+//! effects go back to the caller, which writes them (writing never feeds back into the core). The GTFS-RT files and state tables of an emitting tick are the shell's too.
 //!
 //! Per batch it loads the static data of the batch's keys (lazy index), steps every observation
 //! in `(received_at, source, sha256, item)` order and checks the runner's invariants
@@ -31,7 +29,7 @@ use crate::time::{
 use crate::timeline::SourceProgress;
 use crate::timeline::plan::PlanCache;
 
-/// Where a release's static rows come from, per feed (Python's `ReleaseLoads`).
+/// Where a release's static rows come from, per feed.
 pub trait Loads {
     type Rows: Rows;
     fn release_id(&self) -> &str;
@@ -57,7 +55,7 @@ impl Phases for Untimed {
 }
 
 /// The runner cannot go on: static rows could not be read, the core read static data that was
-/// not loaded, or the core broke one of its own guarantees (Python's `InvariantError`).
+/// not loaded, or the core broke one of its own guarantees.
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
     #[error(transparent)]
@@ -156,7 +154,7 @@ pub struct Runner<L: Loads, P: Phases = Untimed> {
     pub loads: L,
     pub policy: Arc<Policy>,
     pub semantics: Semantics,
-    /// In the order of the feeds given (Python's dict); iterated sorted where Python sorts.
+    /// In the order of the feeds given.
     pub runtimes: IndexMap<Feed, FeedRuntime<L::Rows>>,
     pub skipped: u64,
     pub phases: P,
@@ -205,7 +203,7 @@ impl<L: Loads, P: Phases> Runner<L, P> {
         })
     }
 
-    /// The feeds, sorted (Python's `sorted(self.runtimes)`).
+    /// The feeds, sorted.
     pub fn sorted_feeds(&self) -> Vec<Feed> {
         let mut feeds: Vec<Feed> = self.runtimes.keys().copied().collect();
         feeds.sort();
@@ -585,7 +583,7 @@ impl Ticks {
     }
 
     /// Run every tick up to and including `at`; `ticked` sees each tick's time and effects
-    /// after it ran (Python's `on_effects`, then `on_tick`).
+    /// after it ran.
     pub fn advance<L: Loads, P: Phases, E: From<RunError>>(
         &mut self,
         runner: &mut Runner<L, P>,
@@ -606,7 +604,7 @@ impl Ticks {
 
     /// The chunk (in `received_at` order) in runs between ticks, each handed to `run`; the
     /// ticks between them run on the way, `ticked` seeing each as in [`Ticks::advance`]
-    /// (Python's `split`). The first observation starts the clock.
+    ///. The first observation starts the clock.
     pub fn split<L: Loads, P: Phases, E: From<RunError>>(
         &mut self,
         runner: &mut Runner<L, P>,

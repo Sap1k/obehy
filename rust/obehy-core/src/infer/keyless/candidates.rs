@@ -1,5 +1,4 @@
-//! Candidate journeys of a keyless observation (R5): port of
-//! `realtime/infer/keyless/candidates.py` (BASE_PLAN.md section 19.2, steps 1-2).
+//! Candidate journeys of a keyless observation (R5) (BASE_PLAN.md section 19.2, steps 1-2).
 //!
 //! The line's trips ([`Index::line_keys`]) on the candidate service dates, hard-filtered: the
 //! trip runs that day, its last passenger stop is the destination (matched only against the

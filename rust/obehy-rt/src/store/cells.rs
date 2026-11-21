@@ -1,16 +1,16 @@
-//! A row's cells: Python's tuple items, typed for PostgreSQL's binary format and for the
-//! compare harness's records.
+//! A row's cells, typed for PostgreSQL's binary format and for the output stream's records.
 
 use std::cmp::Ordering;
 use std::error::Error;
 use std::sync::Arc;
 
 use bytes::{BufMut, BytesMut};
-use obehy_core::py::json::{DumpOptions, PyJson, dumps};
 use obehy_core::time::{Date, Instant};
 use tokio_postgres::types::{FromSql, IsNull, ToSql, Type, to_sql_checked};
 
-use crate::canonical::{C, utc_text};
+use serde_json::Value;
+
+use crate::canonical::utc_text;
 
 /// Microseconds from 1970-01-01 to PostgreSQL's epoch, 2000-01-01.
 pub const PG_EPOCH_MICROS: i64 = 946_684_800_000_000;
@@ -27,10 +27,10 @@ pub enum Cell {
     Float(f64),
     Date(Date),
     Time(Instant),
-    /// A jsonb value (written as Python's `json.dumps` text; recorded as the object). Shared:
+    /// A jsonb value (sent as its JSON text; recorded as the object). Shared:
     /// a journey's calls are one tree for its row and the writer's cache, and an unchanged
     /// row compares by pointer.
-    Json(Arc<PyJson>),
+    Json(Arc<Value>),
 }
 
 impl PartialEq for Cell {
@@ -57,7 +57,7 @@ impl Cell {
         Cell::Text(value.into())
     }
 
-    pub fn json(value: PyJson) -> Cell {
+    pub fn json(value: Value) -> Cell {
         Cell::Json(Arc::new(value))
     }
 
@@ -102,17 +102,17 @@ impl Cell {
         }
     }
 
-    /// The record value (`canonical.plain` of the Python cell).
-    pub fn record(&self) -> C {
+    /// The value in a stream record.
+    pub fn record(&self) -> Value {
         match self {
-            Cell::Null => C::Null,
-            Cell::Text(text) => C::Str(text.clone()),
-            Cell::Int(n) => C::Int(i128::from(*n)),
-            Cell::Bool(b) => C::Bool(*b),
-            Cell::Float(x) => C::Float(*x),
-            Cell::Date(day) => C::Str(day.isoformat()),
-            Cell::Time(at) => C::Str(utc_text(*at)),
-            Cell::Json(value) => C::from_py(value),
+            Cell::Null => Value::Null,
+            Cell::Text(text) => Value::String(text.clone()),
+            Cell::Int(n) => Value::from(*n),
+            Cell::Bool(b) => Value::Bool(*b),
+            Cell::Float(x) => Value::from(*x),
+            Cell::Date(day) => Value::String(day.isoformat()),
+            Cell::Time(at) => Value::String(utc_text(*at)),
+            Cell::Json(value) => Value::clone(value),
         }
     }
 
@@ -129,7 +129,7 @@ impl Cell {
         }
     }
 
-    /// A total order for sorting keys (text, dates and times, as Python orders key tuples).
+    /// A total order for sorting keys.
     pub fn order(&self, other: &Cell) -> Ordering {
         match (self, other) {
             (Cell::Text(a), Cell::Text(b)) => a.cmp(b),
@@ -154,9 +154,9 @@ pub fn order_rows(a: &Row, b: &Row) -> Ordering {
     a.len().cmp(&b.len())
 }
 
-/// `json.dumps(value)` (default separators, ASCII), the text a jsonb column is sent as.
-pub fn json_text(value: &PyJson) -> String {
-    dumps(value, DumpOptions::DEFAULT)
+/// The text a jsonb column is sent as.
+pub fn json_text(value: &Value) -> String {
+    value.to_string()
 }
 
 fn mismatch(cell: &Cell, ty: &Type) -> Box<dyn Error + Sync + Send> {
@@ -280,20 +280,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keys_sort_as_python_tuples_and_cells_record_canonically() {
+    fn keys_sort_as_tuples_and_cells_record_canonically() {
         let a = vec![Cell::text("jdf"), Cell::Date(Date::ymd(2026, 10, 8))];
         let b = vec![Cell::text("jdf"), Cell::Date(Date::ymd(2026, 10, 9))];
         assert_eq!(order_rows(&a, &b), Ordering::Less);
         assert_eq!(order_rows(&b, &b), Ordering::Equal);
         assert_eq!(
             Cell::Date(Date::ymd(2026, 10, 8)).record(),
-            C::str("2026-10-08")
+            Value::from("2026-10-08")
         );
         assert_eq!(
             Cell::Time(Instant::from_micros(1_500_000)).record(),
-            C::str("1970-01-01T00:00:01.500000Z")
+            Value::from("1970-01-01T00:00:01.500000Z")
         );
-        let json = PyJson::object([("a", PyJson::Int(1)), ("b", PyJson::str("ž"))]);
-        assert_eq!(json_text(&json), "{\"a\": 1, \"b\": \"\\u017e\"}");
+        let json = serde_json::json!({"a": 1, "b": "ž"});
+        assert_eq!(json_text(&json), "{\"a\":1,\"b\":\"ž\"}");
     }
 }

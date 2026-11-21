@@ -171,9 +171,8 @@ fn drive(waypoints: &[(&str, f64, f64)], every_s: i64, bearing: bool) -> Vec<Fix
         let (t0, t1) = (at(c0), at(c1));
         let span = (t1 - t0).micros() / 1_000_000;
         let steps = (span / every_s).max(1);
-        let heading = ((e1, n1) != (e0, n0)).then(|| {
-            obehy_core::py::num::py_fmod(obehy_core::geo::degrees((e1 - e0).atan2(n1 - n0)), 360.0)
-        });
+        let heading = ((e1, n1) != (e0, n0))
+            .then(|| obehy_core::geo::degrees((e1 - e0).atan2(n1 - n0)).rem_euclid(360.0));
         for k in 0..steps {
             let share = k as f64 / steps as f64;
             let moment = t0 + (t1 - t0).mul_f64(share);

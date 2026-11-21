@@ -1,5 +1,4 @@
-//! A keyless vehicle's episode (R5): port of `realtime/infer/keyless/episode.py`. What it has
-//! shown since its line or destination last changed.
+//! A keyless vehicle's episode (R5). What it has shown since its line or destination last changed.
 //!
 //! An episode lasts while the line and destination stay the same and the vehicle is heard at
 //! least every `episode_gap_s`. Each change of its next-stop name is a departure from the stop

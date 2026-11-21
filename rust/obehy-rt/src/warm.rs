@@ -1,5 +1,5 @@
-//! Warm replay: rebuild the worker's state from stored observations: port of `realtime/warm.py`
-//! (docs/R1_SLICE.md section 5), and the `obehy-rt warm` command that times it.
+//! Warm replay: rebuild the worker's state from stored observations (docs/R1_SLICE.md section 5),
+//! and the `obehy-rt warm` command that times it.
 //!
 //! The stored observations run through the same runner as live ones, with no writer, on the
 //! replay clock ([`Ticks::split`]): housekeeping ticks on round multiples of the emit tick, each

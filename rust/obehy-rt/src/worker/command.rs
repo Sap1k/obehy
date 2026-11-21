@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use obehy_core::config::manifest::{RECORDER_FILTERS, load_sources, select_channels};
 use obehy_core::config::{Channel, Lookup};
-use obehy_core::py::text::strip;
 use obehy_core::vehicles::Vocabulary;
 use obehy_core::vehicles::vocabulary::VOCABULARY_FILE;
 use obehy_sources::Decoders;
@@ -68,7 +67,7 @@ fn command(args: &WorkerArgs, env: &dyn Env) -> Result<(), HandlerError> {
         .sources
         .iter()
         .flat_map(|list| list.split(','))
-        .map(|s| strip(s).to_owned())
+        .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty())
         .collect();
     let wanted: Vec<&str> = wanted.iter().map(String::as_str).collect();

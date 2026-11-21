@@ -1,8 +1,8 @@
 """Prediction quality during replay: accuracy, flicker and dwell at stops. Pure.
 
-Read from the output stream's `journey_sample` records (`obehy rt replay --quality`, `obehy rt
-compare --quality`; `journey_view.py`), one per feed every emit tick, after estimates are brought
-up to date; never from the core, so a stream written by the Rust worker reads the same:
+Read from the output stream's `journey_sample` records (`obehy-rt compare --quality`;
+`journey_view.py`), one per feed every emit tick, after estimates are brought up to date; never
+from the core:
 
 - accuracy: each running journey's predicted arrival at its next `HORIZON` calls, scored
   against the arrival event once it happens (MAE and bias, by mode and horizon);

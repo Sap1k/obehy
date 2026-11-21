@@ -1,16 +1,12 @@
-//! The raw realtime archive: port of `realtime/archive.py`. Content-addressed zstd payloads with
-//! a daily append-only index (BASE_PLAN.md section 18.4):
+//! The raw realtime archive: content-addressed zstd payloads with a daily append-only index
+//! (BASE_PLAN.md section 18.4):
 //!
 //! ```text
 //! <root>/<source>/<channel>/<YYYY-MM-DD>/index.jsonl     one line per poll, UTC date
 //! <root>/<source>/<channel>/<YYYY-MM-DD>/objects/<sha256>.zst
 //! ```
 //!
-//! Both implementations read each other's archive while both exist. For the same poll the
-//! index line is byte-identical to Python's (`json.dumps(..., ensure_ascii=False,
-//! separators=(",", ":"))`, the same key order) and so is the object: zstd level 10 with the
-//! content size in the frame and no checksum, as `zstandard.ZstdCompressor(level=10).compress`
-//! writes it, from the same libzstd (1.5.7 in both).
+//! An index line is a JSON object; an object is zstd level 10.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -19,7 +15,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use obehy_core::py::json::{DumpOptions, PyJson, dumps};
 use obehy_core::time::{Date, Instant, TimeError};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -28,8 +23,7 @@ pub const INDEX: &str = "index.jsonl";
 pub const OBJECTS: &str = "objects";
 pub const COMPRESSION_LEVEL: i32 = 10;
 
-/// `datetime.isoformat(timespec="microseconds")` of an aware UTC time:
-/// `2026-10-05T23:59:50.000000+00:00`.
+/// An index time: `2026-10-05T23:59:50.000000+00:00`.
 pub fn timestamp(value: Instant) -> String {
     let utc = value.utc();
     let (hour, minute, second, micro) = utc.hms_micro();
@@ -210,72 +204,34 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     text
 }
 
-/// `round(microseconds / 1000)`: half to even, as Python rounds the float quotient.
+/// Milliseconds from request to response, rounded.
 pub fn elapsed_ms(requested_at: Instant, received_at: Instant) -> i64 {
-    let micros = received_at.micros() - requested_at.micros();
-    let (quotient, remainder) = (micros.div_euclid(1000), micros.rem_euclid(1000));
-    match remainder.cmp(&500) {
-        std::cmp::Ordering::Greater => quotient + 1,
-        std::cmp::Ordering::Equal if quotient % 2 != 0 => quotient + 1,
-        _ => quotient,
-    }
+    (received_at.micros() - requested_at.micros() + 500).div_euclid(1000)
 }
 
-fn string_map(map: &BTreeMap<String, String>) -> PyJson {
-    PyJson::from_pairs(
-        map.iter()
-            .map(|(k, v)| (k.clone(), PyJson::str(v.as_str())))
-            .collect(),
-    )
-}
-
-/// The index line of a poll (without its newline): Python's text, key for key.
+/// The index line of a poll (without its newline); `extra` fields are added, or replace one.
 pub fn index_line(
     poll: &Poll,
     sha256: Option<&str>,
     body: Option<&[u8]>,
-    extra: &[(String, PyJson)],
+    extra: &Map<String, Value>,
 ) -> String {
-    let mut entry = vec![
-        (
-            "requested_at".to_owned(),
-            PyJson::str(timestamp(poll.requested_at)),
-        ),
-        (
-            "received_at".to_owned(),
-            PyJson::str(timestamp(poll.received_at)),
-        ),
-        (
-            "elapsed_ms".to_owned(),
-            PyJson::Int(elapsed_ms(poll.requested_at, poll.received_at)),
-        ),
-        (
-            "status".to_owned(),
-            PyJson::opt(poll.status, |s| PyJson::Int(i64::from(s))),
-        ),
-        ("sha256".to_owned(), PyJson::opt(sha256, PyJson::str)),
-        (
-            "bytes".to_owned(),
-            PyJson::opt(body, |b| PyJson::Int(b.len() as i64)),
-        ),
-        (
-            "content_type".to_owned(),
-            PyJson::opt(poll.content_type.as_deref(), PyJson::str),
-        ),
-        ("headers".to_owned(), string_map(&poll.headers)),
-        (
-            "error".to_owned(),
-            PyJson::opt(poll.error.as_deref(), PyJson::str),
-        ),
-    ];
-    // `{**entry, **extra}`: a repeated key keeps its first position and takes the new value.
+    let mut entry = serde_json::json!({
+        "requested_at": timestamp(poll.requested_at),
+        "received_at": timestamp(poll.received_at),
+        "elapsed_ms": elapsed_ms(poll.requested_at, poll.received_at),
+        "status": poll.status,
+        "sha256": sha256,
+        "bytes": body.map(<[u8]>::len),
+        "content_type": poll.content_type,
+        "headers": poll.headers,
+        "error": poll.error,
+    });
+    let fields = entry.as_object_mut().expect("an object");
     for (key, value) in extra {
-        match entry.iter_mut().find(|(k, _)| k == key) {
-            Some(slot) => slot.1 = value.clone(),
-            None => entry.push((key.clone(), value.clone())),
-        }
+        fields.insert(key.clone(), value.clone());
     }
-    dumps(&PyJson::from_pairs(entry), DumpOptions::COMPACT.utf8())
+    entry.to_string()
 }
 
 /// Appends polls; each write opens the index anew, so days roll over without state.
@@ -296,7 +252,7 @@ impl ArchiveWriter {
         channel: &str,
         poll: &Poll,
         body: Option<&[u8]>,
-        extra: &[(String, PyJson)],
+        extra: &Map<String, Value>,
     ) -> io::Result<Stored> {
         let directory = day_directory(&self.root, source, channel, poll.received_at.utc().date());
         let mut sha256 = None;

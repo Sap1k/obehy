@@ -1,4 +1,4 @@
-//! The `obehy-rt` command line: one subcommand per Python `obehy rt` command it replaces.
+//! The `obehy-rt` command line.
 
 use std::process::ExitCode;
 

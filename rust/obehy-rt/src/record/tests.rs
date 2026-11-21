@@ -1,10 +1,10 @@
-//! Ports of `tests/unit/test_rt_record.py` (archive and recorder) and the archive's text and
-//! object bytes against Python's.
+//! The archive and the recorder (ported from `tests/unit/test_rt_record.py`).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use obehy_core::time::{Date, Instant, TimeDelta};
+use serde_json::{Map, Value, json};
 
 use super::command::filterable;
 use super::*;
@@ -80,10 +80,10 @@ fn identical_payloads_share_one_object() {
     let writer = ArchiveWriter::new(&root);
     let body = b"{\"VehicleList\":[]}";
     let first = writer
-        .append("duk", "vehicles", &poll(body), Some(body), &[])
+        .append("duk", "vehicles", &poll(body), Some(body), &Map::new())
         .unwrap();
     let second = writer
-        .append("duk", "vehicles", &poll(body), Some(body), &[])
+        .append("duk", "vehicles", &poll(body), Some(body), &Map::new())
         .unwrap();
     assert_eq!(first.sha256, second.sha256);
     assert!(first.new_object_bytes > 0);
@@ -109,12 +109,12 @@ fn error_polls_are_archived() {
     let writer = ArchiveWriter::new(&root);
     let bad = poll_at(Some(b"bad gateway"), t0(), Some(502));
     writer
-        .append("duk", "vehicles", &bad, Some(b"bad gateway"), &[])
+        .append("duk", "vehicles", &bad, Some(b"bad gateway"), &Map::new())
         .unwrap();
     let start = t0() - TimeDelta::from_micros(3_600_000_000);
-    let timeout = Poll::failed(start, start + ms(20_000), "TimeoutError: timed out");
+    let timeout = Poll::failed(start, start + ms(20_000), "timeout: timed out");
     writer
-        .append("duk", "vehicles", &timeout, None, &[])
+        .append("duk", "vehicles", &timeout, None, &Map::new())
         .unwrap();
     let polls: Vec<_> = iter_polls(&root, "duk", "vehicles", day(5), day(5))
         .map(Result::unwrap)
@@ -122,7 +122,7 @@ fn error_polls_are_archived() {
     let statuses: Vec<Option<i64>> = polls.iter().map(|p| p.status()).collect();
     assert_eq!(statuses, [Some(502), None]);
     assert_eq!(polls[0].body().unwrap().unwrap(), b"bad gateway");
-    assert_eq!(polls[1].error(), Some("TimeoutError: timed out"));
+    assert_eq!(polls[1].error(), Some("timeout: timed out"));
     assert_eq!(polls[1].body().unwrap(), None);
     assert!(!polls[0].succeeded() && !polls[1].succeeded());
 }
@@ -132,11 +132,11 @@ fn index_rolls_over_at_utc_midnight() {
     let root = scratch("rollover");
     let writer = ArchiveWriter::new(&root);
     writer
-        .append("duk", "vehicles", &poll(b"a"), Some(b"a"), &[])
+        .append("duk", "vehicles", &poll(b"a"), Some(b"a"), &Map::new())
         .unwrap();
     let later = poll_at(Some(b"b"), t0() + ms(15_000), Some(200));
     writer
-        .append("duk", "vehicles", &later, Some(b"b"), &[])
+        .append("duk", "vehicles", &later, Some(b"b"), &Map::new())
         .unwrap();
     assert!(root.join("duk/vehicles/2026-10-05/index.jsonl").is_file());
     assert!(root.join("duk/vehicles/2026-10-06/index.jsonl").is_file());
@@ -151,7 +151,7 @@ fn truncated_last_index_line_is_skipped_but_a_broken_middle_line_is_an_error() {
     let root = scratch("truncated");
     let writer = ArchiveWriter::new(&root);
     writer
-        .append("duk", "vehicles", &poll(b"a"), Some(b"a"), &[])
+        .append("duk", "vehicles", &poll(b"a"), Some(b"a"), &Map::new())
         .unwrap();
     let index = root.join("duk/vehicles/2026-10-05/index.jsonl");
     let mut text = std::fs::read_to_string(&index).unwrap();
@@ -172,14 +172,14 @@ fn prune_deletes_only_day_directories_before_the_cutoff() {
     let root = scratch("prune");
     let writer = ArchiveWriter::new(&root);
     writer
-        .append("duk", "vehicles", &poll(b"a"), Some(b"a"), &[])
+        .append("duk", "vehicles", &poll(b"a"), Some(b"a"), &Map::new())
         .unwrap();
     let later = poll_at(Some(b"b"), t0() + ms(15_000), Some(200));
     writer
-        .append("duk", "vehicles", &later, Some(b"b"), &[])
+        .append("duk", "vehicles", &later, Some(b"b"), &Map::new())
         .unwrap();
     writer
-        .append("pid", "vehicles", &poll(b"c"), Some(b"c"), &[])
+        .append("pid", "vehicles", &poll(b"c"), Some(b"c"), &Map::new())
         .unwrap();
     std::fs::create_dir(root.join("duk/vehicles/notes")).unwrap();
     let pruned = prune(&root, day(6), None).unwrap();
@@ -211,61 +211,49 @@ fn prune_deletes_only_day_directories_before_the_cutoff() {
 }
 
 #[test]
-fn the_index_line_and_object_are_pythons_bytes() {
-    // What Python's ArchiveWriter wrote for the same poll: key order, compact separators, raw
-    // UTF-8 with `\u0001` escaped, 120.5 ms rounded half to even.
+fn the_index_line_holds_the_poll_and_its_extra_fields() {
     let mut p = poll(b"{\"VehicleList\":[]}");
     p.received_at = t0() + TimeDelta::from_micros(120_500);
     p.content_type = Some("application/json; charset=utf-8".into());
     p.headers.insert("etag".into(), "W/\"x\"".into());
-    let extra = vec![
-        ("filter".to_owned(), PyJson::str("dpmd@1")),
-        (
-            "filter_error".to_owned(),
-            PyJson::str("Čas \"x\"\n\t\u{1}\u{7f} ü/€\u{2028}"),
-        ),
-        (
-            "request".to_owned(),
-            PyJson::Object(vec![("sr70".into(), PyJson::str("534149"))]),
-        ),
-    ];
+    let mut extra = Map::new();
+    extra.insert("filter".into(), json!("dpmd@1"));
+    extra.insert("request".into(), json!({"sr70": "534149"}));
     let body = p.body.clone().unwrap();
     let sha = crate::archive::sha256_hex(&body);
-    let line = index_line(&p, Some(&sha), Some(&body), &extra);
-    let expected = concat!(
-        r#"{"requested_at":"2026-10-05T23:59:50.000000+00:00","#,
-        r#""received_at":"2026-10-05T23:59:50.120500+00:00","elapsed_ms":120,"status":200,"#,
-        r#""sha256":"0001f4cf7677d198fba7c24b05afc152b5b8fa3f533c2ff0d3616a4260ac6ff9","#,
-        r#""bytes":18,"content_type":"application/json; charset=utf-8","#,
-        r#""headers":{"date":"Mon, 05 Oct 2026 21:59:50 GMT","etag":"W/\"x\""},"#,
-        r#""error":null,"filter":"dpmd@1","#,
-        "\"filter_error\":\"Čas \\\"x\\\"\\n\\t\\u0001\u{7f} ü/€\u{2028}\",",
-        r#""request":{"sr70":"534149"}}"#,
-    );
-    assert_eq!(line, expected);
-    // The object Python's zstandard (libzstd 1.5.7, level 10) wrote for this payload.
-    let object = zstd::bulk::compress(&body, crate::archive::COMPRESSION_LEVEL).unwrap();
-    let hex: String = object.iter().map(|b| format!("{b:02x}")).collect();
+    let line: Value =
+        serde_json::from_str(&index_line(&p, Some(&sha), Some(&body), &extra)).unwrap();
     assert_eq!(
-        hex,
-        "28b52ffd20129100007b2256656869636c654c697374223a5b5d7d"
+        line,
+        json!({
+            "requested_at": "2026-10-05T23:59:50.000000+00:00",
+            "received_at": "2026-10-05T23:59:50.120500+00:00",
+            "elapsed_ms": 121,
+            "status": 200,
+            "sha256": sha,
+            "bytes": 18,
+            "content_type": "application/json; charset=utf-8",
+            "headers": {"date": "Mon, 05 Oct 2026 21:59:50 GMT", "etag": "W/\"x\""},
+            "error": null,
+            "filter": "dpmd@1",
+            "request": {"sr70": "534149"},
+        })
     );
 }
 
 #[test]
-fn elapsed_ms_rounds_half_to_even() {
+fn elapsed_ms_rounds_to_the_nearest() {
     let at = t0();
     let after = |us| crate::archive::elapsed_ms(at, at + TimeDelta::from_micros(us));
     assert_eq!(
         [
+            after(499),
             after(500),
-            after(1500),
-            after(2500),
             after(2501),
-            after(-500),
+            after(-499),
             after(-1500)
         ],
-        [0, 2, 2, 3, 0, -2]
+        [0, 1, 3, 0, -1]
     );
 }
 
@@ -303,14 +291,14 @@ fn a_filter_keeps_what_it_keeps_and_says_so() {
     let source = b"[\"ARRIVA EXPRESS\",\"MHD\",\"ARRIVA EXPRESS\",\"REGIONAL\"]";
     let (body, extra) = archived_payload(&channel, &poll(source), &filters());
     assert_eq!(body.unwrap(), b"[\"ARRIVA EXPRESS\",\"ARRIVA EXPRESS\"]");
-    let extra: BTreeMap<String, PyJson> = extra.into_iter().collect();
-    assert_eq!(extra["filter"], PyJson::str("arriva-express@1"));
-    assert_eq!(
-        (&extra["kept"], &extra["dropped"]),
-        (&PyJson::Int(2), &PyJson::Int(2))
+    assert_eq!(extra["filter"], json!("arriva-express@1"));
+    assert_eq!((&extra["kept"], &extra["dropped"]), (&json!(2), &json!(2)));
+    assert_eq!(extra["source_bytes"], json!(source.len()));
+    assert!(
+        extra["source_sha256"]
+            .as_str()
+            .is_some_and(|s| s.len() == 64)
     );
-    assert_eq!(extra["source_bytes"], PyJson::Int(source.len() as i64));
-    assert!(matches!(&extra["source_sha256"], PyJson::Str(s) if s.len() == 64));
 }
 
 #[test]
@@ -319,8 +307,7 @@ fn a_filter_stores_an_unexpected_shape_unfiltered() {
     let source = b"{\"errors\":[{\"message\":\"schema changed\"}]}";
     let (body, extra) = archived_payload(&channel, &poll(source), &filters());
     assert_eq!(body.unwrap(), source);
-    let extra: BTreeMap<String, PyJson> = extra.into_iter().collect();
-    assert_eq!(extra["filter_error"], PyJson::str("not a GraphQL batch"));
+    assert_eq!(extra["filter_error"], json!("not a GraphQL batch"));
     // A failed poll is stored as sent, labelled with the filter only.
     let failed = poll_at(Some(b"oops"), t0(), Some(500));
     let (body, extra) = archived_payload(&channel, &failed, &filters());
@@ -502,13 +489,9 @@ fn the_arriva_filter_keeps_only_express() {
         .collect();
     assert_eq!(spz, ["1AB0", "1AB3"]);
     assert!(!String::from_utf8_lossy(&body).contains("REGIONÁLNÍ"));
-    let extra: BTreeMap<String, PyJson> = extra.into_iter().collect();
-    assert_eq!(extra["filter"], PyJson::str("arriva-express@1"));
-    assert_eq!(
-        (&extra["kept"], &extra["dropped"]),
-        (&PyJson::Int(2), &PyJson::Int(2))
-    );
-    assert_eq!(extra["source_bytes"], PyJson::Int(source.len() as i64));
+    assert_eq!(extra["filter"], json!("arriva-express@1"));
+    assert_eq!((&extra["kept"], &extra["dropped"]), (&json!(2), &json!(2)));
+    assert_eq!(extra["source_bytes"], json!(source.len()));
 }
 
 #[test]
@@ -517,8 +500,7 @@ fn the_arriva_filter_stores_an_unexpected_shape_unfiltered() {
     let source = b"{\"errors\":[{\"message\":\"schema changed\"}]}";
     let (body, extra) = archived_payload(&channel, &poll(source), &Filters::shipped());
     assert_eq!(body.unwrap(), source);
-    let extra: BTreeMap<String, PyJson> = extra.into_iter().collect();
-    assert!(matches!(&extra["filter_error"], PyJson::Str(m) if m.contains("GraphQL batch")));
+    assert!(matches!(&extra["filter_error"], Value::String(m) if m.contains("GraphQL batch")));
 }
 
 const DPMD_BODY: &str = concat!(
@@ -548,12 +530,8 @@ fn the_dpmd_filter_keeps_vehicles_in_service_without_drivers() {
     assert_eq!(buses[0]["vehicle"], "842");
     let text = String::from_utf8_lossy(&body);
     assert!(!text.contains("1103") && !text.contains("Řidič") && !text.contains("busstops"));
-    let extra: BTreeMap<String, PyJson> = extra.into_iter().collect();
-    assert_eq!(extra["filter"], PyJson::str("dpmd@1"));
-    assert_eq!(
-        (&extra["kept"], &extra["dropped"]),
-        (&PyJson::Int(1), &PyJson::Int(1))
-    );
+    assert_eq!(extra["filter"], json!("dpmd@1"));
+    assert_eq!((&extra["kept"], &extra["dropped"]), (&json!(1), &json!(1)));
 }
 
 #[test]
@@ -562,6 +540,5 @@ fn the_dpmd_filter_stores_an_unexpected_shape_unfiltered() {
     let source = b"/* {\"TimeStamp\":\"2026-10-11T17:30:16\"} */ buspositions=eval(`x`);";
     let (body, extra) = archived_payload(&channel, &poll(source), &Filters::shipped());
     assert_eq!(body.unwrap(), source);
-    let extra: BTreeMap<String, PyJson> = extra.into_iter().collect();
-    assert!(matches!(&extra["filter_error"], PyJson::Str(m) if m.contains("eval")));
+    assert!(matches!(&extra["filter_error"], Value::String(m) if m.contains("eval")));
 }

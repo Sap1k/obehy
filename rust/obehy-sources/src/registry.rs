@@ -1,5 +1,5 @@
 //! Every channel's decoder, by (source, channel), built from the manifests' `[channel.decode]`:
-//! the port of `realtime/sources/registry.py`. One table, so a channel decodes the same in the
+//! One table, so a channel decodes the same in the
 //! worker, in replay and in the compare harness.
 //!
 //! - [`Decoders::decode`] is the facts decoders' signature, `registry.DECODERS`: the body, its
@@ -18,7 +18,7 @@ use obehy_core::time::{Instant, TimeDelta};
 
 use crate::error::PayloadError;
 use crate::mapping::{CompileError, Context, Files, Mapping};
-use crate::reader::json::Json;
+use crate::reader::json::Value;
 use crate::{pid_alerts, sz_tabule};
 
 /// How one channel decodes.
@@ -120,7 +120,7 @@ impl Decoders {
         sha256: &str,
         received_at: Instant,
         max_clock_skew: TimeDelta,
-        request: Option<&Json>,
+        request: Option<&Value>,
     ) -> Result<Vec<Observation>, PayloadError> {
         let ctx = Context {
             received_at,
@@ -131,7 +131,7 @@ impl Decoders {
             Some(Decoder::SzTabule { version }) => {
                 sz_tabule::decode(body, sha256, received_at, request, *version)
             }
-            _ => Err(PayloadError::payload(format!(
+            _ => Err(PayloadError::new(format!(
                 "no realtime connector decodes {source}/{channel} to facts"
             ))),
         }
@@ -148,7 +148,7 @@ impl Decoders {
         match self.get(source, channel) {
             Some(Decoder::PidAlerts) => pid_alerts::decode_alerts(body, received_at),
             Some(Decoder::PidInfotexts) => pid_alerts::decode_infotexts(body, received_at),
-            _ => Err(PayloadError::payload(format!(
+            _ => Err(PayloadError::new(format!(
                 "{source}/{channel} is no alert channel"
             ))),
         }

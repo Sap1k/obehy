@@ -1,5 +1,4 @@
-//! Hop running times learned live (BASE_PLAN.md section 20.5). Port of
-//! `realtime/timeline/runtimes.py`.
+//! Hop running times learned live (BASE_PLAN.md section 20.5).
 //!
 //! A hop is two consecutive passenger calls, keyed by mode and the two locations, so every line
 //! over the same stops shares it. Each journey that records an arrival at its end adds a
@@ -11,7 +10,7 @@
 //!
 //! Each hop's traversals are a deque in append order. Ends are not sorted (a late recorder can
 //! append an older end), so it is trimmed from the front only while the front is out of the
-//! window, and `forget` looks at the last appended, not the latest end, exactly as Python does.
+//! window, and `forget` looks at the last appended, not the latest end.
 //! Eviction: traversals leave on append (front older than the window), hops leave in `forget`
 //! (empty, or the last appended older than the window).
 //!
@@ -22,7 +21,6 @@ use std::collections::VecDeque;
 
 use crate::config::policy::PredictionPolicy;
 use crate::model::{CallState, FastIndexMap, HopKey, Progress, Traversal};
-use crate::py::num::{py_max, py_min};
 use crate::time::{Instant, TimeDelta};
 
 /// `FeedState.hops`: each hop's recent traversals, oldest appended first; hops in insertion
@@ -166,10 +164,7 @@ fn traversals_ratio(
             continue;
         }
         let w = (-age / decay as f64).exp();
-        total += w * py_min(
-            most,
-            py_max(1.0 / most, traversal.taken_s / traversal.scheduled_s),
-        );
+        total += w * most.min((1.0 / most).max(traversal.taken_s / traversal.scheduled_s));
         weight += w;
     }
     assert!(weight != 0.0, "float division by zero");
@@ -327,10 +322,7 @@ pub fn running_extra_with(
             if let (Some(left), Some(reach)) = (left, reach)
                 && reach > left
             {
-                share = py_min(
-                    1.0,
-                    py_max(0.0, (reach - progress.distance_m) / (reach - left)),
-                );
+                share = ((reach - progress.distance_m) / (reach - left)).clamp(0.0, 1.0);
             }
         }
         extra[b] = (end - start).mul_f64((r - 1.0) * share);
@@ -342,7 +334,7 @@ pub fn running_extra_with(
 /// arrival: the hop's running time now (timetable times the live ratio) less the typical dwell
 /// the timetable's minute holds (`dwell_credit_s`), and never less than the hop's length at the
 /// mode's top speed. Zero for the first call and non-passenger calls. Panics on a zero
-/// `speed_mps` (Python raises).
+/// `speed_mps`.
 pub fn minimum_drives(
     mode: &str,
     calls: &[CallState],
@@ -386,7 +378,7 @@ pub fn minimum_drives_with(
         }
         assert!(speed_mps != 0.0, "float division by zero");
         let fastest = TimeDelta::from_secs_f64(
-            py_max(0.0, plan.call_distance_m(b) - plan.call_distance_m(a)) / speed_mps,
+            (plan.call_distance_m(b) - plan.call_distance_m(a)).max(0.0) / speed_mps,
         );
         drives[b] = (running - credit).max(fastest).max(TimeDelta::ZERO);
     }

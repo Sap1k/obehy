@@ -1,5 +1,4 @@
-//! Rail runs and their public journeys (docs/R2_SLICE.md section 2): port of `realtime/runs.py`.
-//! Pure.
+//! Rail runs and their public journeys (docs/R2_SLICE.md section 2). Pure.
 //!
 //! The core follows a CZPTT path (PA) as one run instance keyed `czptt:pa`; the public and
 //! history identity is the train number on its service date. A run whose train number changes
@@ -21,7 +20,7 @@ pub const TRAIN_NAMESPACE: &str = "czptt:train_number";
 pub const TRAIN_PREFIX: &str = "train:";
 
 /// The run instance's key: the path (PA) on its service date. Panics on a trip outside a run,
-/// as Python's assert.
+///.
 pub fn run_journey(feed: Feed, run: &Trip, day: Date) -> JourneyKey {
     let run_key = run.run_key.as_ref().expect("a run trip has a run key");
     JourneyKey {

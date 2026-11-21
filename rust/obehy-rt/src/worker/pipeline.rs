@@ -1,8 +1,8 @@
-//! What the worker does after the core: the shell half of Python's `Runner` (its `writer`,
-//! `emitters`, `alerts` and `gtfs_rt_dir`) around the core's [`Runner`].
+//! What the worker does after the core: the writer, the GTFS-RT emitters, alerts and the GTFS-RT
+//! directory around the core's [`Runner`].
 //!
 //! [`Output`] writes a step's or tick's effects and, on an emitting tick, the current-state
-//! tables and each feed's GTFS-RT file (Python's `Runner.run` and `Runner.tick(emit=True)`).
+//! tables and each feed's GTFS-RT file.
 //! [`Pipeline`] is the live order: every poll first runs the housekeeping ticks due before it
 //! (round multiples of `emit.tick_s`, [`Ticks`]), then its observations through the runner, its
 //! effects to the writer. Replay drives the same runner and the same [`Output`] through
@@ -48,7 +48,7 @@ pub struct Output {
 }
 
 impl Output {
-    /// One batch's effects to the writer (nothing for none, as Python's runner writes).
+    /// One batch's effects to the writer (nothing for none writes).
     pub fn write(&mut self, phases: &mut Phases, effects: &[Effect]) -> Result<(), WorkerError> {
         match &mut self.writer {
             Some(writer) if !effects.is_empty() => {
@@ -182,7 +182,7 @@ impl<L: Loads> Pipeline<L> {
         self.output.write(&mut self.runner.phases, &effects)
     }
 
-    /// A last tick at `now`, written and emitted (on stop, as Python's `close`).
+    /// A last tick at `now`, written and emitted (on stop.
     pub fn close(&mut self, now: Instant) -> Result<(), WorkerError> {
         let effects = self.runner.tick(now)?;
         self.output.ticked(&mut self.runner, now, &effects)

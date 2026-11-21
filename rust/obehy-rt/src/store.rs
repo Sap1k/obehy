@@ -1,11 +1,9 @@
-//! Where the worker's rows go: port of `emit/rows.py`, `emit/db.py`, `emit/sql_store.py`,
-//! `emit/storage.py`, `emit/stored.py`, `emit/recording.py` and the writing halves of
-//! `emit/compositions.py`, `emit/alerts.py` and `emit/vehicles.py` (docs/RUST_PORT.md, R7).
+//! Where the worker's rows go (docs/RUST_PORT.md, R7).
 //!
 //! [`Writer`] turns the core's effects and state into rows; a [`Store`] writes them:
-//! [`PgStore`] to PostgreSQL (binary COPY where Python sends many rows), [`RecordingStore`]
+//! [`PgStore`] to PostgreSQL (binary COPY for many rows), [`RecordingStore`]
 //! as the compare harness's records. Rows are [`Row`]s, a cell per column in the order of the
-//! `*_COLUMNS` constants, as Python's tuples are. History terms (`history.term`) and the
+//! `*_COLUMNS` constants are. History terms (`history.term`) and the
 //! writer's `derivation_id` are the SQL store's to add: a row names a term by its text and
 //! carries no derivation.
 //!
@@ -18,7 +16,6 @@ pub mod compositions;
 pub mod pg;
 pub mod pg_book;
 pub mod recording;
-pub mod records;
 pub mod rows;
 pub mod storage;
 pub mod stored;

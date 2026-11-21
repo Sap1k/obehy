@@ -1,5 +1,5 @@
-//! Time per pipeline phase (archive, decode, core, writes, emit) for the worker's periodic
-//! summary and `obehy-rt bench`: port of `realtime/phases.py`.
+//! Time per pipeline phase (archive, decode, core, writes, emit) for the worker's periodic summary
+//! and `obehy-rt bench`.
 //!
 //! Each phase gets thread CPU time and wall time: the CPU is what the calling thread spent (its
 //! fetches run elsewhere), the wall time also counts waiting on the database.
@@ -12,7 +12,7 @@ use indexmap::IndexMap;
 
 #[derive(Debug, Default, Clone)]
 pub struct Phases {
-    /// In first-timed order, as Python's dicts.
+    /// In first-timed order.
     pub cpu_s: IndexMap<String, f64>,
     pub wall_s: IndexMap<String, f64>,
     pub calls: BTreeMap<String, u64>,

@@ -1,22 +1,19 @@
-//! DPMD: the recorder filter `dpmd`, port of `dpmd.read_traffic_state` and `dpmd.recorded`.
+//! DPMD: the recorder filter `dpmd`.
 //!
 //! `TrafficState.js` is JavaScript, not JSON (DPMD-Q2): `name=<literal>;` statements after a
 //! leading `/* {"TimeStamp": …} */` comment, unquoted keys, backtick strings, strings
 //! concatenated with page variables (kept as `${name}`). It is read by a narrow literal
 //! reader, never evaluated; anything outside that grammar is a payload error. The archive
 //! keeps the timestamp, the data hash and the vehicles in service without their drivers
-//! (DPMD-Q5, DPMD-Q8), as JSON byte for byte Python's (its sha256 names it). Decoding that JSON
-//! is declarative (the manifest).
+//! (DPMD-Q5, DPMD-Q8), as JSON. Decoding that JSON is declarative (the manifest).
 
 use std::sync::OnceLock;
 
-use indexmap::IndexMap;
-use obehy_core::py::text::{self, repr_str};
 use regex::Regex;
 
 use crate::arriva_express::Filtered;
 use crate::error::PayloadError;
-use crate::reader::json::{self, Json, Object};
+use crate::reader::json::{Map, Value};
 
 const KEPT: [&str; 12] = [
     "id", "line", "vehicle", "course", "body", "fuel", "color", "hue", "arrow", "coords", "final1",
@@ -50,15 +47,11 @@ impl Reader {
     fn fail(&self, what: &str) -> PayloadError {
         let end = (self.at + 40).min(self.text.len());
         let shown: String = self.text[self.at.min(end)..end].iter().collect();
-        PayloadError::payload(format!(
-            "{what} at offset {}: {}",
-            self.at,
-            repr_str(&shown)
-        ))
+        PayloadError::new(format!("{what} at offset {}: {shown:?}", self.at))
     }
 
     fn space(&mut self) {
-        while self.at < self.text.len() && text::is_space_char(self.text[self.at]) {
+        while self.at < self.text.len() && self.text[self.at].is_whitespace() {
             self.at += 1;
         }
     }
@@ -70,7 +63,7 @@ impl Reader {
 
     fn expect(&mut self, c: char) -> Result<(), PayloadError> {
         if self.peek() != Some(c) {
-            return Err(self.fail(&format!("expected {}", repr_str(&c.to_string()))));
+            return Err(self.fail(&format!("expected {c:?}")));
         }
         self.at += 1;
         Ok(())
@@ -89,39 +82,30 @@ impl Reader {
         Ok(self.text[start..self.at].iter().collect())
     }
 
-    fn value(&mut self) -> Result<Json, PayloadError> {
+    fn value(&mut self) -> Result<Value, PayloadError> {
         let c = self.peek();
         match c {
             Some('[') => return self.array(),
             Some('{') => return self.object(),
-            // Python's `char in "`'"` is also true for "" (the end): `string()` then fails.
-            Some('`' | '\'') | None => return self.concatenation().map(Json::Str),
+            Some('`' | '\'') | None => return self.concatenation().map(Value::String),
             _ => {}
         }
         let rest: String = self.text[self.at..].iter().take(4096).collect();
         if let Some(found) = number_regex().find(&rest) {
             let number = found.as_str().to_owned();
             self.at += number.chars().count();
-            if number.contains('.') {
-                let x = text::float_from_str(&number).expect("a matched number");
-                return Ok(Json::Float(x));
-            }
-            let n = text::int_from_str(&number).expect("a matched number");
-            return Ok(match n.small().and_then(|v| i64::try_from(v).ok()) {
-                Some(v) => Json::Int(v),
-                None => Json::BigInt(n.text().into()),
-            });
+            return serde_json::from_str(&number).map_err(|_| self.fail("bad number"));
         }
         let word = self.name()?;
         match word.as_str() {
-            "null" => Ok(Json::Null),
-            "true" => Ok(Json::Bool(true)),
-            "false" => Ok(Json::Bool(false)),
-            _ => Err(self.fail(&format!("unexpected {}", repr_str(&word)))),
+            "null" => Ok(Value::Null),
+            "true" => Ok(Value::Bool(true)),
+            "false" => Ok(Value::Bool(false)),
+            _ => Err(self.fail(&format!("unexpected {word:?}"))),
         }
     }
 
-    fn array(&mut self) -> Result<Json, PayloadError> {
+    fn array(&mut self) -> Result<Value, PayloadError> {
         self.expect('[')?;
         let mut items = Vec::new();
         while self.peek() != Some(']') {
@@ -131,12 +115,12 @@ impl Reader {
             }
         }
         self.at += 1;
-        Ok(Json::Array(items))
+        Ok(Value::Array(items))
     }
 
-    fn object(&mut self) -> Result<Json, PayloadError> {
+    fn object(&mut self) -> Result<Value, PayloadError> {
         self.expect('{')?;
-        let mut fields = Object::default();
+        let mut fields = Map::new();
         while self.peek() != Some('}') {
             let key = self.name()?;
             self.expect(':')?;
@@ -147,7 +131,7 @@ impl Reader {
             }
         }
         self.at += 1;
-        Ok(Json::Object(fields))
+        Ok(Value::Object(fields))
     }
 
     fn concatenation(&mut self) -> Result<String, PayloadError> {
@@ -168,10 +152,7 @@ impl Reader {
 
     fn string(&mut self) -> Result<String, PayloadError> {
         let Some(&quote) = self.text.get(self.at) else {
-            return Err(PayloadError {
-                class: "IndexError",
-                message: "string index out of range".into(),
-            });
+            return Err(self.fail("expected a string"));
         };
         self.at += 1;
         let mut out = String::new();
@@ -217,14 +198,14 @@ impl Reader {
 /// `/* {...} */` at the start: the brace text and where the comment ends.
 fn timestamp_comment(text: &[char]) -> Option<(String, usize)> {
     let mut i = 0;
-    while i < text.len() && text::is_space_char(text[i]) {
+    while i < text.len() && text[i].is_whitespace() {
         i += 1;
     }
     if text.get(i) != Some(&'/') || text.get(i + 1) != Some(&'*') {
         return None;
     }
     i += 2;
-    while i < text.len() && text::is_space_char(text[i]) {
+    while i < text.len() && text[i].is_whitespace() {
         i += 1;
     }
     if text.get(i) != Some(&'{') {
@@ -236,7 +217,7 @@ fn timestamp_comment(text: &[char]) -> Option<(String, usize)> {
             continue;
         }
         let mut k = j + 1;
-        while k < text.len() && text::is_space_char(text[k]) {
+        while k < text.len() && text[k].is_whitespace() {
             k += 1;
         }
         if text.get(k) == Some(&'*') && text.get(k + 1) == Some(&'/') {
@@ -247,30 +228,19 @@ fn timestamp_comment(text: &[char]) -> Option<(String, usize)> {
 }
 
 /// The statements of `TrafficState.js` by name, plus `TimeStamp` from its leading comment.
-pub fn read_traffic_state(body: &[u8]) -> Result<IndexMap<String, Json>, PayloadError> {
-    let decoded = std::str::from_utf8(body).map_err(|e| {
-        PayloadError::payload(format!(
-            "not UTF-8: {}",
-            json::utf8_error_text(body, &e, "utf-8")
-        ))
-    })?;
+pub fn read_traffic_state(body: &[u8]) -> Result<Map<String, Value>, PayloadError> {
+    let decoded =
+        std::str::from_utf8(body).map_err(|e| PayloadError::new(format!("not UTF-8: {e}")))?;
     let chars: Vec<char> = decoded.chars().collect();
     let (header, end) = timestamp_comment(&chars)
-        .ok_or_else(|| PayloadError::payload("no leading TimeStamp comment"))?;
-    let stamp = json::loads_str(&header).map_err(|e| match e {
-        json::JsonError::Value(m) => PayloadError::value(m),
-        other => PayloadError::payload(format!(
-            "TimeStamp comment is not JSON: {}",
-            other.message()
-        )),
-    })?;
-    let Some(Json::Str(timestamp)) = stamp.get("TimeStamp") else {
-        return Err(PayloadError::payload(
-            "TimeStamp comment without a TimeStamp",
-        ));
+        .ok_or_else(|| PayloadError::new("no leading TimeStamp comment"))?;
+    let stamp: Value = serde_json::from_str(&header)
+        .map_err(|e| PayloadError::new(format!("TimeStamp comment is not JSON: {e}")))?;
+    let Some(Value::String(timestamp)) = stamp.get("TimeStamp") else {
+        return Err(PayloadError::new("TimeStamp comment without a TimeStamp"));
     };
-    let mut statements = IndexMap::new();
-    statements.insert("TimeStamp".to_owned(), Json::Str(timestamp.clone()));
+    let mut statements = Map::new();
+    statements.insert("TimeStamp".to_owned(), Value::String(timestamp.clone()));
     let mut reader = Reader {
         text: chars,
         at: end,
@@ -288,42 +258,41 @@ pub fn read_traffic_state(body: &[u8]) -> Result<IndexMap<String, Json>, Payload
 /// The archived JSON, vehicles kept and dropped.
 pub fn recorded(body: &[u8]) -> Result<Filtered, PayloadError> {
     let statements = read_traffic_state(body)?;
-    let Some(Json::Array(entries)) = statements.get("buspositions") else {
-        return Err(PayloadError::payload("buspositions is not a list"));
+    let Some(Value::Array(entries)) = statements.get("buspositions") else {
+        return Err(PayloadError::new("buspositions is not a list"));
     };
     let mut kept = Vec::new();
     for entry in entries {
-        let Json::Object(bus) = entry else {
-            return Err(PayloadError::payload("a bus position is not an object"));
+        let Value::Object(bus) = entry else {
+            return Err(PayloadError::new("a bus position is not an object"));
         };
         let off = bus.get("off");
-        let parked = matches!(off, Some(Json::Int(1) | Json::Bool(true)))
-            || matches!(off, Some(Json::Float(x)) if *x == 1.0);
+        let parked = off.and_then(Value::as_f64) == Some(1.0) || off == Some(&Value::Bool(true));
         if parked {
             continue;
         }
-        let mut vehicle = Object::default();
+        let mut vehicle = Map::new();
         for key in KEPT {
             if let Some(v) = bus.get(key) {
                 vehicle.insert(key.to_owned(), v.clone());
             }
         }
-        if let Some(Json::Str(text)) = vehicle.get_mut("body") {
+        if let Some(Value::String(text)) = vehicle.get_mut("body") {
             *text = driver_regex().replace_all(text, "").into_owned();
         }
-        kept.push(Json::Object(vehicle));
+        kept.push(Value::Object(vehicle));
     }
-    let mut document = Object::default();
+    let mut document = Map::new();
     document.insert("TimeStamp".into(), statements["TimeStamp"].clone());
     document.insert(
         "datahash".into(),
-        statements.get("datahash").cloned().unwrap_or(Json::Null),
+        statements.get("datahash").cloned().unwrap_or(Value::Null),
     );
     let dropped = entries.len() - kept.len();
     let count = kept.len();
-    document.insert("buspositions".into(), Json::Array(kept));
+    document.insert("buspositions".into(), Value::Array(kept));
     Ok(Filtered {
-        body: json::dumps_compact(&Json::Object(document), false).into_bytes(),
+        body: Value::Object(document).to_string().into_bytes(),
         kept: count,
         dropped,
     })

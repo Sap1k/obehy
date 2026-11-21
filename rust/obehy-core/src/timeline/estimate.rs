@@ -1,18 +1,11 @@
-//! Per-call public model: estimate, status and source class (docs/R1_SLICE.md section 1).
-//! Port of `realtime/timeline/estimate.py`, operation for operation (its docstring has the
-//! rules), plus the per-journey body of `core.estimate_all` and the three helpers it uses
-//! (`_seen_leaving`, `_fresh`, `_behind`), which read only one instance.
-//!
-//! Python semantics kept: `td * float` and `timedelta(seconds=float)` round half to even
-//! (`TimeDelta::mul_f64`, `from_secs_f64`; the early lead `lateness * early_keep` is a negative
-//! duration), the publish deadband holds while `abs(old - value) < hold`, and truthiness of
-//! instants and intervals is only `None` (`est_dep or est_arr`).
+//! Per-call public model: estimate, status and source class (docs/R1_SLICE.md section 1), plus the
+//! per-journey body of `core.estimate_all` and the three helpers it uses (`_seen_leaving`,
+//! `_fresh`, `_behind`), which read only one instance.
 
 use crate::config::Policy;
 use crate::config::policy::PredictionPolicy;
 use crate::index::{Index, Trip};
 use crate::model::{CallState, CallStatus, Instance, Interval, Lifecycle, SourceClass};
-use crate::py::num::{py_max, py_min};
 use crate::time::{Instant, TimeDelta};
 use crate::timeline::fusion::{anchor_prediction, current_lateness};
 use crate::timeline::plan::{Plan, Scheduled, no_timetabled_dwell};
@@ -199,16 +192,13 @@ pub fn dwell_credit(
     if end <= start {
         return current;
     }
-    let share = py_min(
-        1.0,
-        py_max(0.0, (track.hypotheses[0].along_m - start) / (end - start)),
-    );
+    let share = ((track.hypotheses[0].along_m - start) / (end - start)).clamp(0.0, 1.0);
     (Some(lateness - credited.mul_f64(1.0 - share)), source_class)
 }
 
 /// What `estimate` is given besides the instance: the current lateness, and the optional
 /// anchor, running extras, floor at now, last fix at a stop, seen leaving and least drives
-/// (Python's keyword arguments).
+///.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Inputs<'a> {
     pub current: Lateness,
@@ -226,7 +216,7 @@ fn at_call(pair: Option<(usize, Instant)>, i: usize) -> Option<Instant> {
 }
 
 /// Per-call estimates (estimate.py `estimate`; its docstring has the rules). Panics where
-/// `scheduled` does not have one entry per call (Python's `zip(strict=True)`).
+/// `scheduled` does not have one entry per call.
 pub fn estimate(
     instance: Instance,
     scheduled: &[Scheduled],
@@ -751,9 +741,7 @@ pub fn estimate_with(
     let current = waiting_is_not_early(&instance, plan, current_lateness(&instance));
     let current = dwell_credit(&instance, trip, plan, current, prediction);
     let mut instance = instance;
-    instance.lateness_s = current
-        .0
-        .map(|l| crate::py::num::py_round_int(l.total_seconds()));
+    instance.lateness_s = current.0.map(|l| l.total_seconds().round() as i64);
     let inputs = Inputs {
         current,
         anchor: anchor_prediction(&instance, trip, index, policy.rail.predictor),

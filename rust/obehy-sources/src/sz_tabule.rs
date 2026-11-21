@@ -1,5 +1,5 @@
-//! SŽ station board: `InfoTabule` HTML → platforms (docs/sources/sz-tabule.md); port of
-//! `realtime/sources/sz_tabule.py`, a code decoder (`decoder = "sz-tabule"`).
+//! SŽ station board: `InfoTabule` HTML → platforms (docs/sources/sz-tabule.md), a code
+//! decoder (`decoder = "sz-tabule"`).
 //!
 //! One poll is one station's board: arrivals and departures. Each row with a platform becomes a
 //! vehicle-less observation keyed by train number, carrying a `PlatformAssignment` for the
@@ -7,18 +7,18 @@
 //! last column's header says platforms, tracks or both), SZT-Q4 (`-` and `ND` are none),
 //! SZT-Q5 (bare `HH:mm` resolved near reception). Only desktop cells are read.
 
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 
 use obehy_core::model::{
     Fact, Feed, Observation, PlatformAssignment, PlatformLabel, RawRef, StopKind, TripKey,
 };
-use obehy_core::py::text;
 use obehy_core::time::{Instant, resolve_clock};
 use regex::Regex;
+use scraper::{ElementRef, Html, Selector};
 
 use crate::error::PayloadError;
-use crate::reader::html::{Event, parse};
-use crate::reader::json::{self, Json};
+use crate::mapping::hhmm;
+use crate::reader::json::{self, Value};
 
 pub const SOURCE: &str = "sz-tabule";
 pub const CHANNEL: &str = "board";
@@ -38,102 +38,64 @@ struct Table {
     rows: Vec<Vec<Cell>>,
 }
 
-fn column_regex() -> &'static Regex {
-    static COLUMN: OnceLock<Regex> = OnceLock::new();
-    COLUMN.get_or_init(|| crate::mapping::py_regex(r"^inTaCol[PO]-\d+$").expect("a valid pattern"))
+fn selector(css: &str) -> Selector {
+    Selector::parse(css).expect("a valid selector")
 }
 
-/// The `_Board` handler over the parser's events.
-fn tables(events: Vec<Event>) -> Vec<Table> {
-    let mut tables: Vec<Table> = Vec::new();
-    let mut in_table = false;
-    let mut cell: Option<Cell> = None;
-    let mut head = false;
-    // Python keeps `_row` across tables: a cell before the next `tr` joins the last row seen.
-    let mut row: Option<(usize, usize)> = None;
-    for event in events {
-        match event {
-            Event::Start(tag, attrs) => {
-                // `{name: value or ""}`: the last duplicate wins.
-                let value = |name: &str| {
-                    attrs
-                        .iter()
-                        .rev()
-                        .find(|(n, _)| n == name)
-                        .map(|(_, v)| v.clone().unwrap_or_default())
-                };
-                let class = value("class").unwrap_or_default();
-                let classes = text::split(&class);
-                let typ = value("data-typ");
-                let kind = match typ.as_deref() {
-                    Some("prijezdy") => Some(StopKind::Arrival),
-                    Some("odjezdy") => Some(StopKind::Departure),
-                    _ => None,
-                };
-                if let (true, Some(kind)) = (tag == "div", kind) {
-                    tables.push(Table {
-                        kind,
-                        header: Vec::new(),
-                        rows: Vec::new(),
-                    });
-                    in_table = true;
-                } else if !in_table {
-                    continue;
-                } else if tag == "thead" {
-                    head = true;
-                } else if tag == "tbody" {
-                    head = false;
-                } else if tag == "tr" && !head {
-                    let t = tables.len() - 1;
-                    tables[t].rows.push(Vec::new());
-                    row = Some((t, tables[t].rows.len() - 1));
-                } else if tag == "td" || tag == "th" {
-                    let column = classes
-                        .iter()
-                        .find(|c| column_regex().is_match(c))
-                        .map(|c| (*c).to_owned());
-                    cell = Some(Cell {
-                        column,
-                        mobile: classes.contains(&"d-md-none"),
-                        text: String::new(),
-                        train: value("data-trainnumber"),
-                    });
-                }
-            }
-            Event::End(tag) => {
-                if (tag != "td" && tag != "th") || cell.is_none() || !in_table {
-                    continue;
-                }
-                let mut done = cell.take().expect("checked");
-                done.text = text::normalize_space(&done.text);
-                if tag == "th" && head {
-                    if !done.mobile {
-                        let table = tables.last_mut().expect("a table");
-                        table.header.push((done.column, done.text));
-                    }
-                } else if let Some((t, r)) = row {
-                    tables[t].rows[r].push(done);
-                }
-            }
-            Event::Data(data) => {
-                if let Some(c) = cell.as_mut() {
-                    c.text.push_str(&data);
-                }
-            }
-        }
+static TABLES: LazyLock<Selector> = LazyLock::new(|| selector("div[data-typ]"));
+static HEADER: LazyLock<Selector> = LazyLock::new(|| selector("thead th"));
+static ROWS: LazyLock<Selector> = LazyLock::new(|| selector("tbody tr"));
+static CELLS: LazyLock<Selector> = LazyLock::new(|| selector("td, th"));
+static COLUMN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^inTaCol[PO]-\d+$").expect("a valid pattern"));
+
+fn normalize_space(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn cell(element: ElementRef<'_>) -> Cell {
+    let e = element.value();
+    Cell {
+        column: e.classes().find(|c| COLUMN.is_match(c)).map(str::to_owned),
+        mobile: e.has_class("d-md-none", scraper::CaseSensitivity::CaseSensitive),
+        text: normalize_space(&element.text().collect::<String>()),
+        train: e.attr("data-trainnumber").map(str::to_owned),
+    }
+}
+
+/// The board's arrival and departure tables.
+fn tables(document: &Html) -> Vec<Table> {
+    let mut tables = Vec::new();
+    for div in document.select(&TABLES) {
+        let kind = match div.value().attr("data-typ") {
+            Some("prijezdy") => StopKind::Arrival,
+            Some("odjezdy") => StopKind::Departure,
+            _ => continue,
+        };
+        let header = div
+            .select(&HEADER)
+            .map(cell)
+            .filter(|c| !c.mobile)
+            .map(|c| (c.column, c.text))
+            .collect();
+        let rows = div
+            .select(&ROWS)
+            .map(|row| row.select(&CELLS).map(cell).collect())
+            .collect();
+        tables.push(Table { kind, header, rows });
     }
     tables
 }
 
-/// `code5`: the 6-digit request code without its check digit (SZT-Q1).
+/// The 6-digit request code without its check digit (SZT-Q1).
 pub fn code5(station: &str) -> Option<String> {
-    (station.chars().count() == 6 && text::isdigit(station))
-        .then(|| station.chars().take(5).collect())
+    (station.len() == 6 && station.bytes().all(|b| b.is_ascii_digit()))
+        .then(|| station[..5].to_owned())
 }
 
 fn labels(table: &Table) -> Option<Vec<PlatformLabel>> {
     let last = &table.header.last()?.1;
-    match text::normalize_space(last).to_lowercase().as_str() {
+    match last.to_lowercase().as_str() {
         "nástupiště" => Some(vec![PlatformLabel::Platform]),
         "kolej" => Some(vec![PlatformLabel::Track]),
         "nást./kolej" => Some(vec![PlatformLabel::Platform, PlatformLabel::Track]),
@@ -141,48 +103,25 @@ fn labels(table: &Table) -> Option<Vec<PlatformLabel>> {
     }
 }
 
-fn hhmm(scheduled: &str) -> Option<i64> {
-    let (h, m) = scheduled
-        .strip_suffix('\n')
-        .unwrap_or(scheduled)
-        .split_once(':')?;
-    let ok = |s: &str, lo: usize, hi: usize| {
-        (lo..=hi).contains(&s.chars().count()) && s.chars().all(text::is_decimal_char)
-    };
-    if !ok(h, 1, 2) || !ok(m, 2, 2) {
-        return None;
-    }
-    let hours = text::int_from_str(h)?.small()?;
-    let minutes = text::int_from_str(m)?.small()?;
-    if hours > 23 || minutes > 59 {
-        return None;
-    }
-    Some(((hours * 60 + minutes) * 60_000_000) as i64)
-}
-
 /// A board's observations; `request` is the poll's archived request (`{"sr70": "534149"}`).
 pub fn decode(
     body: &[u8],
     sha256: &str,
     received_at: Instant,
-    request: Option<&Json>,
+    request: Option<&Value>,
     version: i64,
 ) -> Result<Vec<Observation>, PayloadError> {
     let sr70 = request
         .and_then(|r| r.get("sr70"))
-        .map(Json::py_str)
+        .map(json::text)
         .unwrap_or_default();
-    let station = code5(&sr70)
-        .ok_or_else(|| PayloadError::payload("poll without the station's SR70 code"))?;
-    let text = std::str::from_utf8(body).map_err(|e| {
-        PayloadError::payload(format!(
-            "not UTF-8: {}",
-            json::utf8_error_text(body, &e, "utf-8")
-        ))
-    })?;
-    let tables = tables(parse(text));
+    let station =
+        code5(&sr70).ok_or_else(|| PayloadError::new("poll without the station's SR70 code"))?;
+    let text =
+        std::str::from_utf8(body).map_err(|e| PayloadError::new(format!("not UTF-8: {e}")))?;
+    let tables = tables(&Html::parse_document(text));
     if tables.is_empty() {
-        return Err(PayloadError::payload("no arrival or departure table"));
+        return Err(PayloadError::new("no arrival or departure table"));
     }
     let mut observations = Vec::new();
     let mut item = 0_i64;
@@ -253,7 +192,7 @@ fn row_facts(
     let (Some(train), Some(scheduled), Some(value)) = (train, scheduled, value) else {
         return Vec::new();
     };
-    if !text::isdigit(train) {
+    if !train.bytes().all(|b| b.is_ascii_digit()) {
         return Vec::new();
     }
     let parts: Vec<&str> = if labels.len() > 1 {
@@ -267,7 +206,7 @@ fn row_facts(
     let shown: Vec<(PlatformLabel, String)> = labels
         .iter()
         .zip(parts)
-        .map(|(l, p)| (*l, text::strip(p).to_owned()))
+        .map(|(l, p)| (*l, p.trim().to_owned()))
         .filter(|(_, p)| !matches!(p.as_str(), "" | "-" | "ND"))
         .collect();
     if shown.is_empty() {

@@ -1,16 +1,12 @@
-//! `step`: one observation through the realtime core (BASE_PLAN.md sections 19-20). Port of
-//! `realtime/core.py`, function for function; its module docstring has the rules (binding
-//! continuity, DUK-Q4/Q15/Q18/Q19, PID-Q8, rail runs, cancellations, keyless sources).
+//! `step`: one observation through the realtime core (BASE_PLAN.md sections 19-20): binding
+//! continuity, DUK-Q4/Q15/Q18/Q19, PID-Q8, rail runs, cancellations, keyless sources.
 //!
 //! Pure: no database, network or files. The runner loads the index for an observation's keys
 //! before calling [`step`] and executes the returned effects. Every read of static data that
-//! was not loaded is an [`IndexMiss`], fatal in the runner as in Python.
+//! was not loaded is an [`IndexMiss`], fatal in the runner.
 //!
-//! Python semantics kept: `FeedState.instances` and `.vehicles` are `IndexMap`s, entries
-//! replaced in place and removed with `shift_remove` (refresh's history effects follow the
-//! instances' insertion order); `timedelta(seconds=<float>)` from policy rounds as CPython
-//! (`TimeDelta::from_secs_f64`); "calls changed" (`instance.calls is not calls_before`) is a
-//! value comparison, equivalent because recording hops is idempotent for equal calls.
+//! `FeedState.instances` and `.vehicles` are ordered by key, so `refresh` and its effects
+//! visit journeys in key order.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
@@ -49,7 +45,7 @@ pub const SOURCE_RUNNING: &str = "running";
 pub type Semantics = HashMap<(String, String), SourceSemantics>;
 
 /// What `step` cannot continue from: static data that was not loaded, or an observation of
-/// another feed (Python raises `IndexMiss` and `ValueError`).
+/// another feed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CoreError {
     #[error(transparent)]
@@ -59,7 +55,7 @@ pub enum CoreError {
 }
 
 /// The core's context for one feed: its index, plans and the per-source progress policies,
-/// the policy and the channels' semantics (Python's `Context`).
+/// the policy and the channels' semantics.
 #[derive(Debug)]
 pub struct Context<'a> {
     pub index: &'a mut Index,
@@ -614,11 +610,11 @@ const PARALLEL_FROM: usize = 64;
 /// Journeys a thread takes at a time.
 const BLOCK: usize = 16;
 
-/// One journey due for its estimate: its slot and the instance moved out of it (a placeholder
-/// holds the slot meanwhile, so its insertion position is kept), and once looked up its trip
+/// One journey due for its estimate: the instance moved out of its entry (a placeholder holds
+/// the entry meanwhile), and once looked up its trip
 /// and plan, or why the trip is missing.
 struct Due {
-    slot: usize,
+    journey: JourneyKey,
     day: crate::time::Date,
     instance: Option<Instance>,
     trip: Option<Arc<Trip>>,
@@ -652,7 +648,7 @@ pub fn estimate_all_with(
     let mut jobs: Vec<Due> = Vec::with_capacity(due.len());
     let no_calls: Arc<[CallState]> = Arc::from(Vec::new());
     for journey in due {
-        let Some((slot, _, instance)) = instances.get_full_mut(&journey) else {
+        let Some(instance) = instances.get_mut(&journey) else {
             continue;
         };
         if instance.lifecycle == Lifecycle::Cancelled {
@@ -660,8 +656,8 @@ pub fn estimate_all_with(
         }
         let held = vacant(instance, &no_calls);
         jobs.push(Due {
-            slot,
             day: journey.service_date,
+            journey,
             instance: Some(std::mem::replace(instance, held)),
             trip: None,
             plan: None,
@@ -729,7 +725,7 @@ pub fn estimate_all_with(
         ));
     }
     for job in jobs {
-        instances[job.slot] = job.instance.expect("estimated");
+        *instances.get_mut(&job.journey).expect("a due journey") = job.instance.expect("estimated");
     }
     state.dirty.clear();
     Ok(())
@@ -990,7 +986,7 @@ fn drop_unstarted(state: &mut FeedState, journey: &JourneyKey, vehicle: &Vehicle
                 .is_some_and(|b| b.journey == *journey)
     });
     if !others {
-        state.instances.shift_remove(journey);
+        state.instances.remove(journey);
         state.dirty.remove(journey);
     }
 }
@@ -1256,7 +1252,7 @@ pub fn rebase(state: &mut FeedState, index: &mut Index) -> Result<Vec<Effect>, I
     journeys.sort();
     for journey in journeys {
         let Some(trip) = resolve(&journey, index)? else {
-            state.instances.shift_remove(&journey);
+            state.instances.remove(&journey);
             continue;
         };
         let instance = state.instances[&journey].clone();

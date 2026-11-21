@@ -34,7 +34,7 @@ fn every_quirk_a_manifest_names_is_in_its_dossier() {
     let id = Regex::new(r"\b([A-Z]+)-Q\d+\b").unwrap();
     let mut missing = Vec::new();
     let mut seen = 0;
-    let dir = repo().join("src/obehy/realtime/sources");
+    let dir = repo().join("src/obehy/data/realtime/sources");
     for entry in std::fs::read_dir(&dir).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_none_or(|e| e != "toml") {
@@ -62,7 +62,7 @@ fn every_quirk_a_manifest_names_is_in_its_dossier() {
 #[test]
 fn every_shipped_decode_section_compiles() {
     let sources = manifest::load_sources(
-        &repo().join("src/obehy/realtime/sources"),
+        &repo().join("src/obehy/data/realtime/sources"),
         &RECORDER_FILTERS,
     )
     .unwrap();

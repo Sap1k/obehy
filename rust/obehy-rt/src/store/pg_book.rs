@@ -5,10 +5,11 @@
 
 use futures_util::future::try_join_all;
 use obehy_core::model::{Feed, JourneyKey};
-use obehy_core::py::json::{DumpOptions, PyJson, dumps};
 use obehy_core::time::Date;
 use tokio_postgres::Client;
 use tokio_postgres::types::ToSql;
+
+use serde_json::Value;
 
 use super::cells::{JsonText, Jsonb, PgTime};
 use super::vehicles::{
@@ -269,7 +270,7 @@ pub async fn write_vehicle_rows(client: &Client, rows: &VehicleRows) -> StoreRes
     let mut kept_values = Vec::with_capacity(rows.kept.len());
     for (_, e) in &rows.kept {
         let fixes = i32::try_from(e.fixes).map_err(|e| StoreError::other(e.to_string()))?;
-        let journey = Jsonb(dumps(&journey_json(&e.journey), DumpOptions::DEFAULT));
+        let journey = Jsonb(journey_json(&e.journey).to_string());
         kept_values.push((PgTime(e.first_seen), PgTime(e.last_seen), fixes, journey));
     }
     let kept: Vec<Params> = rows
@@ -309,10 +310,7 @@ pub async fn write_vehicle_rows(client: &Client, rows: &VehicleRows) -> StoreRes
                 p.text("operator"),
                 p.text("licence_plate"),
                 p.text("fleet_number"),
-                Jsonb(dumps(
-                    &PyJson::List(p.attributes.clone()),
-                    DumpOptions::DEFAULT,
-                )),
+                Jsonb(Value::Array(p.attributes.clone()).to_string()),
                 p.last_stated.map(PgTime),
             )
         })

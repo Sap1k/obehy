@@ -1,5 +1,4 @@
-//! Keyed binding (R5): port of `realtime/infer/keyed.py`. A literal source key plus the
-//! observation time choose one journey.
+//! Keyed binding (R5). A literal source key plus the observation time choose one journey.
 //!
 //! The date rule of BASE_PLAN.md section 19.3: candidate service dates are local yesterday,
 //! today and tomorrow; a date survives when the trip runs on it and the observation lies in
@@ -12,7 +11,7 @@
 //! operating date (`ServiceDay`, SŽ) makes it the only candidate.
 //!
 //! Python caches `_span` and `_admissible` (lru, pure); they are recomputed here. Every function
-//! that reads the index returns its [`IndexMiss`] (fatal in the runner, as in Python).
+//! that reads the index returns its [`IndexMiss`] (fatal in the runner).
 
 use std::collections::HashSet;
 use std::sync::Arc;

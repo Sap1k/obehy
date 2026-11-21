@@ -22,7 +22,7 @@ flowchart LR
     direction TB
     rel["obehy release<br/>fetch · load · activate"]
     refimp["obehy ref import"]
-    worker["obehy realtime<br/>connectors + core"]
+    worker["obehy-rt worker (Rust)<br/>connectors + core"]
     jobs["obehy jobs<br/>nightly SQL"]
     api["obehy api<br/>/api/v1"]
     files[["files<br/>gtfs · gtfs-rt · vehicles.json · tiles"]]
@@ -53,8 +53,8 @@ flowchart LR
 | `obehy build` (GitHub Actions) | the only static compiler, through JrUtil (§11, §15) |
 | `obehy release` | fetch, verify, load and activate releases into `static.*` (§16) |
 | `obehy ref import` | load curated reference datasets into `ref.*` |
-| `obehy realtime` | the one process that talks to realtime upstreams; connectors plus the pure core (§18) |
-| `obehy jobs` | nightly set-wise SQL: retention (circulation edges and punctuality planned) |
+| `obehy-rt worker` | the realtime worker, a Rust binary of its own image (`rust/`, `docs/RUST_PORT.md`); the one process that talks to realtime upstreams; connectors plus the pure core (§18) |
+| `obehy jobs` | hourly and nightly set-wise SQL and file deletions: retention, the disk guard (circulation edges and punctuality planned) |
 | `obehy api` | FastAPI `/api/v1`; never calls upstream |
 
 PostgreSQL schemas:
@@ -66,9 +66,21 @@ PostgreSQL schemas:
 - `rt`: observations, assignments, current state, lookups.
 - `history`: journeys, actual events, vehicle days, the circulation model.
 
+**The database is the boundary between the two languages.** The Rust worker writes `rt.*` and
+`history.*` and reads `static.*`, `active.*`, `rt.alert_target` and the API's
+`rt.lookup_request` (`NOTIFY obehy_lookup`); Python loads releases, applies migrations (the
+worker refuses a schema it does not know), serves the API and runs the jobs. Besides the
+database they share only files: the policy and the connector manifests
+(`src/obehy/data/realtime/`, which Python reads through `realtime_config.py`), the SQL compiled
+into the worker (`data/realtime/sql/`), the raw archive (written by the worker, pruned by the
+jobs) and the worker's output stream, which the Python diagnostics read (`obehy rt report
+--from-stream`). Nothing calls across. The worker is plain Rust: the emulation of Python's exact
+numbers, text and library quirks that kept it byte-identical during the port was removed after
+the switch.
+
 ## Two kinds of input
 
-| | Connector (`realtime/sources/`) | Importer (`reference/importers/`) |
+| | Connector (`data/realtime/sources/` + `obehy-sources`) | Importer (`reference/importers/`) |
 |---|---|---|
 | what | live data: positions, delays, events, assignments, compositions | reference datasets: vehicle registers, models, bindings, rosters, media |
 | when | polled channels, or lazy lookups on demand | when the reviewed files change |
@@ -82,8 +94,10 @@ Private ones (such as the DÚK vehicle register) use the same format from a loca
 
 ## Connector contract
 
-A connector is `realtime/sources/<source>.py` plus `<source>.toml`. **It declares how it
-fetches; the generic connector runtime (`realtime/runtime/`) executes that.** No connector
+A connector is its manifest, `src/obehy/data/realtime/sources/<source>.toml`, decoded
+declaratively by `obehy-sources` (`[channel.decode]`) or by a named code decoder there. **It
+declares how it fetches; the generic connector runtime of `obehy-rt` (scheduler, fetch,
+egress, lookup broker) executes that.** No connector
 implements scheduling, rate limits, budgets or caching itself.
 
 ```text
@@ -128,8 +142,8 @@ lookup:   plan(subject, view) → UpstreamRequest | not_available     pure
   its request; with no answer or an older one it upserts `rt.lookup_request`, NOTIFYs
   `obehy_lookup` and answers `pending` (202, `retry_after`) or `stale`. That request row is the
   only thing the API writes, on a small pool of its own. The lookup broker
-  (`realtime/runtime/lookups.py`, its own connection and thread in the worker):
-  - reads the view in SQL (`realtime/sql/lookup_view.sql`: the trip's calls with their SR70,
+  (`obehy-rt` `lookups.rs`, its own connection and task in the worker):
+  - reads the view in SQL (`data/realtime/sql/lookup_view.sql`: the trip's calls with their SR70,
     which the train has left, its keys);
   - reuses `rt.detail_cache` by cache key, so requests planned to one key share one fetch;
   - enforces the token bucket (a request without a token waits for a later pass) and the daily
@@ -169,7 +183,7 @@ wide timeline constraint and a TripUpdate only, with low confidence. It needs no
 
 ```mermaid
 flowchart TB
-  subgraph CONN["sources/ — each connector declares how it fetches"]
+  subgraph CONN["data/realtime/sources/ — each connector declares how it fetches"]
     direction LR
     duk["duk<br/>poll 15 s"]
     sz["sz-mapa<br/>poll 30 s"]
@@ -301,8 +315,8 @@ erDiagram
 - **Attributes.** A closed vocabulary (`data/vehicles/attributes.toml`), mapped by each
   connector. Per attribute: curated > live (by source order) > model default, disagreements
   flagged and every statement kept. Media rows carry licence and attribution.
-- **The worker resolves, the API reads.** The emitter's `VehicleBook` (`realtime/emit/
-  vehicles.py`, `pairing.py`) decides each report's vehicle and each vehicle's profile when an
+- **The worker resolves, the API reads.** The worker's `VehicleBook` (`obehy-core`
+  `vehicles/book.rs`, `pairing.rs`) decides each report's vehicle and each vehicle's profile when an
   input changes (a live value, a pairing, `NOTIFY obehy_registry` after an import) and writes
   `rt.vehicle_state_current.vehicle_id`/`bound_by`, `rt.vehicle_profile` and
   `rt.vehicle_pairing`.
@@ -323,7 +337,7 @@ erDiagram
   vehicle the worker resolved the report as (`vehicle_id`: registry, stated identifier or
   co-located partner, as the live map; a rail run's unit, not its train); a vehicle's working
   days, the observed tours, are cut from them live by `history.vehicle_chains`.
-- **Alerts** (`realtime/alerts.py`, `emit/alerts.py`) are not core state: alert channels write
+- **Alerts** (`obehy-core` `alerts.rs`, `obehy-rt` `store/alerts.rs`) are not core state: alert channels write
   whole sets to `rt.alert` on their own connection, SQL resolves their entities per feed
   against the active release (`rt.alert_target`), and the emit tick appends them to each
   feed's GTFS-RT. An alert stating a trip's fate reaches the core as a fact, never as an alert.
@@ -378,16 +392,19 @@ These are fixed now because changing them later breaks history or consumers.
 ```text
 src/obehy/
 ├── cli.py, pipeline/, national_*.py, ...   static build (GitHub Actions)
-├── release/                                release mirror
+├── release/                                release mirror, migrations
 ├── reference/          importers/, load.py (versioned snapshot → ref.*)
-├── realtime/
-│   ├── sources/        connectors: <source>.py + <source>.toml
-│   ├── runtime/        poll scheduler, lookup broker
-│   ├── model.py, times.py, clock.py, core.py
-│   ├── index/, infer/, timeline/, vehicles.py
-│   ├── emit/, worker.py, record.py, archive.py, replay.py, evaluate.py
-│   └── sql/            nightly set-wise jobs
+├── realtime_config.py  what Python reads of the policy and manifests; Prague time at the edge
+├── realtime/           jobs.py, disk_guard.py (retention); gtfs_rt_check.py; the replay
+│                       diagnostics over the worker's output stream (replay_report.py, ...)
 ├── api/                FastAPI /api/v1
-└── data/               policies, connector manifests, vehicles/attributes.toml
+└── data/               policies, realtime/sources/ (connector manifests), realtime/sql/,
+                        vehicles/attributes.toml
+rust/                   the realtime worker (rust/README.md)
+├── obehy-core/         time, geo, model, config, index, infer, timeline, core, publish,
+│                       vehicles; no I/O
+├── obehy-sources/      readers, declarative decoding, normalizers, code decoders; no I/O
+└── obehy-rt/           the binary: worker, record, replay, warm, bench, compare; store,
+                        archive, scheduler, egress, lookup broker
 web/                    frontend: Vite + React + Mantine; nginx image (web/Dockerfile)
 ```

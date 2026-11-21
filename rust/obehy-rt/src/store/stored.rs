@@ -1,5 +1,5 @@
-//! Reading stored observations back for warm replay: port of `emit/stored.py` (docs/R1_SLICE.md
-//! section 5), with binary COPY out instead of a server-side cursor.
+//! Reading stored observations back for warm replay (docs/R1_SLICE.md section 5), with binary COPY
+//! out instead of a server-side cursor.
 //!
 //! The window is read in `received_at` order, which the `observation_time` index streams without
 //! a sort; a chunk never splits observations received at the same instant, so sorting each chunk

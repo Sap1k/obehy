@@ -1,5 +1,5 @@
-//! The realtime processes' log line (port of `realtime/logs.py`): a UTC timestamp to the second
-//! and the message, on stdout, flushed. The worker, the recorder and egress all log alike.
+//! The realtime processes' log line: a UTC timestamp to the second and the message, on stdout,
+//! flushed. The worker, the recorder and egress all log alike.
 
 use std::io::Write as _;
 use std::sync::Arc;

@@ -612,7 +612,7 @@ struct Driver {
 impl Driver {
     fn new(index: Index) -> Driver {
         let sources = load_sources(
-            &common::repo().join("src/obehy/realtime/sources"),
+            &common::repo().join("src/obehy/data/realtime/sources"),
             &RECORDER_FILTERS,
         )
         .unwrap();

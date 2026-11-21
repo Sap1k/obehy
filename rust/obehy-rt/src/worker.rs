@@ -1,5 +1,5 @@
-//! `obehy-rt worker`: the long-running realtime worker, port of `realtime/worker.py`
-//! (BASE_PLAN.md section 18.3, docs/RUST_PORT.md R8).
+//! `obehy-rt worker`: the long-running realtime worker (BASE_PLAN.md section 18.3,
+//! docs/RUST_PORT.md R8).
 //!
 //! What runs where:
 //!
