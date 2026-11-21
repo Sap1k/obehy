@@ -5,7 +5,9 @@
 //!
 //! - **The core thread** ([`core_loop`]): the runner, the writer, the vehicle book, the GTFS-RT
 //!   emitters and the alert entities. It warm-replays the stored observations first, then serves
-//!   messages in arrival order: polls, ticks, release switches, registry reloads, summaries.
+//!   messages: polls and ticks in reception order, as replay runs them ([`order`]: a ticket per
+//!   poll as it leaves the fetch, a reorder buffer before the core), release switches, registry
+//!   reloads and summaries as they arrive.
 //! - **Pollers** (tokio tasks, one per channel; demand channels read station boards while trains
 //!   are due): fetch through egress, then archive and decode on the blocking pool
 //!   ([`handler`]) and hand the observations to the core. An alert channel's alerts are written
@@ -30,6 +32,7 @@ pub mod core_loop;
 pub mod handler;
 pub mod loads;
 pub mod memory;
+pub mod order;
 pub mod pipeline;
 pub mod schema;
 
@@ -63,6 +66,7 @@ use crate::store::vehicles::physical_rows;
 use core_loop::{CoreSetup, Message, Reply, run_core};
 use handler::{PollHandler, Shared};
 use loads::active_loads;
+use order::Sequencer;
 use schema::check_schema;
 
 /// `obehy release activate` notifies this channel.
@@ -201,6 +205,7 @@ pub async fn run_worker<F: Fetcher>(
     let ready = Stop::new();
     let warm_stop = Arc::new(AtomicBool::new(false));
     let (core, messages) = std::sync::mpsc::channel::<Message>();
+    let sequencer = Arc::new(Sequencer::new());
     let setup = CoreSetup {
         database_url: options.database_url.clone(),
         config: config.clone(),
@@ -256,6 +261,7 @@ pub async fn run_worker<F: Fetcher>(
         stats: Mutex::new(stats),
         phases: Mutex::new(Phases::new()),
         core: core.clone(),
+        sequencer: Arc::clone(&sequencer),
         ready: ready.clone(),
         alerts,
         log: Arc::clone(&log),
@@ -273,15 +279,16 @@ pub async fn run_worker<F: Fetcher>(
     if !options.once {
         let every_s = options.policy.emit.tick_s;
         {
-            let (core, ready, stop, clock) = (
+            let (core, ready, stop, clock, sequencer) = (
                 core.clone(),
                 ready.clone(),
                 stop.clone(),
                 Arc::clone(&options.clock),
+                Arc::clone(&sequencer),
             );
             let failed = Arc::clone(&log);
             helpers.spawn(async move {
-                if let Err(error) = ticks(&core, &ready, &stop, &clock, every_s).await {
+                if let Err(error) = ticks(&core, &sequencer, &ready, &stop, &clock, every_s).await {
                     failed(&format!("ticks: {error}"));
                     stop.set();
                 }
@@ -392,9 +399,11 @@ pub async fn run_worker<F: Fetcher>(
 }
 
 /// Run each tick once the wall clock passed it with no poll after it (a poll runs the ticks
-/// before it itself).
+/// before it itself). The tick takes its ticket as it is sent: the core runs it after every
+/// poll ticketed before it.
 async fn ticks(
     core: &std::sync::mpsc::Sender<Message>,
+    sequencer: &Sequencer,
     ready: &Stop,
     stop: &Stop,
     clock: &Clock,
@@ -412,7 +421,12 @@ async fn ticks(
         if stop.is_set() || clock() < next {
             continue;
         }
-        ask(core, |done| Message::Tick { at: next, done }).await?;
+        ask(core, |done| Message::Tick {
+            ticket: sequencer.tick(next),
+            at: next,
+            done,
+        })
+        .await?;
     }
     Ok(())
 }

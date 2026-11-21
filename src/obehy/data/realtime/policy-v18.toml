@@ -200,6 +200,10 @@ compact_index_at_s = 12600
 # The Rust worker's vehicle book forgets a (source, vehicle) report no observation named for this
 # long (a returning one is identified afresh). Python never forgets and ignores this key.
 forget_reports_s = 172800
+# The Rust worker hands polls to the core in the order they were received, as replay runs them;
+# a poll still being archived or decoded after this long no longer holds back the polls and ticks
+# received after it (logged; it runs when it comes). Python ignores this key.
+poll_stall_s = 30
 
 [retention]
 # Hourly rt.observation partitions (UTC hours) are dropped by `obehy jobs hourly` once they end

@@ -1,21 +1,25 @@
 //! The core's thread: the one place the runner, the writer and the GTFS-RT emitters live. Python
 //! guards its runner with one asyncio lock shared by polls, ticks and rebases; here they are
-//! messages on one queue, run in arrival order on a thread of its own (the core and the store
-//! are synchronous), so the async side never blocks on the core.
+//! messages on one queue, run on a thread of its own (the core and the store are synchronous),
+//! so the async side never blocks on the core. Polls and timer ticks carry tickets and run in
+//! ticket order, which is reception order, as replay runs them ([`super::order`]); the other
+//! messages run as they arrive.
 //!
 //! 1. Open the writer (it writes the sources' physical-vehicle policy, `rt.physical_vehicles`).
 //! 2. Warm replay: stored observations of the last `warm_replay.max_hours` through the runner
 //!    with no writer (`warm::warm_start`), while the pollers queue what they receive.
 //! 3. Attach the writer, run the backlog the queue holds (ticks due before each poll first),
 //!    publish the state tables and GTFS-RT files, and mark the worker ready.
-//! 4. Serve messages until [`Message::Stop`]; then a last tick at the clock's time, emitted.
+//! 4. Serve messages until [`Message::Stop`]; then what the reorder buffer still holds, in
+//!    order, and a last tick at the clock's time, emitted.
 //!
 //! Any error here is fatal: the thread ends, the worker stops and the process exits non-zero
 //! (Python's poller ends on the same errors and takes the worker with it).
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::Duration;
 
 use obehy_core::config::Policy;
 use obehy_core::core::{CORE_VERSION, Semantics};
@@ -30,6 +34,7 @@ use tokio_postgres::Config;
 use super::WorkerError;
 use super::loads::{PgLoads, ReleaseLoads};
 use super::memory::sizes_line;
+use super::order::{Released, Reorder};
 use super::pipeline::{LiveWriter, Output, Pipeline};
 use crate::fetch::Clock;
 use crate::logs::Log;
@@ -52,16 +57,24 @@ pub type Reply = Result<(), String>;
 
 #[derive(Debug)]
 pub enum Message {
-    /// A facts channel's poll received at `at`; `done` when the poller waits for it.
+    /// A facts channel's poll received at `at` (none for a failed or undecodable one), with
+    /// its ticket; `done` when the poller waits for it.
     Poll {
+        ticket: u64,
         at: Instant,
         observations: Vec<Arc<Observation>>,
         done: Option<oneshot::Sender<Reply>>,
     },
-    /// The wall clock passed the tick at `at` with no poll after it yet.
+    /// The wall clock passed the tick at `at` with no poll after it yet; with its ticket.
     Tick {
+        ticket: u64,
         at: Instant,
         done: oneshot::Sender<Reply>,
+    },
+    /// A ticket with nothing for the core (an alert or archive-only poll, an error, a poller
+    /// cancelled).
+    Skip {
+        ticket: u64,
     },
     /// An alert poll changed `rt.alert`.
     AlertsChanged,
@@ -183,13 +196,15 @@ pub fn run_core(
 
     // Live: the writer attached, the backlog run, the state published.
     pipeline.output.writer = Some(writer);
+    let stall = Duration::from_secs(u64::try_from(setup.policy.emit.poll_stall_s).unwrap_or(0));
+    let mut order: Reorder<Message> = Reorder::new(stall);
     let mut backlog = 0;
     let mut stopped = false;
     while let Ok(message) = messages.try_recv() {
         if let Message::Poll { observations, .. } = &message {
             backlog += observations.len();
         }
-        if !serve(&setup, &mut pipeline, message)? {
+        if !receive(&setup, &mut pipeline, &mut order, message)? {
             stopped = true; // stopped during warm replay: the backlog was all there is
             break;
         }
@@ -204,10 +219,106 @@ pub fn run_core(
          received meanwhile",
         setup.loads.run_id
     ));
-    while !stopped && let Ok(message) = messages.recv() {
-        stopped = !serve(&setup, &mut pipeline, message)?;
+    while !stopped {
+        let message = match order.deadline() {
+            None => messages.recv().ok(),
+            Some(deadline) => {
+                let wait = deadline.saturating_duration_since(std::time::Instant::now());
+                match messages.recv_timeout(wait) {
+                    Ok(message) => Some(message),
+                    Err(RecvTimeoutError::Timeout) => {
+                        release_due(&setup, &mut pipeline, &mut order)?;
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => None,
+                }
+            }
+        };
+        stopped = match message {
+            Some(message) => !receive(&setup, &mut pipeline, &mut order, message)?,
+            None => {
+                // Every sender is gone: what is held is all there is.
+                drain(&setup, &mut pipeline, &mut order)?;
+                true
+            }
+        };
     }
     finish(&setup, pipeline)
+}
+
+/// One message from the queue: polls, ticks and skips go through the reorder buffer and run
+/// when their turn comes; the rest run at once. False on [`Message::Stop`], after everything
+/// held has run.
+fn receive(
+    setup: &CoreSetup,
+    pipeline: &mut Pipeline<PgLoads>,
+    order: &mut Reorder<Message>,
+    message: Message,
+) -> Result<bool, WorkerError> {
+    let now = std::time::Instant::now();
+    match message {
+        Message::Poll { ticket, .. } | Message::Tick { ticket, .. } => {
+            order.push(ticket, Some(message), now);
+        }
+        Message::Skip { ticket } => order.push(ticket, None, now),
+        Message::Stop => {
+            drain(setup, pipeline, order)?;
+            return Ok(false);
+        }
+        other => return serve(setup, pipeline, other),
+    }
+    release_due(setup, pipeline, order)?;
+    Ok(true)
+}
+
+/// Everything the reorder buffer releases now.
+fn release_due(
+    setup: &CoreSetup,
+    pipeline: &mut Pipeline<PgLoads>,
+    order: &mut Reorder<Message>,
+) -> Result<(), WorkerError> {
+    while let Some(released) = order.pop(std::time::Instant::now()) {
+        release(setup, pipeline, released)?;
+    }
+    Ok(())
+}
+
+/// At shutdown: everything held, in ticket order.
+fn drain(
+    setup: &CoreSetup,
+    pipeline: &mut Pipeline<PgLoads>,
+    order: &mut Reorder<Message>,
+) -> Result<(), WorkerError> {
+    for released in order.drain() {
+        release(setup, pipeline, released)?;
+    }
+    Ok(())
+}
+
+fn release(
+    setup: &CoreSetup,
+    pipeline: &mut Pipeline<PgLoads>,
+    released: Released<Message>,
+) -> Result<(), WorkerError> {
+    let message = match released {
+        Released::Next(message) => message,
+        Released::Stalled(ticket) => {
+            (setup.log)(&format!(
+                "poll ticket {ticket} not resolved within {} s: the polls and ticks after it go \
+                 on without it",
+                setup.policy.emit.poll_stall_s
+            ));
+            return Ok(());
+        }
+        Released::Late(ticket, message) => {
+            (setup.log)(&format!(
+                "poll ticket {ticket} came after the polls and ticks after it ran: run out of \
+                 order"
+            ));
+            message
+        }
+    };
+    serve(setup, pipeline, message).map(drop)
 }
 
 fn finish(
@@ -227,12 +338,14 @@ fn serve(
 ) -> Result<bool, WorkerError> {
     let (result, done) = match message {
         Message::Stop => return Ok(false),
+        Message::Skip { .. } => return Ok(true),
         Message::Poll {
             at,
             observations,
             done,
+            ..
         } => (pipeline.poll(at, &observations), done),
-        Message::Tick { at, done } => (pipeline.advance(at), Some(done)),
+        Message::Tick { at, done, .. } => (pipeline.advance(at), Some(done)),
         Message::AlertsChanged => {
             if let Some(alerts) = &mut pipeline.output.alerts {
                 alerts.dirty = true;

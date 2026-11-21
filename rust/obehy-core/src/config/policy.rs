@@ -206,6 +206,10 @@ pub struct EmitPolicy {
     /// `sweep_index_every_s` (`VehicleBook::forget_unseen`); absent: never.
     #[serde(default)]
     pub forget_reports_s: Option<i64>,
+    /// Rust only: the live worker releases polls to the core in reception order; a poll not
+    /// archived and decoded this long after a later poll or tick began waiting on it is
+    /// released past (logged; it runs at once when it comes).
+    pub poll_stall_s: i64,
 }
 
 /// How long stored realtime data is kept (`obehy jobs hourly` and `nightly`).
