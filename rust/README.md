@@ -65,6 +65,13 @@ writes the stream `obehy rt compare --level facts` writes, from the same argumen
 (`obehy-core/tests/fixtures/progress.json.gz`); `tests/timeline_progress.rs` replays them bit for
 bit. Plans are cached in `timeline::plan::PlanCache` (`plan(trip, day, &index, &policy)`).
 
+`uv run python rust/tools/gen_estimate_fixtures.py` does the same for `timeline.advance`, fusion,
+the estimates and platforms: every `advance`, `apply_point`, `with_lead`, per-journey
+`estimate_all` (with its intermediates) and `apply_platform` call over the corpus and the unit
+scenarios of `test_timeline.py`, `test_rail_fusion.py`, `test_cancellation.py`, `test_boards.py`
+and `test_hot_path.py`, instances in and out (`obehy-core/tests/fixtures/estimate.json.gz`);
+`tests/timeline_estimate.rs` replays them and compares the instances and effects exactly.
+
 ## Reading policy, manifests and facts
 
 ```rust
