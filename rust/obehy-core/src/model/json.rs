@@ -108,10 +108,24 @@ mod tests {
             .into(),
             Destination {
                 name: "Teplice,Celní".into(),
+                townless: false,
             }
             .into(),
             NextStopName {
                 name: "Teplice,Pražská".into(),
+                scheduled: None,
+                townless: false,
+            }
+            .into(),
+            Destination {
+                name: "Poruba,Opavská".into(),
+                townless: true,
+            }
+            .into(),
+            NextStopName {
+                name: "Svinov,mosty".into(),
+                scheduled: Some(Instant::from_isoformat("2026-10-12T05:30:00+00:00").unwrap()),
+                townless: true,
             }
             .into(),
             VehicleAttribute {

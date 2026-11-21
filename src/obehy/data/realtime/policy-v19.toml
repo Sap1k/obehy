@@ -7,10 +7,12 @@
 # live, v12 one day of rt.observation, v13 hourly rt.observation, a history window and the disk
 # guard, v14 the raw archive window per source, v15 inferred history events, v16 one estimate
 # for every mode: the floor at now per mode, v17 terminals: terminal_radius_m and standing_m,
-# v18 one rule per concept: [journey], constants moved here from the code).
+# v18 one rule per concept: [journey], constants moved here from the code, v19 MPV net, IREDO and
+# IDSOK trains lead the rail position before SŽ, and keyless inference takes the scheduled time
+# at the next stop).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "18"
+policy_version = "19"
 
 [journey]
 # The key a trip's journey is known by everywhere (history, current state, compositions, the
@@ -238,9 +240,10 @@ cooldown_s = 1800
 
 [rail]
 # Several sources on one run (docs/R2_SLICE.md section 5; the order applies on every feed). DÚK
-# GPS leads the position while fresh, then PID; SŽ positions refresh only every few minutes and
-# are coarse.
-position_preference = ["duk", "pid", "sz-mapa"]
+# GPS leads the position while fresh, then PID, then the regional maps (operator GPS with times
+# rounded to minutes: MPVNET-Q8, IREDO-Q5); SŽ positions refresh only every few minutes and are
+# coarse.
+position_preference = ["duk", "pid", "mpvnet", "iredo", "idsok", "sz-mapa"]
 position_fresh_s = 120
 position_sigma_m = { default = 20, "sz-mapa" = 150 }
 # SŽ point events are minutes; a crossing from positions further outside loses to them.
@@ -287,3 +290,7 @@ departure_radius_m = 2000
 # Stop events go to history once the vehicle has left this many stops of the bound trip, in
 # order (times are not compared: the source's delay is stale between stops, ARRIVA-Q10).
 confirm_departures = 2
+# A source naming its next stop's scheduled departure (MPV net city buses, MPVNET-Q3): the
+# candidates with a call there at that time, within this, are the only ones left; one of them
+# binds outright. Both times are whole minutes.
+next_stop_time_tolerance_s = 60

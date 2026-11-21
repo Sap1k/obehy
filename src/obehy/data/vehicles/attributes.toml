@@ -11,14 +11,14 @@ touch_s = 3600
 # names its own order, else `live_sources`; unlisted sources after), the most recent first
 # among equals; then the model's default. Every disagreement is flagged, none is dropped.
 [precedence]
-live_sources = ["pid", "duk", "dpmd", "mpvnet", "arriva-express", "sz-mapa", "sz-tabule"]
+live_sources = ["pid", "duk", "dpmd", "mpvnet", "iredo", "idsok", "arriva-express", "sz-mapa", "sz-tabule"]
 
 [precedence.attributes]
 # Golemio's agency_name.real is the operator actually running the trip.
 operator = ["pid"]
 # Which report names a co-located vehicle the registry does not know (emit/vehicles.py): the
 # realtime policy's position order (`rail.position_preference`), the others after.
-position = ["duk", "pid", "sz-mapa"]
+position = ["duk", "pid", "mpvnet", "iredo", "idsok", "sz-mapa"]
 
 # The identifiers a vehicle can be known by beside a source's vehicle ID: a registry key of
 # this kind binds any source report stating the same value live (an MPVnet plate, a 55p series

@@ -211,16 +211,28 @@ pub struct LineRef {
     pub value: String,
 }
 
-/// The destination stop's name, matched only against a candidate's own last stop.
+/// The destination stop's name, matched only against a candidate's own last stop. A
+/// `townless` name may leave out the stop name's leading parts (MPVNET-Q10).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Destination {
     pub name: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub townless: bool,
 }
 
-/// The next stop by name; a change means the vehicle has just left the call before it.
+/// The next stop by name; a change means the vehicle has just left the call before it. With
+/// `scheduled`, the timetable's departure there as the source knows it (MPVNET-Q3).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NextStopName {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled: Option<Instant>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub townless: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// The operating date the source names for the run it reports (SŽ `id`).

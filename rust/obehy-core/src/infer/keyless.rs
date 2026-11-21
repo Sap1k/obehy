@@ -1,8 +1,11 @@
 //! Keyless inference (R5). A vehicle without a trip key bound by what it shows (BASE_PLAN.md
 //! section 19.2; the first source is Arriva Express, docs/sources/arriva-express.md).
 //!
-//! Candidates come from the line and are hard-filtered by destination and time
-//! ([`candidates`]). The episode's departures, else the current fix, give each a time residual
+//! A scheduled time at the next stop that exactly one of the line's trips has binds that trip
+//! outright, whatever the destination says, and ends a binding to another trip (MPVNET-Q3,
+//! MPVNET-Q11: a city bus names its line's terminal, not its trip's). Otherwise candidates come
+//! from the line and are hard-filtered by destination and time ([`candidates`]). The episode's
+//! departures, else the current fix, give each a time residual
 //! ([`score`]). The best candidate binds only if its residual is at most `accept_s`
 //! (`gps_accept_s` for a fix alone) and the runner-up's is at least `margin_s` larger;
 //! otherwise the observation is `ambiguous`. The core calls it only for an observation with a
@@ -21,12 +24,13 @@ use crate::config::Policy;
 use crate::index::{Index, IndexMiss};
 use crate::infer::keyed::{Found, Match, admissible};
 use crate::model::{
-    Binding, BindingMethod, JourneyKey, KeylessEpisode, LineRef, Observation, Reason, VehicleState,
+    Binding, BindingMethod, JourneyKey, KeylessEpisode, LineRef, NextStopName, Observation, Reason,
+    VehicleState,
 };
 use crate::time::Instant;
 use crate::timeline::plan::PlanCache;
 
-use self::candidates::candidates;
+use self::candidates::{at_next_stop, candidates};
 use self::score::{place, position_residual};
 
 /// What told the candidates apart.
@@ -34,6 +38,8 @@ use self::score::{place, position_residual};
 pub enum Evidence {
     Departures,
     Position,
+    /// The scheduled time at the next stop (MPVNET-Q3).
+    NextStopTime,
 }
 
 impl Evidence {
@@ -41,6 +47,7 @@ impl Evidence {
         match self {
             Evidence::Departures => "departures",
             Evidence::Position => "position",
+            Evidence::NextStopTime => "next_stop_time",
         }
     }
 }
@@ -114,6 +121,51 @@ fn median(values: &mut [f64]) -> f64 {
     }
 }
 
+/// The next stop and its scheduled time, when the source gives them (MPVNET-Q3).
+fn next_stop_due(observation: &Observation) -> Option<(&NextStopName, Instant)> {
+    observation
+        .first::<NextStopName>()
+        .and_then(|next| next.scheduled.map(|due| (next, due)))
+}
+
+/// The one trip of the line with a call at the next stop at its scheduled time, whatever the
+/// destination (MPVNET-Q11), with the gap in seconds and how many trips were looked at; None
+/// without such a time, or unless exactly one trip has it.
+fn named_by_next_stop(
+    line: &LineRef,
+    episode: &KeylessEpisode,
+    observation: &Observation,
+    index: &Index,
+    policy: &Policy,
+) -> Result<Option<(f64, usize, Match)>, IndexMiss> {
+    let Some((next, due)) = next_stop_due(observation) else {
+        return Ok(None);
+    };
+    let found = match candidates(
+        line,
+        None,
+        episode.townless,
+        observation.at(),
+        index,
+        &policy.keyless,
+    )? {
+        Ok(found) => found,
+        Err(_) => return Ok(None),
+    };
+    let timed = at_next_stop(
+        &found,
+        &next.name,
+        due,
+        episode.townless,
+        index,
+        &policy.keyless,
+    )?;
+    Ok(match timed[..] {
+        [(gap, chosen)] => Some((gap, found.len(), chosen.clone())),
+        _ => None,
+    })
+}
+
 pub fn bind(
     line: &LineRef,
     episode: &KeylessEpisode,
@@ -122,9 +174,21 @@ pub fn bind(
     policy: &Policy,
     plans: &mut PlanCache,
 ) -> Result<Decision, IndexMiss> {
+    if let Some((gap, looked_at, chosen)) =
+        named_by_next_stop(line, episode, observation, index, policy)?
+    {
+        return Ok(Decision {
+            result: Found::Match(chosen),
+            candidates: looked_at,
+            evidence: Some(Evidence::NextStopTime),
+            best_s: Some(gap),
+            runner_up_s: None,
+        });
+    }
     let found = match candidates(
         line,
-        &episode.destination,
+        Some(&episode.destination),
+        episode.townless,
         observation.at(),
         index,
         &policy.keyless,
@@ -188,15 +252,19 @@ pub fn bind(
 /// An inferred binding continues while its episode does (same line and destination, no long
 /// silence) and the time stays in the journey's window (section 19.5); otherwise None, and the
 /// vehicle is inferred again. A bound trip is never re-scored on the way: the source's delay is
-/// stale between stops (ARRIVA-Q10), and the delay comes from GPS progress.
+/// stale between stops (ARRIVA-Q10), and the delay comes from GPS progress. Only a next stop's
+/// scheduled time naming another trip ends it early (MPVNET-Q11: the destination of a city
+/// bus stays its line's terminal from one trip to the next).
 pub fn continued(
     previous: Option<&VehicleState>,
+    line: &LineRef,
     episode: &KeylessEpisode,
-    at: Instant,
+    observation: &Observation,
     instances: &impl Journeys,
     index: &Index,
     policy: &Policy,
 ) -> Result<Option<Binding>, IndexMiss> {
+    let at = observation.at();
     let Some(previous) = previous else {
         return Ok(None);
     };
@@ -214,7 +282,31 @@ pub fn continued(
     if !instances.holds(&binding.journey) {
         return Ok(None);
     }
-    Ok(admissible(binding, at, index, policy)?.then(|| binding.clone()))
+    if !admissible(binding, at, index, policy)? {
+        return Ok(None);
+    }
+    if let Some((next, due)) = next_stop_due(observation) {
+        let bound = [Match::of(
+            binding.journey.clone(),
+            index.trip(&binding.trip_id)?.clone(),
+        )?];
+        let keeps = !at_next_stop(
+            &bound,
+            &next.name,
+            due,
+            episode.townless,
+            index,
+            &policy.keyless,
+        )?
+        .is_empty();
+        if !keeps
+            && named_by_next_stop(line, episode, observation, index, policy)?
+                .is_some_and(|(_, _, named)| named.journey != binding.journey)
+        {
+            return Ok(None);
+        }
+    }
+    Ok(Some(binding.clone()))
 }
 
 /// An inferred binding is confirmed once the vehicle has left `confirm_departures` stops of the

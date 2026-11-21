@@ -386,14 +386,16 @@ pub enum Normalizer {
         #[serde(default)]
         needs: Vec<String>,
     },
-    /// MPVNET-Q2, Q3: the pipe-separated record by vehicle kind; `<name>.kind` is `bus` or
-    /// `train`, `<name>.<n>` its fields.
+    /// MPVNET-Q2, Q3: the pipe-separated record by vehicle kind; `<name>.kind` is `bus`,
+    /// `city` (a city bus naming its line and course, not its trip) or `train`, `<name>.<n>`
+    /// its fields.
     MpvnetRecord {
         quirk: Quirks,
         record: String,
         kind: String,
         category: String,
         bus: RecordLayout,
+        city: Option<Box<RecordLayout>>,
         train: RecordLayout,
     },
     /// MPVNET-Q6: `min * 60 + s`, negative with the minus group.
@@ -419,8 +421,8 @@ impl Normalizer {
     }
 }
 
-/// Which records are a kind's: the `kind` field's value and the field count; a bus also its
-/// category and the pattern of its line field.
+/// Which records are a kind's: the `kind` field's value and the field count; a bus (or city
+/// bus) also its category and the pattern of its line field.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecordLayout {
@@ -567,9 +569,16 @@ pub enum FactBody {
     },
     Destination {
         name: String,
+        /// The source's names may leave out the stop name's leading parts (MPVNET-Q10).
+        #[serde(default)]
+        townless: bool,
     },
     NextStopName {
         name: String,
+        /// The timetable's departure at the next stop, a time value (MPVNET-Q3).
+        scheduled: Option<String>,
+        #[serde(default)]
+        townless: bool,
     },
     Position {
         lat: Option<String>,

@@ -65,7 +65,8 @@ def test_every_manifest_loads(path: Path) -> None:
 def test_sources_and_lookups_of_the_shipped_manifests() -> None:
     sources = {source.source: source for source in load_sources()}
     assert sources["duk"].live_feeds == ("jdf", "czptt")
-    assert sources["mpvnet"].live_feeds == ("jdf",)  # trains recorded, not live
+    assert sources["mpvnet"].live_feeds == ("jdf", "czptt")
+    assert sources["iredo"].live_feeds == sources["idsok"].live_feeds == ("jdf", "czptt")
     lookups = declared_lookups()
     assert [lookup.kind for lookup in lookups] == ["composition"] * len(lookups)
     assert all(lookup.source in sources for lookup in lookups)

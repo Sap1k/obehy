@@ -15,6 +15,8 @@ the sections below remain the design record.
 
 ## 0. Conventions
 
+- `entities`: the dotted path of the entity list; the empty path is the document itself
+  (IDSOK-Q1).
 - `values.<name>`: per entity, evaluated in declaration order. `path` dotted from the entity
   (`/`-prefixed = document root); a numeric segment indexes an array only; any non-object /
   non-array step → absent (= `decoding.table`). `from = "<value>"` derives from another value;
@@ -286,8 +288,31 @@ delay = { by = "kind", cases = [{ match = "bus", from = "rec.6", as = "py_int" }
                                 { match = "train", from = "ds_delay" }] }            # MPVNET-Q6
 vehicle = { by = "kind", cases = [{ match = "bus", template = "{plate}" }, { match = "train", template = "train:{trip}" }] }
 ```
-`kind` absent (no `cn`, wrong layout, a city bus) drops the entity. Q4, Q5, Q8, Q9 mapping;
+`kind` absent (no `cn`, wrong layout) drops the entity. Since decoder version 4 a city bus
+(`cat` 3, a 1–3 digit line) is kind `city`: `line_ref`, `destination` and `next_stop_name`
+(`scheduled` from field 7 as `minute_of_day`, both `townless`), no trip key (MPVNET-Q3, Q10). Q4, Q5, Q8, Q9 mapping;
 Q2, Q3, Q6 normalizers; Q1, Q7 request side.
+
+### iredo / vehicles, idsok / vehicles (fully declarative, added after the switch)
+One record layout for both (the same vendor software); IREDO wraps it in `{"connections": [...]}`
+and is asked by POST, IDSOK answers a bare array (`root = "array"`, `entities = ""`).
+```toml
+keep = { kind = ["S", "K"] }
+feed = { by = "kind", cases = [{ match = "S", value = "jdf" }, { match = "K", value = "czptt" }] }
+observed_at = { value = "time", fresh = true }
+fact = [
+  { t = "vehicle_key", id = "trip:{id}" },                                    # Q3
+  { t = "trip_key", by = "kind", cases = [
+    { match = "S", ns = "cis:line_trip", key = "{line:06d}:{spoj:d}" },
+    { match = "K", ns = "czptt:train_number", key = "{train}" } ] },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
+  { t = "delay", s = "delay", scale = 60, ref = "unknown" },
+]
+[channel.decode.values]
+bus = { from = "id", regex = '^S-(\d{6})-(\d+)$', captures = ["line", "spoj"], captures_as = "py_int", when = { kind = "S" }, required = true }  # Q2
+rail = { from = "id", regex = '^K-(\d+)$', captures = ["train"], when = { kind = "K" }, required = true }
+time = { path = "time", as = "hhmmss" }                                       # Q4
+```
 
 ### arriva-express / buses (fully declarative)
 ```toml
@@ -340,11 +365,11 @@ Recorder filters (reader options; byte-identical because sha256 depends on them)
 | `stale_body` | DPMD-Q9 | `read_local(stamp.split(".")[0])`; absent or beyond skew → payload gives `[]` (not an error) (dpmd.py:241-243) |
 | `popup_labels` | DPMD-Q2 | `dict(re.findall(r"<br>([^<:]{1,30}): ([^<]*)"))`, last duplicate wins, counts in code points (dpmd.py:262) |
 | `moving_bearing` | DPMD-Q10 | speed `^(\d+) km/h$` on stripped label, `int > 0`; arrow a str with `isdigit` → `float(arrow)`, else absent (dpmd.py:275-278) |
-| `mpvnet_record` | MPVNET-Q2, Q3 | `cn` a str split on `"\|"`; bus: `t == "H"`, 22 fields, `cat == 2` (Python ==), `^\d{6}$` on field 0; train: `t == "T"`, 12 fields; else absent (mpvnet.py:72-97) |
+| `mpvnet_record` | MPVNET-Q2, Q3 | `cn` a str split on `"\|"`; bus: `t == "H"`, 22 fields, `cat == 2` (Python ==), `^\d{6}$` on field 0; optional city: its own layout (`cat == 3`, `^\d{1,3}$`), kind `city`; train: `t == "T"`, 12 fields; else absent (mpvnet.py:72-97) |
 | `signed_min_sec` | MPVNET-Q6 | `min*60 + s`, negated with the `-` group; `-0` → 0 (mpvnet.py:137-144) |
 
 Time conventions (mapping level): `iso`, `iso_local_digits` (ARRIVA-Q1), `local:<layout>`
-(DPMD-Q1, MPVNET-Q4, SZ-Q2), `hhmm` (SZ-Q2, SZT-Q5). CRS: `EPSG:5514` (SZ-Q1).
+(DPMD-Q1, MPVNET-Q4, SZ-Q2), `hhmm` (SZ-Q2, SZT-Q5), `hhmmss` (IREDO-Q4, IDSOK-Q4), `minute_of_day` (MPVNET-Q3: digits or an integer below 1440, resolved like `hhmm`). CRS: `EPSG:5514` (SZ-Q1).
 Add a test: every `quirk` named in a manifest exists in `docs/sources/<source>.md`.
 
 ## 3. Rust type sketch
@@ -364,7 +389,7 @@ pub struct Decode {
     #[serde(default)] pub fact: Vec<FactSpec>,
 }
 pub enum Coerce { Raw, Int, IntOrDigits, PyInt, PyFloat, Number, Real, RealNb, Bool, Text, Trimmed,
-                  Digits, Sr70_5, Yyyymmdd, Pair, Iso, IsoLocalDigits, Local(Layout), Hhmm }
+                  Digits, Sr70_5, Yyyymmdd, Pair, Iso, IsoLocalDigits, Local(Layout), Hhmm, Hhmmss, MinuteOfDay }
 #[serde(tag = "fn", rename_all = "snake_case")] pub enum Normalizer { /* one per row above */ }
 #[serde(tag = "t", rename_all = "snake_case")] pub enum FactSpec { /* one per facts.py type */, Use{..} }
 // every FactSpec carries Gate { when, unless, if_fact } via #[serde(flatten)]
@@ -416,6 +441,8 @@ pub enum Coerce { Raw, Int, IntOrDigits, PyInt, PyFloat, Number, Real, RealNb, B
 - `hhmm` (sz.py:80-89; times.py:187-195): stripped, `^\d{1,2}:\d{2}$`, h ≤ 23, m ≤ 59;
   candidate dates = the local day of the reference's *UTC hour* (times.py:89-106) ± 1 day;
   keep readings within 12 h inclusive; closest wins, ties to earlier.
+- `hhmmss` (added after the switch for IREDO/IDSOK): `^\d{1,2}:\d{2}:\d{2}$` after trimming,
+  h ≤ 23, m and s ≤ 59; resolved like `hhmm` (`near`, else the reception).
 - DUK `iso` (duk.py:43-50): naive → absent; filter `utc.year <= 1970`; parse error **fatal**.
   PID `iso` (pid.py:66-73) catches → absent.
 - `iso_local_digits` (times.py:214-218; arriva_express.py:141-149): fromisoformat full grammar

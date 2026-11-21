@@ -266,7 +266,7 @@ fn effects() -> Vec<Effect> {
 fn derivation() -> Derivation {
     Derivation {
         core_version: "r1.0".into(),
-        policy_version: "18".into(),
+        policy_version: "19".into(),
         release_id: "run-a".into(),
     }
 }

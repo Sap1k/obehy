@@ -316,6 +316,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-21** — Two new sources, IREDO and IDSOK (one vendor's map payload; CIS line + trip on
+  jdf, train number on czptt; no vehicle identity, so not physical; `hhmmss` times; dossiers
+  `docs/sources/{iredo,idsok}.md`). They went live without a record-first phase: decode fixtures
+  and a 3-minute recording replayed at facts level. MPV net trains are live, and policy v19
+  ranks MPV net, IREDO and IDSOK positions before SŽ. MPV net city buses (DPO, DSZO; MPVNET-Q3)
+  are bound keylessly by line and next stop's scheduled minute, which names the trip whatever
+  the destination says (MPVNET-Q10 town-less names, Q11 terminal destinations). Replay
+  2026-10-12 07:00–07:30: 605/629 city vehicle groups bound (median 0 min), trains 383/383
+  running key groups, regional buses unchanged (2,792/2,837). Pinned corpus and compare streams
+  rewritten (header, the new sources' `physical_vehicles` rows, MPV net's new facts). Not
+  checked: IREDO/IDSOK against a release, the server.
 - **2026-11-21** — Rust worker simplified: the Python parity emulation went (`obehy_core::py`,
   `timedelta` half-even rounding, CPython `hypot`, the UCRT `pow` workaround, GEOS/PROJ quirks,
   the vendored tzdata, the hand-written `json.loads` and `html.parser`, insertion-ordered core

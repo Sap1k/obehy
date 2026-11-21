@@ -29,14 +29,16 @@ fn policy_text() -> String {
 #[test]
 fn policy_resolves_modes_and_journey_keys() {
     let policy = Policy::from_toml(&policy_text()).unwrap();
-    assert_eq!(policy.version, "18");
+    assert_eq!(policy.version, "19");
     assert_eq!(policy.warm_replay.mode, WarmReplayMode::Vehicles);
     assert_eq!(policy.time.max_delay_s.get("rail"), 14400.0);
     assert_eq!(policy.time.max_delay_s.get("bus"), 7200.0);
     assert_eq!(policy.progress.max_speed_mps.get("rail"), 45.0);
     assert_eq!(policy.retention.longest_raw_days(), 14);
     assert_eq!(policy.rail.rank("pid"), 1);
-    assert_eq!(policy.rail.rank("dpmd"), 3);
+    assert_eq!(policy.rail.rank("mpvnet"), 2);
+    assert_eq!(policy.rail.rank("sz-mapa"), 5);
+    assert_eq!(policy.rail.rank("dpmd"), 6);
     let keys = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
         pairs
             .iter()
@@ -123,6 +125,8 @@ fn shipped_manifests_load() {
             "arriva-express/buses",
             "dpmd/vehicles",
             "duk/vehicles",
+            "idsok/vehicles",
+            "iredo/vehicles",
             "mpvnet/idol",
             "mpvnet/jikord",
             "mpvnet/odis",
@@ -174,7 +178,7 @@ fn shipped_manifests_load() {
     assert_eq!(arriva.headers["x-enviroment"], "client");
     assert!(sz.url.contains("OsVlaky") && sz.proxied && !duk.proxied && !arriva.proxied);
     assert!(duk.live_feeds.is_none() && duk.is_live("czptt"));
-    assert!(idol.is_live("jdf") && !idol.is_live("czptt"));
+    assert!(idol.live_feeds.is_none() && idol.is_live("jdf") && idol.is_live("czptt"));
     assert_eq!(
         (duk.interval_s, duk.backoff_after, duk.max_backoff_s),
         (15.0, 5, 300.0)
@@ -221,7 +225,8 @@ fn shipped_manifests_load() {
     assert!(
         !source("sz-mapa").physical(Some("rail")) && source("dpmd").physical(Some("trolleybus"))
     );
-    assert_eq!(source("mpvnet").live_feeds(), ["jdf"]);
+    assert_eq!(source("mpvnet").live_feeds(), ["jdf", "czptt"]);
+    assert!(!source("iredo").physical(None) && !source("idsok").physical(Some("tram")));
     // test_select_channels_rejects_unknown_source
     let all: Vec<Channel> = channels.iter().map(|c| (*c).clone()).collect();
     assert!(

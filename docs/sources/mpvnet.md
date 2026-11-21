@@ -3,10 +3,12 @@
 Status: **probed on 2026-10-11** (Sunday, about 17:30 local): a few requests per portal, and
 a 40-second recording of all four channels. Keys checked against release
 `20261006T194555Z-06c0829d89aa` (serving schema 5.0). Recorded from 2026-10-11 on (`obehy
-realtime` archives every manifest channel). Connector `sources/mpvnet.py` (decoder version 2).
+realtime` archives every manifest channel). Decoder: the manifest's declarative `[decode.portal]`.
 Buses are live on jdf since 2026-10-12, after a day of capture settled the delay fields and
-replayed clean (see Replay). Trains are not live (`live_feeds = ["jdf"]`) until their positions
-prove to be GPS (MPVNET-Q8). Terms of use are still to be recorded.
+replayed clean (see Replay). Trains are live on czptt since 2026-11-21: their positions are the
+operators' GPS (MPVNET-Q8). City buses of DPO and DSZO, dropped until then, are bound since
+2026-11-21 by keyless inference on their line, destination and next stop's scheduled time
+(MPVNET-Q3). Terms of use are still to be recorded.
 
 MPV net runs the public vehicle maps of several regional integrated systems on one piece of
 software. Each portal is one channel of this source:
@@ -77,7 +79,7 @@ Storage at 15 s: about 46 KB per round of four polls, about 270 MB a day.
 | 4 | `114` | delay at the stop in 3, signed seconds: it grows while the bus stands there and freezes when it leaves |
 | 5 | `Nové Město p.Smrkem,Přebytek` | the next stop |
 | 6 | `137` | current delay, signed seconds, updated between stops (MPVNET-Q9) |
-| 7 | `1046` | scheduled departure at the stop in 5, as a minute of the day (`17:26`) |
+| 7 | `1046` | scheduled departure at the stop in 5, as a minute of the day (`17:26`); always below 1440, empty with no next stop |
 | 8, 9 | `Świeradów-Zdrój,…`, `Liberec,aut.nádr.` | first and last stop of the trip |
 | 10 | `0` / `1` | unknown flag |
 | 11 | `6SJ4698`, `Ev. č. 226` | licence plate, or fleet number for city buses |
@@ -157,12 +159,14 @@ names in fields 3 and 5 match the trip's calls for 96 % and 94 %):
 |---|---|---|
 | MPVNET-Q1 | the bounding box hardly filters: each portal returns its whole fleet, including interregional lines after they leave the region (a whole-country box gave 122 vehicles against 119 for the IDOL view) | one request per portal with a fixed whole-country box |
 | MPVNET-Q2 | the trip is a pipe-separated string with different layouts for buses (22 fields) and trains (12 fields); some entries have `cn: null` (`cat: 0`) | the connector splits by kind and checks the field count; a vehicle without `cn` has no trip |
-| MPVNET-Q3 | city buses (DPO Ostrava, DSZO Zlín; `cat: 3`) carry the bare public line (`8`), a **course number** in the trip field, and a fleet number instead of a plate. The lines are fixed CIS prefixes plus the 3-digit line: DPO `915` (116 of 116 keys exist), DSZO `825`, and `826` for the Otrokovice lines 55, 56, 57 and 93. But no key named a trip running at that time, and one number serves several lines at once (DPO `47` on lines 39, 46, 55 and 56; DSZO `37` on 31, 32 and 33): it is the vehicle's course (*pořadí*), not the *spoj* | out of scope (decided 2026-10-11): neither operator publishes its courses, and the regional buses are the coverage that matters. The connector drops `cat: 3` entries |
+| MPVNET-Q3 | city buses (DPO Ostrava, DSZO Zlín; `cat: 3`) carry the bare public line (`8`), a **course number** in the trip field, and a fleet number instead of a plate. The lines are fixed CIS prefixes plus the 3-digit line: DPO `915` (116 of 116 keys exist), DSZO `825`, and `826` for the Otrokovice lines 55, 56, 57 and 93. But no key named a trip running at that time, and one number serves several lines at once (DPO `47` on lines 39, 46, 55 and 56; DSZO `37` on 31, 32 and 33): it is the vehicle's course (*pořadí*), not the *spoj*. The record still names the next stop (field 5), its scheduled departure as a minute of the day (field 7) and the destination (field 9) | dropped until 2026-11-21; now a `city` record: `line_ref` `cis:line` `<prefix><line:03d>` (another operator's city record has no prefix and is dropped), `destination`, `next_stop_name` with `scheduled` (field 7, `minute_of_day` near the fix time), vehicle key `<cr>:<fleet number>` with the `fleet_number` attribute, no trip key. Keyless inference keeps only the candidates with a call at the next stop at that time (`[keyless] next_stop_time_tolerance_s`); one left binds outright, which tells trips minutes apart at city headways |
 | MPVNET-Q4 | `dt` and `tm` are local times without an offset | `times.resolve_local` against `received_at`, as DPMD-Q1 |
 | MPVNET-Q5 | `x` is the latitude and `y` the longitude | swapped in the connector |
 | MPVNET-Q6 | the delay is signed seconds, but `ds`'s sign letter says `p` for both 0 and early | the number is used, never the letter |
 | MPVNET-Q7 | a request without `origin` gets HTTP 400 | the manifest sends it |
-| MPVNET-Q8 | a train's `dt`/`tm` is the time of its last event, not of the position (ČD in whole minutes); trains have no unit identity | the train number is its vehicle key; positions older than the skew are dropped; trains stay off live until it is known whether their positions are GPS or derived (from SŽ, which would duplicate `sz-mapa`) |
+| MPVNET-Q8 | a train's `dt`/`tm` is rounded to whole minutes by the operator's on-board unit (sometimes the time of an older event); the position is the operator's GPS, finer than SŽ's; trains have no unit identity | the train number is its vehicle key; positions older than the skew are dropped; live since 2026-11-21, ranked after DÚK and PID and before `sz-mapa` in `rail.position_preference` (policy v19) |
+| MPVNET-Q10 | city bus stop names leave out the town and often the district: `Křižíkova`, `Mor. Ostrava,Plynárny`, `Svinov,mosty` for JDF `Ostrava,Mor.Ostrava,Křižíkova`, `Ostrava,Mor.Ostrava,Plynárny`, `Ostrava,Svinov,mosty` (Otrokovice names keep their town) | the city facts are `townless`: a name matches a stop whose whole name, or name from any comma on, is the same (`names::spellings`). On a 2026-10-12 sample of 19,386 city names against release `20261014T065758Z`: 1,372 whole, 17,424 one suffix, 217 suffixes of several stops, 373 none (`Nová huť již.brána`, `Náměstí Ostrava-Jih`: abbreviated or worded differently) |
+| MPVNET-Q11 | a city bus's destination (field 9) is often its line's terminal, not its trip's: DPO line 22 buses running to most M.Sýkory name Hraničník, and the name stays the same from one trip to the next | the next stop's scheduled time names the trip among all of the line's trips, whatever the destination; it also ends a binding when it names another trip (otherwise a binding lasts while line and destination stay the same). The destination filters candidates only when the time names no single trip |
 | MPVNET-Q9 | a bus's `ds` lags its current delay: it often still shows field 4, the delay at the last stop, while field 6 has moved on (bus 5L53480 on `670951:3`, 2026-10-12 06:03–06:04 UTC: field 6 191 → 182 → 169 s, `ds` 174 s throughout) | the bus delay is field 6; `ds` is used for trains only, where it equals field 4 |
 
 ## Open questions

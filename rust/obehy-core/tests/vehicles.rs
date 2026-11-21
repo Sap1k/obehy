@@ -168,7 +168,7 @@ fn pairs_join_transitively_into_one_vehicle() {
 fn a_co_located_vehicle_keeps_its_id_as_reports_join_and_leave() {
     let mut book = VehicleBook::new(Registry::default(), vocabulary());
     let day = Date::ymd(2026, 10, 20);
-    // MPVnet and DPMD first: DPMD names the vehicle (both unranked).
+    // MPVnet and DPMD first: MPVnet, ranked before the unranked DPMD, names the vehicle.
     for minute in 0..3 {
         let t = local(&format!("2026-10-20 08:0{minute}"));
         let fixes = [
@@ -179,7 +179,7 @@ fn a_co_located_vehicle_keeps_its_id_as_reports_join_and_leave() {
             book.identify(&report, day);
         }
     }
-    let co_located = ("dpmd:301".to_owned(), Some(BoundBy::CoLocated));
+    let co_located = ("mpvnet:4U1 2345".to_owned(), Some(BoundBy::CoLocated));
     assert_eq!(book.identify(&mpv(), day), co_located);
     // DÚK, ranked first, joins: the vehicle keeps its ID.
     for minute in 3..6 {
@@ -198,10 +198,10 @@ fn a_co_located_vehicle_keeps_its_id_as_reports_join_and_leave() {
         source: s.into(),
         source_vehicle_id: v.into(),
     };
-    assert_eq!(book.vehicle_id(&named("duk", "807")), "dpmd:301");
+    assert_eq!(book.vehicle_id(&named("duk", "807")), "mpvnet:4U1 2345");
     assert_eq!(book.vehicle_id(&named("duk", "999")), "duk:999");
     // History keeps the vehicle a report was: the co-located one, as the map names it.
-    assert_eq!(book.worked_by(&mpv(), day), "dpmd:301");
+    assert_eq!(book.worked_by(&mpv(), day), "mpvnet:4U1 2345");
 }
 
 fn on_run(report: Report, train: &str, at: Instant) -> Sighting {

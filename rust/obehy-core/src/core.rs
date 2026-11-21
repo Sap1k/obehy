@@ -190,8 +190,9 @@ pub fn step(
             .expect("a keyless observation has an episode");
         let mut found = keyless::continued(
             previous.as_ref(),
+            line,
             episode,
-            observation.at(),
+            observation,
             &state.instances,
             ctx.index,
             ctx.policy,

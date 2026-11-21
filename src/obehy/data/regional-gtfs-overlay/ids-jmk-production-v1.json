@@ -3,7 +3,7 @@
   "source": {
     "source_id": "ids-jmk-gtfs", "excluded_route_types": ["2"], "maximum_snapshot_skew_days": 7, "route_join": null,
     "stop_match": {"group_column": "", "post_column": "", "maximum_distance_metres": 300, "coordinate_identity_maximum_metres": 25, "coordinate_identity_minimum_margin_metres": 10, "split_flat_groups_by_name": true, "contextual_inference": {"enabled": true, "minimum_mapped_calls": 1}},
-    "trip_match": {"time_resolution_seconds": 60, "exact_pattern_proximity": true, "pattern_edit": {"enabled": true, "maximum_edits": 3, "minimum_agreement": 0.9, "require_same_endpoints": true}, "source_revision": null, "minimum_capability_tier": {"call_boarding_points": "pattern_edit_nearest", "schedules": "pattern_nearest", "transfers": "pattern_nearest"}},
+    "trip_match": {"time_resolution_seconds": 60, "exact_pattern_proximity": true, "keep_source_calls": true, "pattern_edit": {"enabled": true, "maximum_edits": 3, "minimum_agreement": 0.9, "require_same_endpoints": true}, "source_revision": null, "minimum_capability_tier": {"call_boarding_points": "pattern_edit_nearest", "schedules": "pattern_nearest", "transfers": "pattern_nearest"}},
     "trip_set_authority": {"modes": ["bus", "tram", "trolleybus", "ferry"], "source_native_modes": ["ferry"]},
     "route_match_tiers": ["structural_trip_evidence"],
     "trip_match_tiers": ["full_signature", "pattern_endpoints", "pattern_first", "pattern_nearest", "pattern_edit_nearest"],

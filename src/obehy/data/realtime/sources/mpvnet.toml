@@ -1,12 +1,14 @@
 # MPV net regional vehicle maps (docs/sources/mpvnet.md). One portal per channel, same payload.
 # The bounding box is fixed to the whole country: the portal returns its whole fleet anyway
-# (MPVNET-Q1). Buses go to jdf, trains to czptt. Buses are live since 2026-10-12; trains are not
-# (`live_feeds = ["jdf"]`) until their positions prove to be GPS (MPVNET-Q8).
+# (MPVNET-Q1). Buses go to jdf, trains to czptt. Buses are live since 2026-10-12, trains since
+# 2026-11-21: operator GPS with times rounded to minutes (MPVNET-Q8). City buses (DPO, DSZO) name
+# their line, course, next stop and its scheduled minute, not their trip: they are bound by
+# keyless inference (MPVNET-Q3).
 source = "mpvnet"
 manifest_version = 1
 # The public feed list (obehy release feed-list) names the source by these.
 title = "MPV net regional vehicle maps"
-covers = "Vehicles of IDOL (Liberecký kraj), JIKORD (Jihočeský kraj), ODIS (Moravskoslezský kraj) and IDZK (Zlínský kraj): positions and delays."
+covers = "Vehicles of IDOL (Liberecký kraj), JIKORD (Jihočeský kraj), ODIS (Moravskoslezský kraj, with Ostrava city lines) and IDZK (Zlínský kraj, with Zlín and Otrokovice city lines): positions and delays."
 
 # IDOL, Liberecký kraj
 
@@ -21,8 +23,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = ["jdf"]
-capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+capabilities = ["vehicle_key", "trip_key", "line_ref", "destination", "next_stop", "position", "delay"]
 decode = "portal"
 
 [channel.request]
@@ -38,8 +39,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = ["jdf"]
-capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+capabilities = ["vehicle_key", "trip_key", "line_ref", "destination", "next_stop", "position", "delay"]
 decode = "portal"
 
 [channel.request]
@@ -55,8 +55,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = ["jdf"]
-capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+capabilities = ["vehicle_key", "trip_key", "line_ref", "destination", "next_stop", "position", "delay"]
 decode = "portal"
 
 [channel.request]
@@ -72,8 +71,7 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 10
 feeds = ["jdf", "czptt"]
-live_feeds = ["jdf"]
-capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+capabilities = ["vehicle_key", "trip_key", "line_ref", "destination", "next_stop", "position", "delay"]
 decode = "portal"
 
 [channel.request]
@@ -85,11 +83,11 @@ headers = { content-type = "application/json; charset=UTF-8", origin = "https://
 # How every portal's payload becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven
 # sources"); the observation's channel is the portal's.
 [decode.portal]
-version = 3
+version = 4
 reader = "json"
 entities = "transmitters"
 errors = { entities = "payload lacks transmitters" }
-feed = { by = "kind", cases = [{ match = "bus", value = "jdf" }, { match = "train", value = "czptt" }] }
+feed = { by = "kind", cases = [{ match = ["bus", "city"], value = "jdf" }, { match = "train", value = "czptt" }] }
 observed_at = { value = "time", fresh = true }
 fact = [
   { t = "vehicle_key", id = "{vehicle}" },
@@ -97,7 +95,13 @@ fact = [
     { match = "bus", ns = "cis:line_trip", key = "{line:06d}:{trip:d}" },
     { match = "train", ns = "czptt:train_number", key = "{trip}" },
   ] },
+  # MPVNET-Q3: a city bus is bound by its line and next stop's scheduled time (its destination
+  # is often the line's terminal, MPVNET-Q11).
+  { t = "line_ref", ns = "cis:line", value = "{city_line}", when = { kind = "city" } },
+  { t = "destination", name = "destination", townless = true, when = { kind = "city" } },  # MPVNET-Q10
+  { t = "next_stop_name", name = "next", scheduled = "due?", townless = true, when = { kind = "city" } },
   { t = "vehicle_attribute", a = "licence_plate", value = "plate", when = { kind = "bus" } },
+  { t = "vehicle_attribute", a = "fleet_number", value = "fleet", when = { kind = "city" } },
   { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
   { t = "delay", s = "delay", ref = "unknown" },
 ]
@@ -106,21 +110,34 @@ fact = [
 cn = { path = "cn", as = "text" }
 t = { path = "t", as = "raw" }
 cat = { path = "cat", as = "raw" }
-rec = { fn = "mpvnet_record", quirk = ["MPVNET-Q2", "MPVNET-Q3"], record = "cn", kind = "t", category = "cat", bus = { t = "H", fields = 22, category = 2, line_field = 0, line_regex = '^\d{6}$' }, train = { t = "T", fields = 12 } }
+rec = { fn = "mpvnet_record", quirk = ["MPVNET-Q2", "MPVNET-Q3"], record = "cn", kind = "t", category = "cat", bus = { t = "H", fields = 22, category = 2, line_field = 0, line_regex = '^\d{6}$' }, city = { t = "H", fields = 22, category = 3, line_field = 0, line_regex = '^\d{1,3}$' }, train = { t = "T", fields = 12 } }
 kind = { from = "rec.kind", required = true }
 plate = { from = "rec.11", as = "trimmed", when = { kind = "bus" }, required = true }
 trip = { from = "rec.2", as = "digits", required = true }
 line = { from = "rec.0" }
+# MPVNET-Q3: the city operators' fixed CIS prefixes (DPO 915; DSZO 825, its Otrokovice lines 826).
+cr = { path = "cr", as = "trimmed", when = { kind = "city" }, required = true }
+dszo = { by = "line", cases = [{ match = ["55", "56", "57", "93"], template = "826" }, { template = "825" }] }
+prefix = { by = "cr", cases = [{ match = "DPO", template = "915" }, { match = "DSZO", from = "dszo" }] }
+city_line = { template = "{prefix}{line:03d}", when = { kind = "city" }, required = true }
+fleet_text = { from = "rec.11", as = "trimmed", regex = '^\D*(\d+)$', captures = ["fleet"], when = { kind = "city" }, required = true }
+destination = { from = "rec.9", as = "trimmed", when = { kind = "city" }, required = true }
+next = { from = "rec.5", as = "trimmed", when = { kind = "city" } }
 ds = { path = "ds", as = "text" }
 ds_delay = { fn = "signed_min_sec", quirk = "MPVNET-Q6", value = "ds", regex = '^\$[zp](-?)(\d+)~min\.~(\d+)~s$' }
 delay = { by = "kind", cases = [  # MPVNET-Q9: a bus's current delay is field 6
-  { match = "bus", from = "rec.6", as = "py_int" },
+  { match = ["bus", "city"], from = "rec.6", as = "py_int" },
   { match = "train", from = "ds_delay" },
 ] }
-vehicle = { by = "kind", cases = [{ match = "bus", template = "{plate}" }, { match = "train", template = "train:{trip}" }] }
+vehicle = { by = "kind", cases = [
+  { match = "bus", template = "{plate}" },
+  { match = "city", template = "{cr}:{fleet}" },
+  { match = "train", template = "train:{trip}" },
+] }
 dt = { path = "dt", as = "text" }
 tm = { path = "tm", as = "text" }
 time = { template = "{dt} {tm}", as = "local:%d.%m.%Y %H:%M:%S" }  # MPVNET-Q4
+due = { from = "rec.7", as = "minute_of_day", near = "time", when = { kind = "city" } }  # MPVNET-Q3
 lat = { path = "x", as = "number" }  # MPVNET-Q5
 lon = { path = "y", as = "number" }
 ico = { path = "ico", as = "text", regex = '^a_(\d{1,3})\.png$', captures = ["bearing"], captures_as = "float" }

@@ -25,6 +25,8 @@ fn dossier(prefix: &str) -> &'static str {
         "MPVNET" => "mpvnet.md",
         "ARRIVA" => "arriva-express.md",
         "CD" => "cd.md",
+        "IREDO" => "iredo.md",
+        "IDSOK" => "idsok.md",
         other => panic!("no dossier for quirk prefix {other}"),
     }
 }
@@ -77,9 +79,11 @@ fn every_shipped_decode_section_compiles() {
         ("sz-tabule", "board", Some(2)),
         ("dpmd", "vehicles", Some(2)),
         ("arriva-express", "buses", Some(2)),
-        ("mpvnet", "idol", Some(3)),
-        ("mpvnet", "zlin", Some(3)),
+        ("mpvnet", "idol", Some(4)),
+        ("mpvnet", "zlin", Some(4)),
         ("cd", "composition", None),
+        ("iredo", "vehicles", Some(1)),
+        ("idsok", "vehicles", Some(1)),
     ] {
         assert!(
             decoders.get(source, channel).is_some(),

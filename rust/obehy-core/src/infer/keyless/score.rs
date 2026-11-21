@@ -17,7 +17,7 @@ use crate::geo::distance_m;
 use crate::index::{Call, Index, IndexMiss, Trip};
 use crate::infer::keyed::Match;
 use crate::model::{Delay, Departure, Interval, KeylessEpisode, Observation, Position};
-use crate::names::normal;
+use crate::names::{normal, spellings};
 use crate::time::{Instant, ServiceTime};
 use crate::timeline::path::project_all;
 use crate::timeline::plan::PlanCache;
@@ -30,12 +30,18 @@ pub struct Placed {
     pub next_stop: Option<usize>,
 }
 
-/// The passenger calls: (index into `trip.calls`, normalised stop name).
-fn stops(trip: &Trip, index: &Index) -> Result<Vec<(usize, String)>, IndexMiss> {
+/// The passenger calls: (index into `trip.calls`, the normalised names a source may give the
+/// stop: `names::spellings`, MPVNET-Q10).
+fn stops(
+    trip: &Trip,
+    index: &Index,
+    townless: bool,
+) -> Result<Vec<(usize, Vec<String>)>, IndexMiss> {
     let mut found = Vec::new();
     for (i, call) in trip.calls.iter().enumerate() {
         if call.passenger_service {
-            found.push((i, normal(&index.location(&call.location_id)?.name)));
+            let name = &index.location(&call.location_id)?.name;
+            found.push((i, spellings(name, townless)));
         }
     }
     Ok(found)
@@ -58,14 +64,14 @@ pub fn place(
     index: &Index,
     policy: &Policy,
 ) -> Result<Option<Placed>, IndexMiss> {
-    let stops = stops(&found.trip, index)?;
+    let stops = stops(&found.trip, index, episode.townless)?;
     let day = found.journey.service_date;
     let mut residuals: Vec<Option<f64>> = Vec::with_capacity(episode.departures.len());
     let mut k = 0;
     for departure in &episode.departures {
         let name = normal(&departure.stop);
-        let Some(at) = (k..stops.len()).find(|&n| stops[n].1 == name) else {
-            if stops[..k].iter().any(|(_, n)| *n == name) {
+        let Some(at) = (k..stops.len()).find(|&n| stops[n].1.contains(&name)) else {
+            if stops[..k].iter().any(|(_, n)| n.contains(&name)) {
                 return Ok(None); // a stop the candidate has already passed: wrong order
             }
             continue; // not a stop of the candidate (ARRIVA-Q8): no evidence either way
@@ -85,7 +91,7 @@ pub fn place(
         Some(next) => {
             let name = normal(next);
             (k..stops.len())
-                .find(|&n| stops[n].1 == name)
+                .find(|&n| stops[n].1.contains(&name))
                 .map(|n| stops[n].0)
         }
         None => None,

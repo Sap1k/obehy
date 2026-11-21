@@ -1395,7 +1395,7 @@
 "feed": "jdf",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:27:36+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"6L19269\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"500459:105\"},{\"t\":\"vehicle_attribute\",\"a\":\"licence_plate\",\"value\":\"6L19269\"},{\"t\":\"position\",\"lat\":50.68153,\"lon\":14.63543,\"bearing\":0.0},{\"t\":\"delay\",\"s\":216,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -1418,7 +1418,7 @@
 "feed": "czptt",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:26:25+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"train:6615\"},{\"t\":\"trip_key\",\"ns\":\"czptt:train_number\",\"key\":\"6615\"},{\"t\":\"position\",\"lat\":50.75916,\"lon\":15.047535,\"bearing\":null},{\"t\":\"delay\",\"s\":-238,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -1441,7 +1441,7 @@
 "feed": "czptt",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:26:25+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"train:6615\"},{\"t\":\"trip_key\",\"ns\":\"czptt:train_number\",\"key\":\"6615\"},{\"t\":\"position\",\"lat\":50.75916,\"lon\":15.047535,\"bearing\":null},{\"t\":\"delay\",\"s\":0,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -1464,7 +1464,7 @@
 "feed": "czptt",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:26:25+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"train:6615\"},{\"t\":\"trip_key\",\"ns\":\"czptt:train_number\",\"key\":\"6615\"},{\"t\":\"position\",\"lat\":50.75916,\"lon\":15.047535,\"bearing\":null},{\"t\":\"delay\",\"s\":-25,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -1487,7 +1487,7 @@
 "feed": "jdf",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:27:36+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"6L19269\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"500459:105\"},{\"t\":\"vehicle_attribute\",\"a\":\"licence_plate\",\"value\":\"6L19269\"},{\"t\":\"position\",\"lat\":50.68153,\"lon\":14.63543,\"bearing\":0.0},{\"t\":\"delay\",\"s\":191,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -1510,7 +1510,7 @@
 "feed": "jdf",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:27:36+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"6L19269\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"500459:105\"},{\"t\":\"vehicle_attribute\",\"a\":\"licence_plate\",\"value\":\"6L19269\"},{\"t\":\"position\",\"lat\":50.68153,\"lon\":14.63543,\"bearing\":0.0},{\"t\":\"delay\",\"s\":-25,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -1533,7 +1533,7 @@
 "feed": "jdf",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:27:36+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"6L19269\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"500459:105\"},{\"t\":\"vehicle_attribute\",\"a\":\"licence_plate\",\"value\":\"6L19269\"},{\"t\":\"position\",\"lat\":50.68153,\"lon\":14.63543,\"bearing\":0.0}]}"
 }
 ]
@@ -1567,7 +1567,7 @@
 "feed": "czptt",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": "2026-10-11T15:26:25+00:00",
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"train:6615\"},{\"t\":\"trip_key\",\"ns\":\"czptt:train_number\",\"key\":\"6615\"},{\"t\":\"position\",\"lat\":50.75916,\"lon\":15.047535,\"bearing\":null},{\"t\":\"delay\",\"s\":-180,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -1590,7 +1590,7 @@
 "feed": "czptt",
 "received_at": "2026-10-11T15:27:55+00:00",
 "observed_at": null,
-"decoder_version": 3,
+"decoder_version": 4,
 "facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"train:6615\"},{\"t\":\"trip_key\",\"ns\":\"czptt:train_number\",\"key\":\"6615\"},{\"t\":\"delay\",\"s\":-180,\"ref\":\"unknown\"}]}"
 }
 ]
@@ -5121,5 +5121,211 @@
 "kept": 0,
 "dropped": 0
 }
+},
+{
+"kind": "facts",
+"source": "iredo",
+"channel": "vehicles",
+"body": "eyJsYW5ndWFnZSI6ImNzIiwiaW5pdGlhbFpvb20iOjksInJlZnJlc2hJbnRlcnZhbCI6MTAsImxhdCI6NTAuMSwibG5nIjoxNS43NSwiY29ubmVjdGlvbnMiOlt7ImlkIjoiUy02NDIzMDUtMTIwIiwidmVoaWNsZVR5cGUiOiJBIiwic291cmNlVHlwZSI6IlMiLCJkZWxheSI6Miwib3BlcmF0b3IiOiJDRFMgcy5yLm8uIE7DoWNob2QiLCJkZXBUaW1lIjoiMjE6MTAiLCJkZXN0VGltZSI6IjIzOjEzIiwidGltZSI6IjIxOjE1OjQ0IiwibGF0Ijo1MC4yMTcxOSwibG9uIjoxNS44Mjc2NywibGluZU51bWJlciI6NjQyMzA1LCJhbmdsZSI6NzksImxpbmVUeXBlIjoiRCIsImV4dExpbmVOYW1lIjoiMzA1IiwiaXNEZXRvdXIiOnRydWUsInBhc3NlbmdlckNvdW50IjoxOH0seyJpZCI6IlMtNjQyMzUxLTEwOSIsInZlaGljbGVUeXBlIjoiQSIsInNvdXJjZVR5cGUiOiJTIiwib3BlcmF0b3IiOiJDRFMgcy5yLm8uIE7DoWNob2QiLCJkZXBUaW1lIjoiMjE6MTYiLCJkZXN0VGltZSI6IjIxOjM1IiwidGltZSI6IjIxOjE1OjM2IiwibGF0Ijo1MC40NzI0NCwibG9uIjoxNi4xNzc5NSwibGluZU51bWJlciI6NjQyMzUxLCJsaW5lVHlwZSI6IlYiLCJleHRMaW5lTmFtZSI6IjM1MSIsImlzRGV0b3VyIjp0cnVlfSx7ImlkIjoiSy0xODQ1IiwidmVoaWNsZVR5cGUiOiJWIiwic291cmNlVHlwZSI6IksiLCJkZWxheSI6MCwib3BlcmF0b3IiOiLEjGVza8OpIGRyw6FoeSwgYS5zLiIsImRlcFRpbWUiOiIyMTowNiIsImRlc3RUaW1lIjoiMjE6NDgiLCJ0aW1lIjoiMjE6MTY6MDAiLCJsYXQiOjUwLjIxNjE2LCJsb24iOjE1LjkzMDMwNiwidHJhaW5OdW1iZXIiOiIxODQ1IiwiZXh0TGluZU5hbWUiOiJWMiJ9LHsiaWQiOiJYLTEiLCJzb3VyY2VUeXBlIjoiWCIsInZlaGljbGVUeXBlIjoiQSIsInRpbWUiOiIyMToxNTowMCIsImxhdCI6NTAuMiwibG9uIjoxNS44fV19",
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"received_at": 1795292160000000,
+"skew": 1200000000,
+"request": null,
+"result": [
+{
+"source": "iredo",
+"channel": "vehicles",
+"item": 0,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-11-21T20:16:00+00:00",
+"observed_at": "2026-11-21T20:15:44+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:S-642305-120\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"642305:120\"},{\"t\":\"position\",\"lat\":50.21719,\"lon\":15.82767,\"bearing\":79.0},{\"t\":\"delay\",\"s\":120,\"ref\":\"unknown\"}]}"
+},
+{
+"source": "iredo",
+"channel": "vehicles",
+"item": 1,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-11-21T20:16:00+00:00",
+"observed_at": "2026-11-21T20:15:36+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:S-642351-109\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"642351:109\"},{\"t\":\"position\",\"lat\":50.47244,\"lon\":16.17795,\"bearing\":null}]}"
+},
+{
+"source": "iredo",
+"channel": "vehicles",
+"item": 2,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "czptt",
+"received_at": "2026-11-21T20:16:00+00:00",
+"observed_at": "2026-11-21T20:16:00+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:K-1845\"},{\"t\":\"trip_key\",\"ns\":\"czptt:train_number\",\"key\":\"1845\"},{\"t\":\"position\",\"lat\":50.21616,\"lon\":15.930306,\"bearing\":null},{\"t\":\"delay\",\"s\":0,\"ref\":\"unknown\"}]}"
+}
+]
+},
+{
+"kind": "facts",
+"source": "iredo",
+"channel": "vehicles",
+"body": "eyJsYW5ndWFnZSI6ImNzIiwiaW5pdGlhbFpvb20iOjksInJlZnJlc2hJbnRlcnZhbCI6MTAsImxhdCI6NTAuMSwibG5nIjoxNS43NSwiY29ubmVjdGlvbnMiOlt7ImlkIjoiUy02NDIzMDUtMTIwIiwidmVoaWNsZVR5cGUiOiJBIiwic291cmNlVHlwZSI6IlMiLCJkZWxheSI6Miwib3BlcmF0b3IiOiJDRFMgcy5yLm8uIE7DoWNob2QiLCJkZXBUaW1lIjoiMjE6MTAiLCJkZXN0VGltZSI6IjIzOjEzIiwidGltZSI6IjIzOjU5OjUwIiwibGF0Ijo1MC4yMTcxOSwibG9uIjoxNS44Mjc2NywibGluZU51bWJlciI6NjQyMzA1LCJhbmdsZSI6NzksImxpbmVUeXBlIjoiRCIsImV4dExpbmVOYW1lIjoiMzA1IiwiaXNEZXRvdXIiOnRydWUsInBhc3NlbmdlckNvdW50IjoxOH1dfQ==",
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"received_at": 1795302005000000,
+"skew": 1200000000,
+"request": null,
+"result": [
+{
+"source": "iredo",
+"channel": "vehicles",
+"item": 0,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-11-21T23:00:05+00:00",
+"observed_at": "2026-11-21T22:59:50+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:S-642305-120\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"642305:120\"},{\"t\":\"position\",\"lat\":50.21719,\"lon\":15.82767,\"bearing\":79.0},{\"t\":\"delay\",\"s\":120,\"ref\":\"unknown\"}]}"
+}
+]
+},
+{
+"kind": "facts",
+"source": "iredo",
+"channel": "vehicles",
+"body": "PCFkb2N0eXBlIGh0bWw+PGh0bWw+PGJvZHk+PGFwcC1yb290PjwvYXBwLXJvb3Q+PC9ib2R5PjwvaHRtbD4=",
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"received_at": 1795292160000000,
+"skew": 1200000000,
+"request": null,
+"error": {
+"message": "?"
+}
+},
+{
+"kind": "facts",
+"source": "idsok",
+"channel": "vehicles",
+"body": "W3siaWQiOiJTLTg5NTAwMi0zNTkiLCJzb3VyY2VUeXBlIjoiUyIsInZlaGljbGVUeXBlIjoiRSIsImxpbmVUeXBlIjoiQSIsImxpbmVOdW1iZXIiOjg5NTAwMiwic2VydmljZU51bWJlciI6MzU5LCJuYW1lIjoiVHJhbSAyIiwiZGVwVGltZSI6IjIxOjA4IiwiZGVzdFRpbWUiOiIyMToyNSIsImxhdCI6NDkuNTk1NDMsImxvbiI6MTcuMjQyODEsImFuZ2xlIjo3MCwidGltZSI6IjIxOjE0OjQ1IiwiZGVsYXkiOjIsIm9wZXJhdG9yIjoiRG9wcmF2bsOtIHBvZG5payBtxJtzdGEgT2xvbW91Y2UsIGEucy4ifSx7ImlkIjoiUy04OTEzNjQtMzYyIiwic291cmNlVHlwZSI6IlMiLCJ2ZWhpY2xlVHlwZSI6IkEiLCJsaW5lVHlwZSI6IlYiLCJsaW5lTnVtYmVyIjo4OTEzNjQsInNlcnZpY2VOdW1iZXIiOjM2MiwibmFtZSI6Ijg5MTM2NCAzNjIiLCJkZXBUaW1lIjoiMjA6MzAiLCJkZXN0VGltZSI6IjIxOjEzIiwibGF0Ijo0OS42OTMxNiwibG9uIjoxNy4xOTU2OCwiYW5nbGUiOjE4LCJ0aW1lIjoiMjE6MTI6MTQiLCJkZWxheSI6MCwib3BlcmF0b3IiOiJBUlJJVkEgYXV0b2J1c3kgYS5zLiJ9LHsiaWQiOiJLLTEzODYxIiwic291cmNlVHlwZSI6IksiLCJ2ZWhpY2xlVHlwZSI6IlYiLCJ0cmFpbk51bWJlciI6IjEzODYxIiwibmFtZSI6Ik00MiAoT3MgMTM4NjEpIiwiZGVwVGltZSI6IjIxOjEzIiwiZGVzdFRpbWUiOiIyMToyMiIsImxhdCI6NDkuNzI2ODE4LCJsb24iOjE3LjA4MDI5MywidGltZSI6IjIxOjE1OjAwIiwiZGVsYXkiOjAsIm9wZXJhdG9yIjoixIxlc2vDqSBkcsOhaHksIGEucy4ifSx7ImlkIjoiUy04OTEzNjQtMzY0Iiwic291cmNlVHlwZSI6IlMiLCJ2ZWhpY2xlVHlwZSI6IkEiLCJsaW5lVHlwZSI6IlYiLCJsaW5lTnVtYmVyIjo4OTEzNjQsInNlcnZpY2VOdW1iZXIiOjM2NCwibmFtZSI6Ijg5MTM2NCAzNjIiLCJkZXBUaW1lIjoiMjA6MzAiLCJkZXN0VGltZSI6IjIxOjEzIiwibGF0Ijo0OS42OTMxNiwibG9uIjoxNy4xOTU2OCwiYW5nbGUiOjE4LCJ0aW1lIjoiMjE6MTI6MTQiLCJvcGVyYXRvciI6IkFSUklWQSBhdXRvYnVzeSBhLnMuIn1d",
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"received_at": 1795292110000000,
+"skew": 1200000000,
+"request": null,
+"result": [
+{
+"source": "idsok",
+"channel": "vehicles",
+"item": 0,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-11-21T20:15:10+00:00",
+"observed_at": "2026-11-21T20:14:45+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:S-895002-359\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"895002:359\"},{\"t\":\"position\",\"lat\":49.59543,\"lon\":17.24281,\"bearing\":70.0},{\"t\":\"delay\",\"s\":120,\"ref\":\"unknown\"}]}"
+},
+{
+"source": "idsok",
+"channel": "vehicles",
+"item": 1,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-11-21T20:15:10+00:00",
+"observed_at": "2026-11-21T20:12:14+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:S-891364-362\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"891364:362\"},{\"t\":\"position\",\"lat\":49.69316,\"lon\":17.19568,\"bearing\":18.0},{\"t\":\"delay\",\"s\":0,\"ref\":\"unknown\"}]}"
+},
+{
+"source": "idsok",
+"channel": "vehicles",
+"item": 2,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "czptt",
+"received_at": "2026-11-21T20:15:10+00:00",
+"observed_at": "2026-11-21T20:15:00+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:K-13861\"},{\"t\":\"trip_key\",\"ns\":\"czptt:train_number\",\"key\":\"13861\"},{\"t\":\"position\",\"lat\":49.726818,\"lon\":17.080293,\"bearing\":null},{\"t\":\"delay\",\"s\":0,\"ref\":\"unknown\"}]}"
+},
+{
+"source": "idsok",
+"channel": "vehicles",
+"item": 3,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-11-21T20:15:10+00:00",
+"observed_at": "2026-11-21T20:12:14+00:00",
+"decoder_version": 1,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"trip:S-891364-364\"},{\"t\":\"trip_key\",\"ns\":\"cis:line_trip\",\"key\":\"891364:364\"},{\"t\":\"position\",\"lat\":49.69316,\"lon\":17.19568,\"bearing\":18.0}]}"
+}
+]
+},
+{
+"kind": "facts",
+"source": "idsok",
+"channel": "vehicles",
+"body": "eyJjb25uZWN0aW9ucyI6W119",
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"received_at": 1795292110000000,
+"skew": 1200000000,
+"request": null,
+"error": {
+"message": "?"
+}
+},
+{
+"kind": "facts",
+"source": "mpvnet",
+"channel": "odis",
+"body": "eyJwb3J0YWwiOiAiT2RpcyIsICJyZWZyZXNoSW50ZXJ2YWwiOiAxMCwgInRyYW5zbWl0dGVycyI6IFt7InQiOiAiSCIsICJjIjogMCwgImRtIjogMiwgImRzIjogIiR6Mn5taW4ufjI4fnMiLCAiY3IiOiAiRFBPIiwgIngiOiA0OS44Mjk4MiwgInkiOiAxOC4xODg4NSwgImR0IjogIjEyLjEwLjIwMjYiLCAidG0iOiAiMDc6Mjk6NDAiLCAiaWNvIjogImFfMjcwLnBuZyIsICJjbiI6ICI0OXw0OXw5NHx8fFN2aW5vdixtb3N0eXwxNDh8NDUwfFBvcnViYSxPcGF2c2vDoXxNaWNow6Fsa292aWNlfDF8RXYuIMSNLiA3MTM2fDB8MHwwfDB8MHwwfDB8MHwwfDAiLCAiY2F0IjogM30sIHsidCI6ICJIIiwgImMiOiAwLCAiZG0iOiAwLCAiZHMiOiAiJHAwfm1pbi5+MDB+cyIsICJjciI6ICJEUE8iLCAieCI6IDQ5LjgyMjY4LCAieSI6IDE4LjE1ODIyOCwgImR0IjogIjEyLjEwLjIwMjYiLCAidG0iOiAiMDc6Mjk6MzUiLCAiaWNvIjogImFfMTgwLnBuZyIsICJjbiI6ICI3fDd8MTQ5fHx8fDB8fFbDvcWha292aWNlfFBvcnViYSxWxZllc2luc2vDoXwxfEV2LiDEjS4gMTc1OHwwfDB8MHwwfDB8MHwwfDB8MHwwIiwgImNhdCI6IDN9LCB7InQiOiAiSCIsICJjIjogMCwgImRtIjogMCwgImRzIjogIiR6MH5taW4ufjQ1fnMiLCAiY3IiOiAiRFNaTyIsICJ4IjogNDkuMjAxMjU2LCAieSI6IDE3LjUzNTg1NiwgImR0IjogIjEyLjEwLjIwMjYiLCAidG0iOiAiMDc6Mjk6NDUiLCAiaWNvIjogImFfMzMwLnBuZyIsICJjbiI6ICI1NXw1NXwxNXxPdHJva292aWNlLERyLkUuQmVuZcWhZXw0NXxPdHJva292aWNlLFBvxaF0YXw0NXw0NTB8T3Ryb2tvdmljZSzFvmVsLnN0LnxPdHJva292aWNlLMWgdMSbcmtvdmnFoXTEm3wwfEV2LiDEjS4gNDE4fDB8MHwwfDB8MHwwfDB8MHwwfDAiLCAiY2F0IjogM30sIHsidCI6ICJIIiwgImMiOiAwLCAiZG0iOiAyLCAiZHMiOiAiJHoyfm1pbi5+NDJ+cyIsICJjciI6ICJEU1pPIiwgIngiOiA0OS4yNjcxMDUsICJ5IjogMTcuNzA1NTI2LCAiZHQiOiAiMTIuMTAuMjAyNiIsICJ0bSI6ICIwNzoyOTo0MiIsICJpY28iOiAiYV8xODAucG5nIiwgImNuIjogIjR8NHwyOXxLb3N0ZWxlYyxnYXLDocW+ZXwxNjJ8S29zdGVsZWMsc3TFmWVkfDE2Mnw0NDl8TGXFoW7DoSxaT098UG9kaG/FmcOtLHRvxI1uYXwwfEV2LiDEjS4gMjI2fDB8MHwwfDB8MHwwfDB8MHwwfDAiLCAiY2F0IjogM31dfQ==",
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"received_at": 1791783009000000,
+"skew": 1200000000,
+"request": null,
+"result": [
+{
+"source": "mpvnet",
+"channel": "odis",
+"item": 0,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-10-12T05:30:09+00:00",
+"observed_at": "2026-10-12T05:29:40+00:00",
+"decoder_version": 4,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"DPO:7136\"},{\"t\":\"line_ref\",\"ns\":\"cis:line\",\"value\":\"915049\"},{\"t\":\"destination\",\"name\":\"Michálkovice\",\"townless\":true},{\"t\":\"next_stop_name\",\"name\":\"Svinov,mosty\",\"scheduled\":\"2026-10-12T05:30:00+00:00\",\"townless\":true},{\"t\":\"vehicle_attribute\",\"a\":\"fleet_number\",\"value\":\"7136\"},{\"t\":\"position\",\"lat\":49.82982,\"lon\":18.18885,\"bearing\":270.0},{\"t\":\"delay\",\"s\":148,\"ref\":\"unknown\"}]}"
+},
+{
+"source": "mpvnet",
+"channel": "odis",
+"item": 1,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-10-12T05:30:09+00:00",
+"observed_at": "2026-10-12T05:29:35+00:00",
+"decoder_version": 4,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"DPO:1758\"},{\"t\":\"line_ref\",\"ns\":\"cis:line\",\"value\":\"915007\"},{\"t\":\"destination\",\"name\":\"Poruba,Vřesinská\",\"townless\":true},{\"t\":\"vehicle_attribute\",\"a\":\"fleet_number\",\"value\":\"1758\"},{\"t\":\"position\",\"lat\":49.82268,\"lon\":18.158228,\"bearing\":180.0},{\"t\":\"delay\",\"s\":0,\"ref\":\"unknown\"}]}"
+},
+{
+"source": "mpvnet",
+"channel": "odis",
+"item": 2,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-10-12T05:30:09+00:00",
+"observed_at": "2026-10-12T05:29:45+00:00",
+"decoder_version": 4,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"DSZO:418\"},{\"t\":\"line_ref\",\"ns\":\"cis:line\",\"value\":\"826055\"},{\"t\":\"destination\",\"name\":\"Otrokovice,Štěrkoviště\",\"townless\":true},{\"t\":\"next_stop_name\",\"name\":\"Otrokovice,Pošta\",\"scheduled\":\"2026-10-12T05:30:00+00:00\",\"townless\":true},{\"t\":\"vehicle_attribute\",\"a\":\"fleet_number\",\"value\":\"418\"},{\"t\":\"position\",\"lat\":49.201256,\"lon\":17.535856,\"bearing\":330.0},{\"t\":\"delay\",\"s\":45,\"ref\":\"unknown\"}]}"
+},
+{
+"source": "mpvnet",
+"channel": "odis",
+"item": 3,
+"sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+"feed": "jdf",
+"received_at": "2026-10-12T05:30:09+00:00",
+"observed_at": "2026-10-12T05:29:42+00:00",
+"decoder_version": 4,
+"facts": "{\"v\":5,\"facts\":[{\"t\":\"vehicle_key\",\"id\":\"DSZO:226\"},{\"t\":\"line_ref\",\"ns\":\"cis:line\",\"value\":\"825004\"},{\"t\":\"destination\",\"name\":\"Podhoří,točna\",\"townless\":true},{\"t\":\"next_stop_name\",\"name\":\"Kostelec,střed\",\"scheduled\":\"2026-10-12T05:29:00+00:00\",\"townless\":true},{\"t\":\"vehicle_attribute\",\"a\":\"fleet_number\",\"value\":\"226\"},{\"t\":\"position\",\"lat\":49.267105,\"lon\":17.705526,\"bearing\":180.0},{\"t\":\"delay\",\"s\":162,\"ref\":\"unknown\"}]}"
+}
+]
 }
 ]

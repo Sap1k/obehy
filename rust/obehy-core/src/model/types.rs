@@ -92,6 +92,8 @@ pub struct Departure {
 pub struct KeylessEpisode {
     pub line: String,
     pub destination: String,
+    /// The source's stop names may leave out their leading parts (MPVNET-Q10).
+    pub townless: bool,
     pub started_at: Instant,
     pub last_at: Instant,
     pub next_stop: Option<String>,

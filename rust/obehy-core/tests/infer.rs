@@ -526,6 +526,8 @@ struct Seen<'a> {
     destination: &'a str,
     delay_min: Option<i64>,
     place: Option<f64>,
+    due: Option<&'a str>,
+    townless: bool,
 }
 
 fn seen<'a>(at: &'a str, following: &'a str) -> Seen<'a> {
@@ -535,6 +537,8 @@ fn seen<'a>(at: &'a str, following: &'a str) -> Seen<'a> {
         destination: TEPLICE,
         delay_min: Some(0),
         place: None,
+        due: None,
+        townless: false,
     }
 }
 
@@ -551,6 +555,15 @@ impl<'a> Seen<'a> {
         self.destination = destination;
         self
     }
+    /// The scheduled departure at the next stop, as MPV net city buses give it (MPVNET-Q3).
+    fn due(mut self, at: &'a str) -> Self {
+        self.due = Some(at);
+        self
+    }
+    fn townless(mut self) -> Self {
+        self.townless = true;
+        self
+    }
     fn observation(&self) -> Observation {
         let mut facts: Vec<Fact> = vec![
             Fact::VehicleKey(VehicleKey {
@@ -562,10 +575,15 @@ impl<'a> Seen<'a> {
             }),
             Fact::Destination(Destination {
                 name: self.destination.into(),
+                townless: self.townless,
             }),
         ];
         if let Some(name) = self.following {
-            facts.push(Fact::NextStopName(NextStopName { name: name.into() }));
+            facts.push(Fact::NextStopName(NextStopName {
+                name: name.into(),
+                scheduled: self.due.map(local),
+                townless: self.townless,
+            }));
         }
         if let Some(i) = self.place {
             facts.push(Fact::Position(Position {
@@ -657,8 +675,9 @@ impl Driver {
         .unwrap();
         let mut binding = keyless::continued(
             previous.as_ref(),
+            &line,
             &episode,
-            o.at(),
+            o,
             &self.instances,
             &self.index,
             &self.policy,
@@ -952,4 +971,101 @@ fn a_real_arriva_express_trip_binds_from_its_first_report() {
         source_vehicle_id: "6SA3453".into(),
     }];
     assert!(state.binding.as_ref().unwrap().confirmed);
+}
+
+// --- MPV net city buses: the next stop's scheduled time (MPVNET-Q3, MPVNET-Q10) ----------------
+
+fn five_minutes_later() -> Vec<(&'static str, String)> {
+    OUT.iter()
+        .enumerate()
+        .map(|(i, stop)| (*stop, format!("11:{:02}", 5 + 10 * i)))
+        .collect()
+}
+
+#[test]
+fn mpvnet_q3_the_next_stops_time_picks_one_of_two_trips_minutes_apart() {
+    // The 11:00 and 11:05 trips both fit by line, destination and time; only the 11:05 one
+    // leaves B at 11:15.
+    let mut driver = Driver::new(express(&[("580916:7", five_minutes_later())]));
+    let results = driver.run(&[seen("2026-10-08 11:03", "B").due("2026-10-08 11:15")]);
+    assert_eq!(results, [bound(7)]);
+    assert_eq!(driver.decisions[0].evidence, Some(Evidence::NextStopTime));
+    assert_eq!(driver.decisions[0].best_s, Some(0.0));
+    assert_eq!(driver.decisions[0].runner_up_s, None);
+    // A minute off still names it (whole minutes on both sides).
+    let mut driver = Driver::new(express(&[("580916:7", five_minutes_later())]));
+    let results = driver.run(&[seen("2026-10-08 11:03", "B").due("2026-10-08 11:11")]);
+    assert_eq!(results, [bound(3)]);
+}
+
+#[test]
+fn mpvnet_q3_a_time_no_candidate_has_is_no_evidence() {
+    let mut driver = Driver::new(express(&[("580916:7", five_minutes_later())]));
+    let results = driver.run(&[seen("2026-10-08 11:03", "B").due("2026-10-08 11:17")]);
+    assert_eq!(results, [Err(Reason::Ambiguous)]);
+    assert_eq!(driver.decisions[0].evidence, None);
+}
+
+#[test]
+fn mpvnet_q3_the_next_stops_time_past_midnight_is_on_the_trips_service_date() {
+    let times: Vec<(&str, String)> = OUT
+        .iter()
+        .enumerate()
+        .map(|(i, stop)| {
+            let minutes = 50 + 10 * i;
+            (*stop, format!("{}:{:02}", 23 + minutes / 60, minutes % 60))
+        })
+        .collect();
+    let mut driver = Driver::new(express(&[("580916:9", times)]));
+    // B at 24:00 of 2026-10-08.
+    let results = driver.run(&[seen("2026-10-08 23:55", "B").due("2026-10-09 00:00")]);
+    assert_eq!(results, [bound(9)]);
+    assert_eq!(driver.decisions[0].evidence, Some(Evidence::NextStopTime));
+}
+
+#[test]
+fn mpvnet_q10_townless_names_match_the_trips_stops() {
+    let city = vec![
+        ("Ostrava,Svinov,mosty", "13:00".to_owned()),
+        ("Ostrava,Mor.Ostrava,Křižíkova", "13:10".to_owned()),
+        ("Ostrava,Poruba,Opavská", "13:20".to_owned()),
+    ];
+    let mut driver = Driver::new(express(&[("580916:8", city.clone())]));
+    let obs = seen("2026-10-08 13:01", "Křižíkova")
+        .to("Poruba,Opavská")
+        .due("2026-10-08 13:10")
+        .townless();
+    assert_eq!(driver.run(&[obs]), [bound(8)]);
+    // Without the flag the short names are no stop of the trip.
+    let mut driver = Driver::new(express(&[("580916:8", city)]));
+    let obs = seen("2026-10-08 13:01", "Křižíkova")
+        .to("Poruba,Opavská")
+        .due("2026-10-08 13:10");
+    assert_eq!(driver.run(&[obs]), [Err(Reason::NotInService)]);
+}
+
+#[test]
+fn mpvnet_q11_the_next_stops_time_names_a_trip_to_another_destination() {
+    // The 10:00 trip back from Teplice leaves D at 10:20; the bus names Teplice, its line's
+    // terminal, as its destination all the same.
+    let mut driver = Driver::new(express(&[]));
+    let results = driver.run(&[seen("2026-10-08 10:18", "D").due("2026-10-08 10:20")]);
+    assert_eq!(results, [bound(2)]);
+    assert_eq!(driver.decisions[0].evidence, Some(Evidence::NextStopTime));
+}
+
+#[test]
+fn mpvnet_q11_a_next_stops_time_on_another_trip_ends_the_binding() {
+    // Bound on the 11:00 trip; at Teplice it starts the 12:00 one with the same destination
+    // named, and A at 12:00 names that trip. A time the bound trip keeps, or one no trip has,
+    // keeps the binding.
+    let mut driver = Driver::new(express(&[]));
+    let results = driver.run(&[
+        seen("2026-10-08 11:45", TEPLICE).due("2026-10-08 11:50"),
+        seen("2026-10-08 11:49", TEPLICE).due("2026-10-08 11:51"),
+        seen("2026-10-08 11:52", TEPLICE).due("2026-10-08 11:58"),
+        seen("2026-10-08 11:58", "A").due("2026-10-08 12:00"),
+    ]);
+    assert_eq!(results, [bound(3), bound(3), bound(3), bound(5)]);
+    assert_eq!(driver.decisions.len(), 2);
 }

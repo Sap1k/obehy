@@ -57,6 +57,7 @@ pub(crate) enum Norm {
         kind: Ref,
         category: Ref,
         bus: Layout,
+        city: Option<Box<Layout>>,
         train: Layout,
     },
     SignedMinSec {
@@ -137,6 +138,7 @@ pub(crate) fn compile(
             kind,
             category,
             bus,
+            city,
             train,
             ..
         } => Norm::MpvnetRecord {
@@ -144,6 +146,7 @@ pub(crate) fn compile(
             kind: c.reference(kind)?,
             category: c.reference(category)?,
             bus: layout(bus)?,
+            city: city.as_deref().map(layout).transpose()?.map(Box::new),
             train: layout(train)?,
         },
         Normalizer::SignedMinSec { value, regex, .. } => Norm::SignedMinSec {
@@ -242,12 +245,14 @@ pub(crate) fn evaluate(
                 _ => None,
             }
         }
-        // MPVNET-Q2, Q3: the record by kind; a city bus (category) or a bad line has none.
+        // MPVNET-Q2, Q3: the record by kind: a regional bus (category, CIS line), a city bus
+        // (its own category) or a train; any other has none.
         Norm::MpvnetRecord {
             record,
             kind,
             category,
             bus,
+            city,
             train,
         } => {
             let Some(record) = get(slots, record).and_then(|v| v.as_text().map(str::to_owned))
@@ -256,24 +261,25 @@ pub(crate) fn evaluate(
             };
             let fields: Vec<String> = record.split('|').map(str::to_owned).collect();
             let kind = get(slots, kind);
-            let is = |t: &str| {
+            let category = get(slots, category);
+            let fits = |layout: &Layout| {
                 kind.as_deref()
-                    .is_some_and(|k| k.equals(&Scalar::Text(t.into())))
+                    .is_some_and(|k| k.equals(&Scalar::Text(layout.t.clone())))
+                    && fields.len() == layout.fields
+                    && layout
+                        .category
+                        .as_ref()
+                        .is_none_or(|want| category.as_deref().is_some_and(|c| c.equals(want)))
+                    && layout
+                        .line
+                        .as_ref()
+                        .is_none_or(|(f, re)| fields.get(*f).is_some_and(|v| re.is_match(v)))
             };
-            let chosen = if is(&bus.t) && fields.len() == bus.fields {
-                let category_ok = bus
-                    .category
-                    .as_ref()
-                    .is_none_or(|want| get(slots, category).is_some_and(|c| c.equals(want)));
-                let line_ok = bus
-                    .line
-                    .as_ref()
-                    .is_none_or(|(f, re)| fields.get(*f).is_some_and(|v| re.is_match(v)));
-                if !(category_ok && line_ok) {
-                    return Ok(None);
-                }
+            let chosen = if fits(bus) {
                 "bus"
-            } else if is(&train.t) && fields.len() == train.fields {
+            } else if city.as_deref().is_some_and(fits) {
+                "city"
+            } else if fits(train) {
                 "train"
             } else {
                 return Ok(None);

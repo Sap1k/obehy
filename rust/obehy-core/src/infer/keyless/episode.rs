@@ -39,6 +39,7 @@ pub fn advance(
         return Some(KeylessEpisode {
             line: line.value.clone(),
             destination: destination.name.clone(),
+            townless: destination.townless,
             started_at: at,
             last_at: at,
             next_stop: name,
@@ -66,6 +67,7 @@ pub fn advance(
     Some(KeylessEpisode {
         line: previous.line.clone(),
         destination: previous.destination.clone(),
+        townless: previous.townless,
         started_at: previous.started_at,
         last_at: at,
         next_stop: name.or_else(|| previous.next_stop.clone()),

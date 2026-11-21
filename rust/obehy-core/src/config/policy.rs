@@ -1,4 +1,4 @@
-//! Versioned realtime policy (`src/obehy/data/realtime/policy-v18.toml`). Every value is required
+//! Versioned realtime policy (`src/obehy/data/realtime/policy-v19.toml`). Every value is required
 //! (a missing key is a load error); sections read field by field reject unknown keys; `[delay]`,
 //! `[warm_replay]`, `[emit]` and the root take extra keys silently.
 //!
@@ -15,7 +15,7 @@ use super::ConfigError;
 use crate::time::TimeDelta;
 
 /// The policy file of this code.
-pub const POLICY_FILE: &str = "policy-v18.toml";
+pub const POLICY_FILE: &str = "policy-v19.toml";
 
 /// A value with per-route-mode (or per-source) overrides: a table with `default`.
 #[derive(Debug, Clone, PartialEq)]
@@ -324,6 +324,7 @@ pub struct KeylessPolicy {
     pub max_path_distance_m: f64,
     pub departure_radius_m: f64,
     pub confirm_departures: i64,
+    pub next_stop_time_tolerance_s: i64,
 }
 
 /// The whole policy file.

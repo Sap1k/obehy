@@ -82,7 +82,11 @@ enum Seg {
     Index(usize),
 }
 
+/// A dotted path; the empty path is the document itself (IDSOK-Q1: a bare array).
 fn parse_path(path: &str) -> Vec<Seg> {
+    if path.is_empty() {
+        return Vec::new();
+    }
     path.split('.')
         .map(|p| match p.parse::<usize>() {
             Ok(i) if !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()) => Seg::Index(i),
@@ -177,6 +181,10 @@ enum Coerce {
     Local(Layout),
     /// A bare `HH:MM` near a reference.
     Hhmm,
+    /// A bare `HH:MM:SS` near a reference (IREDO-Q4, IDSOK-Q4).
+    Hhmmss,
+    /// Minutes after midnight (digits or an integer) near a reference (MPVNET-Q3).
+    MinuteOfDay,
     /// A number in a string, an error if it is none.
     Float,
 }
@@ -202,6 +210,8 @@ fn coerce_named(name: &str) -> Result<Coerce, CompileError> {
         "iso" => Coerce::Iso,
         "iso_local_digits" => Coerce::IsoLocalDigits,
         "hhmm" => Coerce::Hhmm,
+        "hhmmss" => Coerce::Hhmmss,
+        "minute_of_day" => Coerce::MinuteOfDay,
         "float" => Coerce::Float,
         other => return bad(format!("unknown coercion `{other}`")),
     })
@@ -234,6 +244,17 @@ pub(crate) fn hhmm(text: &str) -> Option<i64> {
         return None;
     }
     Some((hours * 60 + minutes) * 60_000_000)
+}
+
+/// `HH:MM:SS` (or `H:MM:SS`) as microseconds after midnight.
+pub(crate) fn hhmmss(text: &str) -> Option<i64> {
+    let (hm, sec) = text.trim().rsplit_once(':')?;
+    if sec.len() != 2 || !digits(sec) {
+        return None;
+    }
+    let seconds: i64 = sec.parse().ok()?;
+    (seconds <= 59).then_some(())?;
+    Some(hhmm(hm)? + seconds * 1_000_000)
 }
 
 impl Coerce {
@@ -308,6 +329,17 @@ impl Coerce {
             Coerce::Hhmm => s
                 .and_then(hhmm)
                 .and_then(|clock| resolve_clock(clock, near.unwrap_or(ctx.received_at)))
+                .map(Val::Instant),
+            Coerce::Hhmmss => s
+                .and_then(hhmmss)
+                .and_then(|clock| resolve_clock(clock, near.unwrap_or(ctx.received_at)))
+                .map(Val::Instant),
+            Coerce::MinuteOfDay => s
+                .map_or_else(|| json_int(j), |t| digits(t).then(|| int_text(t)).flatten())
+                .filter(|minute| (0..24 * 60).contains(minute))
+                .and_then(|minute| {
+                    resolve_clock(minute * 60_000_000, near.unwrap_or(ctx.received_at))
+                })
                 .map(Val::Instant),
             Coerce::Float => match s {
                 Some(t) => Some(Val::Float(float_text(t).ok_or_else(|| not_a_number(t))?)),
@@ -442,8 +474,12 @@ enum CBody {
     VehicleKey(Template),
     TripKey(String, Template),
     LineRef(String, Template),
-    Destination(In),
-    NextStopName(In),
+    Destination(In, bool),
+    NextStopName {
+        name: In,
+        scheduled: Option<In>,
+        townless: bool,
+    },
     Position {
         lat: Option<In>,
         lon: Option<In>,
@@ -749,8 +785,18 @@ impl Compiler<'_> {
             FactBody::VehicleKey { id } => CBody::VehicleKey(self.template(id)?),
             FactBody::TripKey { ns, key } => CBody::TripKey(ns.clone(), self.template(key)?),
             FactBody::LineRef { ns, value } => CBody::LineRef(ns.clone(), self.template(value)?),
-            FactBody::Destination { name } => CBody::Destination(self.input(name)?),
-            FactBody::NextStopName { name } => CBody::NextStopName(self.input(name)?),
+            FactBody::Destination { name, townless } => {
+                CBody::Destination(self.input(name)?, *townless)
+            }
+            FactBody::NextStopName {
+                name,
+                scheduled,
+                townless,
+            } => CBody::NextStopName {
+                name: self.input(name)?,
+                scheduled: scheduled.as_deref().map(|s| self.input(s)).transpose()?,
+                townless: *townless,
+            },
             FactBody::Position {
                 lat,
                 lon,
@@ -1530,14 +1576,31 @@ impl Mapping {
                 }),
                 None => return Ok(None),
             },
-            CBody::Destination(i) => match need!(i) {
-                Some(v) => Fact::Destination(Destination { name: text_of(&v) }),
+            CBody::Destination(i, townless) => match need!(i) {
+                Some(v) => Fact::Destination(Destination {
+                    name: text_of(&v),
+                    townless: *townless,
+                }),
                 None => return Ok(None),
             },
-            CBody::NextStopName(i) => match need!(i) {
-                Some(v) => Fact::NextStopName(NextStopName { name: text_of(&v) }),
-                None => return Ok(None),
-            },
+            CBody::NextStopName {
+                name,
+                scheduled,
+                townless,
+            } => {
+                let Some(name) = need!(name).map(|v| text_of(&v)) else {
+                    return Ok(None);
+                };
+                let scheduled = match scheduled {
+                    Some(i) => instant(need!(i)),
+                    None => None,
+                };
+                Fact::NextStopName(NextStopName {
+                    name,
+                    scheduled,
+                    townless: *townless,
+                })
+            }
             CBody::Position {
                 lat,
                 lon,
@@ -1754,6 +1817,7 @@ mod tests {
         let doc: Value = serde_json::from_str(r#"[{"a": [1, {"b": 2}]}]"#).unwrap();
         assert_eq!(lookup(&doc, &parse_path("0.a.1.b")), Some(&Value::from(2)));
         assert_eq!(lookup(&doc, &parse_path("a")), None);
+        assert_eq!(lookup(&doc, &parse_path("")), Some(&doc));
         let obj: Value = serde_json::from_str(r#"{"0": 1}"#).unwrap();
         assert_eq!(lookup(&obj, &parse_path("0")), None);
     }
@@ -1764,6 +1828,18 @@ mod tests {
         assert_eq!(hhmm("24:00"), None);
         assert_eq!(hhmm("7:5"), None);
         assert_eq!(hhmm("07:05:00"), None);
+        assert_eq!(
+            hhmmss("7:05:09"),
+            Some((7 * 3_600 + 5 * 60 + 9) * 1_000_000)
+        );
+        assert_eq!(
+            hhmmss("23:59:59"),
+            Some((23 * 3_600 + 59 * 60 + 59) * 1_000_000)
+        );
+        assert_eq!(hhmmss("24:00:00"), None);
+        assert_eq!(hhmmss("07:05:60"), None);
+        assert_eq!(hhmmss("07:05"), None);
+        assert_eq!(hhmmss("07:5:00"), None);
         assert_eq!(round_to(50.123_456_5, 6), 50.123_457);
     }
 }
