@@ -305,6 +305,21 @@ fn a_kept_line_keeps_its_trips_keys() {
     );
 }
 
+#[test]
+fn a_kept_line_without_trips_keeps_its_own_key() {
+    // A keyless source's line the timetable has no trip of (DPO 915990, MPVNET-Q3): its key is
+    // only a trip key's parent otherwise, so it went while the line stayed loaded, and binding
+    // then read a key that was not.
+    let mut index = sweep_index();
+    let line = KeyRef::new("cis:line", "915990");
+    let key = index.intern(&line);
+    index.key_entries.insert(key.clone(), Box::new([]));
+    index.lines.insert(key, Box::new([]));
+    index.sweep([], [&line], [], D8);
+    assert!(index.keys("cis:line", "915990").unwrap().is_empty());
+    assert!(index.line_keys("cis:line", "915990").unwrap().is_empty());
+}
+
 /// `test_rail_runs._run`: A ~X B | B C, part 1 (A..B, X a railway point) and part 2 (B..C).
 fn rail_index(extra_part: bool) -> Index {
     let d8 = [D8];

@@ -360,6 +360,9 @@ impl Index {
             .collect();
         let mut wanted: HashSet<KeyRef> = refs.into_iter().cloned().collect();
         for line in &kept_lines {
+            // The line's own key too: a line without trips has no trip key to keep it as a
+            // parent, and a kept line is read through it.
+            wanted.insert(line.clone());
             let identifiers = self.lines.get_ref(line).expect("a kept line is loaded");
             if let Some(child) = child_namespace(&line.namespace) {
                 let child: Id = Arc::from(child);
