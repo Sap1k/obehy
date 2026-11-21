@@ -9,6 +9,13 @@ publish.workspace = true
 
 [dependencies]
 obehy-core.workspace = true
+indexmap.workspace = true
+prost.workspace = true
+regex.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

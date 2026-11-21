@@ -21,7 +21,7 @@ Survey of `src/obehy/realtime` (2026-11-21). Line numbers are as of commit 42287
 - `math.hypot` is CPython's own `vector_norm` (3.8+), not libm hypot — port it.
   Used `path.py:72`, `progress.py:224,466`.
 - libm: port formulas op for op, keep evaluation order; verify libm parity on the target OS for
-  sin, cos, asin, sqrt, atan2, exp, log; `x**2` is libm pow (check `x*x` matches);
+  sin, cos, asin, sqrt, atan2, exp, log; `x**2` is libm pow, NOT `x*x` (UCRT differs in ~1 in 2,000: use `geo::square`);
   radians/degrees = `x*(pi/180)` / `x*(180/pi)`.
 - Float `%` is floored: `degrees(atan2(-0.0,+y)) % 360.0` → +0.0 in Python, -0.0 with Rust
   rem_euclid. Reaches GTFS-RT bearing bytes via `heading_at` (`path.py:111,149`,
@@ -253,3 +253,10 @@ Survey of `src/obehy/realtime` (2026-11-21). Line numbers are as of commit 42287
   minimum_drives, `_fresh`, `_seen_leaving`; then publish deadband, then monotone.
 - `emit/db.py:443-457` iterates state.vehicles and state.instances in insertion order (IndexMap
   + shift_remove again).
+
+## Platform libm (found in R4)
+- On Windows, Rust's f64 math and CPython both call UCRT: 1.15M recorded arguments matched bit
+  for bit (`tests/fixtures/libm.json`). Parity references are generated and compared on Windows.
+  On Linux both use glibc; a musl static build would not match glibc. After the switch, parity
+  with Python no longer matters, but committed fixtures assume UCRT: regenerate on Linux if CI
+  runs the Rust tests there.

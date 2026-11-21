@@ -176,6 +176,7 @@ them.
 | DPMD-Q7 | now and then a bus is logged into the wrong trip: bus 705 reported `515216:303` at 12:28 on 2026-10-10, a trip of seasonal line 216, which is not running (its last day was 2026-09-28; DPMD's own popup showed no timetable for it). A transient driver selection error, not a numbering scheme | taken literally: `not_in_service` until the driver selects the right trip |
 | DPMD-Q8 | every vehicle carries its driver's number (`driver`, `Řidič`) | public on DPMD's own map, but Oběhy has no use for it: the recorder filter drops it, so the archive and the core never see it |
 | DPMD-Q9 | without a fresh `v` the server returns a cached copy (5 minutes old on 2026-10-10) | always send `v=<epoch ms>`, and compare `TimeStamp` with reception (a stale body is skipped) |
+| DPMD-Q10 | the arrow's heading stays on a standing bus and is noise there | a bearing only while `Rychlost` is above 0 km/h and the arrow is a number |
 
 ## Recording
 

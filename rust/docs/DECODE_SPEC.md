@@ -458,3 +458,42 @@ computed once). Port PROJ 9.8.1 krovak.cpp (iterative inverse), cart.cpp, helmer
 unitconvert.cpp literally. Fixture: pyproj outputs at 17 significant digits before rounding,
 points on both sides of each box edge, and every distinct (x, y) in a day of sz-mapa archive;
 report any rounded value that flips.
+
+## 6. As built (R2, 2026-11-21)
+
+The manifests (`src/obehy/realtime/sources/*.toml`) hold the final shape; the Rust types are in
+`obehy-core/src/config/decode.rs` (read strictly), the engine in `obehy-sources/src/mapping.rs`.
+Where the code moved away from the sketch above:
+
+- **Normalizers are values.** A `[values]` entry with `fn` (and its `quirk`) instead of a
+  `normalize` list: later values read their output (DPMD's `label.Linka`, MPV net's `rec.11`,
+  DÚK's `fix_time`). The payload-level DPMD-Q9 is a `guard`; PID-Q6's choice across entities
+  is a profile's `select`.
+- **Choices** have no `default` key: a case without `match` is the default; a case of a scalar
+  (`feed`, a flag, a state code) holds it under `value`.
+- **Errors.** `root` (`object`, `array`), `non_empty` and an `errors` table with Python's texts
+  (`json` prefix, `root`, `entities`; `required = "payload"` uses the latter), so the stream's
+  `payload_error` records match too. `[document]` paths are plain, not `/`-prefixed.
+- **Values** take `when`/`unless` (a gated-off value is absent but not missing for `required`:
+  MPV net's `plate`, PID's `cis_key`, which is a value so that its `int()` fails the payload
+  exactly where Python's `_keys` does), value-level `fresh` (SŽ `md`), and `near = "<value>"`
+  (falling back to reception). `skip`/`keep` are checked right after the leading required values
+  or the values they read, whichever is later (DÚK: after the four `int()`s, as Python).
+- **Coercions**: `integer` (= `decoding.integer`) for `int_or_digits`; `real` without bool for
+  SŽ's `a` (the pair has its own bool rule); `float` for regex captures (`float()`, an error if
+  it raises). `offset_applied_twice` reads the raw text (`text = "gps_text"`);
+  `moving_bearing` has `needs` (Python reads the arrow only for a position it keeps);
+  `mpvnet_record` makes one record value (`rec.kind`, `rec.<n>`).
+- Code decoders: `decoder = "sz-tabule" | "pid-alerts" | "pid-infotexts" | "cd-composition"`
+  (ČD under `[lookup.decode]`); `version` is only for facts.
+
+Declarative: DÚK, PID positions, SŽ map (with Křovák), DPMD (over the recorder filter's JSON),
+the four MPV net portals (one `[decode.portal]`), Arriva Express. Code: SŽ boards, PID alerts
+and infotexts, ČD compositions, and the two recorder filters (`arriva_express::recorded`,
+`dpmd::recorded`). Křovák (§5) is pure Rust and bit-identical to pyproj on every distinct
+position of 2026-10-12 and on both sides of every box edge.
+
+Accepted divergence: a lone UTF-16 surrogate (in a `\u` escape or encoded in the bytes) is a
+payload error in Rust, a string in Python; no archived payload has one (every compared window
+is identical). Python's `\d` in `strptime` and the Unicode version of `\d` in patterns
+(Python 15.1, `regex` 16) differ only for digits no source sends.

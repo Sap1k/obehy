@@ -31,3 +31,36 @@ content-type = "application/json"
 x-enviroment = "client"
 origin = "https://www.arriva.cz"
 referer = "https://www.arriva.cz/cs/dopravni-info/aktualni-poloha-autobusu-online"
+
+# How the archived batch becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven sources").
+[channel.decode]
+version = 2
+reader = "json"
+root = "array"
+non_empty = true
+entities = "0.data.busesCurrentLocations"
+errors = { root = "payload is not a GraphQL batch", entities = "payload lacks busesCurrentLocations" }
+keep = { main_type = "ARRIVA EXPRESS" }  # ARRIVA-Q7 (the recorder filter keeps only these too)
+feed = "jdf"
+observed_at = { value = "updated", fresh = true }
+fact = [
+  { t = "vehicle_key", id = "{plate}" },
+  { t = "vehicle_attribute", a = "licence_plate", value = "plate" },
+  { t = "line_ref", ns = "cis:line", value = "{line}" },
+  { t = "destination", name = "destination" },
+  { t = "next_stop_name", name = "next" },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
+  { t = "delay", s = "delay", scale = 60, ref = "departure" },  # ARRIVA-Q3
+]
+
+[channel.decode.values]
+main_type = { path = "mainType", as = "raw" }
+plate = { path = "spz", as = "trimmed", required = true }  # ARRIVA-Q5
+line = { path = "linkNumber", as = "trimmed", required = true }
+destination = { path = "destinationName", as = "trimmed", required = true }
+next = { path = "lastStopName", as = "trimmed" }  # ARRIVA-Q2
+updated = { path = "updated", as = "iso_local_digits" }  # ARRIVA-Q1
+lat = { path = "latitude", as = "number" }
+lon = { path = "longitude", as = "number" }
+bearing = { path = "angle", as = "number" }
+delay = { path = "delay", as = "integer" }

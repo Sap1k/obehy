@@ -28,6 +28,26 @@ serde_json = { version = "1.0", features = ["float_roundtrip"] }
 thiserror = "2.0"
 # preserve_order: tables keep document order, as tomllib's dicts do (request headers).
 toml = { version = "1.2", features = ["preserve_order"] }
+# R3, the index (obehy-rt only): PostgreSQL `static.*` and a release's serving Parquet.
+arrow-array = "60.1"
+arrow-schema = "60.1"
+bytes = "1.12"
+parquet = { version = "60.1", default-features = false, features = ["arrow", "snap"] }
+stats_alloc = "0.1.10"
+tokio = { version = "1.54", features = ["rt", "macros"] }
+tokio-postgres = "0.7.18"
+# R2, the connectors: GTFS-RT alerts (obehy-sources); the archive's zstd objects and gzip
+# compare streams (obehy-rt).
+prost = { version = "0.14", default-features = false, features = ["derive", "std"] }
+zstd = "0.13"
+flate2 = "1.1"
+# R8, the I/O shell (obehy-rt only): HTTP/1.1 with rustls and no automatic decompression (the
+# runtime decodes gzip itself, as Python does), the archive's sha256 names.
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+hyper = "1"
+sha2 = "0.11"
+# Thread CPU time per worker phase (phases.py's `time.thread_time()`).
+cpu-time = "1.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

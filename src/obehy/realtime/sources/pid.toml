@@ -31,6 +31,73 @@ method = "GET"
 url = "https://api.golemio.cz/v2/vehiclepositions?limit=10000&includeNotTracking=true"
 headers = { accept-encoding = "gzip" }
 
+# How a payload becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven sources").
+[channel.decode]
+version = 4
+reader = "json"
+entities = "features"
+errors = { entities = "payload lacks features" }
+feed = { by = "route_type", cases = [{ match = 2, value = "czptt" }, { value = "jdf" }] }
+observed_at = { value = "fix_time", fresh = true }
+
+[channel.decode.values]
+route_type = { path = "properties.trip.gtfs.route_type", as = "int", required = true }
+state = { path = "properties.last_position.state_position", as = "raw" }
+is_canceled = { path = "properties.last_position.is_canceled", as = "raw" }
+cancelled = { fn = "pid_cancelled", quirk = "PID-Q4", state = "state", flag = "is_canceled", canceled = "canceled" }
+trip_id = { path = "properties.trip.gtfs.trip_id", as = "text", none = [""] }
+train_number = { path = "properties.trip.cis.trip_number", as = "int" }
+cis_line = { path = "properties.trip.cis.line_id", as = "digits" }  # PID-Q3
+cis_key = { template = "{cis_line:06d}:{train_number}", unless = { route_type = 2 } }
+fleet = { path = "properties.trip.vehicle_registration_number", as = "int" }
+vehicle = { by = "route_type", cases = [  # PID-Q1, PID-Q2
+  { match = 2, first_of = ["{route_type}:{fleet}", "train:{train_number}"] },
+  { first_of = ["{route_type}:{fleet}", "trip:{trip_id}"] },
+] }
+start = { path = "properties.trip.start_timestamp", as = "iso" }
+fix_time = { path = "properties.last_position.origin_timestamp", as = "iso" }
+lon = { path = "geometry.coordinates.0", as = "number" }
+lat = { path = "geometry.coordinates.1", as = "number" }
+bearing = { path = "properties.last_position.bearing", as = "number" }
+delay = { path = "properties.last_position.delay.actual", as = "int" }
+wheelchair = { path = "properties.trip.wheelchair_accessible", as = "bool" }
+air = { path = "properties.trip.air_conditioned", as = "bool" }
+usb = { path = "properties.trip.usb_chargers", as = "bool" }
+operator = { path = "properties.trip.agency_name.real", as = "trimmed" }
+category = { path = "properties.trip.vehicle_type.description_cs", as = "trimmed" }
+
+[channel.decode.groups]
+trip_keys = [
+  { t = "trip_key", by = "route_type", cases = [
+    { match = 2, ns = "czptt:train_number", key = "{train_number}" },
+    { ns = "pid:gtfs_trip_id", key = "{trip_id}" },
+  ] },
+  { t = "trip_key", ns = "cis:line_trip", key = "{cis_key}" },
+]
+
+# PID-Q4: a cancelled trip's entry: the trip, no vehicle.
+[channel.decode.profile.cancellation]
+when = { cancelled = true }
+require_fact = "trip_key"
+fact = [{ use = "trip_keys" }, { t = "trip_cancelled" }]
+
+[channel.decode.profile.vehicle]
+require = ["vehicle"]
+select = { fn = "block_current", quirk = ["PID-Q6", "PID-Q4"], group_by = "vehicle", state = "state", start = "start", running = ["on_track", "at_stop", "off_track"], off_route = "off_track", pre_trip = ["before_track", "before_track_delayed"], out = "trip_state" }
+fact = [
+  { t = "vehicle_key", id = "{vehicle}" },
+  { use = "trip_keys", when = { trip_state = ["pre_trip", "running"] } },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
+  { t = "vehicle_attribute", a = "wheelchair_accessible", value = "wheelchair" },
+  { t = "vehicle_attribute", a = "air_conditioning", value = "air" },
+  { t = "vehicle_attribute", a = "usb", value = "usb" },
+  { t = "vehicle_attribute", a = "operator", value = "operator" },
+  { t = "vehicle_attribute", a = "category", value = "category" },
+  { t = "vehicle_attribute", a = "fleet_number", value = "{fleet}" },
+  { t = "source_state", code = "{trip_state}", if_fact = "trip_key" },
+  { t = "delay", s = "delay", ref = "unknown", when = { trip_state = "running" }, if_fact = "trip_key" },
+]
+
 # PID alerts (docs/sources/pid.md, Alerts): the VYMI events as a full GTFS-RT dataset, routes by
 # PID GTFS ID. Cached by Golemio for 40 s.
 [[channel]]
@@ -47,6 +114,10 @@ method = "GET"
 url = "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/alerts.pb"
 headers = { accept-encoding = "gzip" }
 
+[channel.decode]
+reader = "gtfs-rt"
+decoder = "pid-alerts"
+
 # The VYMI infotexts departure boards show: stop-scoped, Czech and English, current and future.
 [[channel]]
 name = "infotexts"
@@ -61,3 +132,7 @@ auth = { header = "X-Access-Token", secret = "golemio" }
 method = "GET"
 url = "https://api.golemio.cz/v3/pid/infotexts?includeFuture=true"
 headers = { accept-encoding = "gzip" }
+
+[channel.decode]
+reader = "json"
+decoder = "pid-infotexts"

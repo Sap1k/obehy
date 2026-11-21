@@ -459,3 +459,21 @@ fn manifest_errors() {
     // Without a title the channel parses and the title is what fails, as in Python.
     assert!(manifest_error(&format!("{CHANNEL}{EVERY_5S}{GET}"), "duk").contains("'title'"));
 }
+
+#[test]
+fn every_shipped_decode_section_loads() {
+    let dir = common::repo().join("src/obehy/realtime/sources");
+    let sources = manifest::load_sources(&dir, &RECORDER_FILTERS).expect("manifests load");
+    for source in &sources {
+        for channel in &source.channels {
+            assert!(channel.decode.is_some(), "{} has no decode", channel.name());
+        }
+        for lookup in &source.lookups {
+            assert!(
+                lookup.request.decode.is_some(),
+                "{} has no decode",
+                lookup.name
+            );
+        }
+    }
+}

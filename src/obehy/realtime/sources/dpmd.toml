@@ -21,3 +21,42 @@ capabilities = ["vehicle_key", "trip_key", "position", "delay"]
 method = "GET"
 url = "https://tabla.dpmdas.cz/data/TrafficState.js?v={epoch_ms}"
 headers = { accept-encoding = "gzip" }
+
+# How the archived JSON becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven sources").
+# The JavaScript literal reader (DPMD-Q2, Q5, Q8) is the recorder filter `dpmd`.
+[channel.decode]
+version = 2
+reader = "json"
+root = "object"
+entities = "buspositions"
+errors = { json = "not the recorded JSON", root = "not the recorded JSON object", entities = "recorded JSON lacks TimeStamp or buspositions" }
+guard = [{ fn = "stale_body", quirk = "DPMD-Q9", value = "stamp", cut_at = ".", layout = "%Y-%m-%dT%H:%M:%S" }]
+feed = "jdf"
+observed_at = { value = "time" }
+fact = [
+  { t = "vehicle_key", id = "{vehicle}" },
+  { t = "trip_key", ns = "cis:line_trip", key = "515{line:03d}:{spoj:d}" },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = false, needs_time = true },
+  { t = "vehicle_attribute", a = "fleet_number", value = "fleet" },
+  { t = "vehicle_attribute", a = "model", value = "model" },
+  { t = "vehicle_attribute", a = "licence_plate", value = "plate" },
+  { t = "delay", s = "minutes", scale = 60, default = 0, ref = "unknown" },  # DPMD-Q4
+]
+
+[channel.decode.document]
+stamp = { path = "TimeStamp", as = "text", required = "payload" }
+
+[channel.decode.values]
+vehicle = { path = "vehicle", as = "text", none = [""], required = true }
+body = { path = "body", as = "text", required = true }
+label = { fn = "popup_labels", quirk = "DPMD-Q2", value = "body" }
+line = { from = "label.Linka", trim = true, as = "digits", required = true }
+spoj = { from = "label.Spoj", trim = true, as = "digits", required = true }
+time = { from = "label.Čas", trim = true, as = "local:%d.%m.%Y %H:%M:%S", fresh = true }  # DPMD-Q1
+coords = { path = "coords", as = "text", regex = '^(\d+(?:\.\d+)?)N, (\d+(?:\.\d+)?)E$', captures = ["lat", "lon"], captures_as = "float" }
+arrow = { path = "arrow", as = "raw" }
+bearing = { fn = "moving_bearing", quirk = "DPMD-Q10", speed = "label.Rychlost", arrow = "arrow", needs = ["time", "coords"] }
+fleet = { from = "label.Autobus", as = "trimmed" }
+model = { from = "label.Typ vozu", as = "trimmed" }
+plate = { from = "label.SPZ", as = "trimmed" }
+delay = { from = "label.Zpoždění", trim = true, as = "text", regex = '^(\d+) min\.$', captures = ["minutes"], captures_as = "py_int" }

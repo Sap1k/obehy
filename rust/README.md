@@ -5,7 +5,7 @@ reference until the switch.
 
 | Crate | What | May depend on |
 |---|---|---|
-| `obehy-core` | time, geo, model + facts JSON, config (policy, manifests), `py` (Python semantics); later index, infer, timeline, core, publish, vehicles | no I/O crate |
+| `obehy-core` | time, geo, model + facts JSON, config (policy, manifests), `py` (Python semantics), index; later infer, timeline, core, publish, vehicles | no I/O crate |
 | `obehy-sources` | connectors: bytes in, facts out (R2) | `obehy-core`; no async, no I/O |
 | `obehy-rt` | the `obehy-rt` binary: shell, store, archive, commands | everything |
 
@@ -41,6 +41,21 @@ under `data/rt-raw-prod`, `../rt-data/rt-raw` and `data/rt-raw`). Regenerate it 
 Python side changes, and on a tzdata bump after copying the new TZif (see
 `obehy-core/src/time/zone.rs`).
 
+## Connectors (obehy-sources) and the facts harness
+
+`uv run python rust/tools/gen_tables.py` writes the Python tables read as code (Unicode digit
+and space classes for `obehy_core::py::text`, the HTML5 entities for the board parser);
+`uv run python rust/tools/gen_sources_fixtures.py` writes `obehy-sources/tests/fixtures/` (every
+decoder call of the Python connector tests with its result, JSON error texts, pyproj Křovák
+outputs). The facts level of the harness:
+
+```
+obehy-rt compare --level facts --archive <root> --sources <ids> --from <day> --to <day> \
+    [--since <local>] [--until <local>] --out <stream.jsonl[.gz]> [--check <python stream>]
+```
+
+writes the stream `obehy rt compare --level facts` writes, from the same arguments.
+
 ## Reading policy, manifests and facts
 
 ```rust
@@ -58,3 +73,18 @@ assert_eq!(facts_json_text(&facts), stored);                  // byte-identical 
 Python semantics the port must keep (half-even `timedelta` arithmetic, `round`, `min`/`max`
 ties, floored `%`, CPython `hypot`, float repr) are in `obehy_core::py` and
 `obehy_core::time::TimeDelta`; `docs/PORTING_HAZARDS.md` lists where each is needed.
+
+## The index against Python (R3)
+
+`obehy_core::index` is the index and its loader, written against the `Rows` trait;
+`obehy_rt::index` reads the rows from PostgreSQL (`SqlRows`) or a release's serving Parquet
+(`ServingRows`). `rust/tools/index_crosscheck.py` turns an archive window into a load plan, runs it
+with the Python loader and dumps the index; the `index_check` example runs the same plan in Rust
+and compares (`index_parity` compares every `Rows` method between Parquet and PostgreSQL):
+
+```
+uv run python rust/tools/index_crosscheck.py plan --release data/releases/<run> --source sz-mapa \
+    --channel trains --since 2026-10-10T01:30:00+00:00 --until 2026-10-10T10:00:00+00:00 --out OUT
+cargo run --release -p obehy-rt --example index_check -- --plan OUT/plan.json --expect OUT/expect.json
+uv run python rust/tools/index_crosscheck.py sql --plan OUT/plan.json --expect OUT/expect.json --subset --parity
+```

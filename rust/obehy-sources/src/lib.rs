@@ -1,20 +1,23 @@
 //! Connectors (docs/RUST_PORT.md, "Config-driven sources"): payload bytes in, facts out. No
-//! I/O and no async: polling, egress and archiving are obehy-rt's. Filled in R2.
+//! I/O and no async: polling, egress and archiving are obehy-rt's.
+//!
+//! A channel's manifest says how its payload is decoded (`[channel.decode]`,
+//! `obehy_core::config::decode`): most channels by the declarative [`mapping`] with the named
+//! normalizers of [`normalize`], the rest by a code decoder ([`sz_tabule`], [`pid_alerts`],
+//! [`cd`]). [`registry::Decoders`] builds them all from the manifests.
 
 pub mod arriva_express;
 pub mod cd;
-pub mod decoding;
 pub mod dpmd;
-pub mod duk;
+pub mod error;
+pub mod krovak;
 pub mod mapping;
-pub mod mpvnet;
 pub mod normalize;
-pub mod pid;
 pub mod pid_alerts;
 pub mod reader;
 pub mod registry;
-pub mod sz;
 pub mod sz_tabule;
+pub mod value;
 
-// The connectors build facts from obehy-core types (R2).
-use obehy_core as _;
+pub use error::PayloadError;
+pub use registry::{Decoder, Decoders};

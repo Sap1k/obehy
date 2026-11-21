@@ -14,6 +14,7 @@ use regex::Regex;
 use toml::{Table, Value};
 
 use super::ConfigError;
+use super::decode::{Decode, channel_decode, shared_decodes};
 use crate::model::SourceSemantics;
 use crate::time::Date;
 
@@ -77,6 +78,8 @@ pub struct Channel {
     pub demand: Option<String>,
     pub auth: Option<Auth>,
     pub cursor: Option<Cursor>,
+    /// `[channel.decode]` (or the shared `[decode.<name>]` it names): Rust only.
+    pub decode: Option<Decode>,
 }
 
 impl Channel {
@@ -328,7 +331,13 @@ fn proxied(t: &Table, at: &str) -> Result<bool, ConfigError> {
     }
 }
 
-fn channel(source: &str, raw: &Value, at: &str, filters: &[&str]) -> Result<Channel, ConfigError> {
+fn channel(
+    source: &str,
+    raw: &Value,
+    at: &str,
+    filters: &[&str],
+    shared: &IndexMap<String, Decode>,
+) -> Result<Channel, ConfigError> {
     let Value::Table(t) = raw else {
         return fail(format!("{at}: not a table"));
     };
@@ -412,6 +421,7 @@ fn channel(source: &str, raw: &Value, at: &str, filters: &[&str]) -> Result<Chan
         None
     };
     let url = string(request, "url", at)?;
+    let decode = channel_decode(t.get("decode"), shared, at).map_err(ConfigError::Manifest)?;
     let interval_s = if demand.is_some() {
         60.0
     } else {
@@ -437,6 +447,7 @@ fn channel(source: &str, raw: &Value, at: &str, filters: &[&str]) -> Result<Chan
         demand,
         auth,
         cursor,
+        decode,
     })
 }
 
@@ -476,7 +487,12 @@ fn applies(t: &Table, at: &str) -> Result<Applies, ConfigError> {
     })
 }
 
-fn lookup(source: &str, raw: &Value, at: &str) -> Result<Lookup, ConfigError> {
+fn lookup(
+    source: &str,
+    raw: &Value,
+    at: &str,
+    shared: &IndexMap<String, Decode>,
+) -> Result<Lookup, ConfigError> {
     let Value::Table(t) = raw else {
         return fail(format!("{at}: not a table"));
     };
@@ -497,6 +513,7 @@ fn lookup(source: &str, raw: &Value, at: &str) -> Result<Lookup, ConfigError> {
     let applies = applies(t, at)?;
     let rate = table(t, "rate", at)?;
     let feeds = strings(t, "feeds", at, &FEED_NAMES)?;
+    let decode = channel_decode(t.get("decode"), shared, at).map_err(ConfigError::Manifest)?;
     let channel = Channel {
         source: source.to_owned(),
         channel: name.clone(),
@@ -517,6 +534,7 @@ fn lookup(source: &str, raw: &Value, at: &str) -> Result<Lookup, ConfigError> {
         demand: None,
         auth: None,
         cursor: None,
+        decode,
     };
     Ok(Lookup {
         source: source.to_owned(),
@@ -604,6 +622,7 @@ pub fn parse_source(
     if tables.is_empty() && lookup_tables.is_empty() {
         return fail(format!("{at} defines no [[channel]] and no [[lookup]]"));
     }
+    let shared = shared_decodes(&document, at).map_err(ConfigError::Manifest)?;
     let mut channels: Vec<Channel> = Vec::new();
     for (number, raw) in tables.iter().enumerate() {
         let c = channel(
@@ -611,6 +630,7 @@ pub fn parse_source(
             raw,
             &format!("{at} channel {}", number + 1),
             filters,
+            &shared,
         )?;
         if channels.iter().any(|existing| existing.name() == c.name()) {
             return fail(format!("{at}: duplicate channel {}", c.name()));
@@ -619,7 +639,12 @@ pub fn parse_source(
     }
     let mut lookups: Vec<Lookup> = Vec::new();
     for (number, raw) in lookup_tables.iter().enumerate() {
-        let l = lookup(&source, raw, &format!("{at} lookup {}", number + 1))?;
+        let l = lookup(
+            &source,
+            raw,
+            &format!("{at} lookup {}", number + 1),
+            &shared,
+        )?;
         let taken = channels.iter().any(|c| c.channel == l.name)
             || lookups.iter().any(|e| e.name == l.name);
         if taken {

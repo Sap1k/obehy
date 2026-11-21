@@ -41,7 +41,10 @@ impl Text<'_> {
 }
 
 fn invalid(text: &str) -> TimeError {
-    TimeError::new(format!("Invalid isoformat string: {text:?}"))
+    TimeError::new(format!(
+        "Invalid isoformat string: {}",
+        crate::py::text::repr_str(text)
+    ))
 }
 
 /// `parse_digits`: exactly `count` ASCII digits from `at`; the position after them.

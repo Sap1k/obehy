@@ -30,3 +30,8 @@ applies = { keys = { "czptt:tr" = '^Tr:1154:' }, days_around = 1 }
 method = "GET"
 url = "https://razeniws.cdis.cz/apiws.svc/getTrains?trainParams={params}&lang=cs&client=TrainDetail&format=json"
 headers = { Referer = "https://www.cd.cz/" }
+
+# A lookup with its own plan (CD-Q1) and units, not facts: a code decoder (Rust worker).
+[lookup.decode]
+reader = "json"
+decoder = "cd-composition"

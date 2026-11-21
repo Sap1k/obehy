@@ -23,3 +23,43 @@ capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 [channel.semantics]
 pre_trip_delay_is_elapsed = true  # DUK-Q14
 pre_trip_after_end_is_stale = true  # DUK-Q15
+
+# How a payload becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven sources").
+[channel.decode]
+version = 4
+reader = "json"
+entities = "VehicleList"
+errors = { entities = "payload lacks VehicleList" }
+skip = { state = 255 }
+feed = { by = "line", cases = [{ match = 0, value = "czptt" }, { value = "jdf" }] }  # DUK-Q8
+observed_at = { value = "fix_time", fresh = true }
+fact = [
+  { t = "vehicle_key", id = "{id}" },  # DUK-Q7
+  { t = "trip_key", by = "line", cases = [
+    { match = 0, ns = "czptt:train_number", key = "{trip}" },  # DUK-Q8
+    { ns = "cis:line_trip", key = "{line:06d}:{trip:d}" },  # DUK-Q9
+  ] },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
+  { t = "delay", s = "delay", scale = 60, ref = "unknown" },
+  { t = "source_state", code = { by = "state", cases = [{ match = [2, 3], value = "pre_trip" }, { value = "running" }] } },  # DUK-Q5
+  { t = "vehicle_attribute", a = "low_floor", value = "low_floor" },
+  { t = "vehicle_attribute", a = "air_conditioning", value = "air" },
+  { t = "source_departure", at = "departure" },  # DUK-Q18
+]
+
+[channel.decode.values]
+state = { path = "State", as = "py_int", required = true }
+id = { path = "ID", as = "py_int", required = true }
+line = { path = "CISLineID", as = "py_int", required = true }
+trip = { path = "RouteID", as = "py_int", required = true }
+gps_text = { path = "GPSPositionDT", as = "text" }
+gps = { path = "GPSPositionDT", as = "iso", invalid = "fail", none_before = "1971-01-01T00:00:00+00:00" }  # DUK-Q2
+activity = { path = "LastActivityDT", as = "iso", invalid = "fail", none_before = "1971-01-01T00:00:00+00:00" }
+fix_time = { fn = "offset_applied_twice", quirk = "DUK-Q1", value = "gps", text = "gps_text", against = "activity", tolerance = "5m" }
+lat = { path = "Latitude", as = "number" }
+lon = { path = "Longitude", as = "number" }
+bearing = { path = "Azimut", as = "number", none = [0] }  # DUK-Q13
+delay = { path = "Delay", as = "int" }
+low_floor = { path = "HasLowfloor", as = "bool" }
+air = { path = "isAirConditioned", as = "bool" }
+departure = { path = "TODepartureDT", as = "iso", invalid = "fail", none_before = "1971-01-01T00:00:00+00:00" }  # DUK-Q2

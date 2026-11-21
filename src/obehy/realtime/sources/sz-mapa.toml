@@ -25,3 +25,49 @@ capabilities = ["vehicle_key", "trip_key", "position", "delay", "stop_event", "n
 [channel.semantics]
 unchanged_entry_is_no_news = true  # SZ-Q6
 delay_floor_minute = true  # SZ-Q12
+
+# How a payload becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven sources").
+[channel.decode]
+version = 3
+reader = "json"
+root = "object"
+entities = "result"
+errors = { root = "payload is not an object", entities = "payload lacks result" }
+feed = "czptt"
+observed_at = { value = "md" }
+fact = [
+  { t = "vehicle_key", id = "{id}" },
+  { t = "trip_key", ns = "czptt:tr", key = "Tr:{company}:{core}:{variant}:{year}" },
+  { t = "trip_key", ns = "czptt:train_number", key = "{tn}" },  # SZ-Q5
+  { t = "service_day", day = "operating" },
+  { t = "position", xy = "xy", crs = "EPSG:5514", round = 6, bearing = "a?", zero_is_none = true, needs_time = false },  # SZ-Q1
+  { t = "point_event", name = "point", codes = "codes", scheduled = "cp?", actual = "cr", width = "59s", standing = { by = "rr", cases = [{ match = 1, value = true }, { value = false }] } },  # SZ-Q3
+  { t = "next_point", name = "nna", sr70 = "zst?" },  # SZ-Q7
+  { t = "delay", s = "de", scale = 60, ref = "point" },  # SZ-Q12 (whole minutes: manifest semantics)
+  { t = "next_stop_prediction", sr70 = "nsn70", scheduled = "nst?", predicted = "nsp_middle?" },
+  { t = "trip_status", replacement_bus = { by = "s", cases = [{ match = 1, value = true }, { value = false }] }, diverted = { by = "di", cases = [{ match = 1, value = true }, { value = false }] } },
+]
+
+[channel.decode.document]
+md = { path = "md", as = "local:%d.%m.%Y %H:%M:%S", fresh = true }  # SZ-Q2
+
+[channel.decode.values]
+id = { path = "properties.id", as = "text", regex = '^TR/([^/]+)/([^/]+)/([^/]+)/([^/]+)/(\d{8})$', captures = ["company", "core", "variant", "year", "day"], required = true }
+operating = { from = "day", as = "yyyymmdd", required = true }
+tn = { path = "properties.tn", as = "digits" }  # SZ-Q5
+xy = { path = "geometry.coordinates", as = "pair" }  # SZ-Q1
+a = { path = "properties.a", as = "real" }  # SZ-Q8: "" when standing
+point = { path = "properties.cna", as = "trimmed" }
+codes = { fn = "catalogue_codes", quirk = "SZ-Q4", name = "point", catalogue = "data/realtime/sr70-name20.csv" }
+cr = { path = "properties.cr", as = "hhmm", near = "md" }  # SZ-Q2, SZ-Q3
+cp = { path = "properties.cp", as = "hhmm", near = "md" }
+rr = { path = "properties.rr", as = "raw" }
+nna = { path = "properties.nna", as = "trimmed" }  # SZ-Q7
+zst = { path = "properties.zst_sr70", as = "sr70_5" }  # SZ-Q4
+de = { path = "properties.de", as = "int" }
+nsn70 = { path = "properties.nsn70", as = "sr70_5" }
+nst = { path = "properties.nst", as = "hhmm", near = "md" }
+nsp = { path = "properties.nsp", as = "hhmm", near = "md" }
+nsp_middle = { fn = "minute_middle", quirk = "SZ-Q12", value = "nsp" }
+s = { path = "properties.s", as = "raw" }
+di = { path = "properties.di", as = "raw" }

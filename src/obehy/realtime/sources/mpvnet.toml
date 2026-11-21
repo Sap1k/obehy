@@ -23,6 +23,7 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+decode = "portal"
 
 [channel.request]
 method = "POST"
@@ -39,6 +40,7 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+decode = "portal"
 
 [channel.request]
 method = "POST"
@@ -55,6 +57,7 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+decode = "portal"
 
 [channel.request]
 method = "POST"
@@ -71,9 +74,53 @@ timeout_s = 10
 feeds = ["jdf", "czptt"]
 live_feeds = ["jdf"]
 capabilities = ["vehicle_key", "trip_key", "position", "delay"]
+decode = "portal"
 
 [channel.request]
 method = "POST"
 url = "https://www.mpvnet.cz/zlin/map/mapData"
 body = '{"w":12.0,"s":48.5,"e":19.0,"n":51.1,"zoom":10,"showStops":false,"mapFilterId":null}'
 headers = { content-type = "application/json; charset=UTF-8", origin = "https://www.mpvnet.cz" }
+
+# How every portal's payload becomes facts (Rust worker; docs/RUST_PORT.md "Config-driven
+# sources"); the observation's channel is the portal's.
+[decode.portal]
+version = 3
+reader = "json"
+entities = "transmitters"
+errors = { entities = "payload lacks transmitters" }
+feed = { by = "kind", cases = [{ match = "bus", value = "jdf" }, { match = "train", value = "czptt" }] }
+observed_at = { value = "time", fresh = true }
+fact = [
+  { t = "vehicle_key", id = "{vehicle}" },
+  { t = "trip_key", by = "kind", cases = [
+    { match = "bus", ns = "cis:line_trip", key = "{line:06d}:{trip:d}" },
+    { match = "train", ns = "czptt:train_number", key = "{trip}" },
+  ] },
+  { t = "vehicle_attribute", a = "licence_plate", value = "plate", when = { kind = "bus" } },
+  { t = "position", lat = "lat", lon = "lon", bearing = "bearing?", zero_is_none = true, needs_time = true },
+  { t = "delay", s = "delay", ref = "unknown" },
+]
+
+[decode.portal.values]
+cn = { path = "cn", as = "text" }
+t = { path = "t", as = "raw" }
+cat = { path = "cat", as = "raw" }
+rec = { fn = "mpvnet_record", quirk = ["MPVNET-Q2", "MPVNET-Q3"], record = "cn", kind = "t", category = "cat", bus = { t = "H", fields = 22, category = 2, line_field = 0, line_regex = '^\d{6}$' }, train = { t = "T", fields = 12 } }
+kind = { from = "rec.kind", required = true }
+plate = { from = "rec.11", as = "trimmed", when = { kind = "bus" }, required = true }
+trip = { from = "rec.2", as = "digits", required = true }
+line = { from = "rec.0" }
+ds = { path = "ds", as = "text" }
+ds_delay = { fn = "signed_min_sec", quirk = "MPVNET-Q6", value = "ds", regex = '^\$[zp](-?)(\d+)~min\.~(\d+)~s$' }
+delay = { by = "kind", cases = [  # MPVNET-Q9: a bus's current delay is field 6
+  { match = "bus", from = "rec.6", as = "py_int" },
+  { match = "train", from = "ds_delay" },
+] }
+vehicle = { by = "kind", cases = [{ match = "bus", template = "{plate}" }, { match = "train", template = "train:{trip}" }] }
+dt = { path = "dt", as = "text" }
+tm = { path = "tm", as = "text" }
+time = { template = "{dt} {tm}", as = "local:%d.%m.%Y %H:%M:%S" }  # MPVNET-Q4
+lat = { path = "x", as = "number" }  # MPVNET-Q5
+lon = { path = "y", as = "number" }
+ico = { path = "ico", as = "text", regex = '^a_(\d{1,3})\.png$', captures = ["bearing"], captures_as = "float" }

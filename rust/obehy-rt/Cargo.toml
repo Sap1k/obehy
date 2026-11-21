@@ -15,9 +15,26 @@ path = "src/main.rs"
 obehy-core.workspace = true
 obehy-sources.workspace = true
 clap.workspace = true
+arrow-array.workspace = true
+arrow-schema.workspace = true
+bytes.workspace = true
+parquet.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync", "signal"] }
+tokio-postgres.workspace = true
+flate2.workspace = true
+hyper.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+toml.workspace = true
+zstd.workspace = true
+cpu-time.workspace = true
+indexmap.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-toml.workspace = true
+stats_alloc.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }

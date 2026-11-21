@@ -5,6 +5,8 @@
 //!
 //! One file per Python module; modules of later slices are stubs naming what they port.
 
+pub mod alerts;
+pub mod compositions;
 pub mod config;
 pub mod core;
 pub mod geo;
