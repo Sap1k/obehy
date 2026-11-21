@@ -21,8 +21,8 @@ from obehy.realtime.facts import Delay, Interval, Observation, Position
 from obehy.realtime.geo import distance_m
 from obehy.realtime.index import Call, IndexView, Trip
 from obehy.realtime.infer.keyed import Match
-from obehy.realtime.infer.keyless.episode import normal
 from obehy.realtime.model import Departure, KeylessEpisode
+from obehy.realtime.names import normal
 from obehy.realtime.policy import Policy
 from obehy.realtime.timeline.path import project_all
 from obehy.realtime.timeline.plan import PlanCache

@@ -17,7 +17,7 @@ from itertools import zip_longest
 from pathlib import Path
 from typing import Any, cast
 
-from obehy.realtime.compare import open_lines
+from obehy.realtime.jsonl import open_lines
 
 SHOWN = 400  # characters of each differing line shown
 

@@ -11,7 +11,8 @@ decompressed text, not the gzip bytes.
 
 The first record is the `header`: `compare_version`, `level`, `channels` (sorted
 `source/channel`), `from`, `to`, `since`, `until`, `all_feeds`, `fact_schema_version`, and for
-`output` also `feeds`, `gtfs_rt_every_s`, `release` (run ID), `core_version`, `policy_version`.
+`output` also `feeds`, `gtfs_rt_every_s`, `release` (run ID), `core_version`, `policy_version`,
+and only when asked `diagnostics: true` and `quality: true` (below).
 
 **`--level facts`** (connectors only; needs neither a release nor a database). Per archived
 poll, in reception order:
@@ -41,16 +42,48 @@ write, each record tagged with `at` (simulated time), in the order produced:
 
 Alerts and compositions are not part of the stream: alert channels are not replayed (they do
 not pass through the core) and compositions need the lookup broker's database.
+
+**`--diagnostics`** (output level) adds what the replay report reads (`replay_report.py`; `obehy
+rt report --from-stream` makes `report.json` of such a file), and **`--quality`** (implies it)
+also what `quality.py` reads. Journeys are `JourneyKey` objects as in effects; times are
+instants; lists of journeys are in the feed's instance order (insertion order, as `refresh`
+visits them).
+
+- `poll`, every poll before its step's effects (also a failed or undecodable one): the facts
+  level's `poll` record (no `payload_error`), a decoded one also with `feeds`: its observations
+  per feed;
+- `predictor_sample`, on round multiples of 300 s (at the first tick at or after each, with the
+  sample time as `at`), after that tick's effects and journey samples and before its snapshot,
+  when the rail feed is replayed: `feed` and `journeys`, each running rail run (with parts)
+  having an arrival event or a prediction: `journey`, `arrivals` (`[call index, the arrival
+  interval's middle]` of each call with an arrival event) and `predicted` (`[predictor, call
+  index, predicted arrival]` per predictor of `policy.PREDICTORS`, in that order, that predicts:
+  `timeline.fusion.anchor_prediction`, `propagate` the `sz` target with `current_lateness`,
+  only where the call has a scheduled arrival; the arrival is that schedule time plus the
+  lateness);
+- `journey_sample` (`--quality`), after every tick's effects, per feed in sorted order: `feed`
+  and `journeys`, every journey of the feed with `journey`, `trip_id`, `mode`, `lifecycle`,
+  `stale`, `lost`, `rail` (has parts), `lead` (has a lead vehicle), `progress` (null or `call`:
+  the index reached, `along_m`), `track` (null or `seen_at`, `at_stop`: at a call and not seen
+  away, `lateness_s`, `hypotheses`: has any, `off_path`: the best is held off the path), `fix`
+  (null unless a track with `seen_at`, a lead vehicle with a position and a path of two points
+  or more; else distances from that position: `best_m` to the best hypothesis's point or null,
+  `first_m` and `last_m` to the first and last call's point, `near`: the calls `call - 1 ..
+  call + 2` within the policy's departure margin), `n` (number of calls), `calls` (`[index,
+  call]` of each call that differs from the journey's previous sample, every call on its first
+  or when `n` changed; a call: `arrival`, `departure` (the event intervals' middles),
+  `estimated_arrival`, `estimated_departure`, `passed_arrival`, `passed_departure`,
+  `passenger`, `status`), `plan` (on the first sample and when it changed, else null:
+  `scheduled` `[[arrival, departure], ...]`, `zones` `[[arrival_m, departure_m], ...]`,
+  `calls_m`, `shaped`, `points`: how many path points). A journey missing from its feed's sample
+  is forgotten, so it comes back whole. Floats here are exact (`canonical.EXACT_KINDS`).
 """
 
 from __future__ import annotations
 
-import gzip
-import io
-from collections.abc import Callable, Generator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import IO, Any, Literal
+from typing import Any, Literal
 
 from google.protobuf import json_format
 from google.transit import gtfs_realtime_pb2 as rt
@@ -60,18 +93,26 @@ from obehy.realtime.core import CORE_VERSION, estimate_all
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.gtfs_rt import FeedEmitter
 from obehy.realtime.emit.recording import RecordingStore
-from obehy.realtime.facts import FACT_SCHEMA_VERSION
 from obehy.realtime.index_sql import file_loads
+from obehy.realtime.jsonl import open_lines
 from obehy.realtime.manifest import semantics_by_channel
 from obehy.realtime.model import Derivation, Effect, FeedState
 from obehy.realtime.model_json import facts_to_json
 from obehy.realtime.policy import Policy
-from obehy.realtime.replay import Clock, ReplayOptions, decoded_polls, drive, finish
+from obehy.realtime.replay import (
+    Clock,
+    DecodedPoll,
+    ReplayOptions,
+    decoded_polls,
+    drive,
+    finish,
+    poll_record,
+    samplers,
+)
+from obehy.realtime.replay import header as stream_header
 from obehy.realtime.runner import Runner
-from obehy.realtime.sources.registry import DECODER_VERSIONS
 from obehy.realtime.times import Instant
 
-COMPARE_VERSION = 1
 Level = Literal["facts", "output"]
 Record = dict[str, Any]
 Emit = Callable[[Record], None]
@@ -82,27 +123,8 @@ class CompareError(RuntimeError):
 
 
 def header(options: ReplayOptions, level: Level, policy: Policy) -> Record:
-    record: Record = {
-        "kind": "header",
-        "compare_version": COMPARE_VERSION,
-        "level": level,
-        "channels": sorted(c.name for c in options.channels),
-        "from": options.start,
-        "to": options.end,
-        "since": options.since,
-        "until": options.until,
-        "all_feeds": options.all_feeds,
-        "fact_schema_version": FACT_SCHEMA_VERSION,
-    }
-    if level == "output":
-        record |= {
-            "feeds": list(options.feeds),
-            "gtfs_rt_every_s": options.gtfs_rt_every_s,
-            "release": file_loads(Path(options.release)).run_id,
-            "core_version": CORE_VERSION,
-            "policy_version": policy.version,
-        }
-    return record
+    run_id = file_loads(Path(options.release)).run_id if level == "output" else None
+    return stream_header(options, level, policy, run_id)
 
 
 def facts(options: ReplayOptions, policy: Policy, emit: Emit) -> None:
@@ -111,26 +133,12 @@ def facts(options: ReplayOptions, policy: Policy, emit: Emit) -> None:
     emit(header(options, "facts", policy))
     for decoded in decoded_polls(options, policy):
         entry = decoded.poll.entry
-        request = entry.get("request")
-        record: Record = {
-            "kind": "poll",
-            "at": decoded.at,
-            "source": decoded.source,
-            "channel": decoded.channel,
-            "sha256": entry.get("sha256"),
-            "status": entry.get("status"),
-            "error": entry.get("error"),
-            "request": request if isinstance(request, dict) else None,
-            "decoder_version": DECODER_VERSIONS[(decoded.source, decoded.channel)],
-        }
+        emit(poll_record(decoded))
         observations = decoded.observations
-        if observations is not None:
-            emit(record | {"outcome": "decoded", "observations": len(observations)})
-        elif decoded.error is None:
-            emit(record | {"outcome": "failed"})
+        if observations is None and decoded.error is None:
             continue
-        else:
-            emit(record | {"outcome": "undecodable"})
+        if observations is None:
+            assert decoded.error is not None
             emit(
                 {
                     "kind": "payload_error",
@@ -193,6 +201,15 @@ def output(options: ReplayOptions, policy: Policy, emit: Emit) -> None:
 
         return record
 
+    diagnostics = options.diagnostics or options.quality
+    step = effects("step")
+
+    def stepped(poll: DecodedPoll, produced: list[Effect] | None) -> None:
+        if diagnostics:
+            emit(poll_record(poll, output=True))
+        if produced is not None:
+            step(poll.at, produced)
+
     def snapshot(at: Instant) -> None:
         for _, runtime in sorted(runner.runtimes.items()):
             estimate_all(runtime.state, runtime.ctx, at)
@@ -202,9 +219,16 @@ def output(options: ReplayOptions, policy: Policy, emit: Emit) -> None:
             emit(gtfs_rt(runtime.state, at, policy, writer))
 
     flush(None)  # what opening the writer writes
-    clock = Clock(runner, options, snapshot=snapshot, ticked=effects("tick"))
-    polls = ((d.at, d.observations) for d in decoded_polls(options, policy))
-    last = drive(runner, polls, clock, effects("step"))
+    sampled, rail_sampled = samplers(runner, options, emit) if diagnostics else (None, None)
+    clock = Clock(
+        runner,
+        options,
+        snapshot=snapshot,
+        ticked=effects("tick"),
+        sampled=sampled,
+        rail_sampled=rail_sampled,
+    )
+    last = drive(runner, decoded_polls(options, policy), clock, stepped)
     if last is not None:
         produced = finish(runner, last, writer)
         pending = store.take()
@@ -212,21 +236,6 @@ def output(options: ReplayOptions, policy: Policy, emit: Emit) -> None:
             emit({"kind": "effect", "at": last, "phase": "finish", "effect": effect})
         for record in pending:
             emit(record | {"at": last})
-
-
-@contextmanager
-def open_lines(path: Path, mode: Literal["r", "w"]) -> Generator[IO[str]]:
-    """A JSON-lines file as text, gzip when its name ends in `.gz` (deterministic: no name, mtime
-    0)."""
-
-    if path.suffix != ".gz":
-        with path.open(mode, encoding="utf-8", newline="\n") as stream:
-            yield stream
-        return
-    with path.open(mode + "b") as raw:
-        packed = gzip.GzipFile(filename="", mode=mode + "b", fileobj=raw, mtime=0)
-        with packed, io.TextIOWrapper(packed, encoding="utf-8", newline="\n") as stream:
-            yield stream
 
 
 def compare(options: ReplayOptions, level: Level, policy: Policy, out: Path) -> int:

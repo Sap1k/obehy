@@ -23,20 +23,10 @@ from obehy.realtime.facts import (
     SourceSemantics,
 )
 from obehy.realtime.model import Departure, KeylessEpisode
+from obehy.realtime.names import same_name
 from obehy.realtime.policy import KeylessPolicy
 
 MAX_DEPARTURES = 40  # longer than any trip's stop list; older ones no longer decide anything
-
-
-def same_name(a: str, b: str) -> bool:
-    """Stop names compared without commas, spaces and case (ARRIVA-Q6: `Brno, Benešova
-    tř.,hotel GRAND` is `Brno,Benešova tř.hotel GRAND`)."""
-
-    return normal(a) == normal(b)
-
-
-def normal(name: str) -> str:
-    return name.replace(",", "").replace(" ", "").casefold()
 
 
 def advance(

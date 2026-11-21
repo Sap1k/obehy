@@ -137,6 +137,12 @@ def utc_text(value: datetime) -> str:
     return text + "Z"
 
 
+def parse_utc(text: str) -> Instant:
+    """An instant from `utc_text` (or any ISO 8601 time with an offset)."""
+
+    return instant(datetime.fromisoformat(text))
+
+
 def next_multiple(at: Instant, every_s: int) -> Instant:
     """The first instant after `at` on a round multiple of `every_s` seconds (emit ticks)."""
 

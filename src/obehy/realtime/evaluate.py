@@ -1,23 +1,23 @@
 """Shadow evaluation of rail predictors during replay (docs/R2_SLICE.md section 11, item 5).
 
-Every sample, for each running rail run with a source prediction, each predictor's arrival at
-the predicted next stop is noted; once that arrival happens (an actual event), the errors are
-scored. The policy's predictor is chosen from this report, never guessed. Pure.
+Read from the output stream's `predictor_sample` records (`emit/samples.py`, every five minutes):
+for each running rail run with a source prediction, each predictor's arrival at the predicted
+next stop is noted; once that arrival happens (an actual event), the errors are scored. The
+policy's predictor is chosen from this report, never guessed. Pure: it reads records, never the
+core.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
-from obehy.realtime.index import IndexView
-from obehy.realtime.model import FeedState, JourneyKey
+from obehy.realtime.journey_view import Key, at, journey_key
 from obehy.realtime.policy import PREDICTORS
-from obehy.realtime.timeline.fusion import anchor_prediction, current_lateness
-from obehy.realtime.times import Instant, ServiceTime
+from obehy.realtime.times import Instant, parse_utc
 
-Call = tuple[JourneyKey, int]
+Call = tuple[Key, int]
+Record = dict[str, Any]
 
 
 @dataclass(slots=True)
@@ -28,33 +28,21 @@ class PredictorLog:
     )
     actual: dict[Call, Instant] = field(default_factory=dict[Call, Instant])
 
-    def sample(self, state: FeedState, index: IndexView, at: Instant) -> None:
-        for journey, instance in state.instances.items():
-            if not instance.parts or instance.lifecycle != "running":
-                continue
-            trip = index.trip(instance.trip_id)
-            for i, call in enumerate(instance.calls):
-                if call.arrival is not None:
-                    self.actual.setdefault((journey, i), call.arrival.mid)
-            own, _ = current_lateness(instance)
-            for predictor in PREDICTORS:
-                if predictor == "propagate":
-                    target = anchor_prediction(instance, trip, index, "sz")
-                    if target is None or own is None:
-                        continue
-                    lateness = own
-                    i = target[0]
-                else:
-                    found = anchor_prediction(instance, trip, index, predictor)
-                    if found is None:
-                        continue
-                    i, lateness = found
-                scheduled = trip.calls[i].arrival
-                if scheduled is None or (journey, i) in self.actual:
+    def sample(self, record: Record) -> None:
+        """One `predictor_sample` record."""
+
+        made = parse_utc(record["at"])
+        for item in cast(list[Record], record["journeys"]):
+            journey = journey_key(item["journey"])
+            for i, mid in item["arrivals"]:
+                self.actual.setdefault((journey, i), parse_utc(mid))
+            for predictor, i, when in item["predicted"]:
+                if (journey, i) in self.actual:
                     continue
-                when = Instant(_scheduled(journey, scheduled) + lateness)
+                arrival = at(when)
+                assert arrival is not None
                 self.predicted.setdefault((journey, i), {}).setdefault(predictor, []).append(
-                    (at, when)
+                    (made, arrival)
                 )
 
     def report(self) -> dict[str, Any]:
@@ -78,10 +66,3 @@ class PredictorLog:
                 "bias_s": round(sum(values) / len(values), 1),
             }
         return out
-
-
-def _scheduled(journey: JourneyKey, seconds: int) -> Instant:
-    return ServiceTime(journey.service_date, seconds).instant()
-
-
-SAMPLE_EVERY = timedelta(minutes=5)

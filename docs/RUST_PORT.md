@@ -85,8 +85,9 @@ worker writes, and two behaviours were deliberately left as they were. Step R0 c
 - **Jobs** (`jobs.py`, `disk_guard.py`): retention and the disk guard are set-wise SQL and file
   deletions run by `obehy jobs`, not part of the worker.
 - **Checks and analyses over output**: `gtfs_rt_check.py`, and the replay diagnostics
-  (`quality.py`, `quality_checks.py`, `evaluate.py`, `keyless_report.py`) rewritten to read the
-  replay's output stream (below) instead of hooking the core.
+  (`replay_report.py`, `quality.py`, `quality_checks.py`, `evaluate.py`, `keyless_report.py`),
+  which read the replay's output stream (below), not the core: `obehy rt report --from-stream`
+  makes `report.json` from a stream the Rust binary writes with `--diagnostics` (`--quality`).
 - **What the API and the release side read of the realtime config.** Today they import from
   `realtime/`: Prague time at the edge (`PRAGUE`, `local_date`, `instant`, `ServiceTime`),
   three policy values (`journey.namespaces`, `time.vehicle_day_gap_s`, `guard.free_gb`), the
@@ -196,8 +197,29 @@ and the steady state must stay within 1.2× of the memory right after warm start
 Known numbers from the Python worker (2026-10): about 43 µs of core per observation, the live
 core near half a CPU before PID multiplied the observation rate, and a warm start of about
 8 minutes over a 4-hour window (about 3,000 observations a second), most of it waiting on the
-index's reads. R0 measures again per phase, with PID included; the targets are then fixed
-against that baseline:
+index's reads.
+
+**Baseline (R0, 2026-11-21)**: `obehy rt bench --from-files` (the worker's path: archive,
+decode, core, ticks with estimates, state tables and GTFS-RT; rows made and dropped, not sent;
+the index read from the release's serving files, not PostgreSQL), Python 3.13 on a Ryzen AI 9
+465, one run with other jobs on the machine. CPU seconds per phase over the hour, µs per
+observation in brackets:
+
+| Hour | Observations | decode | step | refresh | estimate | state | GTFS-RT | writes | index | obs/s | peak RSS |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| PID 2026-10-15 07–08 | 480,778 | 72 (149) | 181 (376) | 8 (16) | 292 (607) | 170 (353) | 96 (199) | 32 (67) | 127 (265) | 475 | 3.5 GB |
+| DÚK+SŽ+Arriva 2026-10-06 07–08 | 180,744 | 9 (50) | 36 (199) | 2 (8) | 42 (231) | 44 (242) | 25 (136) | 9 (48) | 80 (442) | 712 | 3.0 GB |
+
+Core (step + refresh + estimate) is 1.0 ms per PID observation and 0.44 ms per DÚK+SŽ+Arriva
+observation, far above October's 43 µs (the step alone, on DÚK, before PID); on PID, estimates
+are the largest phase. Warm start (`warm.warm_start`, no writer) over 4 hours from files,
+decoding standing in for the read: DÚK+SŽ+Arriva 2026-10-06 05–09, 670,353 observations in
+643 s (1,042/s; index 260 s, estimates 190 s, core 118 s, decode 52 s, peak 3.1 GB); PID
+2026-10-15 05–09, 1,498,899 observations in 3,094 s (485/s; estimates 1,668 s, core 512 s,
+index 475 s, decode 312 s, peak 3.8 GB). Both are the whole window (`mode = "window"`); the
+worker's `vehicles` mode reads fewer. Neither ran on PostgreSQL (the test database's disk was
+too full to load a release), so the index's database reads and reading `rt.observation` are
+not in them. The targets are fixed against this baseline:
 
 | Measure | Target |
 |---|---|
@@ -249,7 +271,10 @@ harness output is a behaviour change and goes through the usual breakdown first.
    soak, fix it, check the fix with the harness, and ship it on its own.
 5. **The replay diagnostics read the output stream.** `quality`, `quality_checks`, `evaluate`
    and `keyless_report` move off the core's hooks onto the output stream (adding to the stream
-   what they need), so they keep working when the core is no longer Python.
+   what they need), so they keep working when the core is no longer Python. Done: the stream
+   gains, only when asked, `poll` and `predictor_sample` records (`--diagnostics`) and
+   `journey_sample` (`--quality`; floats exact), specified in `compare.py` and emitted by
+   `emit/samples.py`; an import-linter contract keeps the diagnostics off the core.
 6. **Freeze the Python worker** for the length of the port: fixes only, each one added to the
    reference and to the Rust side in the same change.
 
@@ -322,4 +347,5 @@ it is not kept as a fallback.
 - The workspace's layout and names (`rust/`, `obehy-core`, `obehy-sources`, `obehy-rt`).
 - The `[channel.decode]` shape, settled in R2 on the eight sources.
 - Whether hop timing changes in R0 or is ported as it is.
-- Whether any replay diagnostic is worth porting into Rust instead of reading the stream.
+- Replay diagnostics in Rust: none (decided in R0 item 5). Rust writes the diagnostics
+  records; the Python diagnostics read them.

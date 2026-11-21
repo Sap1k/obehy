@@ -14,8 +14,8 @@ from datetime import timedelta
 from obehy.realtime.facts import LineRef
 from obehy.realtime.index import CHILD_NAMESPACE, IndexView, Trip
 from obehy.realtime.infer.keyed import Match, running, span
-from obehy.realtime.infer.keyless.episode import same_name
 from obehy.realtime.model import JourneyKey, Reason
+from obehy.realtime.names import same_name
 from obehy.realtime.policy import KeylessPolicy
 from obehy.realtime.times import Instant, candidate_service_dates
 

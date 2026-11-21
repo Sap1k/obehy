@@ -14,7 +14,8 @@ fetched release's serving files (no database), as `corpus/<name>.json.gz`.
 `build` decodes each window once and loads each feed's index once. Selection is
 deterministic: per source and stratum, journeys with enough fixes in a stable hash order, plus
 journeys a replay's quality checks named (`--examples`). `bench` steps every journey through
-the core with the replay's emit ticks and reports `quality.QualityLog` over all of them.
+the core with the replay's emit ticks and reports `quality.QualityLog` over all of them (read
+from journey samples, as replay reads them).
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ from obehy.realtime.index import CHILD_NAMESPACE, Index, KeyRef, Trip, parent_re
 from obehy.realtime.model import Effect, FeedState, WriteEvent
 from obehy.realtime.model_json import facts_to_json
 from obehy.realtime.policy import load_policy
-from obehy.realtime.quality import QualityLog
 from obehy.realtime.times import Instant, candidate_service_dates, instant
+from tests.realtime.quality_stream import StreamQuality
 from tests.realtime.traces import from_json
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
@@ -488,7 +489,7 @@ class Run:
 
 def run(
     name: str,
-    quality: QualityLog | None = None,
+    quality: StreamQuality | None = None,
     tick: Callable[[FeedState, Instant], None] | None = None,
     stepped: Callable[[str, Instant, list[Effect]], None] | None = None,
 ) -> Run:
@@ -529,10 +530,10 @@ def run(
 
 def bench() -> dict[str, Any]:
     started = time.perf_counter()
-    quality = QualityLog()
+    quality = StreamQuality()
     for name in names():
         run(name, quality)
-    report = quality.report()
+    report = quality.log.report()
     report["journeys"] = len(names())
     report["seconds"] = round(time.perf_counter() - started, 1)
     return report

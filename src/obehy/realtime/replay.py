@@ -4,10 +4,11 @@ Polls of the selected channels are merged in reception order, decoded by their c
 through the same `Runner` as the worker. Housekeeping ticks fall on fixed multiples of the emit
 interval, so output never depends on when the replay runs. Outputs:
 
-- `report.json`: decode counts, results by reason, and per DÚK fleet (per source otherwise) the
-  share of running key groups (vehicle, trip key, local day) that bound to a journey; with the
-  rail feed also names that could not be placed (SŽ points, board rows) and the shadow error of
-  each rail predictor (`evaluate.py`);
+- `report.json` (`replay_report.py`): decode counts, results by reason, the share of running key
+  groups that bound, with the rail feed the names that could not be placed and the shadow error
+  of each rail predictor, with `quality` the prediction quality. It is read from the run's
+  output stream (the diagnostics records of `obehy rt compare --diagnostics`, canonical form),
+  not from the core: `obehy rt report --from-stream` makes the same report from a stream file;
 - `gtfs-rt/<feed>/<UTC time>.pb` every `gtfs_rt_every_s` simulated seconds, if asked;
 - with `write_history`, `rt.observation` and history rows for the replayed days (rebuilt).
 """
@@ -15,8 +16,6 @@ interval, so output never depends on when the replay runs. Outputs:
 from __future__ import annotations
 
 import heapq
-import json
-from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -28,26 +27,28 @@ import psycopg
 
 from obehy.pipeline.files import atomic_output_path
 from obehy.realtime.archive import ArchivedPoll, iter_polls, succeeded
+from obehy.realtime.canonical import plain
 from obehy.realtime.core import CORE_VERSION, estimate_all
-from obehy.realtime.emit.db import Writer
+from obehy.realtime.emit.db import Writer, observation_row
 from obehy.realtime.emit.gtfs_rt import feed_message
+from obehy.realtime.emit.recording import observation_record
+from obehy.realtime.emit.samples import PREDICTOR_SAMPLE_EVERY_S, JourneySampler, predictor_sample
 from obehy.realtime.emit.sql_store import SqlStore, clear_observations
-from obehy.realtime.evaluate import SAMPLE_EVERY, PredictorLog
-from obehy.realtime.facts import Feed, Observation, SourceState, TripKey, VehicleKey
+from obehy.realtime.facts import FACT_SCHEMA_VERSION, Feed, Observation
 from obehy.realtime.index_sql import ReleaseLoads, ensure_release, file_loads
-from obehy.realtime.keyless_report import KeylessLog
 from obehy.realtime.manifest import Channel, semantics_by_channel
 from obehy.realtime.model import Derivation, Effect, ObservationResult, Unresolved
 from obehy.realtime.policy import Policy
-from obehy.realtime.quality import QualityLog
+from obehy.realtime.replay_report import ReplayReport
 from obehy.realtime.runner import Runner, Ticks
-from obehy.realtime.sources import duk, mpvnet, pid
-from obehy.realtime.sources.registry import DECODERS
-from obehy.realtime.times import Instant, instant, local_date, next_multiple
+from obehy.realtime.sources.registry import DECODER_VERSIONS, DECODERS
+from obehy.realtime.times import Instant, instant, next_multiple
 
-REPORT_SCHEMA_VERSION = 2
 LOOKAHEAD_POLLS = 40
 SOURCES = ("duk", "sz-mapa", "sz-tabule")
+COMPARE_VERSION = 1
+Record = dict[str, Any]
+Emit = Callable[[Record], None]
 
 
 class ReplayError(RuntimeError):
@@ -68,19 +69,14 @@ class ReplayOptions:
     gtfs_rt_every_s: int | None = None
     since: Instant | None = None
     until: Instant | None = None
-    # Estimate every tick and log prediction accuracy, flicker and dwell (`quality`).
+    # Sample every journey every tick for prediction accuracy, flicker and dwell (`quality`).
     quality: bool = False
     # Process every feed the channels decode, also those not live yet (`live_feeds`): to check
     # a connector on recorded days before it goes live. Off: exactly what the worker processes.
     all_feeds: bool = False
-
-
-@dataclass(slots=True)
-class _Stats:
-    polls: int = 0
-    failed_polls: int = 0
-    bad_payloads: int = 0
-    observations: int = 0
+    # `obehy rt compare`: add the records the replay report reads (`poll`, `predictor_sample`);
+    # `quality` adds `journey_sample` too. Replay itself always reads them.
+    diagnostics: bool = False
 
 
 def _stream(
@@ -121,6 +117,36 @@ def _polls(options: ReplayOptions) -> Iterator[tuple[datetime, str, str, Archive
     return merged_polls(options.archive, keys, options.start, options.end)
 
 
+def header(options: ReplayOptions, level: str, policy: Policy, run_id: str | None = None) -> Record:
+    """The stream's first record (`compare.py`); `run_id` for the output level."""
+
+    record: Record = {
+        "kind": "header",
+        "compare_version": COMPARE_VERSION,
+        "level": level,
+        "channels": sorted(c.name for c in options.channels),
+        "from": options.start,
+        "to": options.end,
+        "since": options.since,
+        "until": options.until,
+        "all_feeds": options.all_feeds,
+        "fact_schema_version": FACT_SCHEMA_VERSION,
+    }
+    if level == "output":
+        record |= {
+            "feeds": list(options.feeds),
+            "gtfs_rt_every_s": options.gtfs_rt_every_s,
+            "release": run_id,
+            "core_version": CORE_VERSION,
+            "policy_version": policy.version,
+        }
+        if options.diagnostics or options.quality:
+            record["diagnostics"] = True
+        if options.quality:
+            record["quality"] = True
+    return record
+
+
 def replay(
     connection: psycopg.Connection | None,
     options: ReplayOptions,
@@ -153,79 +179,138 @@ def replay(
         )
     else:
         runner.writer = writer
-    stats: dict[str, _Stats] = defaultdict(_Stats)
-    groups: dict[tuple[str, str, Any, date], bool] = {}
-    reasons: Counter[str] = Counter()
-    unresolved: Counter[str] = Counter()
-    keyless = KeylessLog(policy.keyless.episode_gap_s)
-    predictors = PredictorLog() if "czptt" in runner.runtimes else None
-    quality = QualityLog() if options.quality else None
-    clock = Clock(runner, options, predictors, quality)
+    head = header(options, "output", policy, loads.run_id) | {"diagnostics": True}
+    diagnostics = ReplayReport(plain(head), policy.keyless.episode_gap_s)
 
-    def stepped(_: Instant, effects: list[Effect]) -> None:
-        _count(effects, groups, reasons, unresolved)
-        keyless.observe(effects)
+    def emit(record: Record) -> None:
+        # JSON-ready as a stream file reads back, but not rounded: the report reads no float a
+        # stream rounds (`journey_sample` floats are exact), so a file gives the same report.
+        diagnostics.add(plain(record))
 
-    last = drive(runner, _decoded(options, policy, stats), clock, stepped)
+    def stepped(poll: DecodedPoll, effects: list[Effect] | None) -> None:
+        emit(poll_record(poll, output=True))
+        for record in step_records(poll.at, effects or (), loads.run_id):
+            emit(record)
+
+    sampled, rail_sampled = samplers(runner, options, emit)
+    clock = Clock(runner, options, sampled=sampled, rail_sampled=rail_sampled)
+    last = drive(runner, decoded_polls(options, policy), clock, stepped)
     if last is not None:
         finish(runner, last, writer)
-    document = _report(loads, options, stats, groups, reasons, runner.skipped)
-    if predictors is not None:
-        document["unresolved"] = dict(sorted(unresolved.items()))
-        document["predictors"] = predictors.report()
-    if quality is not None:
-        document["quality"] = quality.report()
-    options.out.mkdir(parents=True, exist_ok=True)
-    if keyless.groups:
-        document["keyless"] = keyless.report()
-        with atomic_output_path(options.out / "keyless.jsonl") as temporary:
-            keyless.write(temporary)
-    with atomic_output_path(options.out / "report.json") as temporary:
-        temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", "utf-8")
-    return document
+    return diagnostics.write(options.out)
+
+
+def step_records(at: Instant, effects: Iterable[Effect], release_id: str) -> Iterator[Record]:
+    """Of a step's effects and rows, the records the replay report reads: the `Unresolved`
+    effects and the `observation` rows (as the writer makes them)."""
+
+    results: list[ObservationResult] = []
+    for effect in effects:
+        if isinstance(effect, Unresolved):
+            yield {"kind": "effect", "at": at, "phase": "step", "effect": effect}
+        elif isinstance(effect, ObservationResult):
+            results.append(effect)
+    for result in results:
+        yield observation_record(observation_row(result, release_id)) | {"at": at}
+
+
+def poll_record(poll: DecodedPoll, *, output: bool = False) -> Record:
+    """A poll's `poll` record; at the output level with its observations per feed."""
+
+    entry = poll.poll.entry
+    request = entry.get("request")
+    record: Record = {
+        "kind": "poll",
+        "at": poll.at,
+        "source": poll.source,
+        "channel": poll.channel,
+        "sha256": entry.get("sha256"),
+        "status": entry.get("status"),
+        "error": entry.get("error"),
+        "request": request if isinstance(request, dict) else None,
+        "decoder_version": DECODER_VERSIONS[(poll.source, poll.channel)],
+    }
+    observations = poll.observations
+    if observations is None:
+        return record | {"outcome": "failed" if poll.error is None else "undecodable"}
+    record |= {"outcome": "decoded", "observations": len(observations)}
+    if output:
+        feeds: dict[str, int] = {}
+        for observation in observations:
+            feeds[observation.feed] = feeds.get(observation.feed, 0) + 1
+        record["feeds"] = feeds
+    return record
+
+
+def samplers(
+    runner: Runner, options: ReplayOptions, emit: Emit
+) -> tuple[Callable[[Instant], None] | None, Callable[[Instant], None] | None]:
+    """The tick's `journey_sample` writer (with `quality`) and the rail feed's
+    `predictor_sample` writer (with the rail feed), both writing to `emit`."""
+
+    sampled: Callable[[Instant], None] | None = None
+    if options.quality:
+        sampler = JourneySampler()
+
+        def journeys(at: Instant) -> None:
+            for _, runtime in sorted(runner.runtimes.items()):
+                emit(sampler.sample(runtime.state, runtime.ctx, at))
+
+        sampled = journeys
+    if "czptt" not in runner.runtimes:
+        return sampled, None
+
+    def predictors(at: Instant) -> None:
+        rail = runner.runtimes["czptt"]
+        emit(predictor_sample(rail.state, rail.ctx.index, at))
+
+    return sampled, predictors
 
 
 def drive(
     runner: Runner,
-    polls: Iterable[tuple[Instant, list[Observation] | None]],
+    polls: Iterable[DecodedPoll],
     clock: Clock,
-    stepped: Callable[[Instant, list[Effect]], None],
+    stepped: Callable[[DecodedPoll, list[Effect] | None], None],
 ) -> Instant | None:
     """Run the decoded polls through the runner on the simulated clock; `stepped` sees each
-    poll's effects. The last poll's time, if any ran."""
+    poll and its effects (None: failed or undecodable). The last poll's time, if any ran."""
 
     last: Instant | None = None
     for chunk in batched(polls, LOOKAHEAD_POLLS, strict=False):
         # Load the static data of the next polls' keys in one round trip set.
-        runner.prefetch([o for _, observations in chunk for o in observations or ()])
-        for at, observations in chunk:
-            clock.advance(at)
-            if observations is None:
+        runner.prefetch([o for poll in chunk for o in poll.observations or ()])
+        for poll in chunk:
+            clock.advance(poll.at)
+            if poll.observations is None:
+                stepped(poll, None)
                 continue
-            stepped(at, runner.process(observations))
-            last = at
+            stepped(poll, runner.process(poll.observations))
+            last = poll.at
     return last
 
 
 class Clock:
     """The simulated clock: the runner's ticks (`Ticks`), and with them GTFS-RT snapshots
-    every `gtfs_rt_every_s` and the samplers, on round multiples. `snapshot` takes the
-    snapshots (default: files under `out`); `ticked` sees each tick's effects."""
+    every `gtfs_rt_every_s` and the samples, on round multiples. `snapshot` takes the
+    snapshots (default: files under `out`); `ticked` sees each tick's effects; after each tick
+    `sampled` (the journey samples), then on each predictor sample time `rail_sampled`, then the
+    snapshot."""
 
     def __init__(
         self,
         runner: Runner,
         options: ReplayOptions,
-        predictors: PredictorLog | None = None,
-        quality: QualityLog | None = None,
         *,
         snapshot: Callable[[Instant], None] | None = None,
         ticked: Callable[[Instant, list[Effect]], None] | None = None,
+        sampled: Callable[[Instant], None] | None = None,
+        rail_sampled: Callable[[Instant], None] | None = None,
     ) -> None:
         self.runner = runner
         self.options = options
-        self.predictors = predictors
-        self.quality = quality
+        self.sampled = sampled
+        self.rail_sampled = rail_sampled
         self.snapshot: Callable[[Instant], None] = snapshot or self._files
         self.ticks = Ticks(runner, on_tick=self._ticked, on_effects=ticked)
         self.next_snapshot: Instant | None = None
@@ -236,22 +321,22 @@ class Clock:
         if self.ticks.next is None:
             if every:
                 self.next_snapshot = next_multiple(at, every)
-            if self.predictors is not None:
-                self.next_sample = next_multiple(at, int(SAMPLE_EVERY.total_seconds()))
+            if self.rail_sampled is not None:
+                self.next_sample = next_multiple(at, PREDICTOR_SAMPLE_EVERY_S)
         self.ticks.advance(at)
 
     def _files(self, at: Instant) -> None:
         _snapshot(self.options, self.runner, at)
 
     def _ticked(self, at: Instant) -> None:
-        if self.quality is not None:
-            for _, runtime in sorted(self.runner.runtimes.items()):
-                self.quality.sample(runtime.state, runtime.ctx, at)
+        if self.sampled is not None:
+            self.sampled(at)
         if self.next_sample is not None and self.next_sample <= at:
-            rail = self.runner.runtimes["czptt"]
-            assert self.predictors is not None
-            self.predictors.sample(rail.state, rail.ctx.index, self.next_sample)
-            self.next_sample = instant(self.next_sample + SAMPLE_EVERY)
+            assert self.rail_sampled is not None
+            self.rail_sampled(self.next_sample)
+            self.next_sample = instant(
+                self.next_sample + timedelta(seconds=PREDICTOR_SAMPLE_EVERY_S)
+            )
         if self.next_snapshot is not None and self.next_snapshot <= at:
             every = self.options.gtfs_rt_every_s or 0
             self.snapshot(self.next_snapshot)
@@ -313,24 +398,6 @@ def decoded_polls(options: ReplayOptions, policy: Policy) -> Iterator[DecodedPol
         yield DecodedPoll(at, source, channel, poll, observations)
 
 
-def _decoded(
-    options: ReplayOptions, policy: Policy, stats: dict[str, _Stats]
-) -> Iterator[tuple[Instant, list[Observation] | None]]:
-    """Each poll in the window, decoded and counted; None for a failed or undecodable poll."""
-
-    for decoded in decoded_polls(options, policy):
-        counts = stats[f"{decoded.source}/{decoded.channel}"]
-        counts.polls += 1
-        if decoded.observations is None:
-            if decoded.error is None:
-                counts.failed_polls += 1
-            else:
-                counts.bad_payloads += 1
-        else:
-            counts.observations += len(decoded.observations)
-        yield decoded.at, decoded.observations
-
-
 def _writer(
     connection: psycopg.Connection, loads: ReleaseLoads, options: ReplayOptions, policy: Policy
 ) -> Writer:
@@ -371,81 +438,3 @@ def _snapshot(options: ReplayOptions, runner: Runner, at: Instant) -> None:
         message = feed_message(runtime.state, at, runner.policy.lifecycle)
         with atomic_output_path(path) as temporary:
             temporary.write_bytes(message.SerializeToString(deterministic=True))
-
-
-def _count(
-    effects: Sequence[Effect],
-    groups: dict[tuple[str, str, Any, date], bool],
-    reasons: Counter[str],
-    unresolved: Counter[str],
-) -> None:
-    for effect in effects:
-        if isinstance(effect, Unresolved):
-            unresolved[f"{effect.observation.source}/{effect.kind}"] += 1
-            continue
-        if not isinstance(effect, ObservationResult):
-            continue
-        obs = effect.observation
-        reasons[f"{obs.feed}/{'bound' if effect.journey else effect.reason}"] += 1
-        vehicle, key = obs.first(VehicleKey), obs.first(TripKey)
-        state = obs.first(SourceState)
-        if vehicle is None or key is None or (state is not None and state.code != "running"):
-            continue
-        group = (obs.source, vehicle.source_vehicle_id, key, local_date(obs.at))
-        groups[group] = groups.get(group, False) or effect.journey is not None
-
-
-def _report(
-    loads: ReleaseLoads,
-    options: ReplayOptions,
-    stats: dict[str, _Stats],
-    groups: dict[tuple[str, str, Any, date], bool],
-    reasons: Counter[str],
-    skipped: int,
-) -> dict[str, Any]:
-    fleets: dict[str, Counter[str]] = defaultdict(Counter)
-    for (source, vehicle, key, _), bound in groups.items():
-        feed: Feed = "czptt" if key.namespace.startswith("czptt:") else "jdf"
-        if source == duk.SOURCE:
-            name = f"{source}/{duk.fleet(vehicle, feed)}"
-        elif source == mpvnet.SOURCE:
-            name = f"{source}/{'train' if feed == 'czptt' else 'bus'}"
-        elif source == pid.SOURCE:
-            name = f"{source}/{pid.mode(vehicle, feed)}"
-        else:
-            name = source
-        fleets[name]["key_groups"] += 1
-        fleets[name]["bound"] += int(bound)
-    return {
-        "schema_version": REPORT_SCHEMA_VERSION,
-        "core_version": CORE_VERSION,
-        "release": {"run_id": loads.run_id},
-        "archive": {
-            "from": options.start.isoformat(),
-            "to": options.end.isoformat(),
-            "channels": {
-                name: {
-                    "polls": s.polls,
-                    "failed_polls": s.failed_polls,
-                    "bad_payloads": s.bad_payloads,
-                    "observations": s.observations,
-                }
-                for name, s in sorted(stats.items())
-            },
-        },
-        "feeds": list(options.feeds),
-        "skipped_other_feeds": skipped,
-        "results": dict(sorted(reasons.items())),
-        "running_key_groups": {
-            name: dict(sorted(counter.items())) for name, counter in sorted(fleets.items())
-        },
-    }
-
-
-def summary_lines(document: dict[str, Any]) -> list[str]:
-    lines: list[str] = []
-    for name, counter in document["running_key_groups"].items():
-        total, bound = counter.get("key_groups", 0), counter.get("bound", 0)
-        share = 100 * bound / total if total else 0.0
-        lines.append(f"{name}: {bound}/{total} running key groups bound ({share:.1f}%)")
-    return lines

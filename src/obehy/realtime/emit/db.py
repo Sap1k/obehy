@@ -82,7 +82,7 @@ class Writer:
             ],
         )
         with store.transaction():
-            store.observations([self._observation(r) for r in results])
+            store.observations([observation_row(r, self.derivation.release_id) for r in results])
             for snapshot in snapshots:
                 store.snapshot(snapshot)
             store.events([_event(e) for e in events])
@@ -95,32 +95,6 @@ class Writer:
                 [(*_key(c.journey), c.source, c.at, c.cancelled) for c in cancellations]
             )
             store.vehicles(self.vehicles.rows(attributes))
-
-    def _observation(self, result: ObservationResult) -> Row:
-        obs = result.observation
-        facts = facts_to_json(obs.facts)
-        journey = result.journey
-        vehicle = obs.first(VehicleKey)
-        return (
-            obs.received_at,
-            obs.source,
-            obs.channel,
-            obs.feed,
-            obs.raw.sha256,
-            obs.raw.item,
-            obs.observed_at,
-            obs.decoder_version,
-            facts["v"],
-            facts,
-            None if journey is None else journey.namespace,
-            None if journey is None else journey.key,
-            None if journey is None else journey.service_date,
-            None if result.reason is None else result.reason.value,
-            self.derivation.release_id,
-            None if vehicle is None else vehicle.source_vehicle_id,
-            # A row without a vehicle (a board row) starts its own state.
-            result.state_since or obs.received_at,
-        )
 
     def _assignments(
         self, results: Sequence[ObservationResult], assigned: Sequence[AssignVehicle]
@@ -227,6 +201,35 @@ class Writer:
         """Delete the history of service dates before a rebuild by replay."""
 
         self.store.clear_history(sorted(set(days)))
+
+
+def observation_row(result: ObservationResult, release_id: str) -> Row:
+    """The `rt.observation` row of an observation's result (`OBSERVATION_COLUMNS`)."""
+
+    obs = result.observation
+    facts = facts_to_json(obs.facts)
+    journey = result.journey
+    vehicle = obs.first(VehicleKey)
+    return (
+        obs.received_at,
+        obs.source,
+        obs.channel,
+        obs.feed,
+        obs.raw.sha256,
+        obs.raw.item,
+        obs.observed_at,
+        obs.decoder_version,
+        facts["v"],
+        facts,
+        None if journey is None else journey.namespace,
+        None if journey is None else journey.key,
+        None if journey is None else journey.service_date,
+        None if result.reason is None else result.reason.value,
+        release_id,
+        None if vehicle is None else vehicle.source_vehicle_id,
+        # A row without a vehicle (a board row) starts its own state.
+        result.state_since or obs.received_at,
+    )
 
 
 def _event(e: WriteEvent) -> Row:

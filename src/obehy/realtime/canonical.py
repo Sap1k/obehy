@@ -16,6 +16,12 @@ A record is a JSON object on one line. Rules:
   even), then trailing zeros and a trailing `.` are stripped and `-0` becomes `0`: `50.0812345678`
   under `lat` is `50.0812346`, `90.0` is `90`, `-0.0001` under `bearing` is `0`. A float field
   holding an integral value therefore prints like an integer. NaN and infinities are errors.
+  **Exception**: in records of the kinds in `EXACT_KINDS` (the diagnostic `journey_sample`,
+  whose distances and lateness decide buckets and thresholds) every float is exact: the
+  shortest decimal that reads back as the same binary value, as Python's `repr` writes it
+  (`90.0`, `-0.0`, `0.1`, `1e-05`, `1.5e+16`: exponent form below 1e-4 and from 1e16 up, with
+  a sign and at least two exponent digits). Rust's last bits may differ there; those records
+  feed diagnostics, not the parity check.
 - **Times**: an aware datetime is its UTC instant, `YYYY-MM-DDTHH:MM:SSZ`, with `.ffffff` (six
   digits) before the `Z` only when the microseconds are not zero (`times.utc_text`); a date is
   `YYYY-MM-DD`. Time strings already inside JSON the code writes itself (the fact JSON of
@@ -43,6 +49,7 @@ from obehy.realtime.times import utc_text
 
 COORDINATES = frozenset({"lat", "lon", "latitude", "longitude"})
 METRES = frozenset({"odometer"})
+EXACT_KINDS = frozenset({"journey_sample"})
 
 
 def decimals(key: str | None) -> int:
@@ -111,8 +118,9 @@ def _key(value: object) -> str:
     return converted if isinstance(converted, str) else dumps(converted)
 
 
-def dumps(value: Any, key: str | None = None) -> str:
-    """The canonical text of JSON-ready data (`plain`); `key`: what the value is under."""
+def dumps(value: Any, key: str | None = None, *, exact: bool = False) -> str:
+    """The canonical text of JSON-ready data (`plain`); `key`: what the value is under;
+    `exact`: floats exact (`EXACT_KINDS`)."""
 
     if value is None:
         return "null"
@@ -123,7 +131,11 @@ def dumps(value: Any, key: str | None = None) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, float):
-        return number(value, decimals(key))
+        if not exact:
+            return number(value, decimals(key))
+        if not math.isfinite(value):
+            raise ValueError(f"{value!r} has no canonical JSON form")
+        return repr(value)
     if isinstance(value, str):
         return json.dumps(value, ensure_ascii=False)
     if isinstance(value, Mapping):
@@ -131,16 +143,17 @@ def dumps(value: Any, key: str | None = None) -> str:
         return (
             "{"
             + ",".join(
-                f"{json.dumps(k, ensure_ascii=False)}:{dumps(items[k], k)}" for k in sorted(items)
+                f"{json.dumps(k, ensure_ascii=False)}:{dumps(items[k], k, exact=exact)}"
+                for k in sorted(items)
             )
             + "}"
         )
     if isinstance(value, list | tuple):
-        return "[" + ",".join(dumps(v, key) for v in cast(list[Any], value)) + "]"
+        return "[" + ",".join(dumps(v, key, exact=exact) for v in cast(list[Any], value)) + "]"
     raise TypeError(f"not JSON-ready: {type(value).__name__}")
 
 
 def line(record: Mapping[str, Any]) -> str:
     """One record: its canonical text and a newline."""
 
-    return dumps(plain(record)) + "\n"
+    return dumps(plain(record), exact=record.get("kind") in EXACT_KINDS) + "\n"

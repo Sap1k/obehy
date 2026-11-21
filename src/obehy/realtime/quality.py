@@ -1,6 +1,8 @@
 """Prediction quality during replay: accuracy, flicker and dwell at stops. Pure.
 
-Sampled every emit tick (`obehy rt replay --quality`), after estimates are brought up to date:
+Read from the output stream's `journey_sample` records (`obehy rt replay --quality`, `obehy rt
+compare --quality`; `journey_view.py`), one per feed every emit tick, after estimates are brought
+up to date; never from the core, so a stream written by the Rust worker reads the same:
 
 - accuracy: each running journey's predicted arrival at its next `HORIZON` calls, scored
   against the arrival event once it happens (MAE and bias, by mode and horizon);
@@ -21,16 +23,13 @@ Sampled every emit tick (`obehy rt replay --quality`), after estimates are broug
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from statistics import median
 from typing import Any
 
-from obehy.realtime.core import Context
-from obehy.realtime.geo import distance_m
-from obehy.realtime.model import FeedState, Instance, JourneyKey
+from obehy.realtime.journey_view import Journey, Key
 from obehy.realtime.quality_checks import Checks
-from obehy.realtime.timeline.path import point_at
-from obehy.realtime.timeline.plan import Plan, Scheduled
 from obehy.realtime.times import Instant
 
 HORIZON = 3
@@ -76,24 +75,24 @@ def _quantiles(values: list[float]) -> dict[str, float]:
 DELAY_BUCKETS = ((-60, "early >1 min"), (0, "early"), (60, "late <1 min"), (180, "late 1-3 min"))
 
 
-def _context(instance: Instance, plan: Plan, at: Instant) -> tuple[str, str]:
+def _context(journey: Journey, at: Instant) -> tuple[str, str]:
     """Where the vehicle is when predicting (at a stop, or how far along the leg) and how old
     its fix is: the next call's accuracy is split by both."""
 
-    track, progress = instance.track, instance.progress
+    track, progress, zones = journey.track, journey.progress, journey.plan.zones
     seen = track.seen_at if track is not None else None
     age = "unknown" if seen is None else _age_bucket((at - seen).total_seconds())
-    if track is not None and track.at_stop is not None and track.at_stop.away is None:
+    if track is not None and track.at_stop:
         return "at stop", age
     if progress is None:
         return "unknown", age
-    i = progress.call_index
-    if i < 0 or i + 1 >= len(plan.zones):
+    i, distance = progress
+    if i < 0 or i + 1 >= len(zones):
         return "unknown", age
-    start, end = plan.zones[i].departure_m, plan.zones[i + 1].arrival_m
+    start, end = zones[i][1], zones[i + 1][0]
     if start is None or end is None or end <= start:
         return "unknown", age
-    share = (progress.distance_m - start) / (end - start)
+    share = (distance - start) / (end - start)
     return f"leg {min(3, max(0, int(share * 4))) * 25}%", age
 
 
@@ -122,9 +121,7 @@ def _bucket(seconds: float) -> str:
 
 @dataclass(slots=True)
 class QualityLog:
-    pending: dict[JourneyKey, dict[int, _Call]] = field(
-        default_factory=dict[JourneyKey, dict[int, _Call]]
-    )
+    pending: dict[Key, dict[int, _Call]] = field(default_factory=dict[Key, dict[int, _Call]])
     # (mode, horizon) -> [count, sum of absolute errors, sum of errors] in seconds
     # (mode, predicted delay bucket) -> the same sums, every horizon together
     by_delay: dict[tuple[str, str], list[float]] = field(
@@ -150,51 +147,48 @@ class QualityLog:
     recovery: dict[tuple[str, str], list[float]] = field(
         default_factory=lambda: defaultdict[tuple[str, str], list[float]](list)
     )
-    dwell_seen: set[tuple[JourneyKey, int]] = field(default_factory=set[tuple[JourneyKey, int]])
-    episodes: dict[JourneyKey, _Episode] = field(default_factory=dict[JourneyKey, _Episode])
-    seen: dict[JourneyKey, Instant] = field(default_factory=dict[JourneyKey, Instant])
+    dwell_seen: set[tuple[Key, int]] = field(default_factory=set[tuple[Key, int]])
+    episodes: dict[Key, _Episode] = field(default_factory=dict[Key, _Episode])
+    seen: dict[Key, Instant] = field(default_factory=dict[Key, Instant])
     bumps: dict[str, list[tuple[float, float]]] = field(
         default_factory=lambda: defaultdict[str, list[tuple[float, float]]](list)
     )  # (bump s, duration s)
     checks: Checks = field(default_factory=Checks)
 
-    def sample(self, state: FeedState, ctx: Context, at: Instant) -> None:
-        self.checks.sample(state, ctx, at)
-        for journey, instance in state.instances.items():
+    def sample(self, feed: str, journeys: Sequence[Journey], at: Instant) -> None:
+        """One feed's `journey_sample` at `at` (`JourneyView.read`)."""
+
+        self.checks.sample(feed, journeys, at)
+        for sampled in journeys:
+            journey = sampled.key
             # A journey that has just finished is scored once more: its last call's arrival.
-            finished = instance.lifecycle == "finished" and journey in self.pending
-            if not finished and (instance.lifecycle != "running" or instance.freshness.stale):
+            finished = sampled.lifecycle == "finished" and journey in self.pending
+            if not finished and (sampled.lifecycle != "running" or sampled.stale):
                 continue
-            trip = ctx.index.trip(instance.trip_id)
-            plan = ctx.plans.plan(trip, journey.service_date, ctx.index, ctx.policy)
-            self._score(journey, instance)
-            self._dwell(journey, instance, plan.scheduled)
+            self._score(sampled)
+            self._dwell(sampled)
             if finished:
                 self.pending.pop(journey, None)
                 continue
-            self._predict(journey, instance, plan, at)
-            if not instance.parts and plan.path.shaped:
-                self._shape(journey, instance, plan, state)
-        for journey in [j for j in self.pending if j.feed == state.feed]:
-            if journey not in state.instances:
+            self._predict(sampled, at)
+            if not sampled.rail and sampled.plan.shaped:
+                self._shape(sampled)
+        present = {j.key for j in journeys}
+        for journey in [j for j in self.pending if j.feed == feed]:
+            if journey not in present:
                 del self.pending[journey]  # forgotten before its calls were reached
 
-    def _shape(self, journey: JourneyKey, instance: Instance, plan: Plan, state: FeedState) -> None:
-        track, lead = instance.track, instance.lead
-        if track is None or not track.hypotheses or lead is None or track.seen_at is None:
+    def _shape(self, sampled: Journey) -> None:
+        journey, track, fix = sampled.key, sampled.track, sampled.fix
+        if track is None or not track.hypotheses or not sampled.lead or track.seen_at is None:
             return
         if self.seen.get(journey) == track.seen_at:
             return  # no new fix since the last sample
         self.seen[journey] = track.seen_at
-        vehicle = state.vehicles.get(lead.vehicle)
         lateness = track.lateness_s
-        if vehicle is None or vehicle.position is None or lateness is None:
+        if fix is None or fix.best_m is None or lateness is None:
             return
-        best = track.hypotheses[0]
-        here = (vehicle.position.lon, vehicle.position.lat)
-        poor = best.off_path_since is not None or (
-            distance_m(here, point_at(plan.path, best.along_m)) > OFF_SHAPE_M
-        )
+        poor = track.off_path or fix.best_m > OFF_SHAPE_M
         episode = self.episodes.get(journey)
         if poor:
             if episode is None:
@@ -204,20 +198,18 @@ class QualityLog:
         elif episode is not None:
             del self.episodes[journey]
             duration = (track.seen_at - episode.since).total_seconds()
-            self.bumps[instance.mode].append((episode.peak - lateness, duration))
+            self.bumps[sampled.mode].append((episode.peak - lateness, duration))
 
-    def _score(self, journey: JourneyKey, instance: Instance) -> None:
-        pending = self.pending.get(journey)
+    def _score(self, sampled: Journey) -> None:
+        pending = self.pending.get(sampled.key)
         if not pending:
             return
-        reached = instance.progress.call_index if instance.progress is not None else -1
-        for i in [i for i in pending if instance.calls[i].passed_arrival or i <= reached]:
+        reached, calls = sampled.reached, sampled.calls
+        for i in [i for i in pending if calls[i].passed_arrival or i <= reached]:
             call = pending.pop(i)
-            if instance.calls[i].arrival is None:
+            actual = calls[i].arrival
+            if actual is None:
                 continue  # passed without an arrival event (a reception gap): nothing to score
-            interval = instance.calls[i].arrival
-            assert interval is not None
-            actual = interval.mid
             for horizon, made, predicted, delay, (where, age) in call.samples:
                 if made < actual:
                     error = (predicted - actual).total_seconds()
@@ -240,13 +232,12 @@ class QualityLog:
             flicker.moves += call.moves
             flicker.reversals += call.reversals
 
-    def _predict(self, journey: JourneyKey, instance: Instance, plan: Plan, at: Instant) -> None:
-        scheduled = plan.scheduled
-        reached = instance.progress.call_index if instance.progress is not None else -1
-        context = _context(instance, plan, at)
+    def _predict(self, sampled: Journey, at: Instant) -> None:
+        journey, scheduled, reached = sampled.key, sampled.plan.scheduled, sampled.reached
+        context = _context(sampled, at)
         horizon = 0
-        for i in range(reached + 1, len(instance.calls)):
-            call = instance.calls[i]
+        for i in range(reached + 1, len(sampled.calls)):
+            call = sampled.calls[i]
             if not call.passenger or call.arrival is not None:
                 continue
             planned = scheduled[i][0] or scheduled[i][1]
@@ -255,7 +246,7 @@ class QualityLog:
             horizon += 1
             entry = self.pending.setdefault(journey, {}).get(i)
             if entry is None:
-                entry = self.pending[journey][i] = _Call(instance.mode)
+                entry = self.pending[journey][i] = _Call(sampled.mode)
             delay = (call.estimated_arrival - planned).total_seconds()
             entry.samples.append((horizon, at, call.estimated_arrival, delay, context))
             if entry.anchor is None:
@@ -269,9 +260,9 @@ class QualityLog:
             if horizon >= HORIZON:
                 break
 
-    def _dwell(self, journey: JourneyKey, instance: Instance, scheduled: Scheduled) -> None:
-        reached = instance.progress.call_index if instance.progress is not None else -1
-        calls = instance.calls
+    def _dwell(self, sampled: Journey) -> None:
+        journey, reached, calls = sampled.key, sampled.reached, sampled.calls
+        scheduled = sampled.plan.scheduled
         for i in range(max(1, reached - 2), min(reached + 1, len(calls) - 1)):
             call = calls[i]
             arrival, departure = scheduled[i]
@@ -288,12 +279,12 @@ class QualityLog:
             next_arrival = calls[j].arrival
             assert next_arrival is not None and following is not None
             self.dwell_seen.add((journey, i))
-            arrived, left = call.arrival.mid, call.departure.mid
+            arrived, left = call.arrival, call.departure
             dwell = (left - arrived).total_seconds()
             leaving = (left - departure).total_seconds()
-            reaching = (next_arrival.mid - following).total_seconds()
-            self.dwells[instance.mode].append(dwell)
-            self.recovery[(instance.mode, _bucket(dwell))].append(leaving - reaching)
+            reaching = (next_arrival - following).total_seconds()
+            self.dwells[sampled.mode].append(dwell)
+            self.recovery[(sampled.mode, _bucket(dwell))].append(leaving - reaching)
 
     def report(self) -> dict[str, Any]:
         accuracy: dict[str, dict[str, Any]] = {}

@@ -313,6 +313,20 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-21** — R0 items 5 and 3 (docs/RUST_PORT.md). The replay diagnostics (`report.json`:
+  counts, key groups, predictors, keyless, `--quality`) read the output stream, not the core:
+  `replay_report.py` consumes canonical records, `obehy rt report --from-stream` makes the same
+  report from a file (Rust's later). New records, only when asked (`compare --diagnostics`,
+  `--quality`): `poll`, `predictor_sample`, `journey_sample` (exact floats), emitted by
+  `emit/samples.py`; an import-linter contract keeps the diagnostics off the core. `obehy rt
+  bench --from-files` times the worker path without a database (rows made and dropped).
+  Validated: report.json byte-identical before/after, in process and from a stream file, on
+  DÚK+SŽ+Arriva 2026-10-06 07:00-07:20 and PID 2026-10-15 07:00-07:10, with and without
+  `--quality`; compare references and corpus streams unchanged; unit and DB tests pass.
+  Baseline in RUST_PORT "Speed" (PID core about 1 ms per observation, estimates the largest
+  phase). Bench and warm start ran from files: the test database's disk is full (a release load
+  failed), so database reads are not measured.
+
 - **2026-11-21** — R0 item 1 (docs/RUST_PORT.md): `obehy rt compare --level facts|output` writes a
   window's decoded facts or everything the worker would write (effects, the writer's rows,
   state tables, decoded GTFS-RT) as canonical JSON lines (`realtime/canonical.py`), with

@@ -1,4 +1,4 @@
-"""CLI: `obehy rt record|replay|compare|compare-diff|bench|corpus pin`, `obehy realtime`,
+"""CLI: `obehy rt record|replay|report|compare|compare-diff|bench|corpus pin`, `obehy realtime`,
 `obehy jobs nightly|hourly`."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import cast
 
 import psycopg
 
-from obehy.realtime import bench, compare, compare_check, record, replay
+from obehy.realtime import bench, compare, compare_check, record, replay, replay_report
 from obehy.realtime.archive import prune as prune_archive
 from obehy.realtime.archive import sources as archive_sources
 from obehy.realtime.emit.alerts import prune_alerts
@@ -134,9 +134,23 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
         metavar="SECONDS",
         help="state tables and GTFS-RT every so often (output; default 60, 0: only at the end)",
     )
+    comparer.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="output: also the records the replay report reads (poll, predictor_sample)",
+    )
+    comparer.add_argument(
+        "--quality", action="store_true", help="output: also journey_sample (implies --diagnostics)"
+    )
     comparer.add_argument("--out", type=Path, required=True, help="JSON lines (.gz: gzip)")
     comparer.add_argument("--check", type=Path, help="then diff against this reference")
     comparer.add_argument("--limit", type=int, default=10, help="differences shown")
+
+    reporter = rt.add_parser(
+        "report", help="a replay's report.json from an output stream written with --diagnostics"
+    )
+    reporter.add_argument("--from-stream", dest="stream", type=Path, required=True)
+    reporter.add_argument("--out", type=Path, required=True, help="output directory")
 
     differ = rt.add_parser("compare-diff", help="where two compare streams part")
     differ.add_argument("reference", type=Path)
@@ -147,7 +161,7 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     )
 
     bencher = rt.add_parser(
-        "bench", help="time the live worker's path over archived polls (development database)"
+        "bench", help="time the live worker's path over archived polls (index: database or files)"
     )
     bencher.add_argument(
         "--release", required=True, help="release directory or a run ID already in the database"
@@ -161,6 +175,11 @@ def add_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -
     bencher.add_argument("--out", type=Path, required=True, help="output directory")
     bencher.add_argument("--trace-memory", action="store_true", help="tracemalloc (slow)")
     bencher.add_argument("--profile", action="store_true", help="write a cProfile dump")
+    bencher.add_argument(
+        "--from-files",
+        action="store_true",
+        help="read the release directory's serving files; no database",
+    )
     bencher.add_argument(
         "--since", type=_local_time, help="start at this local time (YYYY-MM-DDTHH:MM)"
     )
@@ -229,6 +248,8 @@ def run(args: argparse.Namespace) -> int:
             return _compare(args)
         if args.rt_command == "compare-diff":
             return _compare_diff(args)
+        if args.rt_command == "report":
+            return _report(args)
         return _replay(args)
     except (
         OSError,
@@ -238,6 +259,7 @@ def run(args: argparse.Namespace) -> int:
         IndexLoadError,
         replay.ReplayError,
         compare.CompareError,
+        replay_report.ReportError,
         EgressError,
         psycopg.Error,
     ) as error:
@@ -342,6 +364,8 @@ def _compare(args: argparse.Namespace) -> int:
         since=cast(Instant | None, args.since),
         until=cast(Instant | None, args.until),
         all_feeds=cast(bool, args.all_feeds),
+        quality=cast(bool, args.quality),
+        diagnostics=cast(bool, args.diagnostics),
     )
     out = cast(Path, args.out)
     count = compare.compare(options, level, load_policy(), out)
@@ -387,7 +411,16 @@ def _replay(args: argparse.Namespace) -> int:
     else:
         with psycopg.connect(_url(args), autocommit=True) as connection:
             document = replay.replay(connection, options, load_policy())
-    for line in replay.summary_lines(document):
+    for line in replay_report.summary_lines(document):
+        print(line)
+    return 0
+
+
+def _report(args: argparse.Namespace) -> int:
+    document = replay_report.from_stream(
+        cast(Path, args.stream), cast(Path, args.out), load_policy().keyless.episode_gap_s
+    )
+    for line in replay_report.summary_lines(document):
         print(line)
     return 0
 
@@ -418,8 +451,11 @@ def _bench(args: argparse.Namespace) -> int:
         since=cast(Instant | None, args.since),
         until=cast(Instant | None, args.until),
     )
-    with psycopg.connect(_url(args), autocommit=True) as connection:
-        document = bench.bench(connection, options, load_policy())
+    if cast(bool, args.from_files):
+        document = bench.bench(None, options, load_policy())
+    else:
+        with psycopg.connect(_url(args), autocommit=True) as connection:
+            document = bench.bench(connection, options, load_policy())
     for line in bench.summary_lines(document):
         print(line)
     return 0

@@ -25,11 +25,12 @@ import sys
 from pathlib import Path
 
 from obehy.realtime.canonical import line
-from obehy.realtime.compare import gtfs_rt, open_lines
+from obehy.realtime.compare import gtfs_rt
 from obehy.realtime.compare_check import diff
 from obehy.realtime.core import CORE_VERSION
 from obehy.realtime.emit.db import Writer
 from obehy.realtime.emit.recording import RecordingStore
+from obehy.realtime.jsonl import open_lines
 from obehy.realtime.model import Derivation, Effect, FeedState
 from obehy.realtime.times import Instant
 from tests.realtime.corpus import POLICY, load, names, run

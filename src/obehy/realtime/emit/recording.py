@@ -56,6 +56,12 @@ def _named(columns: Sequence[str], row: Row) -> dict[str, Any]:
     }
 
 
+def observation_record(row: Row) -> Record:
+    """The `observation` record of an `rt.observation` row."""
+
+    return {"kind": "observation", "row": _named(OBSERVATION_COLUMNS, row)}
+
+
 @dataclass(slots=True)
 class RecordingStore:
     pending: list[Record] = field(default_factory=list[Record])
@@ -81,7 +87,7 @@ class RecordingStore:
         return nullcontext()
 
     def observations(self, rows: Sequence[Row]) -> None:
-        self._rows("observation", OBSERVATION_COLUMNS, rows)
+        self.pending.extend(observation_record(row) for row in rows)
 
     def snapshot(self, snapshot: SnapshotJourney) -> None:
         self.pending.append({"kind": "journey_schedule", "snapshot": snapshot})

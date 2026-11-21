@@ -1,14 +1,18 @@
 """`obehy rt bench`: the live worker's per-poll and per-tick path over archived polls.
 
 Archived polls of the chosen channels are fed, in reception order, to the worker's own
-`PollHandler` (archive, decode, core) with the emit tick (estimates, GTFS-RT) on a simulated
-clock. Nothing is written to the database, which is only read for the index: a development
-database's round trips would swamp the CPU being measured. Unlike replay,
-which skips emitting, this is the work the live worker does, so it measures that:
+`PollHandler` (archive, decode, core) with the emit tick (estimates, state tables, GTFS-RT) on a
+simulated clock. The writer makes every row it would send (observations, history, state) and
+drops it: nothing is written to the database, which is only read for the index (with
+`--from-files` not used at all: the index comes from the release's serving files), since a
+development database's round trips would swamp the CPU being measured. Unlike replay, which
+skips emitting, this is the work the live worker does, so it measures that:
 
-- CPU and wall time per phase, also as a share of one core over the simulated time;
+- CPU and wall time per phase, also as a share of one core over the simulated time and per
+  observation; observations a second over the whole run;
 - every simulated hour: the process's resident memory, Python's traced memory (with
-  `trace_memory`), and the sizes of the long-lived containers (index, plan cache, state).
+  `trace_memory`), and the sizes of the long-lived containers (index, plan cache, state); the
+  peak resident memory at the end.
 
 The payloads are archived after the recorder's filters, so filter costs are not measured.
 """
@@ -21,7 +25,8 @@ import json
 import sys
 import time
 import tracemalloc
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Generator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -31,9 +36,13 @@ import psycopg
 
 from obehy.pipeline.files import atomic_output_path
 from obehy.realtime.archive import ArchivedPoll, ArchiveWriter, Poll
+from obehy.realtime.core import CORE_VERSION
+from obehy.realtime.emit.db import Writer
+from obehy.realtime.emit.recording import RecordingStore
 from obehy.realtime.facts import Feed
-from obehy.realtime.index_sql import ensure_release
+from obehy.realtime.index_sql import ensure_release, file_loads
 from obehy.realtime.manifest import Channel, semantics_by_channel
+from obehy.realtime.model import Derivation
 from obehy.realtime.policy import Policy
 from obehy.realtime.replay import merged_polls
 from obehy.realtime.runner import Runner, Ticks
@@ -58,8 +67,17 @@ class BenchOptions:
     until: Instant | None = None
 
 
-def rss_bytes() -> int | None:
-    """The process's resident memory, where the platform tells."""
+class _Dropping(RecordingStore):
+    """The rows the SQL store would be sent, made and then dropped."""
+
+    @contextmanager
+    def transaction(self) -> Generator[object]:
+        yield None
+        self.pending.clear()
+
+
+def rss_bytes(peak: bool = False) -> int | None:
+    """The process's resident memory (`peak`: its highest yet), where the platform tells."""
 
     if sys.platform == "win32":
 
@@ -90,7 +108,11 @@ def rss_bytes() -> int | None:
         process = kernel32.GetCurrentProcess()
         if not kernel32.K32GetProcessMemoryInfo(process, ctypes.byref(counters), counters.cb):
             return None
-        return int(counters.WorkingSetSize)
+        return int(counters.PeakWorkingSetSize if peak else counters.WorkingSetSize)
+    if peak:
+        import resource
+
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
     try:
         pages = Path("/proc/self/statm").read_text().split()[1]
     except OSError:
@@ -194,13 +216,18 @@ class _Bench:
 
 
 def bench(
-    connection: psycopg.Connection,
+    connection: psycopg.Connection | None,
     options: BenchOptions,
     policy: Policy,
     *,
     report: Callable[[str], None] = print,
 ) -> dict[str, Any]:
-    loads = ensure_release(connection, options.release, report=report)
+    """`connection` None: the index from the release directory's serving files."""
+
+    if connection is None:
+        loads = file_loads(Path(options.release))
+    else:
+        loads = ensure_release(connection, options.release, report=report)
     channels = {(c.source, c.channel): c for c in options.channels}
     out = options.out
     (out / "gtfs-rt").mkdir(parents=True, exist_ok=True)
@@ -209,7 +236,8 @@ def bench(
         loads,
         policy,
         options.feeds,
-        None,  # CPU only: no history or state writes (the database is read for the index)
+        # CPU only: rows are made and dropped (the database is read for the index at most).
+        Writer(_Dropping(), Derivation(CORE_VERSION, policy.version, loads.run_id)),
         out / "gtfs-rt",
         semantics_by_channel(options.channels),
     )
@@ -253,6 +281,8 @@ def bench(
         0.0 if last is None or state.first is None else (last - state.first).total_seconds()
     )
     phases = runner.phases
+    observations = phases.counts.get("observations", 0)
+    peak = rss_bytes(peak=True)
     document: dict[str, Any] = {
         "release": loads.run_id,
         "from": options.start.isoformat(),
@@ -262,12 +292,18 @@ def bench(
         "polls": state.polls,
         "simulated_s": simulated_s,
         "elapsed_s": round(elapsed, 1),
+        "observations": observations,
+        "observations_per_s": round(observations / elapsed) if elapsed else None,
+        "peak_rss_mb": None if peak is None else round(peak / 2**20, 1),
         "phases": {
             name: {
                 "cpu_s": round(phases.cpu_s[name], 2),
                 "wall_s": round(phases.wall_s[name], 2),
                 "calls": phases.calls[name],
                 "core_share_cpu": _share(phases.cpu_s[name], simulated_s),
+                "cpu_us_per_observation": round(1e6 * phases.cpu_s[name] / observations, 1)
+                if observations
+                else None,
             }
             for name in sorted(phases.wall_s, key=lambda n: -phases.wall_s[n])
         },
@@ -289,12 +325,14 @@ def summary_lines(document: dict[str, Any]) -> list[str]:
     lines = [
         f"{document['polls']} polls over {hours:.1f} simulated h in {document['elapsed_s']} s;"
         f" {100 * (document['core_share_cpu'] or 0):.1f}% of a core CPU,"
-        f" {100 * (document['core_share_wall'] or 0):.1f}% wall"
+        f" {100 * (document['core_share_wall'] or 0):.1f}% wall;"
+        f" {document['observations']} observations, {document['observations_per_s']}/s;"
+        f" peak RSS {document['peak_rss_mb']} MB"
     ]
     for name, phase in document["phases"].items():
         lines.append(
             f"  {name:<8} cpu {phase['cpu_s']:>9.2f} s  wall {phase['wall_s']:>9.2f} s"
-            f"  ({phase['calls']} calls)"
+            f"  ({phase['calls']} calls, {phase['cpu_us_per_observation']} us/observation)"
         )
     if document["samples"]:
         first, final = document["samples"][0], document["samples"][-1]

@@ -88,6 +88,8 @@ source_modules = [
     "obehy.realtime.evaluate",
     "obehy.realtime.quality",
     "obehy.realtime.quality_checks",
+    "obehy.realtime.journey_view",
+    "obehy.realtime.names",
     "obehy.realtime.platforms",
     "obehy.realtime.compositions",
     "obehy.realtime.disk_guard",
@@ -116,6 +118,28 @@ forbidden_modules = [
     "obehy.realtime.worker",
     "obehy.realtime.emit",
     "obehy.pipeline",
+]
+
+[[tool.importlinter.contracts]]
+name = "The replay diagnostics read the output stream, never the core (docs/RUST_PORT.md R0)"
+type = "forbidden"
+source_modules = [
+    "obehy.realtime.replay_report",
+    "obehy.realtime.quality",
+    "obehy.realtime.quality_checks",
+    "obehy.realtime.evaluate",
+    "obehy.realtime.keyless_report",
+    "obehy.realtime.journey_view",
+]
+forbidden_modules = [
+    "obehy.realtime.core",
+    "obehy.realtime.model",
+    "obehy.realtime.infer",
+    "obehy.realtime.timeline",
+    "obehy.realtime.index",
+    "obehy.realtime.runner",
+    "obehy.realtime.replay",
+    "obehy.realtime.emit",
 ]
 
 [[tool.importlinter.contracts]]
