@@ -146,7 +146,7 @@ pub fn update(
         committed_m = t.committed_m.max(floor);
     }
     // Nothing committed yet: the first reading may start past the origin.
-    let unstarted = track.is_none_or(|t| t.hypotheses.is_empty() && t.committed_m == 0.0);
+    let unstarted = track.is_none_or(|t| t.committed().is_none());
     let origin = if unstarted {
         plan.zones.first().and_then(|z| z.departure_m)
     } else {

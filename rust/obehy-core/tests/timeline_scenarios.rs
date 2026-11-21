@@ -693,3 +693,27 @@ fn the_plan_cache_keeps_plans_per_release_and_sweeps() {
     assert!(plans.plan(&trip, DAY, &index, &policy).is_err());
     assert_eq!(MAX_PLANS, 50_000);
 }
+
+#[test]
+fn off_the_path_first_then_on_it_a_doubled_origin_commits_behind_zero() {
+    // The first two calls at one point put the origin's departure behind the path's start
+    // (`stop_zones`). Fixes off the path first leave an unstarted track (nothing committed);
+    // the first fix on it then commits behind 0 so the origin's departure can be inferred.
+    let policy = policy();
+    let route = route(
+        &[("A", 0.0, 0.0), ("A2", 0.0, 0.0), ("B", 1000.0, 0.0)],
+        &[
+            ("A", "08:00", None),
+            ("A2", "08:01", None),
+            ("B", "08:03", None),
+        ],
+    );
+    let mut d = Tracker::new(&route, &policy);
+    d.run(&[(at("07:58"), 0.0, 5000.0, None)]);
+    let before = d.track.clone().unwrap();
+    assert!(before.hypotheses.is_empty() && before.committed().is_none());
+    d.run(&[(at("08:01:30"), 200.0, 0.0, None)]);
+    let after = d.track.as_ref().unwrap();
+    assert!(after.committed_m < 0.0, "{}", after.committed_m);
+    assert!(after.committed().is_some());
+}

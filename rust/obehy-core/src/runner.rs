@@ -21,7 +21,7 @@ use crate::index::{Index, IndexLoader, IndexMiss, KeyRef, LoadError, Rows, RowsE
 use crate::infer::keyed::admissible;
 use crate::model::{
     Effect, Feed, FeedState, JourneyKey, LineRef, Observation, PlatformAssignment, ServiceDay,
-    TripKey,
+    Track, TripKey,
 };
 use crate::time::{
     Date, Instant, ServiceTime, TimeDelta, candidate_service_dates, local_date, next_multiple,
@@ -528,7 +528,7 @@ fn step_checked<R>(
         .as_ref()
         .and_then(|b| runtime.state.instances.get(&b.journey))
         .and_then(|i| i.track.as_ref())
-        .map(|t| t.committed_m);
+        .and_then(Track::committed);
     let (state, mut ctx) = runtime.split(policy, semantics);
     let effects = step(state, observation, &mut ctx)?;
     let after = vehicle
@@ -539,7 +539,9 @@ fn step_checked<R>(
         return Ok(effects);
     };
     if old.journey == new.journey {
-        // The live position may be revised between hypotheses; committed progress never.
+        // The live position may be revised between hypotheses; committed progress never. A
+        // track that had not started had committed nothing: starting, it may commit behind 0
+        // (a doubled origin's departure lies before the path's start).
         let track = state.instances[&new.journey].track.as_ref();
         if let (Some(old_committed), Some(track)) = (old_committed, track)
             && track.committed_m < old_committed

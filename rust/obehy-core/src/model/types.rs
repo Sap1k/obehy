@@ -245,6 +245,14 @@ pub struct Track {
 }
 
 impl Track {
+    /// How far events are committed; None while the track has not started (no reading kept and
+    /// nothing committed: only fixes off the path so far). Such a track may still commit behind
+    /// 0 when it starts, to infer the origin's departure.
+    pub fn committed(&self) -> Option<f64> {
+        let unstarted = self.hypotheses.is_empty() && self.committed_m == 0.0;
+        (!unstarted).then_some(self.committed_m)
+    }
+
     /// The measured lateness: off a chord the estimate, else the best reading's.
     pub fn lateness_s(&self) -> Option<f64> {
         match &self.off_path {
