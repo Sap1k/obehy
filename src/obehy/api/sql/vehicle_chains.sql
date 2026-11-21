@@ -31,9 +31,15 @@ SELECT j.vehicle_id, j.feed, j.source, j.source_vehicle_id, j.day, j.seq, j.chai
        coalesce(s.mode, r.mode) AS mode, r.color, r.text_color,
        vp.fleet_number, vp.public_label, vp.manufacturer, vp.model AS vehicle_model
 FROM journeys j
-LEFT JOIN history.journey_latest s
-    ON (s.feed, s.key_namespace, s.key, s.service_date)
+-- One index lookup per journey: as a plain join the planner flattens the view and, misled by
+-- the chains' estimates, hash-joins every journey and schedule revision history keeps.
+LEFT JOIN LATERAL (
+    SELECT l.*
+    FROM history.journey_latest l
+    WHERE (l.feed, l.key_namespace, l.key, l.service_date)
         = (j.feed, j.key_namespace, j.key, j.service_date)
+    LIMIT 1
+) s ON true
 LEFT JOIN LATERAL (
     SELECT (array_agg(name.value ORDER BY c.ordinal))[1] AS origin,
            control.obehy_instant_fast(

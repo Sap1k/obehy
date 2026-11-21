@@ -316,6 +316,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-21** — Oběhy pegged PostgreSQL and never loaded. Since Phase 3, `vehicle_chains.sql`
+  joined `history.journey_latest` as a plain view, and the planner hash-joined every journey and
+  schedule revision; on prod, polls stacked minutes-long queries. It is now a `LATERAL … LIMIT 1`
+  primary-key lookup per journey. API queries are cancelled after `[queries] statement_timeout_s`
+  (20 s) and answer 503. DB oběhy tests pass; prod plan not re-checked before the deploy.
 - **2026-11-21** — Two new sources, IREDO and IDSOK (one vendor's map payload; CIS line + trip on
   jdf, train number on czptt; no vehicle identity, so not physical; `hhmmss` times; dossiers
   `docs/sources/{iredo,idsok}.md`). They went live without a record-first phase: decode fixtures

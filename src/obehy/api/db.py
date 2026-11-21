@@ -16,11 +16,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import Any, LiteralString, cast
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import ConnectionPool
 
@@ -43,7 +44,7 @@ def query(name: str) -> LiteralString:
     return cast(LiteralString, (SQL / f"{name}.sql").read_text(encoding="utf-8"))
 
 
-def _configure(connection: psycopg.Connection[DictRow]) -> None:
+def _configure(connection: psycopg.Connection[DictRow], statement_timeout_s: int | None) -> None:
     connection.autocommit = True
     # SQL works in UTC, like the instants the worker stores (in columns and in jsonb); local
     # time in SQL is always explicit (`AT TIME ZONE 'Europe/Prague'`, `obehy_instant`). The
@@ -51,18 +52,29 @@ def _configure(connection: psycopg.Connection[DictRow]) -> None:
     connection.execute("SET TIME ZONE 'UTC'")
     # Every API query is a short lookup: JIT compiles for longer than they run.
     connection.execute("SET jit = off")
+    if statement_timeout_s is not None:
+        # A slow plan fails instead of piling up behind polling clients (api-v1.toml [queries]).
+        connection.execute(
+            sql.SQL("SET statement_timeout = {}").format(sql.Literal(f"{statement_timeout_s}s"))
+        )
     connection.read_only = True
     connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
     connection.autocommit = False
 
 
-def open_pool(url: str, *, min_size: int = 1, max_size: int = 10) -> ConnectionPool[Any]:
+def open_pool(
+    url: str,
+    *,
+    min_size: int = 1,
+    max_size: int = 10,
+    statement_timeout_s: int | None = None,
+) -> ConnectionPool[Any]:
     pool: ConnectionPool[Any] = ConnectionPool(
         url,
         min_size=min_size,
         max_size=max_size,
         kwargs={"row_factory": dict_row},
-        configure=_configure,
+        configure=partial(_configure, statement_timeout_s=statement_timeout_s),
         open=False,
         name="obehy-api",
     )

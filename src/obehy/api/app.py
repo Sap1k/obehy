@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from psycopg.errors import QueryCanceled
 from psycopg_pool import ConnectionPool
 from starlette.exceptions import HTTPException
 
@@ -61,6 +62,10 @@ async def _no_release(_: Request, error: Exception) -> JSONResponse:
     return _problem(503, "Service Unavailable", str(error))
 
 
+async def _query_canceled(_: Request, error: Exception) -> JSONResponse:
+    return _problem(503, "Service Unavailable", "the query took too long")
+
+
 def create_app(
     database_url: str | None = None,
     *,
@@ -75,8 +80,14 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         owned = pool is None
-        app.state.pool = pool if pool is not None else open_pool(str(database_url))
         app.state.limits = limits or load_limits()
+        app.state.pool = (
+            pool
+            if pool is not None
+            else open_pool(
+                str(database_url), statement_timeout_s=app.state.limits.statement_timeout_s
+            )
+        )
         app.state.requests = open_request_pool(str(database_url or app.state.pool.conninfo))
         try:
             yield
@@ -98,6 +109,7 @@ def create_app(
     app.add_exception_handler(ParameterError, _parameter_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(NoActiveRelease, _no_release)
+    app.add_exception_handler(QueryCanceled, _query_canceled)
     for module in (
         status,
         stops,

@@ -13,6 +13,7 @@ LIMITS = Path(__file__).resolve().parents[1] / "data" / "api" / "api-v1.toml"
 @dataclass(frozen=True, slots=True)
 class Limits:
     version: str
+    statement_timeout_s: int
     search_min_chars: int
     search_limit: int
     search_limit_max: int
@@ -69,6 +70,7 @@ def load_limits(path: Path = LIMITS) -> Limits:
     punctuality = table("punctuality")
     return Limits(
         version=str(document["api_version"]),
+        statement_timeout_s=int(table("queries")["statement_timeout_s"]),
         search_min_chars=int(stops["search_min_chars"]),
         search_limit=int(stops["search_limit"]),
         search_limit_max=int(stops["search_limit_max"]),

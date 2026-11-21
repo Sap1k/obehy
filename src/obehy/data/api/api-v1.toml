@@ -2,6 +2,11 @@
 # policy: a change of meaning is a new file.
 api_version = "1"
 
+[queries]
+# A query running longer is cancelled and the request answers 503: a slow plan must not pile
+# up behind clients that poll (the browser gives up, PostgreSQL would not).
+statement_timeout_s = 20
+
 [stops]
 # Name search: at least this many characters, at most this many results.
 search_min_chars = 2
