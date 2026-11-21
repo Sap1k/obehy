@@ -135,3 +135,22 @@ cargo test -p obehy-rt --test store_db
 `parity` sends a stream's row records through Python's `SqlStore` and the Rust store into two
 fresh databases and compares every `rt.*` and `history.*` table; `writer_parity` drives the Rust
 writer with a stream's effects and compares its rows with Python's.
+
+## The core, the runner and the output harness (R6)
+
+`obehy_core::core` is `core.py` (`step`, `refresh`, `estimate_all`, `rebase`, `resolve`) over a
+`Context` (index, plans, per-source progress policies, policy, semantics);
+`obehy_core::runner` is `runner.py` without I/O: `Runner<L: Loads, P: Phases>` (`process`,
+`tick`, `sweep`, `compact`, `switch_release`, invariants) and `Ticks`. Effects go back to the
+caller, which writes them. `obehy-rt` drives it from the archive (`replay.rs`: decoding on a
+pool, `drive`, `Clock`, `finish`):
+
+```
+obehy-rt compare --level output --from-files <release> ... --out S.jsonl.gz [--check REF] \
+    [--diagnostics] [--quality] [--threads 8]
+obehy-rt replay --from-files <release> ... [--gtfs-rt-every 60 --out DIR] [--threads 8]
+obehy-rt corpus-stream --out DIR [--check] [names...]   # tests/golden/corpus-stream
+```
+
+`compare` takes the arguments `uv run python -m tests.realtime.compare_windows args NAME output`
+prints; `cargo test -p obehy-rt --test corpus_stream` checks the 106 corpus journeys.

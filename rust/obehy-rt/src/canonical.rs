@@ -8,6 +8,7 @@
 use std::fmt::Write as _;
 
 use obehy_core::py::json::PyJson;
+use obehy_core::py::num::py_float_repr;
 use obehy_core::time::Instant;
 use serde_json::Value;
 
@@ -134,12 +135,16 @@ fn write_string(out: &mut String, text: &str) {
     out.push('"');
 }
 
-fn write(out: &mut String, value: &C, key: Option<&str>) {
+fn write(out: &mut String, value: &C, key: Option<&str>, exact: bool) {
     match value {
         C::Null => out.push_str("null"),
         C::Bool(true) => out.push_str("true"),
         C::Bool(false) => out.push_str("false"),
         C::Int(n) => write!(out, "{n}").expect("writing"),
+        C::Float(x) if exact => {
+            assert!(x.is_finite(), "{x} has no canonical JSON form");
+            out.push_str(&py_float_repr(*x));
+        }
         C::Float(x) => out.push_str(&number(*x, decimals(key))),
         C::Str(s) => write_string(out, s),
         C::List(items) => {
@@ -148,7 +153,7 @@ fn write(out: &mut String, value: &C, key: Option<&str>) {
                 if i > 0 {
                     out.push(',');
                 }
-                write(out, item, key);
+                write(out, item, key, exact);
             }
             out.push(']');
         }
@@ -162,17 +167,26 @@ fn write(out: &mut String, value: &C, key: Option<&str>) {
                 }
                 write_string(out, k);
                 out.push(':');
-                write(out, v, Some(k));
+                write(out, v, Some(k), exact);
             }
             out.push('}');
         }
     }
 }
 
+/// Record kinds whose floats are written exact (Python's `repr`), not rounded by key.
+pub const EXACT_KINDS: [&str; 1] = ["journey_sample"];
+
 /// One record: its canonical text and a newline (`canonical.line`).
 pub fn line(record: &C) -> String {
+    let exact = match record {
+        C::Obj(fields) => fields.iter().any(|(k, v)| {
+            k == "kind" && matches!(v, C::Str(kind) if EXACT_KINDS.contains(&kind.as_str()))
+        }),
+        _ => false,
+    };
     let mut out = String::new();
-    write(&mut out, record, None);
+    write(&mut out, record, None, exact);
     out.push('\n');
     out
 }

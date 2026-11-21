@@ -20,13 +20,16 @@ pub enum Command {
     /// Record raw polls to the archive without processing them (R8).
     Record(crate::record::RecordArgs),
     /// Replay archived polls through the core (R6).
-    Replay,
+    Replay(crate::replay::ReplayArgs),
     /// Warm-start the core from stored observations (R7).
     Warm,
     /// Measure decode, core and writer speed over a window (R6).
     Bench,
     /// Write the comparison harness output for a window (R2, R6).
     Compare(crate::compare::CompareArgs),
+    /// Write each corpus journey's output stream, and check it against the pinned one (R6).
+    #[command(name = "corpus-stream")]
+    CorpusStream(crate::corpus::CorpusArgs),
 }
 
 impl Command {
@@ -34,10 +37,11 @@ impl Command {
         match self {
             Command::Worker => "worker",
             Command::Record(_) => "record",
-            Command::Replay => "replay",
+            Command::Replay(_) => "replay",
             Command::Warm => "warm",
             Command::Bench => "bench",
             Command::Compare(_) => "compare",
+            Command::CorpusStream(_) => "corpus-stream",
         }
     }
 }
@@ -46,6 +50,12 @@ impl Command {
 pub fn run(cli: &Cli) -> ExitCode {
     if let Command::Record(args) = &cli.command {
         return crate::record::run_command(args);
+    }
+    if let Command::Replay(args) = &cli.command {
+        return crate::replay::run_command(args);
+    }
+    if let Command::CorpusStream(args) = &cli.command {
+        return crate::corpus::run_command(args);
     }
     if let Command::Compare(args) = &cli.command {
         return crate::compare::run_command(args);
@@ -60,7 +70,7 @@ mod tests {
 
     #[test]
     fn every_subcommand_parses() {
-        for name in ["worker", "record", "replay", "warm", "bench"] {
+        for name in ["worker", "record", "warm", "bench"] {
             let cli = Cli::try_parse_from(["obehy-rt", name]).expect(name);
             assert_eq!(cli.command.name(), name);
         }

@@ -17,6 +17,7 @@ pub mod names;
 pub mod platforms;
 pub mod publish;
 pub mod py;
+pub mod runner;
 pub mod runs;
 pub mod time;
 pub mod timeline;

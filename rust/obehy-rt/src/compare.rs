@@ -28,12 +28,10 @@ pub const COMPARE_VERSION: i64 = 1;
 /// `replay.SOURCES`: the sources compared when none are named.
 pub const SOURCES: [&str; 3] = ["duk", "sz-mapa", "sz-tabule"];
 
+/// The window of a replay: the archive, its channels and the time span, and the release.
 #[derive(Debug, Clone, Args)]
-pub struct CompareArgs {
-    /// `facts` (connectors only) or `output` (not yet: R6).
-    #[arg(long)]
-    pub level: String,
-    /// Release directory (needed by --level output).
+pub struct WindowArgs {
+    /// Release directory (needed by --level output and replay).
     #[arg(long = "from-files")]
     pub release: Option<PathBuf>,
     #[arg(long = "from")]
@@ -59,6 +57,19 @@ pub struct CompareArgs {
     /// Also feeds not live yet.
     #[arg(long = "all-feeds")]
     pub all_feeds: bool,
+    /// Threads decoding payloads ahead of the core (1: inline).
+    #[arg(long, default_value_t = 1)]
+    pub threads: usize,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct CompareArgs {
+    /// `facts` (connectors only) or `output` (everything the worker writes).
+    #[arg(long)]
+    pub level: String,
+    #[command(flatten)]
+    pub window: WindowArgs,
+    /// State tables and GTFS-RT every so often (output; 0: only at the end).
     #[arg(long = "gtfs-rt-every", default_value_t = 60)]
     pub gtfs_rt_every: i64,
     /// JSON lines (`.gz`: gzip).
@@ -72,6 +83,21 @@ pub struct CompareArgs {
     /// `KIND.FIELD` left out of the --check comparison (e.g. `payload_error.message`).
     #[arg(long)]
     pub ignore: Vec<String>,
+    /// Output: also the records the replay report reads (`poll`, `predictor_sample`).
+    #[arg(long)]
+    pub diagnostics: bool,
+    /// Output: also `journey_sample` per tick and feed (implies --diagnostics).
+    #[arg(long)]
+    pub quality: bool,
+}
+
+/// `--feeds`: comma-separated feed names, in the order given.
+pub fn parse_feeds(text: &str) -> Result<Vec<obehy_core::model::Feed>, String> {
+    text.split(',')
+        .map(str::trim)
+        .filter(|f| !f.is_empty())
+        .map(|f| f.parse().map_err(|_| format!("unknown feed {f:?}")))
+        .collect()
 }
 
 fn fail(message: impl std::fmt::Display) -> ExitCode {
@@ -100,38 +126,25 @@ pub struct Window {
     pub all_feeds: bool,
 }
 
-pub fn run_command(args: &CompareArgs) -> ExitCode {
-    if args.level != "facts" && args.level != "output" {
-        return fail(format!(
-            "--level must be facts or output, not {:?}",
-            args.level
-        ));
-    }
-    if args.level == "output" {
-        if args.release.is_none() {
-            return fail("--level output needs --from-files <release dir>");
-        }
-        return fail("--level output is not implemented yet (R6)");
-    }
-    let paths = match Paths::discover() {
-        Ok(p) => p,
-        Err(e) => return fail(e),
-    };
-    let policy = match paths.load_policy() {
-        Ok(p) => p,
-        Err(e) => return fail(e),
-    };
+/// What a replay of a window needs: the policy, every manifest, the decoders and the window.
+#[derive(Debug)]
+pub struct Setup {
+    pub policy: obehy_core::config::Policy,
+    pub sources: Vec<obehy_core::config::Source>,
+    pub decoders: Decoders,
+    pub window: Window,
+}
+
+/// The policy, manifests, decoders and window the arguments name.
+pub fn setup(args: &WindowArgs) -> Result<Setup, String> {
+    let paths = Paths::discover().map_err(|e| e.to_string())?;
+    let policy = paths.load_policy().map_err(|e| e.to_string())?;
     let manifest_dir = args.manifest.clone().unwrap_or_else(|| paths.sources());
-    let sources = match manifest::load_sources(&manifest_dir, &RECORDER_FILTERS) {
-        Ok(s) => s,
-        Err(e) => return fail(e),
-    };
+    let sources =
+        manifest::load_sources(&manifest_dir, &RECORDER_FILTERS).map_err(|e| e.to_string())?;
     let package = paths.root.join("src/obehy");
     let files = |name: &str| fs::read_to_string(package.join(name)).map_err(|e| e.to_string());
-    let decoders = match Decoders::new(&sources, &files) {
-        Ok(d) => d,
-        Err(e) => return fail(e),
-    };
+    let decoders = Decoders::new(&sources, &files).map_err(|e| e.to_string())?;
     let all: Vec<Channel> = sources.iter().flat_map(|s| s.channels.clone()).collect();
     let wanted: Vec<String> = match &args.sources {
         Some(list) => list
@@ -142,27 +155,15 @@ pub fn run_command(args: &CompareArgs) -> ExitCode {
         None => SOURCES.iter().map(|s| (*s).to_owned()).collect(),
     };
     let wanted: Vec<&str> = wanted.iter().map(String::as_str).collect();
-    let selected = match manifest::select_channels(&all, &wanted) {
-        Ok(c) => c,
-        Err(e) => return fail(e),
-    };
+    let selected = manifest::select_channels(&all, &wanted).map_err(|e| e.to_string())?;
     let channels: Vec<Channel> = selected
         .into_iter()
         .filter(|c| !decoders.is_alert_channel(&c.source, &c.channel))
         .collect();
     let parse_day = |t: &str| Date::from_isoformat(t).map_err(|e| e.0);
-    let (start, end) = match (parse_day(&args.start), parse_day(&args.end)) {
-        (Ok(s), Ok(e)) => (s, e),
-        (Err(e), _) | (_, Err(e)) => return fail(e),
-    };
-    let since = match args.since.as_deref().map(local_time).transpose() {
-        Ok(v) => v,
-        Err(e) => return fail(e),
-    };
-    let until = match args.until.as_deref().map(local_time).transpose() {
-        Ok(v) => v,
-        Err(e) => return fail(e),
-    };
+    let (start, end) = (parse_day(&args.start)?, parse_day(&args.end)?);
+    let since = args.since.as_deref().map(local_time).transpose()?;
+    let until = args.until.as_deref().map(local_time).transpose()?;
     let window = Window {
         archive: args.archive.clone(),
         start,
@@ -172,9 +173,55 @@ pub fn run_command(args: &CompareArgs) -> ExitCode {
         until,
         all_feeds: args.all_feeds,
     };
-    let count = match write_stream(&args.out, |emit| {
-        facts(&window, &decoders, policy.time.max_clock_skew(), emit)
-    }) {
+    Ok(Setup {
+        policy,
+        sources,
+        decoders,
+        window,
+    })
+}
+
+pub fn run_command(args: &CompareArgs) -> ExitCode {
+    if args.level != "facts" && args.level != "output" {
+        return fail(format!(
+            "--level must be facts or output, not {:?}",
+            args.level
+        ));
+    }
+    if args.level == "output" && args.window.release.is_none() {
+        return fail("--level output needs --from-files <release dir>");
+    }
+    let Setup {
+        policy,
+        sources,
+        decoders,
+        window,
+    } = match setup(&args.window) {
+        Ok(s) => s,
+        Err(e) => return fail(e),
+    };
+    let written = if args.level == "output" {
+        let feeds = match parse_feeds(&args.window.feeds) {
+            Ok(f) => f,
+            Err(e) => return fail(e),
+        };
+        let options = crate::output::Options {
+            release: args.window.release.clone().expect("checked above"),
+            feeds,
+            gtfs_rt_every_s: Some(args.gtfs_rt_every).filter(|e| *e != 0),
+            threads: args.window.threads,
+            diagnostics: args.diagnostics,
+            quality: args.quality,
+        };
+        write_stream(&args.out, |emit| {
+            crate::output::output(&window, &options, &decoders, &sources, policy, emit)
+        })
+    } else {
+        write_stream(&args.out, |emit| {
+            facts(&window, &decoders, policy.time.max_clock_skew(), emit)
+        })
+    };
+    let count = match written {
         Ok(n) => n,
         Err(e) => return fail(e),
     };
@@ -311,7 +358,8 @@ pub fn json_of(value: &Value) -> Json {
     }
 }
 
-fn header(window: &Window, level: &str) -> C {
+/// The stream's first record (`replay.header`); the output level adds its fields.
+pub fn header(window: &Window, level: &str) -> C {
     let mut names: Vec<String> = window.channels.iter().map(Channel::name).collect();
     names.sort();
     C::obj([
@@ -446,7 +494,7 @@ pub fn write_stream(
         .unwrap_or_default();
     let temporary = out.with_file_name(format!(".partial-{name}"));
     let file = BufWriter::new(fs::File::create(&temporary)?);
-    let mut writer: Box<dyn Write> = if name.ends_with(".gz") {
+    let mut writer: Box<dyn Write + Send> = if name.ends_with(".gz") {
         Box::new(
             flate2::GzBuilder::new()
                 .mtime(0)
@@ -455,13 +503,38 @@ pub fn write_stream(
     } else {
         Box::new(file)
     };
+    // The lines are made here and compressed and written on a thread of their own, a buffer
+    // at a time, in order.
+    const BUFFER: usize = 1 << 20;
+    let (send, receive) = std::sync::mpsc::sync_channel::<String>(8);
+    let compressor = std::thread::spawn(move || -> io::Result<()> {
+        for buffer in receive {
+            writer.write_all(buffer.as_bytes())?;
+        }
+        writer.flush()
+    });
     let mut count = 0;
-    produce(&mut |record: &C| {
+    let mut buffer = String::with_capacity(BUFFER + 4096);
+    let produced = produce(&mut |record: &C| {
         count += 1;
-        writer.write_all(line(record).as_bytes())
-    })?;
-    writer.flush()?;
-    drop(writer);
+        buffer.push_str(&line(record));
+        if buffer.len() >= BUFFER {
+            let full = std::mem::replace(&mut buffer, String::with_capacity(BUFFER + 4096));
+            send.send(full)
+                .map_err(|_| io::Error::other("the stream writer stopped"))?;
+        }
+        Ok(())
+    });
+    if produced.is_ok() && !buffer.is_empty() {
+        // A failed send leaves the writer's own error to report below.
+        let _ = send.send(buffer);
+    }
+    drop(send);
+    let written = compressor
+        .join()
+        .map_err(|_| io::Error::other("the stream writer panicked"))?;
+    produced?;
+    written?;
     fs::rename(&temporary, out)?;
     Ok(count)
 }
