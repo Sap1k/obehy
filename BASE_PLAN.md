@@ -38,7 +38,7 @@ application server:                     ▼
                                                 control / static / rt              │ observation log,
                                                   │        ▲ NOTIFY publication    │ events, current
                                                   │        │                       │ state projection
-           upstream realtime APIs ──► obehy realtime (one asyncio process, in-memory state)
+           upstream realtime APIs ──► obehy-rt worker (one Rust process, in-memory state)
                                                   │
                                                   ├─► /gtfs-rt/{jdf,czptt}/*.pb (atomic files)
                                                   ▼
@@ -59,13 +59,15 @@ Ownership:
 - **MOTIS** remains the connection-search engine and the source of the route-shapes companion
   (section 17).
 
-Oběhy is a **modular monolith**: one Python package (`src/obehy/`) with a few processes. On the
-application server:
+Oběhy is a **modular monolith**: one Python package (`src/obehy/`) and one Rust program, the
+realtime worker `obehy-rt` (`rust/`, an image of its own; `docs/RUST_PORT.md`), with a few
+processes. The two meet only through PostgreSQL, the raw archive, the GTFS-RT files and the
+shared TOML (policy and connector manifests); nothing calls across. On the application server:
 
 ```text
 obehy release fetch|load|activate   one-shot, run hourly by the server stack
 obehy ref import                    one-shot: curated reference datasets → ref.*
-obehy realtime                      long-running realtime worker; the only upstream I/O
+obehy-rt worker                     long-running realtime worker (Rust); the only upstream I/O
 obehy jobs                          nightly set-wise SQL (vehicle days, circulations, retention)
 obehy api                           FastAPI; never calls upstream
 web                                 React static assets in nginx
@@ -151,12 +153,16 @@ realtime process are enough for one machine. Revisit only when measurements show
 
 ## Application server
 
-- **Python 3.13**, asyncio.
+- **Python 3.13** — the API, release loading, migrations, `obehy jobs` and the diagnostics
+  over the worker's output.
+- **Rust** (stable) — the realtime worker `obehy-rt`: tokio, tokio-postgres (binary COPY),
+  reqwest with rustls, prost for GTFS-RT; the core and the decoders synchronous and free of I/O.
 - **PostgreSQL + PostGIS** — the static mirror, the realtime log and projections, history.
 - **psycopg 3** with raw SQL migrations; no ORM.
 - **pyarrow** — reading serving Parquet and encoding it for COPY.
 - **FastAPI** — project API, feed endpoints and debugging endpoints.
-- **gtfs-realtime-bindings / protobuf** — GTFS-RT decode and encode.
+- **prost** (Rust) encodes GTFS-RT; **gtfs-realtime-bindings** decodes it for `obehy rt
+  check-gtfs-rt`.
 - **Parquet** — cold historical archive.
 
 ## Frontend
@@ -182,37 +188,44 @@ obehy/                         (this repository)
 │   ├── national_jdf.py, national_czptt.py, regional_overlay.py, filtered_jdf.py, ...
 │   ├── release/               commands, contract, ddl, load, activate, migrate, migrations/
 │   ├── reference/             importers/ (one per dataset), load (versioned snapshot → ref.*)
-│   ├── realtime/
-│   │   ├── model.py           Observation, facts, instances, events (frozen dataclasses)
-│   │   ├── times.py           the only time conversions (section 19.3)
-│   │   ├── clock.py           injected clock
-│   │   ├── sources/           connectors: <source>.py + <source>.toml (channels, lookups)
-│   │   ├── runtime/           poll scheduler and lookup broker (section 18.2)
-│   │   ├── vehicles.py        vehicle resolve and vehicle state (section 27)
-│   │   ├── index/             in-memory release index built from active.* (section 18.3)
-│   │   ├── infer/             candidates, scorers, decide, dates, binding, runs; keyless/ apart
-│   │   ├── timeline/          intervals, propagate, progress, lifecycle, arbitrate
-│   │   ├── core.py            step(state, observation, ctx) → (state, effects)
-│   │   ├── emit/              gtfsrt, state_table, vehicles snapshot, history writer
-│   │   ├── worker.py          asyncio shell around core.py
-│   │   ├── record.py, archive.py, replay.py, evaluate.py
-│   │   └── sql/               set-wise SQL: circulation_edge, punctuality (planned)
+│   ├── realtime_config.py     what Python reads of the policy and manifests; Prague
+│   │                          time at the edge
+│   ├── realtime/              what Python keeps: jobs.py, disk_guard.py (retention),
+│   │                          gtfs_rt_check.py, the replay diagnostics over the
+│   │                          worker's output stream (replay_report.py, evaluate.py, ...)
 │   ├── api/                   FastAPI app, /api/v1 routers, debug
-│   └── data/                  versioned rules, policies and connector manifests
+│   └── data/                  versioned rules and policies; realtime/sources/
+│                              (connector manifests), realtime/sql/ (compiled into obehy-rt)
+├── rust/                      the realtime worker, a Cargo workspace (rust/README.md)
+│   ├── obehy-core/            time (the only time conversions, section 19.3), geo,
+│   │                          model (facts, instances, effects), config, index (section
+│   │                          18.3), infer (keyed, keyless), timeline, core (step),
+│   │                          runner, publish (GTFS-RT), vehicles (section 27); no I/O
+│   ├── obehy-sources/         connectors: readers, declarative decoding, normalizers,
+│   │                          code decoders; bytes in, facts out (section 18.2)
+│   └── obehy-rt/              the binary: worker/ (core thread, pipeline, reorder
+│                              buffer), scheduler, fetch, egress, demand, lookups
+│                              (section 18.2), store/ (the writer), archive, record,
+│                              replay, warm, bench, compare
 ├── web/                       Vite + React frontend
 ├── config/                    obehy.example.toml, local config (not committed)
 ├── docs/sources/              one dossier per realtime source, with its quirk ledger
-├── tests/                     unit/, db/, replay/
+├── tests/                     unit/, db/; realtime/ (corpus, compare windows), golden/
+│                              corpus-stream/ (the pinned output streams)
+├── Dockerfile                 server (Python) and worker (obehy-rt) image targets
+├── deploy/compose.yaml        the server stack
 ├── compose.yaml               PostGIS for development and DB tests
 └── converters/
     ├── jrutil/                pinned submodule
     └── jrunify-ext-geodata/   pinned submodule (geodata and identity registry)
 ```
 
-Dependencies point inward: `core.py`, `infer/`, `timeline/` and `model.py` import no database,
-network or filesystem code; `sources/` imports no `infer/` or `timeline/`. An import-linter
-contract enforces this in CI. Live operation and replay run the same core; there is no
-replay-only twin of any core rule.
+Dependencies point inward: `obehy-rt` → `obehy-sources` → `obehy-core`. `obehy-core` uses no
+I/O crate, `obehy-sources` neither I/O nor an async runtime; only `obehy-rt` has tokio,
+PostgreSQL and HTTP. A test over `Cargo.lock` (`obehy-rt/tests/dependency_direction.rs`)
+enforces this in CI. On the Python side, import-linter contracts keep the API off the realtime
+modules (only `realtime_config.py`) and the diagnostics off the database. Live operation and
+replay run the same core; there is no replay-only twin of any core rule.
 
 JrUtil and JrUnify-Ext-GeoData are developed in their standalone checkouts and pinned here. The
 route-shapes companion lives in JrUtil (`route-shapes/`), pinned to the osr commit that MOTIS
@@ -821,13 +834,14 @@ injected clock. Connectors are the only part that performs I/O. That is what mak
 replay possible.
 
 The core is one function, `step(state, observation, ctx) → (state, effects)`, where `ctx` is the
-release index, the policy and the clock. The worker and `obehy rt replay` both drive it.
+release index, the policy and the clock. `obehy-rt worker` and `obehy-rt replay` both drive it,
+through the same runner.
 
-**SQL versus Python.** Work over many rows at once is SQL in PostgreSQL: building the release
-index, departures and the API, history aggregation, punctuality, circulation learning and
-`rt evaluate`. Python holds only the per-vehicle hot path (binding, consistency checks, progress
-and interval updates). A database round trip per observation at 1–2k observations per second
-would be slower and much harder to test and replay.
+**SQL versus the Rust core.** Work over many rows at once is SQL in PostgreSQL: building the
+release index, departures and the API, history aggregation, punctuality, circulation learning
+and `rt evaluate`. The Rust core holds only the per-vehicle hot path (binding, consistency
+checks, progress and interval updates). A database round trip per observation at 1–2k
+observations per second would be slower and much harder to test and replay.
 
 ## 18.2 Connectors
 
@@ -836,10 +850,15 @@ limits, payload family and ID semantics. Inside it, **channels** are individual 
 polls with their own intervals (for example SŽ train positions versus SŽ station departure
 boards). Capabilities are a declared feature set of the connector, not separate connectors.
 
-Each connector is code plus a TOML manifest (`realtime/sources/<source>.py`, `<source>.toml`).
-**The connector declares how it fetches; the generic connector runtime (`realtime/runtime/`)
-executes it.** No connector implements scheduling, rate limits, budgets or caching. Two kinds of
-operation exist:
+Each connector is a TOML manifest (`src/obehy/data/realtime/sources/<source>.toml`). Its
+payloads are decoded declaratively (`[channel.decode]`: a reader, the mapping of fields to
+facts, and named normalizers for the quirks that need logic, each carrying its quirk ID;
+`rust/docs/DECODE_SPEC.md`), or, for what is not one entity per vehicle (station boards,
+compositions, alerts), by a code decoder in `obehy-sources` that the manifest names. A source
+with a GTFS-RT or plain JSON feed needs a manifest and no code. **The connector declares how it
+fetches; the generic connector runtime of `obehy-rt` (scheduler, fetch, egress, demand polling,
+lookup broker) executes it.** No connector implements scheduling, rate limits, budgets or
+caching. Two kinds of operation exist:
 
 - **channels** are polled: endpoint, poll strategy (interval, service hours, adaptive), backoff,
   timeout, payload type and the feed each observation is routed to. A channel is
@@ -864,15 +883,15 @@ operation exist:
   the connector's `request.cache_key`, so different questions that need the same upstream call
   share one fetch.
 
-The **lookup broker** (`realtime/runtime/lookups.py`, in the worker on its own connection and
-thread) owns `rt.detail_cache` and answers `rt.lookup_request`: it reads the view in SQL
-(`realtime/sql/lookup_view.sql`), reuses a cached answer by cache key, enforces the token bucket
-(a request without a token waits) and the daily budget (spent: failed), and will run prefetch
-rules through the same `plan` (none yet). **The API never calls upstream**: on a missing or older
-answer it upserts a lookup request (the only row it writes, on a small pool of its own), NOTIFYs
-`obehy_lookup` and answers `pending` with `retry_after`, or `stale` with the older answer. Every
-lookup response is archived like a poll and logged in `rt.lookup_fetch`. A detail is not core
-state: nothing replays it through the core.
+The **lookup broker** (`obehy-rt` `lookups.rs`, in the worker on its own connection and
+task) owns `rt.detail_cache` and answers `rt.lookup_request`: it reads the view in SQL
+(`data/realtime/sql/lookup_view.sql`), reuses a cached answer by cache key, enforces the token
+bucket (a request without a token waits) and the daily budget (spent: failed), and will run
+prefetch rules through the same `plan` (none yet). **The API never calls upstream**: on a
+missing or older answer it upserts a lookup request (the only row it writes, on a small pool of
+its own), NOTIFYs `obehy_lookup` and answers `pending` with `retry_after`, or `stale` with the
+older answer. Every lookup response is archived like a poll and logged in `rt.lookup_fetch`. A
+detail is not core state: nothing replays it through the core.
 
 The manifest also declares:
 
@@ -920,8 +939,15 @@ changes). Its manifest semantics must be backed by captured examples.
 
 ## 18.3 Execution
 
-- One asyncio process. Connector pollers push observations onto a queue; a single core loop
-  applies them in `(received_at, source order)`, so state changes are deterministic.
+- One process, `obehy-rt worker`: a tokio shell around a synchronous core. Pollers (tokio
+  tasks, one per channel), the tick timer, publications, the lookup broker and the summaries
+  are async; payloads are archived and decoded on a blocking pool. One core thread owns the
+  runner, the writer, the vehicle book and the GTFS-RT emitters. Every poll takes a ticket as
+  it leaves the fetch, and a reorder buffer before the core releases polls strictly in ticket
+  (reception) order, each tick before the first poll at or after it, exactly as replay runs
+  them, so state changes are deterministic. Within a tick the due journeys' estimates run in
+  parallel and go back to their own slots, so the result does not depend on the thread count;
+  each feed's state is independent.
 - **Core state is partitioned by feed.** No in-memory state crosses `jdf` and `czptt`; each
   observation is routed to exactly one feed by its channel (DÚK buses go to `jdf`, DÚK trains
   to `czptt`). Vehicle state is per feed as well; a vehicle seen in both feeds is joined only in
@@ -929,17 +955,18 @@ changes). Its manifest semantics must be backed by captured examples.
 - An emit tick (default 10 s) writes GTFS-RT `.pb` files per feed by atomic rename, upserts
   changed rows of the UNLOGGED `rt.trip_state_current` and `rt.trip_part_current` (joined by the
   API with static departures by feed trip ID).
-- The inference index is built in memory (plain dictionaries) from SQL queries over the
-  `active.*` views, so the realtime core and the API see exactly the same static data and the
-  same derived helpers (`service_date`). It is double-buffered and swapped between cycles when
-  `NOTIFY` announces a new publication. Instances are re-keyed through their timetable-stable
-  key and service date (section 9.3), never through `trip_id`. A file cache of the built index
-  keyed by `release_id` may be added if restarts are slow; it is a cache, never a source of
-  truth. In the worker the index is loaded lazily, per key as observations name it, and so only
-  grows. Every hour the data of keys no observation named in the last hours (policy, 4 h) that
-  no live journey needs is swept out in place, and once a day at a quiet hour the index is
-  rebuilt from the live journeys alone; anything dropped reloads when named again. Memory
-  follows the working set of the last hours, not the day.
+- The inference index is built in memory (IDs interned, times as integer seconds, calls in
+  flat slices) from SQL queries over the active publication's loads, so the realtime core and
+  the API see exactly the same static data and the same derived helpers (`service_date`). When
+  `NOTIFY` announces a new publication, the core switches between polls: live journeys are
+  rebased onto the new release under a new writer. Instances are re-keyed through their
+  timetable-stable key and service date (section 9.3), never through `trip_id`. A file cache of
+  the built index keyed by `release_id` may be added if restarts are slow; it is a cache, never
+  a source of truth. In the worker the index is loaded lazily, per key as observations name
+  it, and so only grows. Every hour the data of keys no observation named in the last hours
+  (policy, 4 h) that no live journey needs is swept out in place, and once a day at a quiet hour
+  the index is rebuilt from the live journeys alone; anything dropped reloads when named again.
+  Memory follows the working set of the last hours, not the day.
 - An observation that repeats a vehicle's last one (the same fix time and the same facts: an
   unchanged payload, a vehicle listed by two portals) is no news: it is neither stepped nor
   stored. Each emit tick does work in proportion to what changed: estimates of journeys with new
@@ -949,7 +976,8 @@ changes). Its manifest semantics must be backed by captured examples.
 - Releases normally activate at night. A mid-day activation (a hotfix rerun) is allowed: every
   journey is re-snapshotted against the new release (section 29).
 - **Restart is a warm replay; there is no checkpoint format.** The worker loads the index and
-  re-runs the core with the replay clock over the stored observations the live state depends
+  re-runs the same runner with the replay clock, and no writer, over the stored observations
+  (`rt.observation`, read with binary COPY and decoded beside the core) the live state depends
   on: those of the vehicles still live from where their state begins (their binding or keyless
   episode), and all of the journeys they are on, within the last few hours (policy). Live
   vehicles and their journeys continue as in an uninterrupted run; a journey already finished
@@ -957,7 +985,7 @@ changes). Its manifest semantics must be backed by captured examples.
   Bindings are re-made from their keys, and the date rule (section 19.3) gives the same service
   date because it depends only on schedule and observation time.
 - Scale target: about 20k vehicles updating every 10–30 s, roughly 1–2k observations per second,
-  handled by one Python process with in-memory indexes. Shard per feed only if measurements
+  handled by one worker process with in-memory indexes. Shard per feed only if measurements
   require it.
 
 ## 18.4 Persistence, archive and replay
@@ -969,15 +997,21 @@ changes). Its manifest semantics must be backed by captured examples.
 - `rt.conflict`, `rt.alert`, `rt.source_health`.
 - Raw archive: `data/rt-raw/<source>/<channel>/<date>/…`, zstd-compressed and content-addressed,
   retained per source licence.
-- `obehy rt record` archives sources without processing them, so replay corpora can be collected
+- `obehy-rt record` archives sources without processing them, so replay corpora can be collected
   before a connector exists.
-- `obehy rt replay --release R --from --to [--sources]` runs archived payloads through the same
-  core with a simulated clock. Outputs are deterministic and golden-testable. When R is not one
-  of the retained database loads, replay loads it into a scratch database with the release
-  loader first. Lookups never pass through the core, so replay does not need them; their
-  answers are archived with the request (`rt.lookup_fetch` holds the recorded pairs) and can
-  be decoded again. A lookup that one day yields core facts is replayed from those recorded
-  pairs at their received time, never by re-running `plan`.
+- `obehy-rt replay --from-files R --from --to [--sources]` runs archived payloads through the
+  same runner with a simulated clock, decoding on a pool ahead of the core with polls kept in
+  archive order. Outputs are deterministic and golden-testable. The index is read from the
+  release's serving Parquet, so any fetched release can be replayed without a database.
+  `obehy-rt warm` times a warm start, `obehy-rt bench` the phases over a window, and
+  `obehy-rt compare` writes a window's exact output stream (`--diagnostics`, `--quality` add the
+  records the diagnostics read; `--check` tells where it parts from a reference); Python reads
+  that stream (`obehy rt report --from-stream`) and never re-runs the core. `obehy rt corpus pin` copies archive
+  days into a pinned corpus, and `obehy rt check-gtfs-rt` checks the files the worker writes.
+  Lookups never pass through the core, so replay does not need them; their answers are archived
+  with the request (`rt.lookup_fetch` holds the recorded pairs) and can be decoded again. A
+  lookup that one day yields core facts is replayed from those recorded pairs at their received
+  time, never by re-running `plan`.
 - Raw retention is a rolling window (default 3 months, per-source where a licence requires
   less; the single server keeps yesterday and today, SŽ station boards 14 days, `[retention]
   raw_days`, since all sources with PID are about 1 GB a day). **Pinned corpora** — the dossier captures, regression days, DST and holiday days — are
@@ -1019,11 +1053,11 @@ All of them go through one engine that takes whatever facts an observation carri
 the trip instance. A `TripKey` is just a very strong fact, so sane sources pay almost nothing for
 the generality. Adding a source means emitting facts, not writing a matcher.
 
-Keyless inference is new territory and is kept apart: its scorers live in `infer/keyless/`
-with their own policy, accept only hard-filtered candidates with a unique time fit, and
-otherwise quarantine as `ambiguous`. It ships last (milestone R4) and emits nothing public until
-`rt evaluate` has measured it on replay. The keyed path is built and proven end to end first,
-with only the `TripKey`, operating-date and time-window scorers.
+Keyless inference is new territory and is kept apart: its scorers live in `obehy-core`
+`infer/keyless/` with their own policy, accept only hard-filtered candidates with a unique time
+fit, and otherwise quarantine as `ambiguous`. It ships last (milestone R4) and emits nothing
+public until `rt evaluate` has measured it on replay. The keyed path is built and proven end to
+end first, with only the `TripKey`, operating-date and time-window scorers.
 
 Facts are typed and versioned. A new kind is added by registering a fact type and its scorer.
 
@@ -1085,7 +1119,8 @@ Praha, Holešovice.
 Midnight, `24:xx+` times and DST are where Czech realtime projects break, so time handling is a
 set of fixed rules with one implementation.
 
-**One time module.** `realtime/times.py` is the only code that converts times. It has two types:
+**One time module.** `obehy-core`'s `time` is the only code in the worker that converts times
+(`realtime_config.py` at the Python edge, for the API). It has two types:
 
 ```text
 Instant       timezone-aware UTC instant
@@ -1094,7 +1129,7 @@ ServiceTime   (service_date, wall-clock seconds from local midnight of that date
 ```
 
 **Schedule times are wall-clock.** JrUtil writes what the timetable says: `05:00` means 05:00
-on the clock of that day, also on DST days. `times.py` converts a `ServiceTime` to an `Instant`
+on the clock of that day, also on DST days. `time` converts a `ServiceTime` to an `Instant`
 by reading it as local wall time; a time in the repeated autumn hour takes the first
 occurrence, and a time in the skipped spring hour is read with the pre-change offset (one hour
 later on the clock). Trips in those hours rarely run as printed and operational changes on DST
@@ -1826,11 +1861,11 @@ scope without becoming misleading, publish the closest safe selector, keep the p
 the project API and expose provenance. Alerts are emitted per feed, with entities of that feed
 only.
 
-- **Any source, one shape** (`realtime/alerts.py`): cause, effect and severity in GTFS-RT terms,
-  active periods, texts per language, and the entities as the source names them (an identifier
-  in a source key namespace). An alert channel's poll states its whole current set: alerts are
-  upserted into `rt.alert`, those missing withdrawn; withdrawn ones are deleted after the raw
-  archive window.
+- **Any source, one shape** (`obehy-core` `alerts.rs`): cause, effect and severity in GTFS-RT
+  terms, active periods, texts per language, and the entities as the source names them (an
+  identifier in a source key namespace). An alert channel's poll states its whole current set:
+  alerts are upserted into `rt.alert`, those missing withdrawn; withdrawn ones are deleted after
+  the raw archive window.
 - **Resolution is SQL** (`rt.alert_target`): entities join `source_key` of the active release,
   and the key's load gives the feed. A new release re-resolves them; an entity no key names
   stays unresolved and visible, never guessed.
@@ -2116,8 +2151,8 @@ deleted and never moved to another stop. The revision diff is logged.
 
 **Derivation.** Every history row carries `derivation = (core_version, policy_version,
 release_id)`. Inside the raw-archive window (section 18.4), history is a rebuildable cache:
-`obehy rt replay --write-history --from --to` regenerates days after a fix. Outside the window it
-is frozen and kept as recorded, which is why the snapshot must be complete.
+`obehy-rt replay --write-history --from --to` regenerates days after a fix. Outside the window
+it is frozen and kept as recorded, which is why the snapshot must be complete.
 
 **Storage.** With PID a day is about 2.9 million stop events and 1.5 million scheduled calls, so
 the two large tables stay narrow. `history.journey` numbers each journey (`journey_id`); its
@@ -2260,11 +2295,12 @@ POST /api/v1/journeys/enrich                MOTIS legs (Transitous, motis.obehy.
 - Vehicles are drawn on the map's WebGL canvas (deck.gl, never DOM markers) and glide to each new
   position. The map asks `/vehicles` by fixed grid cells, not by its viewport, so every viewer
   asks for the same URLs and nginx's 5 s micro-cache answers them all.
-- One marker per journey, by the GTFS-RT rule (`emit/represent.py`): a rail run is one train
-  (the SŽ map's train and a unit's GPS are one), a bus several sources report is the vehicles
-  of the source the tracker follows. The worker writes it as `represents`; `/vehicles` lists
-  only those. A vehicle two sources report takes its trip and state from its best-ranked report
-  (standing for its journey, then the state, then the source), its position from its freshest.
+- One marker per journey, by the GTFS-RT rule (`obehy-core` `publish/represent.rs`): a rail
+  run is one train (the SŽ map's train and a unit's GPS are one), a bus several sources report
+  is the vehicles of the source the tracker follows. The worker writes it as `represents`;
+  `/vehicles` lists only those. A vehicle two sources report takes its trip and state from its
+  best-ranked report (standing for its journey, then the state, then the source), its position
+  from its freshest.
 - On the desktop the map is the base under every tab; a tab's content is fixed-width panels
   over it on the left (a trip opened from a board beside the board), and the map draws what
   they focus on: a board's stop, a trip's path and vehicle. The phone shows tabs as pages and
@@ -2360,7 +2396,10 @@ packages, failed-load cleanup.
 
 Recorded payloads replayed deterministically against a fixed release, for connector parsing,
 inference, arbitration, alert mapping, arrival inference and output stability. Replay output is
-golden-tested on the pinned corpora (section 18.4).
+golden-tested on the pinned corpora (section 18.4): `obehy-rt compare`'s exact output stream of
+each corpus journey (`tests/golden/corpus-stream/`) and of a few real windows
+(`tests/realtime/compare/`) is pinned, and a deliberate change of behaviour rewrites the
+streams it moves in the same change.
 
 ## Invariants
 
@@ -2388,8 +2427,10 @@ Real-data checks run on bounded subsets; full national builds are not a test too
 - National JDF and CZPTT compilation, PID + IDS JMK overlays, typed serving package (bundle v3,
   serving schema 5.0), `obehy build` with atomic release publication.
 - Release mirror without `fetch` (`obehy db migrate`, `obehy release load|activate|status`).
-- `obehy rt record` and `obehy rt replay` (archive → episodes → trips of a release), with the
-  DÚK, SŽ and Arriva Express dossiers.
+- The recorder and replay (archive → episodes → trips of a release; now `obehy-rt record`
+  and `obehy-rt replay`), with the DÚK, SŽ and Arriva Express dossiers.
+- The realtime worker in Rust (`obehy-rt`, `docs/RUST_PORT.md`), replacing the Python worker
+  with identical output.
 - The provisional `v0` identity phase and the identity-registry service are dropped; identity is
   section 6.
 
@@ -2470,10 +2511,11 @@ Done: recorder and dossiers, serving schema 5, database foundation, `release loa
 The first slice is DÚK buses with history; its types, time table, DDL, manifests and acceptance
 are fixed in `docs/R1_SLICE.md`.
 
-1. `realtime/times.py` (section 19.3) with its scenario table.
-2. `realtime/model.py`, the test timetable builder, import-linter layering contract in CI.
-3. Release index from `active.*` in PostgreSQL; `rt replay --release` loads a non-retained
-   release into a scratch database.
+1. The time module (section 19.3; now `obehy-core` `time`) with its scenario table.
+2. The model (now `obehy-core` `model`), the test timetable builder, the layering contract in
+   CI (now the crate dependency test).
+3. Release index from `active.*` in PostgreSQL; replay reads a non-retained release from its
+   serving Parquet (`obehy-rt replay --from-files`).
 4. `core.step` with keyed binding, operating-date and time-window scorers, explanations.
 5. Timeline engine: intervals, delay semantics, propagation, lifecycle and off-route (section
    20.7), progress integrity, conflicts, predictions, arbitration, monotone repair.
