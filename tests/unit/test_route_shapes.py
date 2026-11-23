@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from obehy import national_czptt, regional_overlay, route_shapes
+from obehy import route_shapes
 from obehy.pipeline.reporting import BuildReporter, CommandProgress, Reporter
-
-SHAPES = route_shapes.RouteShapes(
-    companion=Path("/c/obehy-motis-shapes"),
-    graph=Path("/g"),
-    cache=Path("/cache"),
-)
 
 
 class _Extract:
@@ -30,6 +24,7 @@ class _Extract:
         log: Path,
         reporter: Reporter | None,
         progress: CommandProgress | None,
+        env: Mapping[str, str] | None = None,
     ) -> None:
         self.calls += 1
         args = list(command)
@@ -74,61 +69,17 @@ def test_the_graph_is_extracted_once_per_pbf_and_osr(tmp_path: Path) -> None:
     extract = _Extract("abc")
     shapes, reason = _prepare(tmp_path, extract, companion, "abc")
     assert reason is None and shapes is not None
-    assert shapes.arguments() == [
-        f"--route-shapes={companion}",
-        f"--route-shapes-graph={shapes.graph}",
-        f"--route-shapes-cache={tmp_path / 'cache' / 'results'}",
-    ]
+    assert shapes == route_shapes.RouteShapes(
+        companion=companion,
+        graph=(tmp_path / "cache" / "graph").resolve(),
+        cache=(tmp_path / "cache" / "results").resolve(),
+    )
     _prepare(tmp_path, extract, companion, "abc")
     assert extract.calls == 1
     # Another osr build cannot read the graph: extract again.
     extract.commit = "def"
     _prepare(tmp_path, extract, companion, "def")
     assert extract.calls == 2
-
-
-def test_both_final_packages_get_the_options(tmp_path: Path) -> None:
-    config = national_czptt.BuildConfig(
-        output=tmp_path / "out",
-        workdir=tmp_path,
-        osm_file=tmp_path / "osm.pbf",
-        geodata_root=tmp_path,
-        jrutil_root=None,
-        jrutil_command=("jrutil",),
-        route_shapes=tuple(SHAPES.arguments()),
-    )
-    command = national_czptt._converter_command(  # pyright: ignore[reportPrivateUsage]
-        config, tmp_path / "derived" / "messages.zip", tmp_path / "catalog.json", tmp_path / "b"
-    )
-    assert command[-2:] == [str(tmp_path / "derived" / "messages.zip"), str(tmp_path / "b")]
-    assert command[-5:-2] == SHAPES.arguments()
-
-    commands: list[list[str]] = []
-
-    def record(command: Sequence[str], *_: object) -> None:
-        commands.append(list(command))
-
-    (tmp_path / "base").mkdir()
-    (tmp_path / "base" / "manifest.json").write_text(
-        json.dumps({"compiler": {"version": "test"}}), encoding="utf-8"
-    )
-    regional_overlay.run(
-        runtime_command=["jrutil"],
-        cwd=tmp_path,
-        base=tmp_path / "base",
-        output=tmp_path / "jdf",
-        sources=[],
-        gvd_year=2026,
-        jobs=1,
-        memory_budget="auto",
-        diagnostics=tmp_path / "diagnostics",
-        log=tmp_path / "log",
-        reporter=BuildReporter("off"),
-        command_runner=record,
-        route_shapes=SHAPES.arguments(),
-    )
-    assert commands[0][-6:-3] == SHAPES.arguments()
-    assert commands[0][-2:] == [str(tmp_path / "base"), str(tmp_path / "jdf")]
 
 
 def test_summaries_copy_each_package_section(tmp_path: Path) -> None:

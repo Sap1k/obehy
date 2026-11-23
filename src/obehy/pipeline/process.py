@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
-import traceback
 from collections import deque
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Protocol, cast
 
 from obehy.pipeline.errors import PipelineError
-from obehy.pipeline.files import utc_now
-from obehy.pipeline.reporting import CommandProgress, Reporter, StageClock
+from obehy.pipeline.reporting import CommandProgress, Reporter
 
 
 @dataclass(frozen=True)
@@ -64,10 +63,19 @@ class CommandFailure(PipelineError):
         )
 
 
-CommandFn = Callable[
-    [Sequence[str], Path, Path, Reporter | None, CommandProgress | None],
-    CommandResult | None,
-]
+class CommandFn(Protocol):
+    """Runs one supervised command; `env` adds variables to the inherited environment."""
+
+    def __call__(
+        self,
+        command: Sequence[str],
+        cwd: Path,
+        log_path: Path,
+        reporter: Reporter | None,
+        progress: CommandProgress | None,
+        env: Mapping[str, str] | None = None,
+        /,
+    ) -> CommandResult | None: ...
 
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -85,6 +93,7 @@ def run_command(
     log_path: Path,
     reporter: Reporter | None = None,
     progress: CommandProgress | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> CommandResult:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -144,6 +153,7 @@ def run_command(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         bufsize=0,
+        env=None if env is None else {**os.environ, **env},
     )
     assert process.stdout is not None
     with log_path.open("wb") as log:
@@ -322,66 +332,3 @@ def run_command(
         scheduler_samples=tuple(scheduler_samples),
         maximum_workers_observed=maximum_workers_observed,
     )
-
-
-def command_manifest(result: CommandResult | None) -> dict[str, object] | None:
-    """The run-manifest record of one supervised command."""
-
-    if result is None:
-        return None
-    return {
-        "elapsed_seconds": result.elapsed_seconds,
-        "completed": result.completed,
-        "total": result.total,
-        "maximum_in_flight": result.maximum_in_flight,
-        "execution_plan": result.execution_plan,
-        "resource_usage": list(result.resource_usage),
-        "capture_metrics": result.capture_metrics,
-        "scheduler_samples": list(result.scheduler_samples),
-        "maximum_workers_observed": result.maximum_workers_observed,
-    }
-
-
-def failure_record(
-    error: BaseException, clock: StageClock, reporter: Reporter, **locations: str
-) -> dict[str, Any]:
-    """The failure.json record of a failed build, retained with its staging directory."""
-
-    failure: dict[str, Any] = {
-        "schema_version": 1,
-        "failed_at": utc_now(),
-        "stage": clock.current,
-        "error_type": type(error).__name__,
-        "message": str(error),
-        "traceback": traceback.format_exc(),
-        "progress": reporter.snapshot(),
-        "stage_timings_seconds": clock.timings(include_current=True),
-        **locations,
-    }
-    if isinstance(error, CommandFailure):
-        failure["command"] = error.command
-        failure["working_directory"] = str(error.cwd)
-        failure["exit_code"] = error.returncode
-        failure["exit_code_hex"] = f"0x{error.returncode & 0xFFFFFFFF:08X}"
-        failure["elapsed_seconds"] = error.elapsed
-        failure["last_batch"] = error.last_batch
-        failure["completed"] = error.completed
-        failure["in_flight_batches"] = error.in_flight
-        failure["execution_plan"] = error.execution_plan
-        failure["process_log"] = str(error.log_path)
-        failure["process_output_tail"] = error.tail
-    return failure
-
-
-def report_failure(
-    reporter: Reporter, error: BaseException, stage: str, staging: Path, failure_path: Path
-) -> None:
-    reporter.problem("error", f"Stage {stage} failed: {error}")
-    if isinstance(error, CommandFailure):
-        reporter.note(
-            f"Last batch: {error.last_batch or 'none reported'}; process log: {error.log_path}"
-        )
-        if error.tail:
-            reporter.note("Last process output:\n" + "\n".join(error.tail[-12:]))
-    reporter.note(f"FAILED STAGING RETAINED: {staging}")
-    reporter.note(f"Failure report: {failure_path}")

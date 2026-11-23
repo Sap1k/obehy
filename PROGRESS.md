@@ -8,26 +8,23 @@ Short status and the working backlog. Log entries before 2026-10-01 are in git h
 ### `obehy build`
 
 One command (`src/obehy/cli.py`) resolves the GVD year, validates or refreshes the shared OSM
-snapshot, builds JrUtil once, and runs these stages. Production runs daily on GitHub Actions
+snapshot and its extracts, and runs these stages. Production runs daily on GitHub Actions
 (`.github/workflows/build.yml`, `BASE_PLAN.md` section 15) and publishes each run as a
-`build-<run-id>` GitHub release; green since 2026-10-08.
+`build-<run-id>` GitHub release; green since 2026-10-08 (with F# JrUtil; the jrutil-rs build is
+not yet run in production).
 
 0. **fetch-sources** — VLD and dráhy CIS JŘ archives, CZPTT (inventory, KADR, SR70), PID and IDS
-   JMK GTFS, all before JrUtil is built; three attempts per source, `sources/fetch-log.json`.
-1. **national-jdf** — the fetched VLD and dráhy archives → `fix-jdf` (stop matching,
-   coordinate estimation, `regional-adjacent` international policy) → `merge-jdf` (name-based
-   stop reconciliation) → `jdf-to-bundle` → `validate-package`.
-2. **regional-overlay** — overlay the fetched PID and IDS JMK GTFS onto
-   the national JDF package in one `regional-gtfs-overlay` pass.
-3. **filtered-jdf** — a plain GTFS derived from the pre-overlay national JDF, filtered like
-   gtfs-processor (see Next steps §4).
-4. **national-czptt** — the fetched CZPTT snapshot → `czptt-to-bundle`. By default
-   operational (non-passenger) points go only to the Parquet sidecars.
-5. **validate & publish** — both production packages are validated and published atomically with
-   `release.json` and an `artifact_root/current.json` pointer.
+   JMK GTFS, all before the compiler is built; three attempts per source, `sources/fetch-log.json`.
+1. **build-jrutil** — `cargo build --release --locked -p jrutil` in the jrutil-rs checkout.
+2. **route-shapes-graph** — the companion's osr graph (or skipped).
+3. **compile** — one `jrutil build --spec <run>/build.toml`: national JDF from the two exports
+   with estimated posts, the PID + IDS JMK overlay, the filtered JDF feed and national CZPTT;
+   the compiler validates every package it writes.
+4. **validation** — Oběhy's GTFS stop checks and the publication-eligibility check; then both
+   packages are published atomically with `release.json` and an `artifact_root/current.json`
+   pointer.
 
-`--jobs` and `--memory-budget` are forwarded to JDF, the overlay and CZPTT. No process or .NET
-heap hard limit is configured; memory figures are telemetry.
+`--jobs N` becomes the compiler's `RAYON_NUM_THREADS`.
 
 ### Pipelines
 
@@ -316,6 +313,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-22** — `obehy build` switched to jrutil-rs: one `jrutil build` over a written
+  specification (`src/obehy/static_build.py`) replaces the F# stages, the Python filtered feed
+  and the osmium demand clip; `[paths] gazetteer_dir` is new, `--memory-budget` and
+  `--czptt-operational-points` are gone, `release.json` records `compiler` instead of `policy`.
+  Unit tests, ruff, pyright and import contracts pass; no real build run yet.
 - **2026-11-21** — Oběhy pegged PostgreSQL and never loaded. Since Phase 3, `vehicle_chains.sql`
   joined `history.journey_latest` as a plain view, and the planner hash-joined every journey and
   schedule revision; on prod, polls stacked minutes-long queries. It is now a `LATERAL … LIMIT 1`

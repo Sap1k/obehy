@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 from typing import Literal
 
 JobSetting = Literal["auto"] | int
@@ -20,12 +19,6 @@ def parse_jobs(value: str) -> JobSetting:
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be 'auto' or a positive integer")
     return parsed
-
-
-def parse_memory_budget(value: str) -> str:
-    if not re.fullmatch(r"(?i)(?:auto|[0-9]+(?:\.[0-9]+)?(?:KiB|MiB|GiB))", value):
-        raise argparse.ArgumentTypeError("must be 'auto' or a size such as 10GiB")
-    return value
 
 
 def parse_year(value: str) -> YearSetting:

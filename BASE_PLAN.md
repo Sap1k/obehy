@@ -146,9 +146,10 @@ realtime process are enough for one machine. Revisit only when measurements show
 
 ## Static build (GitHub Actions)
 
-- **Python 3.13** — `obehy build`: source acquisition, GVD resolution, OSM snapshot, JrUtil
-  orchestration, filtered feed, validation and publication.
-- **F#/.NET and JrUtil** — national conversion, overlays, identity, GTFS and serving packages.
+- **Python 3.13** — `obehy build`: source acquisition, GVD resolution, OSM snapshot, the build
+  specification, validation and publication.
+- **Rust and jrutil-rs** — national conversion, overlays, identity, the filtered feed, GTFS and
+  serving packages.
 - **Parquet** — the typed serving relations.
 
 ## Application server
@@ -185,7 +186,7 @@ obehy/                         (this repository)
 ├── src/obehy/
 │   ├── cli.py                 obehy build and the command entry points
 │   ├── pipeline/              shared static-build plumbing
-│   ├── national_jdf.py, national_czptt.py, regional_overlay.py, filtered_jdf.py, ...
+│   ├── static_build.py, national_jdf.py, national_czptt.py, regional_overlay.py, ...
 │   ├── release/               commands, contract, ddl, load, activate, migrate, migrations/
 │   ├── reference/             importers/ (one per dataset), load (versioned snapshot → ref.*)
 │   ├── realtime_config.py     what Python reads of the policy and manifests; Prague
@@ -257,7 +258,7 @@ There is no identity service. Public identity consists of:
    overlay_places.csv   source-native stop places created by regional overlays
    ```
 
-   - `merge-jdf --stop-registry` preloads registered stops, so `jdf:stop:N` does not depend on
+   - The compiler's JDF merge preloads registered stops, so `jdf:stop:N` does not depend on
      batch order. Same-named stops are split by reference coordinates; ambiguity is quarantined.
    - An unregistered stop gets a provisional number ≥ 1 000 000 000 hashed from name, okres and
      country, and it appears in the release's `stop-registry/` candidate CSVs.
@@ -453,17 +454,21 @@ non-stop railway points anchor delay estimates without being exposed to riders a
 
 # 11. JrUtil workstream
 
-JrUtil owns the complete production static pipeline. `obehy build` drives the JrUtil multitool:
+JrUtil owns the complete production static pipeline; its implementation is the Rust compiler
+jrutil-rs. `obehy build` fetches the sources, writes a build specification naming every input and
+output, and runs one compiler invocation:
 
 ```text
-fix-jdf → merge-jdf → jdf-to-bundle            national JDF package
-regional-gtfs-overlay                          PID + IDS JMK on top of it
-czptt-to-bundle                                national rail package
-validate-package                               for each result
+jrutil build --spec <run>/build.toml --progress-events
+  [czptt]          national rail package from the CZPTT snapshot
+  [jdf]            national JDF package from the two national exports, with estimated posts,
+                   the PID + IDS JMK overlay, route shapes and the filtered road feed
 ```
 
-Every package records the exact JrUtil commit as its compiler version. Sources reach JrUtil only
-as checksum-pinned local snapshots; live URLs and credentials never enter its inputs.
+The compiler validates every package it writes and leaves no invalid one. Every package manifest
+names the compiler and its version and each source by ID and SHA-256; `release.json` records the
+compiler checkout. Sources reach the compiler only as checksum-pinned local snapshots; live URLs
+and credentials never enter its inputs.
 
 The production package contains standard `gtfs.zip`, the typed Parquet serving relations with
 fixed schemas, unique keys and resolving foreign keys, a manifest with sizes, SHA-256 hashes,
@@ -634,8 +639,8 @@ The `obehy build` workflow runs on GitHub Actions on a schedule and on demand:
 2. restore caches (OSM snapshot, routing cache) and validate the OSM manifest;
 3. download each static source, store the raw bytes by SHA-256 and record a source manifest
    (source, retrieval time, URL or method, checksum, declared version, licence);
-4. build JrUtil at its pinned commit;
-5. run the national JDF, regional overlay, filtered JDF and CZPTT stages;
+4. build jrutil-rs at its pinned commit;
+5. compile both packages, the overlay and the filtered JDF feed in one `jrutil build`;
 6. validate both production packages and the official GTFS validator;
 7. publish the release only when every configured gate passes.
 
@@ -747,8 +752,8 @@ claims become `transfer` rows.
 # 17. MOTIS route-shapes companion
 
 Shape generation is part of the static build on GitHub Actions: an optional phase of JrUtil's
-package writer, switched on for the final packages (the regional overlay for `jdf`, and
-`czptt-to-bundle`), so shapes are in the relations before `gtfs.zip` is projected and the manifest
+package writer, switched on for the final packages (`jdf` after the regional overlay, and
+`czptt`), so shapes are in the relations before `gtfs.zip` is projected and the manifest
 is written, and its output ships in the release. It is an internal build tool, not an Oběhy
 API, and has no pfaedle fallback. The application server only loads the resulting shapes.
 

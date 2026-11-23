@@ -12,11 +12,16 @@
 - Read `PROGRESS.md` first. Its **Next steps** section is the working backlog: the realtime
   core in `BASE_PLAN.md` section 34 order, with static acceptance waiting on the first GitHub
   Actions build.
-- Production static compilation and overlays belong to JrUtil. `obehy build` runs on GitHub
-  Actions, never on the application server. On the server, Oběhy fetches, loads and activates
+- Production static compilation and overlays belong to JrUtil, implemented by the Rust compiler
+  jrutil-rs: `obehy build` fetches the sources, writes a build specification and runs one
+  `jrutil build` (`STATIC_PIPELINE.md`). `obehy build` runs on GitHub Actions, never on the
+  application server. On the server, Oběhy fetches, loads and activates
   releases and runs the realtime core. Do not recreate PostgreSQL source reconciliation.
-- JrUtil work happens in the standalone checkout `E:/Git/obehy/jrutil`. `converters/jrutil` is a
-  pinned submodule: do not edit it or advance its pointer unless the task explicitly asks.
+- Compiler work happens in the standalone checkout `E:/Git/obehy/jrutil-rs`; its build
+  specification (`docs/switch.md`, `crates/jrutil/src/spec.rs`) is the interface Oběhy writes. The
+  F# checkout `E:/Git/obehy/jrutil` supplies the gazetteers and the route-shapes companion.
+  `converters/jrutil` is a pinned submodule: do not edit it or advance its pointer unless the task
+  explicitly asks.
 - Stable JDF stop IDs come from the versioned stop-ID registry files applied by JrUtil. There is no
   identity service and none is planned (`BASE_PLAN.md` section 6).
 - Keep generated data, source snapshots, build artifacts, credentials and local environment files
@@ -126,12 +131,10 @@ where each part runs.
   database tests run with `OBEHY_TEST_DATABASE_URL` or `[database] test_url`, through
   `rust/tools/store_db.py`, and drop what they make). Use your own `CARGO_TARGET_DIR` when
   another build may be running.
-- JrUtil: `dotnet test jrutil.tests/jrutil.tests.fsproj -c Release --no-restore` in the standalone
-  checkout; report the exact command and result.
-- Inspect JrUtil log output as well as the exit code: conversion commands may log entity-level
-  errors while returning zero.
+- jrutil-rs: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+  `cargo test --workspace` in the standalone checkout; report the exact command and result.
+- Inspect the compiler's log (`<run>/logs/compile.process.log`) as well as the exit code.
 - For documentation-only changes, review `git diff --check` and `git diff`.
-- Never run the full national feed (full `obehy build`, full `fix-jdf`/`merge-jdf`/bundle/overlay
-  over all batches) for testing. Verify on a bounded subset of batches, lines or a region, and only
+- Never run the full national feed (full `obehy build`, a full `jrutil build`) for testing. Verify on a bounded subset of batches, lines or a region, and only
   where a real-data check is actually required.
 - If a check cannot run, say so instead of claiming it passed.

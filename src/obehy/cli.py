@@ -10,31 +10,32 @@ import subprocess
 import sys
 import uuid
 import zipfile
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 
 from obehy import (
     build_sources,
-    filtered_jdf,
     gvd,
     national_czptt,
     national_jdf,
     osm_snapshot,
     regional_overlay,
     route_shapes,
+    static_build,
 )
 from obehy.api import commands as api_commands
 from obehy.pipeline import jrutil
-from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
+from obehy.pipeline.args import JobSetting, parse_jobs, parse_year
 from obehy.pipeline.errors import PipelineError
 from obehy.pipeline.files import file_digest, utc_now, write_json
 from obehy.pipeline.process import CommandFn, run_command
 from obehy.pipeline.reporting import BuildReporter, CommandProgress, Reporter
 from obehy.production_package import (
     ProductionPackageError,
+    extracted_gtfs,
     package_digest,
     read_manifest,
 )
@@ -43,8 +44,8 @@ from obehy.reference import commands as reference_commands
 from obehy.release import commands as release_commands
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
-POLICY = regional_overlay.POLICY
 ProgressMode = Literal["auto", "rich", "plain", "off"]
+GAZETTEER_FILES = ("cz_regions.json.gz", "cz_towns.json.gz", "eur_towns_countries.csv")
 
 
 @dataclass(frozen=True)
@@ -52,13 +53,11 @@ class BuildOptions:
     runtime: RuntimeConfig
     gvd_year: int
     jobs: JobSetting = "auto"
-    memory_budget: str = "auto"
     progress: ProgressMode = "auto"
     keep_work: bool = False
     estimated_posts: bool = False
     post_inference_policy: Path | None = None
     refresh_osm: bool = False
-    czptt_operational_points: national_czptt.OperationalPointMode = "sidecar"
     filtered_jdf: bool = True
     routing_cache: bool = True
     czptt_source_cache: bool = True
@@ -87,35 +86,48 @@ class _Run:
     diagnostics: Path
     lock: Path
 
-    @property
-    def jdf_output(self) -> Path:
-        return self.root / "national-jdf"
 
-    @property
-    def czptt_output(self) -> Path:
-        return self.root / "national-czptt"
+@dataclass(frozen=True)
+class _Osm:
+    """The validated OSM snapshot and the extracts the compiler reads."""
 
-
-def _runtime_command(runtime: RuntimeConfig) -> list[str]:
-    return jrutil.runtime_command(runtime.jrutil.directory, runtime.jrutil.command)
+    merge_key: str
+    railway_locations: Path
+    post_candidates: Path
+    transit_routing_base: Path
 
 
-def _check_inputs(options: BuildOptions) -> Path:
+def _post_inference_policy(options: BuildOptions) -> Path:
+    return options.post_inference_policy or national_jdf.DEFAULT_POST_INFERENCE_POLICY
+
+
+def _check_inputs(options: BuildOptions) -> _Osm:
     runtime = options.runtime
     geodata = runtime.jrunify_ext_geodata_dir / "other"
     if not geodata.is_dir():
         raise PipelineError(f"Geodata directory does not exist: {geodata}")
     national_jdf.geodata_manifest(geodata)
     national_jdf.require_route_rules(_route_rules(runtime))
-    for required in (_overlay_overrides(runtime), _filtered_jdf_rules(runtime)):
-        if not required.exists():
-            raise PipelineError(f"Geodata checkout is missing {required}")
-    if not POLICY.is_file():
-        raise PipelineError(f"Production overlay policy is missing: {POLICY}")
+    required = [_overlay_overrides(runtime)]
+    if options.filtered_jdf:
+        required.append(_filtered_jdf_rules(runtime))
+    if options.estimated_posts:
+        required.append(_post_inference_policy(options))
+    required += [runtime.gazetteer_dir / name for name in GAZETTEER_FILES]
+    for path in required:
+        if not path.is_file():
+            raise PipelineError(f"Build input is missing: {path}")
     if options.refresh_osm:
         osm_snapshot.build_snapshot(runtime)
-    osm_snapshot.validate_snapshot(runtime.osm_file, runtime.workdir, full_hash=True)
-    return geodata
+    snapshot = osm_snapshot.validate_snapshot(runtime.osm_file, runtime.workdir, full_hash=True)
+    merge_key = cast(str, snapshot["merge_key"])
+    workdir = runtime.workdir
+    return _Osm(
+        merge_key=merge_key,
+        railway_locations=osm_snapshot.validate_railway_locations(workdir, merge_key),
+        post_candidates=osm_snapshot.validate_jdf_post_candidates(workdir, merge_key),
+        transit_routing_base=osm_snapshot.validate_jdf_transit_routing_base(workdir, merge_key),
+    )
 
 
 def _acquire_lock(path: Path, run_id: str) -> int:
@@ -158,7 +170,7 @@ def _route_rules(runtime: RuntimeConfig) -> Path:
 
 
 def _overlay_overrides(runtime: RuntimeConfig) -> Path:
-    return runtime.jrunify_ext_geodata_dir / "overlay"
+    return runtime.jrunify_ext_geodata_dir / "overlay" / "pid-stop-overrides.csv"
 
 
 def _filtered_jdf_rules(runtime: RuntimeConfig) -> Path:
@@ -172,81 +184,98 @@ def _stop_registry(runtime: RuntimeConfig) -> Path | None:
     return registry if (registry / "stops.csv").is_file() else None
 
 
-def _jdf_config(
-    options: BuildOptions,
-    geodata: Path,
-    output: Path,
-    reference_date: date,
-    source_snapshot: Path | None = None,
-) -> national_jdf.BuildConfig:
-    runtime = options.runtime
-    return national_jdf.BuildConfig(
-        output=output,
-        workdir=runtime.workdir,
-        osm_file=runtime.osm_file,
-        jrutil_root=runtime.jrutil.directory,
-        jrutil_command=runtime.jrutil.command,
-        geodata_root=geodata,
-        keep_work=options.keep_work,
-        progress=options.progress,
-        jobs=options.jobs,
-        memory_budget=options.memory_budget,
-        estimated_posts=options.estimated_posts,
-        post_inference_policy=options.post_inference_policy,
-        routing_cache_dir=runtime.routing_cache_dir if options.routing_cache else None,
-        build_jrutil=False,
-        gvd_year=options.gvd_year,
-        reference_date=reference_date,
-        stop_registry=_stop_registry(runtime),
-        route_rules=_route_rules(runtime),
-        source_snapshot=source_snapshot,
-    )
-
-
-def _czptt_config(
-    options: BuildOptions,
-    output: Path,
-    source_snapshot: Path | None = None,
-    route_shapes_arguments: Sequence[str] = (),
-) -> national_czptt.BuildConfig:
+def _czptt_config(options: BuildOptions) -> national_czptt.BuildConfig:
     runtime = options.runtime
     return national_czptt.BuildConfig(
-        output=output,
-        workdir=runtime.workdir,
-        osm_file=runtime.osm_file,
-        # CZPTT reads rail/SR70.csv from the snapshot root, not from other/.
+        # The snapshot takes rail/SR70.csv from the geodata root, not from other/.
         geodata_root=runtime.jrunify_ext_geodata_dir,
-        jrutil_root=runtime.jrutil.directory,
-        jrutil_command=runtime.jrutil.command,
         timetable_year=options.gvd_year,
-        operational_points=options.czptt_operational_points,
-        source_snapshot=source_snapshot,
-        jobs=options.jobs,
-        memory_budget=options.memory_budget,
-        keep_work=options.keep_work,
-        progress=options.progress,
-        build_jrutil=False,
         source_cache_dir=(runtime.czptt_source_cache_dir if options.czptt_source_cache else None),
-        route_shapes=tuple(route_shapes_arguments),
     )
 
 
-def _validate_packages(
-    packages: dict[str, Path],
-    runtime: RuntimeConfig,
+def _build_spec(
+    options: BuildOptions,
     run: _Run,
-    reporter: Reporter,
-    command_runner: CommandFn,
-) -> dict[str, object]:
+    osm: _Osm,
+    fetched: build_sources.FetchedSources,
+    shapes: route_shapes.RouteShapes | None,
+) -> static_build.BuildSpec:
+    runtime = options.runtime
+    registry = _stop_registry(runtime)
+    regional = {source.source_id: source.payload for source in fetched.regional}
+    return static_build.BuildSpec(
+        timetable_year=options.gvd_year,
+        czptt_snapshot=fetched.czptt,
+        railway_osm=osm.railway_locations,
+        czptt_output=run.partial_release / "czptt",
+        catalogues=runtime.jrunify_ext_geodata_dir / "other",
+        gazetteer=runtime.gazetteer_dir,
+        post_candidates_osm=osm.post_candidates,
+        route_rules=_route_rules(runtime),
+        reference_date=fetched.reference_date,
+        jdf_output=run.partial_release / "jdf",
+        vld_archive=fetched.jdf / "JDF_VLD.zip",
+        drahy_archive=fetched.jdf / "JDF_drahy.zip",
+        overlay_reports=run.diagnostics / "regional-overlay",
+        pid_feed=regional["pid-gtfs"],
+        pid_overrides=_overlay_overrides(runtime),
+        ids_jmk_feed=regional["ids-jmk-gtfs"],
+        registry=registry,
+        registry_candidates=(
+            run.partial_release / "stop-registry" / "stop-candidates.csv"
+            if registry is not None
+            else None
+        ),
+        posts=(
+            static_build.Posts(
+                routing=osm.transit_routing_base,
+                policy=_post_inference_policy(options),
+                reports=run.diagnostics / "posts",
+                cache=runtime.routing_cache_dir if options.routing_cache else None,
+            )
+            if options.estimated_posts
+            else None
+        ),
+        filtered=(
+            static_build.Filtered(
+                rules=_filtered_jdf_rules(runtime), output=run.partial_release / "jdf-filtered"
+            )
+            if options.filtered_jdf
+            else None
+        ),
+        shapes=shapes,
+    )
+
+
+def _keep_registry_candidates(runtime: RuntimeConfig, run: _Run) -> None:
+    """Put the post and place candidates next to the stop candidates the registry review reads."""
+
+    if _stop_registry(runtime) is None:
+        return
+    review = run.partial_release / "stop-registry"
+    for report, name in (
+        (run.diagnostics / "posts" / "post_candidates.csv", "post-candidates.csv"),
+        (
+            run.diagnostics / "regional-overlay" / "overlay_place_candidates.csv",
+            "place-candidates.csv",
+        ),
+    ):
+        if report.is_file():
+            review.mkdir(exist_ok=True)
+            shutil.copy2(report, review / name)
+
+
+def _check_stops(packages: dict[str, Path], czptt_snapshot: Path, reporter: Reporter) -> None:
+    with extracted_gtfs(packages["jdf"]) as gtfs:
+        national_jdf.verify_gtfs_stops(gtfs, reporter)
+    with extracted_gtfs(packages["czptt"]) as gtfs:
+        national_czptt.verify_gtfs_stops(gtfs, czptt_snapshot / "sr70" / "SR70.csv")
+
+
+def _package_summaries(packages: dict[str, Path]) -> dict[str, object]:
     manifests: dict[str, object] = {}
     for name, package in packages.items():
-        command_runner(
-            [*_runtime_command(runtime), "validate-package", str(package)],
-            runtime.jrutil.directory or Path.cwd(),
-            run.logs / f"validate-{name}.process.log",
-            reporter,
-            CommandProgress(f"Validate {name.upper()} package", stage="validate-package"),
-        )
         manifest = read_manifest(package, require_publication=True)
         manifests[name] = {
             "manifest_sha256": file_digest(package / "manifest.json"),
@@ -264,6 +293,7 @@ def _release_record(
     packages: dict[str, object],
     stages: list[dict[str, str]],
 ) -> dict[str, object]:
+    runtime = options.runtime
     outputs: dict[str, object] = {}
     if options.filtered_jdf:
         filtered = run.partial_release / "jdf-filtered"
@@ -278,21 +308,17 @@ def _release_record(
         "gvd_year": options.gvd_year,
         "options": {
             "jobs": options.jobs,
-            "memory_budget": options.memory_budget,
             "estimated_posts": options.estimated_posts,
             "post_inference_policy": (
-                str(options.post_inference_policy or national_jdf.DEFAULT_POST_INFERENCE_POLICY)
-                if options.estimated_posts
-                else None
+                str(_post_inference_policy(options)) if options.estimated_posts else None
             ),
             "refresh_osm": options.refresh_osm,
-            "czptt_operational_points": options.czptt_operational_points,
             "filtered_jdf": options.filtered_jdf,
             "routing_cache": options.routing_cache,
             "czptt_source_cache": options.czptt_source_cache,
             "route_shapes": options.route_shapes,
         },
-        "policy": {"path": str(POLICY), "sha256": file_digest(POLICY)},
+        "compiler": jrutil.provenance(runtime.jrutil.directory, runtime.jrutil.command),
         "retrieval": fetched.retrieval,
         "sources": {
             source.source_id: json.loads(source.descriptor.read_text(encoding="utf-8"))
@@ -322,8 +348,7 @@ def _publish(options: BuildOptions, run: _Run) -> Release:
         current["jdf_filtered"] = str((filtered / "gtfs.zip").resolve())
     write_json(options.runtime.artifact_root / "current.json", current)
     if not options.keep_work:
-        shutil.rmtree(run.jdf_output, ignore_errors=True)
-        shutil.rmtree(run.czptt_output, ignore_errors=True)
+        shutil.rmtree(run.sources, ignore_errors=True)
     return Release(run.run_id, release, release / "jdf", release / "czptt", filtered)
 
 
@@ -344,16 +369,13 @@ def _record_failure(run: _Run, error: Exception, stages: list[dict[str, str]]) -
 def build(
     options: BuildOptions,
     *,
-    jdf_builder: Callable[..., Path] = national_jdf.build,
-    czptt_builder: Callable[..., Path] = national_czptt.build,
     downloader: regional_overlay.DownloadGtfsFn | None = None,
-    filtered_jdf_builder: Callable[..., Path] = filtered_jdf.build_filtered_jdf,
     command_runner: CommandFn = run_command,
     jdf_source_fetcher: build_sources.JdfSourceFetcher = build_sources.fetch_jdf_sources,
     czptt_source_fetcher: build_sources.CzpttSourceFetcher = national_czptt.snapshot_sources,
 ) -> Release:
     runtime = options.runtime
-    geodata = _check_inputs(options)
+    osm = _check_inputs(options)
     run, lock_descriptor = _start_run(runtime)
     reporter = BuildReporter(options.progress)
     stages: list[dict[str, str]] = []
@@ -365,14 +387,13 @@ def build(
         # Every network source first: one retrieval date, and outages fail in minutes.
         fetched = build_sources.fetch_sources(
             run.sources,
-            _czptt_config(options, run.czptt_output),
+            _czptt_config(options),
             reporter,
             jdf_fetcher=jdf_source_fetcher,
             czptt_fetcher=czptt_source_fetcher,
             regional_downloader=downloader,
         )
         completed("fetch-sources")
-        reference_date = fetched.reference_date
 
         if runtime.jrutil.directory is not None:
             command_runner(
@@ -380,44 +401,17 @@ def build(
                 runtime.jrutil.directory,
                 run.logs / "jrutil-build.process.log",
                 reporter,
-                CommandProgress("Build JrUtil", stage="build-jrutil"),
+                CommandProgress("Build jrutil"),
             )
         completed("build-jrutil")
 
-        jdf_builder(
-            _jdf_config(options, geodata, run.jdf_output, reference_date, fetched.jdf),
-            reporter=reporter,
-        )
-        completed("national-jdf")
-        jdf_bundle = run.jdf_output / "bundle"
-        # Registry review files outlive the work directory in the release.
-        registry_review = run.partial_release / "stop-registry"
-        if (run.jdf_output / "stop-registry").is_dir():
-            shutil.move(run.jdf_output / "stop-registry", registry_review)
-
-        if options.filtered_jdf:
-            filtered_work = run.root / "filtered-jdf"
-            filtered_work.mkdir()
-            filtered_jdf_builder(
-                jdf_bundle,
-                run.partial_release / "jdf-filtered",
-                reference=reference_date,
-                work=filtered_work,
-                merged_jdf=run.jdf_output / "derived" / "merged-jdf.zip",
-                rules_path=_filtered_jdf_rules(runtime),
-            )
-            completed("filtered-jdf")
-
-        # Optional: JrUtil's route-shapes phase in the overlay and CZPTT packages.
+        # Optional: the compiler's route-shapes phase in both packages.
         shapes: route_shapes.RouteShapes | None = None
         if options.route_shapes:
             shapes, skipped = route_shapes.prepare(
                 companion=runtime.route_shapes_companion,
                 osm_file=runtime.osm_file,
-                osm_key=lambda: cast(
-                    str,
-                    osm_snapshot.validate_snapshot(runtime.osm_file, runtime.workdir)["merge_key"],
-                ),
+                osm_key=lambda: osm.merge_key,
                 run_dir=run.root,
                 cache=runtime.route_shapes_cache_dir or runtime.workdir / "cache" / "route-shapes",
                 log=run.logs / "route-shapes-graph.process.log",
@@ -429,48 +423,27 @@ def build(
                 stages.append({"name": "route-shapes-graph", "skipped": cast(str, skipped)})
             else:
                 completed("route-shapes-graph")
-        shape_arguments = shapes.arguments() if shapes is not None else []
 
-        regional_overlay.run(
-            runtime_command=_runtime_command(runtime),
-            cwd=runtime.jrutil.directory or Path.cwd(),
-            base=jdf_bundle,
-            output=run.partial_release / "jdf",
-            sources=fetched.regional,
-            gvd_year=options.gvd_year,
+        static_build.run(
+            _build_spec(options, run, osm, fetched, shapes),
+            root=run.root,
+            compiler=jrutil.runtime_command(runtime.jrutil.directory, runtime.jrutil.command),
             jobs=options.jobs,
-            memory_budget=options.memory_budget,
-            diagnostics=run.diagnostics / "regional-overlay",
-            log=run.logs / "regional-overlay.process.log",
+            log=run.logs / "compile.process.log",
             reporter=reporter,
             command_runner=command_runner,
-            stop_registry=_stop_registry(runtime),
-            stop_registry_candidates=registry_review / "place-candidates.csv",
-            overrides_root=_overlay_overrides(runtime),
-            route_rules=_route_rules(runtime),
-            route_shapes=shape_arguments,
         )
-        completed("regional-overlay")
+        _keep_registry_candidates(runtime, run)
+        completed("compile")
 
-        czptt_builder(
-            _czptt_config(options, run.czptt_output, fetched.czptt, shape_arguments),
-            reporter=reporter,
-        )
-        shutil.move(run.czptt_output / "bundle", run.partial_release / "czptt")
-        completed("national-czptt")
-
-        packages = _validate_packages(
-            {"jdf": run.partial_release / "jdf", "czptt": run.partial_release / "czptt"},
-            runtime,
-            run,
-            reporter,
-            command_runner,
-        )
+        packages = {"jdf": run.partial_release / "jdf", "czptt": run.partial_release / "czptt"}
+        _check_stops(packages, fetched.czptt, reporter)
+        summaries = _package_summaries(packages)
         completed("validation")
 
         write_json(
             run.partial_release / "release.json",
-            _release_record(options, run, fetched, packages, stages),
+            _release_record(options, run, fetched, summaries, stages),
         )
         return _publish(options, run)
     except Exception as error:
@@ -488,15 +461,15 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--config", type=Path)
     command.add_argument("--gvd-year", type=parse_year, default="auto")
     command.add_argument("--jobs", type=parse_jobs, default="auto")
-    command.add_argument("--memory-budget", type=parse_memory_budget, default="auto")
     command.add_argument("--progress", choices=("auto", "rich", "plain", "off"), default="auto")
-    command.add_argument("--keep-work", action="store_true")
+    command.add_argument(
+        "--keep-work",
+        action="store_true",
+        help="keep the run's source snapshots after publication",
+    )
     command.add_argument("--estimated-posts", action="store_true")
     command.add_argument("--post-inference-policy", type=Path)
     command.add_argument("--refresh-osm", action="store_true")
-    command.add_argument(
-        "--czptt-operational-points", choices=("sidecar", "gtfs"), default="sidecar"
-    )
     command.add_argument("--skip-filtered-jdf", action="store_true")
     command.add_argument(
         "--no-routing-cache",
@@ -539,15 +512,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 runtime=runtime,
                 gvd_year=gvd_year,
                 jobs=cast(JobSetting, args.jobs),
-                memory_budget=cast(str, args.memory_budget),
                 progress=cast(ProgressMode, args.progress),
                 keep_work=cast(bool, args.keep_work),
                 estimated_posts=cast(bool, args.estimated_posts),
                 post_inference_policy=cast(Path | None, args.post_inference_policy),
                 refresh_osm=cast(bool, args.refresh_osm),
-                czptt_operational_points=cast(
-                    national_czptt.OperationalPointMode, args.czptt_operational_points
-                ),
                 filtered_jdf=not cast(bool, args.skip_filtered_jdf),
                 routing_cache=not cast(bool, args.no_routing_cache),
                 czptt_source_cache=not cast(bool, args.no_czptt_source_cache),

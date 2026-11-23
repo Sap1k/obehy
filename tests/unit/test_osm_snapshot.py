@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -51,6 +50,7 @@ def _config(tmp_path: Path) -> RuntimeConfig:
         czptt_source_cache_dir=tmp_path / "work" / "cache" / "czptt-sources",
         jrunify_ext_geodata_dir=tmp_path / "geodata",
         jrutil=JrUtilRuntime(directory=tmp_path / "jrutil", command=None),
+        gazetteer_dir=tmp_path / "gazetteer",
     )
 
 
@@ -350,64 +350,3 @@ def test_osm_filters_are_single_pass_and_node_only(
     assert "w/railway=tram" in routing_command
     assert "n/barrier=*" in routing_command
     assert "r/type=restriction" in routing_command
-
-
-def test_routing_demand_clip_is_deterministic_and_hash_invalidated(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    base = osm_snapshot.jdf_transit_routing_base_path(tmp_path)
-    base.parent.mkdir(parents=True)
-    base.write_bytes(b"routing-base")
-    stats = base.stat()
-    osm_snapshot.write_json(
-        osm_snapshot.active_manifest_path(base),
-        {
-            "schema_version": 1,
-            "filter_schema": "jdf-transit-routing-base-v1",
-            "source_key": "source-key",
-            "output": {"bytes": stats.st_size, "mtime_ns": stats.st_mtime_ns},
-        },
-    )
-    demands = tmp_path / "JrutilRoutingDemands.txt"
-    demands.write_text(
-        '"d1","both","1","2","50.0","14.0","50.01","14.01","local";\r\n'
-        '"d1b","both","2","3","50.005","14.005","50.015","14.015","local";\r\n',
-        encoding="cp1250",
-    )
-    commands: list[list[str]] = []
-    monkeypatch.setattr(
-        osm_snapshot,
-        "_discover_osmium",
-        lambda: osm_snapshot.OsmiumRuntime(("osmium",), "native", "fixture-osmium"),
-    )
-
-    def run(command: Sequence[str], *, check: bool, text: bool) -> subprocess.CompletedProcess[str]:
-        assert not check and text
-        values = list(command)
-        commands.append(values)
-        Path(values[values.index("--output") + 1]).write_bytes(b"demand-routing")
-        return subprocess.CompletedProcess(values, 0, "")
-
-    monkeypatch.setattr(osm_snapshot.subprocess, "run", run)
-    first = osm_snapshot.prepare_jdf_demand_routing(tmp_path, demands, "source-key")
-    envelope = first.with_suffix(".geojson")
-    first_envelope = envelope.read_bytes()
-    envelope_feature = json.loads(first_envelope)
-    assert envelope_feature["type"] == "Feature"
-    assert envelope_feature["properties"] == {}
-    assert envelope_feature["geometry"]["type"] == "MultiPolygon"
-    assert len(envelope_feature["geometry"]["coordinates"]) == 1
-    second = osm_snapshot.prepare_jdf_demand_routing(tmp_path, demands, "source-key")
-    assert first == second
-    assert envelope.read_bytes() == first_envelope
-    assert len(commands) == 1
-    assert "extract" in commands[0]
-    assert "--strategy=complete_ways" in commands[0]
-
-    demands.write_text(
-        '"d2","both","1","2","50.0","14.0","50.02","14.02","terminal";\r\n',
-        encoding="cp1250",
-    )
-    osm_snapshot.prepare_jdf_demand_routing(tmp_path, demands, "source-key")
-    assert len(commands) == 2
-    assert envelope.read_bytes() != first_envelope

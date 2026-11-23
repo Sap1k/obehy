@@ -1,16 +1,20 @@
 name: build
 
 # Daily production build of the JDF + CZPTT feed pair (BASE_PLAN.md section 15).
-# JrUtil and the geodata registry are built from their standalone repositories, as in local
-# builds; the converters/ submodule pins are not used.
+# The jrutil-rs compiler and the geodata registry come from their standalone repositories, as in
+# local builds; the JrUtil checkout supplies the gazetteers and names the route-shapes companion
+# release. The converters/ submodule pins are not used.
 
 on:
   schedule:
     - cron: "30 23 * * *"
   workflow_dispatch:
     inputs:
+      jrutil_rs_ref:
+        description: jrutil-rs ref to build
+        default: main
       jrutil_ref:
-        description: JrUtil ref to build
+        description: JrUtil ref (gazetteers and route-shapes companion)
         default: main
       geodata_ref:
         description: jrunify-ext-geodata ref
@@ -41,7 +45,6 @@ permissions:
   actions: write
 
 env:
-  MEMORY_BUDGET: 8GiB
   KEEP_RELEASES: 14
   WORK: /mnt/obehy/work
   ARTIFACT_ROOT: /mnt/obehy/artifacts
@@ -55,6 +58,11 @@ jobs:
         with:
           path: obehy
           submodules: false
+      - uses: actions/checkout@v7
+        with:
+          repository: Sap1k/jrutil-rs
+          ref: ${{ inputs.jrutil_rs_ref || 'main' }}
+          path: jrutil-rs
       - uses: actions/checkout@v7
         with:
           repository: Sap1k/jrutil
@@ -100,11 +108,11 @@ jobs:
           sudo apt-get install -y -q osmium-tool
           osmium --version
 
-      - uses: actions/setup-dotnet@v6
+      # `obehy build` builds the compiler (cargo build --release --locked -p jrutil).
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          dotnet-version: 10.0.x
-      - name: Restore JrUtil
-        run: dotnet restore jrutil/jrutil-multitool/jrutil-multitool.fsproj
+          workspaces: jrutil-rs -> target
 
       - uses: astral-sh/setup-uv@v10.4.0  # no floating major tags since v8
         with:
@@ -125,11 +133,12 @@ jobs:
           artifact_root = "$ARTIFACT_ROOT"
           osm_file = "$WORK/osm/regional-merged.osm.pbf"
           jrunify_ext_geodata_dir = "$GITHUB_WORKSPACE/jrunify-ext-geodata"
+          gazetteer_dir = "$GITHUB_WORKSPACE/jrutil/jrutil/data"
           route_shapes_companion = "$WORK/bin/obehy-motis-shapes"
           route_shapes_cache_dir = "$WORK/cache/route-shapes"
 
           [jrutil]
-          directory = "$GITHUB_WORKSPACE/jrutil"
+          directory = "$GITHUB_WORKSPACE/jrutil-rs"
           EOF
           cat obehy/config/obehy.local.toml
 
@@ -172,7 +181,7 @@ jobs:
           REFRESH_CZPTT: ${{ inputs.refresh_czptt }}
           ROUTE_SHAPES: ${{ github.event_name != 'workflow_dispatch' || inputs.route_shapes }}
         run: |
-          args=(--estimated-posts --memory-budget "$MEMORY_BUDGET" --progress plain)
+          args=(--estimated-posts --progress plain)
           if [ "$REFRESH_OSM" = "true" ]; then args+=(--refresh-osm); fi
           if [ "$REFRESH_CZPTT" = "true" ]; then args+=(--no-czptt-source-cache); fi
           if [ "$ROUTE_SHAPES" != "true" ]; then args+=(--no-route-shapes); fi
@@ -237,10 +246,10 @@ jobs:
             if [ -d "$release/$part" ]; then tar -C "$release" -cf "$assets/$part.tar" "$part"; fi
           done
           ls -la "$assets"
-          jrutil_commit=$(git -C jrutil rev-parse HEAD)
+          compiler_commit=$(git -C jrutil-rs rev-parse HEAD)
           geodata_commit=$(git -C jrunify-ext-geodata rev-parse HEAD)
-          printf 'Automated build %s.\n\nOběhy %s, JrUtil %s, jrunify-ext-geodata %s.\n' \
-            "$run_id" "$GITHUB_SHA" "$jrutil_commit" "$geodata_commit" > "$RUNNER_TEMP/notes.md"
+          printf 'Automated build %s.\n\nOběhy %s, jrutil-rs %s, jrunify-ext-geodata %s.\n' \
+            "$run_id" "$GITHUB_SHA" "$compiler_commit" "$geodata_commit" > "$RUNNER_TEMP/notes.md"
           gh release create "build-$run_id" "$assets"/* \
             --target "$GITHUB_SHA" --title "Build $run_id" --notes-file "$RUNNER_TEMP/notes.md"
 

@@ -1,68 +1,50 @@
-# National CZPTT conversion bundle
+# National CZPTT package
 
-`obehy-national-czptt` builds a reproducible national railway conversion snapshot without
-importing it into the canonical database.
+`obehy build` fetches the national railway sources into a reproducible snapshot and compiles it
+into the `czptt` package with the `[czptt]` section of the build specification
+(`STATIC_PIPELINE.md`).
 
-## Build
+## Sources
 
-```powershell
-uv run obehy-national-czptt build `
-  --config C:\src\obehy\config\obehy.local.toml `
-  --output C:\data\obehy-national-czptt `
-  --timetable-year auto `
-  --operational-points sidecar
-```
+The snapshot is fetched into `<run>/sources/czptt/` (`src/obehy/national_czptt.py`) for the
+resolved GVD year. `auto` changes to GVD year `Y` at midnight in `Europe/Prague` on the second
+Sunday of December in `Y-1`; for example, GVD 2026 began on 14 December 2025. The source is
+`https://portal.cisjr.cz/pub/draha/celostatni/szdc`. FTP URLs are rejected with guidance to use
+the official HTTPS mirror because the FTP directory hierarchy is prohibitively slow to inventory.
 
-The output path must not exist. `auto` changes to GVD year `Y` at midnight in
-`Europe/Prague` on the second Sunday of December in `Y-1`; for example, GVD 2026 began on
-14 December 2025. The default source is
-`https://portal.cisjr.cz/pub/draha/celostatni/szdc`. Another HTTP(S) mirror or local test server
-can be selected with `--source-base-url`. FTP URLs are rejected with guidance to use the official
-HTTPS mirror because the FTP directory hierarchy is prohibitively slow to inventory.
+Run `uv run obehy-osm build` before the build. In addition to the shared regional PBF, that
+command uses native `osmium tags-filter` to maintain a cached node-only extract of tagged railway
+stations, halts, and stops under `workdir/osm` (`railway-locations.osm.pbf`), which the
+specification names as `[czptt] osm`. Python never parses OSM objects; the build validates the
+extract against the active snapshot but never downloads, merges, or filters OSM.
 
-Run `uv run obehy-osm build` separately before CZPTT. In addition to the shared regional PBF,
-that command uses native `osmium tags-filter` to maintain a cached node-only extract of tagged
-railway stations, halts, and stops under `workdir/osm`. Python never parses OSM objects. The
-railway builder validates and records both artifacts but never downloads, merges, or filters OSM.
-
-`--source-snapshot PATH` copies and validates an existing `sources/` snapshot and performs no
-network requests. The snapshot must contain `sources.json`, the annual/monthly objects named by
-that manifest, `kadr/catalog.json`, and `sr70/SR70.csv`. JrUtil, JrUnify-Ext-GeoData, the work directory, and the shared merged
-OSM PBF are mandatory absolute paths in the selected TOML configuration. There is no
-parent-directory fallback. `--sr70` selects a coordinate snapshot used only while creating a new live
-snapshot.
+The snapshot contains `sources.json`, the annual/monthly objects named by that manifest,
+`inventory.json`, the KADR catalogue (`kadr/*.xml`, `kadr/catalog.json`) and `sr70/SR70.csv`
+(copied from `jrunify-ext-geodata/rail/SR70.csv`); `sources.json` also records the size and
+SHA-256 of the KADR and SR70 files. The compiler checks every object against `sources.json` before
+reading it.
 Discovery reads monthly HTTP directory listings concurrently and makes no per-object metadata
 requests. The downloaded bytes and their SHA-256 hashes form the authoritative snapshot. Downloads
-stream through `--download-connections` (default 32, independent of `--jobs`) persistent HTTP
-connections with bounded in-flight work and file-count progress. The ~170k change messages average
+stream through 32 persistent HTTP connections with bounded in-flight work and file-count progress.
+The ~170k change messages average
 under 1 KB, so the download is round-trip bound. Source objects are published once and never
 rewritten, so they are kept in a cross-run cache (`[paths] czptt_source_cache_dir`, default
 `<workdir>/cache/czptt-sources/<GVD year>/`): cached objects are linked instead of downloaded,
 cached entries without valid ZIP/gzip magic are re-fetched, and after the final pass the cache is
-pruned to the current inventory. `--no-source-cache` (`obehy build --no-czptt-source-cache`)
-downloads everything. After each download pass, the build rechecks the inventory and downloads newly listed
-objects. It stops when a recheck is stable, with at most five download passes total. The final
-inventory and all downloaded objects are recorded in the snapshot. The build fails if the listing
-still grows after the fifth pass, or if a discovered object disappears, cannot be downloaded
-completely, has the wrong ZIP/gzip magic, contains a corrupt ZIP member, or decompresses to
-malformed/unsupported XML.
+pruned to the current inventory. `obehy build --no-czptt-source-cache`
+downloads everything. After each download pass, the fetch rechecks the inventory and downloads
+newly listed objects. It stops when a recheck is stable, with at most five download passes total.
+The final inventory and all downloaded objects are recorded in the snapshot. The fetch fails if the
+listing still grows after the fifth pass, or if a discovered object disappears, cannot be
+downloaded completely, has the wrong ZIP/gzip magic, or contains a corrupt ZIP member.
 
 ## Operational timing points
 
-`--operational-points sidecar` is the default (also in `obehy build`); see below.
-`--operational-points gtfs` publishes non-passenger locations between the
-first and last activity-`0001` call as ordinary GTFS stops with exact source times,
-`pickup_type=1`, `drop_off_type=1`, and `timepoint=1`, but only when the location has a real SR70
-or OSM coordinate. A purely timing/operational identity is never route-estimated. If it has no
-real coordinate, its GTFS stop-time, child, parent, zone projection, and source-call projection
-are omitted. The source point and call remain in operational Parquet. Locations before the first
-passenger call or after the last one remain sidecar-only.
+Non-passenger locations stay out of GTFS. This is useful for consumers that display all stops
+indiscriminately. A friendly-line change at an internal point then moves to the following
+passenger call in GTFS and is recorded as an approximation.
 
-`--operational-points sidecar` keeps every non-passenger location out of GTFS. This is useful for
-consumers that display all stops indiscriminately. A friendly-line change at an internal point
-then moves to the following passenger call in GTFS and is recorded as an approximation.
-
-Both modes retain the complete accepted PA route in operational Parquet. A PA without any
+The complete accepted PA route is retained in operational Parquet. A PA without any
 activity-`0001` call is never published. A PA is rejected in full if a departure precedes its
 arrival, a later source event precedes the previous event, or `CZInconsistentTime=1` is present.
 Times with source day offsets remain valid above 24:00.
@@ -116,42 +98,26 @@ records. Both line activation and line expiry create linked GTFS segments at the
 Activation remains at the location where the new line first appears. For `line → no line`, the
 shared boundary is one source point earlier, because the train already ceases presenting that
 line at the last lined call when its onward section leaves the line/IDS. If the raw expiry occurs
-at an internal point omitted in `sidecar` mode, the boundary is the preceding passenger call and
-the approximation is diagnosed.
+at an internal point omitted from GTFS, the boundary is the preceding passenger call and the
+approximation is diagnosed.
 
-## Bundle layout
+## Package
+
+The compiler reads the snapshot as fetched and puts the messages in application order itself:
+annual messages before changes, and a cancellation published later is applied after its
+timetable. The package (`<release>/czptt/`) is a production package (bundle version 3, serving
+schema 5; `STATIC_PIPELINE.md`):
 
 ```text
-sources/
-  inventory.json
-  sources.json
-  annual/JRYYYY.zip
-  changes/YYYY-MM/*.xml.zip
-  kadr/*.xml
-  kadr/catalog.json
-  sr70/SR70.csv
-derived/messages.zip
-bundle/
+czptt/
   gtfs.zip
   serving/<relation>.parquet
   diagnostics.json
   manifest.json
-diagnostics-detail/
-run-manifest.json
-manifest.json
 ```
 
-`derived/messages.zip` uses fixed entry names, timestamps, permissions, ordering, and Deflate
-settings. Annual messages precede changes; changes are ordered by their source
-`CZPTTCreation`/`CZPTTCancelation` timestamp, with additions before cancellations only when the
-timestamps are equal. This ensures that a cancellation published later in the same month is
-applied after its timetable instead of accidentally resurrecting the timetable. Exact duplicate
-payloads are removed. Conflicting timetables with the same complete
-object-type/company/core/variant/year PA identity fail the build.
-
-`bundle/` is a JrUtil production package (bundle version 2, serving schema version 3).
 `gtfs.zip` contains standard GTFS only and is what the official GTFS validator checks. The
-converter's Czech tables (`cz_routes`, `cz_trips`, `cz_trip_stop_zones`) and source metadata are
+compiler's Czech tables (`cz_routes`, `cz_trips`, `cz_trip_stop_zones`) and source metadata are
 compiler-internal: they are projected into the serving relations and are not written to the
 package. Friendly KADR `Znacka` values such as `S1` and
 `U32` are route short names. Route/operator/mode changes split one PA into linked trips sharing a
@@ -255,14 +221,13 @@ where all generated memberships for that stop agree on one zone.
 cancellation targets, sidecar boundary approximations, resolved coordinate counts, unresolved
 points grouped by country, authoritative SR70 resolutions, OSM gap fills, SR70/OSM disagreements,
 invalid/conflicting SR70 identities, route estimates, ambiguous candidates, and speed/corridor
-vetoes.
-`run-manifest.json` records the selected GVD, operational-point mode, flattened-message digest,
-source-manifest digest, configured JrUtil provenance, shared OSM source key, and individual SR70
-and `Název 20` digests.
-`manifest.json` hashes every published file. Failed builds retain their staging directory and
-`failure.json`; successful builds publish atomically.
+vetoes; a station that cannot be placed makes the package ineligible for publication.
+`manifest.json` hashes every published file and names the compiler and every source by ID and
+SHA-256. After compiling, `obehy build` checks the GTFS station hierarchy and that every Czech stop
+with a unique SR70 coordinate carries it. A failed build keeps its run directory and
+`failure.json`; a successful one publishes atomically.
 
-The synthetic feeds for both operational-point modes are checked locally with MobilityData GTFS
+The synthetic feeds are checked locally with MobilityData GTFS
 Validator `v8.0.1` (CLI JAR SHA-256
 `19293ddd9b6f954f216d4f12054bd8a3232921751c4484339e339764a91000e2`).
 

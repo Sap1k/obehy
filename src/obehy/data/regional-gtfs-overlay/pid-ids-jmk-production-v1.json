@@ -1,7 +1,0 @@
-{
-  "schema_version": 1,
-  "sources": [
-    {"source_id": "pid-gtfs", "policy": "pid-production-v1.json", "adapter": "pid-v1"},
-    {"source_id": "ids-jmk-gtfs", "policy": "ids-jmk-production-v1.json", "adapter": "ids-jmk-v1"}
-  ]
-}

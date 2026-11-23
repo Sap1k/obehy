@@ -1,62 +1,32 @@
-"""Build an immutable national CZPTT conversion bundle."""
+"""Fetch the national CZPTT sources into a snapshot the compiler reads, and check its stops."""
 
 from __future__ import annotations
 
-import argparse
 import concurrent.futures
 import csv
-import gzip
 import hashlib
 import http.client
 import json
 import os
 import re
 import shutil
-import subprocess
-import sys
-import tempfile
 import threading
 import time
 import zipfile
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime
+from dataclasses import asdict, dataclass
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 from urllib.parse import quote, unquote, urljoin, urlsplit, urlunsplit
 from xml.etree import ElementTree
-from zoneinfo import ZoneInfo
 
 from obehy.gvd import resolve_timetable_year
-from obehy.osm_snapshot import (
-    OsmSnapshotError,
-    validate_railway_locations,
-    validate_snapshot,
-)
-from obehy.pipeline import download, jrutil
-from obehy.pipeline.args import JobSetting, parse_jobs, parse_memory_budget, parse_year
+from obehy.pipeline import download
 from obehy.pipeline.download import USER_AGENT, read_url
 from obehy.pipeline.errors import PipelineError
-from obehy.pipeline.files import (
-    atomic_output_path,
-    file_digest,
-    link_or_copy,
-    utc_now,
-    write_json,
-)
-from obehy.pipeline.process import (
-    CommandFn,
-    CommandResult,
-    command_manifest,
-    failure_record,
-    report_failure,
-    run_command,
-)
-from obehy.pipeline.reporting import BuildReporter, CommandProgress, Reporter, StageClock
-from obehy.pipeline.staging import create as create_staging
-from obehy.production_package import ProductionPackageError, extracted_gtfs, read_manifest
-from obehy.runtime_config import ConfigurationError, load_runtime_config
+from obehy.pipeline.files import file_digest, link_or_copy, utc_now, write_json
+from obehy.pipeline.reporting import Reporter, StageClock
 
 DEFAULT_SOURCE_BASE_URL = "https://portal.cisjr.cz/pub/draha/celostatni/szdc"
 MAX_INVENTORY_DOWNLOAD_PASSES = 5
@@ -71,8 +41,6 @@ KADR_OPERATIONS = (
     "SeznamIDS",
     "SeznamPoznamkyKJR",
 )
-ProgressMode = Literal["auto", "rich", "plain", "off"]
-OperationalPointMode = Literal["gtfs", "sidecar"]
 
 
 @dataclass(frozen=True)
@@ -95,28 +63,16 @@ class SourceRecord:
 
 @dataclass(frozen=True)
 class BuildConfig:
-    output: Path
-    workdir: Path
-    osm_file: Path
+    """What fetching the CZPTT sources needs."""
+
     geodata_root: Path
-    jrutil_root: Path | None
-    jrutil_command: tuple[str, ...] | None
     timetable_year: int | Literal["auto"] = "auto"
-    operational_points: OperationalPointMode = "sidecar"
     source_base_url: str = DEFAULT_SOURCE_BASE_URL
-    source_snapshot: Path | None = None
     sr70: Path | None = None
-    jobs: JobSetting = "auto"
-    memory_budget: str = "auto"
-    keep_work: bool = False
-    progress: ProgressMode = "auto"
-    build_jrutil: bool = True
     # Source objects are published once and never rewritten, so a cache keyed by relative path
     # lets a run download only the objects published since the previous one.
     source_cache_dir: Path | None = None
     download_connections: int = DEFAULT_DOWNLOAD_CONNECTIONS
-    # JrUtil's route-shapes options (obehy.route_shapes.RouteShapes.arguments).
-    route_shapes: tuple[str, ...] = ()
 
 
 class _HrefParser(HTMLParser):
@@ -130,10 +86,6 @@ class _HrefParser(HTMLParser):
         for name, value in attrs:
             if name.casefold() == "href" and value:
                 self.hrefs.append(value)
-
-
-def _jobs(value: JobSetting) -> int:
-    return 8 if value == "auto" else value
 
 
 def _listing_names(payload: bytes) -> list[str]:
@@ -533,44 +485,6 @@ def _validate_object(path: Path, kind: str) -> None:
             raise PipelineError(f"Monthly CZPTT object lacks gzip magic: {path}")
 
 
-def _validate_source_manifest(sources: Path) -> list[SourceRecord]:
-    manifest_path = sources / "sources.json"
-    if not manifest_path.is_file():
-        raise PipelineError("Source snapshot is missing sources.json")
-    manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
-    records = [SourceRecord(**cast(dict[str, Any], value)) for value in manifest["objects"]]
-    for record in records:
-        path = sources / record.relative_path
-        if not path.is_file():
-            raise PipelineError(f"Source snapshot object is missing: {record.relative_path}")
-        if path.stat().st_size != record.bytes or file_digest(path) != record.sha256:
-            raise PipelineError(f"Source snapshot object changed: {record.relative_path}")
-        _validate_object(path, record.kind)
-    for value in cast(list[dict[str, Any]], manifest.get("auxiliary", [])):
-        relative_path = cast(str, value["relative_path"])
-        path = sources / relative_path
-        if (
-            not path.is_file()
-            or path.stat().st_size != cast(int, value["bytes"])
-            or file_digest(path) != cast(str, value["sha256"])
-        ):
-            raise PipelineError(f"Source snapshot auxiliary object changed: {relative_path}")
-    return records
-
-
-def _copy_snapshot(snapshot: Path, destination: Path) -> list[SourceRecord]:
-    root = snapshot / "sources" if (snapshot / "sources").is_dir() else snapshot
-    if not root.is_dir():
-        raise PipelineError(f"Source snapshot directory does not exist: {snapshot}")
-    shutil.copytree(
-        root,
-        destination,
-        dirs_exist_ok=True,
-        copy_function=lambda source, target: link_or_copy(Path(source), Path(target)),
-    )
-    return _validate_source_manifest(destination)
-
-
 def _finalize_sources_manifest(sources: Path) -> None:
     path = sources / "sources.json"
     value = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
@@ -591,205 +505,6 @@ def _finalize_sources_manifest(sources: Path) -> None:
         )
     value["auxiliary"] = auxiliary
     write_json(path, value)
-
-
-def _local_name(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
-
-
-@dataclass(frozen=True)
-class _Message:
-    source_path: str
-    root_type: str
-    identity: str
-    event_time: datetime
-    payload: bytes
-
-
-@dataclass(frozen=True)
-class _SpooledMessage:
-    source_path: str
-    root_type: str
-    identity: str
-    event_time: datetime
-    payload_path: Path
-    sha256: str
-
-
-def _message(payload: bytes, source_path: str) -> _Message:
-    try:
-        root = ElementTree.fromstring(payload)
-    except ElementTree.ParseError as error:
-        raise PipelineError(f"Malformed CZPTT XML in {source_path}: {error}") from error
-    root_type = _local_name(root.tag)
-    if root_type not in {"CZPTTCISMessage", "CZCanceledPTTMessage"}:
-        raise PipelineError(f"Unsupported CZPTT root {root_type!r} in {source_path}")
-    timestamp_name = "CZPTTCreation" if root_type == "CZPTTCISMessage" else "CZPTTCancelation"
-    timestamp_text = next(
-        ((child.text or "").strip() for child in root if _local_name(child.tag) == timestamp_name),
-        "",
-    )
-    if not timestamp_text:
-        raise PipelineError(f"CZPTT message has no {timestamp_name}: {source_path}")
-    try:
-        event_time = datetime.fromisoformat(timestamp_text.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise PipelineError(
-            f"CZPTT message has invalid {timestamp_name} {timestamp_text!r}: {source_path}"
-        ) from error
-    if event_time.tzinfo is None:
-        event_time = event_time.replace(tzinfo=ZoneInfo("Europe/Prague"))
-    event_time = event_time.astimezone(UTC)
-    identifiers: list[str] = []
-    for element in root.iter():
-        if _local_name(element.tag) not in {
-            "PlannedTransportIdentifiers",
-            "RelatedPlannedTransportIdentifiers",
-        }:
-            continue
-        values = {_local_name(child.tag): (child.text or "").strip() for child in element}
-        if {"ObjectType", "Company", "Core", "Variant", "TimetableYear"} <= values.keys():
-            identifiers.append(
-                ":".join(
-                    values[name]
-                    for name in ("ObjectType", "Company", "Core", "Variant", "TimetableYear")
-                )
-            )
-    identity = "|".join(sorted(identifiers))
-    if not identity:
-        raise PipelineError(f"CZPTT message has no full transport identity: {source_path}")
-    return _Message(source_path, root_type, identity, event_time, payload)
-
-
-def flatten_messages(sources: Path, records: Sequence[SourceRecord], destination: Path) -> int:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    spool = Path(tempfile.mkdtemp(prefix=".czptt-messages-", dir=destination.parent))
-    messages: list[_SpooledMessage] = []
-
-    def spool_message(source: Any, source_path: str) -> None:
-        payload_path = spool / f"{len(messages):09d}.xml"
-        digest = hashlib.sha256()
-        with payload_path.open("wb") as output:
-            while chunk := source.read(1024 * 1024):
-                output.write(chunk)
-                digest.update(chunk)
-        parsed = _message(payload_path.read_bytes(), source_path)
-        messages.append(
-            _SpooledMessage(
-                source_path=parsed.source_path,
-                root_type=parsed.root_type,
-                identity=parsed.identity,
-                event_time=parsed.event_time,
-                payload_path=payload_path,
-                sha256=digest.hexdigest(),
-            )
-        )
-
-    try:
-        for record in sorted(records, key=lambda value: value.relative_path):
-            path = sources / record.relative_path
-            _validate_object(path, record.kind)
-            if record.kind == "annual_zip":
-                with zipfile.ZipFile(path) as archive:
-                    for info in sorted(archive.infolist(), key=lambda value: value.filename):
-                        if not info.is_dir() and info.filename.casefold().endswith(".xml"):
-                            with archive.open(info) as source:
-                                spool_message(source, f"{record.relative_path}//{info.filename}")
-            else:
-                try:
-                    with gzip.open(path, "rb") as source:
-                        spool_message(source, record.relative_path)
-                except (OSError, EOFError) as error:
-                    raise PipelineError(f"Malformed CZPTT gzip: {record.relative_path}") from error
-
-        annual = [value for value in messages if value.source_path.startswith("annual/")]
-        changes = [value for value in messages if not value.source_path.startswith("annual/")]
-        changes.sort(
-            key=lambda value: (
-                value.event_time,
-                0 if value.root_type == "CZPTTCISMessage" else 1,
-                value.source_path,
-            )
-        )
-        ordered = annual + changes
-        seen_payloads: set[str] = set()
-        timetable_identities: dict[str, str] = {}
-        deduplicated: list[_SpooledMessage] = []
-        for value in ordered:
-            if value.sha256 in seen_payloads:
-                continue
-            seen_payloads.add(value.sha256)
-            if value.root_type == "CZPTTCISMessage":
-                previous = timetable_identities.setdefault(value.identity, value.sha256)
-                if previous != value.sha256:
-                    raise PipelineError(
-                        f"Conflicting CZPTT timetable messages share identity {value.identity}"
-                    )
-            deduplicated.append(value)
-
-        with (
-            atomic_output_path(destination) as temporary_destination,
-            zipfile.ZipFile(
-                temporary_destination,
-                "w",
-                compression=zipfile.ZIP_DEFLATED,
-                compresslevel=9,
-            ) as archive,
-        ):
-            for index, value in enumerate(deduplicated):
-                info = zipfile.ZipInfo(f"{index:09d}.xml", date_time=(1980, 1, 1, 0, 0, 0))
-                info.compress_type = zipfile.ZIP_DEFLATED
-                info.external_attr = 0o100644 << 16
-                info.create_system = 3
-                # writestr preserves the existing deterministic ZIP encoding;
-                # only the largest individual XML payload is resident here.
-                archive.writestr(info, value.payload_path.read_bytes())
-        return len(deduplicated)
-    finally:
-        shutil.rmtree(spool, ignore_errors=True)
-
-
-def _jrutil_cwd(config: BuildConfig) -> Path:
-    return config.jrutil_root or config.workdir
-
-
-def _runtime_command(config: BuildConfig) -> list[str]:
-    return jrutil.runtime_command(config.jrutil_root, config.jrutil_command)
-
-
-def _converter_command(
-    config: BuildConfig,
-    messages: Path,
-    catalog: Path,
-    bundle: Path,
-) -> list[str]:
-    return [
-        *_runtime_command(config),
-        "czptt-to-bundle",
-        "--progress-events",
-        f"--jobs={config.jobs}",
-        f"--memory-budget={config.memory_budget}",
-        f"--catalog-snapshot={catalog}",
-        f"--operational-points={config.operational_points}",
-        f"--sr70={messages.parent.parent / 'sources' / 'sr70' / 'SR70.csv'}",
-        f"--osm-pbf={config.osm_file}",
-        f"--diagnostics-out={bundle.parent / 'diagnostics-detail'}",
-        *config.route_shapes,
-        str(messages),
-        str(bundle),
-    ]
-
-
-def _manifest(root: Path) -> dict[str, object]:
-    entries: list[dict[str, object]] = []
-    for path in sorted(value for value in root.rglob("*") if value.is_file()):
-        relative = path.relative_to(root).as_posix()
-        if relative == "manifest.json":
-            continue
-        entries.append(
-            {"path": relative, "bytes": path.stat().st_size, "sha256": file_digest(path)}
-        )
-    return {"schema_version": 1, "files": entries}
 
 
 def _sr70_coordinates(path: Path) -> dict[str, tuple[float, float]]:
@@ -819,10 +534,12 @@ def _czptt_stop_identity(stop_id: str) -> tuple[str, str, str]:
     return country, primary_code, parent_id
 
 
-def _verify_gtfs_stops(gtfs: Path, sr70_path: Path) -> None:
+def verify_gtfs_stops(gtfs: Path, sr70_path: Path) -> None:
+    """Check the station hierarchy and SR70 coordinates of a CZPTT package's GTFS stops."""
+
     stops_path = gtfs / "stops.txt"
     if not stops_path.is_file():
-        raise PipelineError("JrUtil CZPTT bundle is missing gtfs-intermediate/stops.txt")
+        raise PipelineError("CZPTT package GTFS is missing stops.txt")
     with stops_path.open("r", encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
     if not rows:
@@ -862,70 +579,6 @@ def _verify_gtfs_stops(gtfs: Path, sr70_path: Path) -> None:
                 f"CZPTT stop does not carry its SR70 coordinates: {stop_id}; "
                 f"expected={expected_coordinates}, actual={actual}"
             )
-
-
-def _verify_foreign_coordinate_acceptance(bundle: Path) -> None:
-    diagnostics_path = bundle / "diagnostics.json"
-    if not diagnostics_path.is_file():
-        diagnostics_path = bundle / "events" / "diagnostics.json"
-    diagnostics = cast(
-        dict[str, object],
-        json.loads(diagnostics_path.read_text(encoding="utf-8")),
-    )
-    coordinate_value = diagnostics.get("coordinate_diagnostics", {})
-    if not isinstance(coordinate_value, dict):
-        raise PipelineError("CZPTT diagnostics lack coordinate_diagnostics")
-    coordinate = cast(dict[str, object], coordinate_value)
-    unresolved = coordinate.get(
-        "unresolvedPassengerPointIds",
-        coordinate.get("unresolvedPointIds", []),
-    )
-    unresolved_values = cast(list[object], unresolved) if isinstance(unresolved, list) else []
-    if not isinstance(unresolved, list) or any(
-        not isinstance(value, str) for value in unresolved_values
-    ):
-        raise PipelineError("CZPTT unresolvedPointIds diagnostics are malformed")
-    foreign = sorted(
-        value
-        for value in cast(list[str], unresolved_values)
-        if not value.startswith("czptt:stop:CZ:")
-    )
-    if foreign:
-        raise PipelineError(
-            f"Passenger-referenced foreign CZPTT locations lack coordinates: {foreign}"
-        )
-
-
-def _validate_config(config: BuildConfig) -> None:
-    if config.output.exists():
-        raise PipelineError(f"Output path must not exist: {config.output}")
-    if (config.jrutil_root is None) == (config.jrutil_command is None):
-        raise PipelineError("Exactly one JrUtil runtime mode must be configured")
-    for label, path in (
-        ("workdir", config.workdir),
-        ("osm_file", config.osm_file),
-        ("geodata_root", config.geodata_root),
-    ):
-        if not path.is_absolute():
-            raise PipelineError(f"{label} must be an absolute path: {path}")
-    if config.jrutil_root is not None and not config.jrutil_root.is_dir():
-        raise PipelineError(f"JrUtil root does not exist: {config.jrutil_root}")
-    if not config.geodata_root.is_dir():
-        raise PipelineError(f"Geodata root does not exist: {config.geodata_root}")
-    if config.source_snapshot is not None and config.source_base_url != DEFAULT_SOURCE_BASE_URL:
-        raise PipelineError("--source-snapshot forbids --source-base-url")
-    if config.source_snapshot is not None and config.sr70 is not None:
-        raise PipelineError("--source-snapshot forbids SR70 overrides")
-    if _jobs(config.jobs) <= 0:
-        raise PipelineError("--jobs must be auto or a positive integer")
-    if config.download_connections <= 0:
-        raise PipelineError("--download-connections must be a positive integer")
-    if config.source_cache_dir is not None and not config.source_cache_dir.is_absolute():
-        raise PipelineError(f"source_cache_dir must be an absolute path: {config.source_cache_dir}")
-
-
-def _resolve_osm_snapshot(config: BuildConfig) -> tuple[Path, dict[str, Any]]:
-    return config.osm_file, validate_snapshot(config.osm_file, config.workdir)
 
 
 def _download_sources(
@@ -1059,8 +712,8 @@ def _download_sources(
 def snapshot_sources(config: BuildConfig, destination: Path, reporter: Reporter) -> Path:
     """Download the CZPTT inventory, KADR catalog and SR70 into a reusable source snapshot.
 
-    The result is what ``BuildConfig.source_snapshot`` accepts, so a production build can fetch
-    every source up front and convert later.
+    The result is what the compiler's ``[czptt] snapshot`` reads: ``sources.json``,
+    ``annual/``, ``changes/``, ``kadr/`` and ``sr70/``.
     """
 
     destination.mkdir(parents=True, exist_ok=False)
@@ -1073,215 +726,9 @@ def snapshot_sources(config: BuildConfig, destination: Path, reporter: Reporter)
 
 def _snapshot_sr70(config: BuildConfig, sources: Path) -> Path:
     destination = sources / "sr70" / "SR70.csv"
-    if not destination.is_file():
-        if config.source_snapshot is not None:
-            raise PipelineError("SR70 source snapshot must contain sr70/SR70.csv")
-        sr70 = config.sr70 or config.geodata_root / "rail" / "SR70.csv"
-        if not sr70.is_file():
-            raise PipelineError(f"SR70 snapshot does not exist: {sr70}")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(sr70, destination)
+    sr70 = config.sr70 or config.geodata_root / "rail" / "SR70.csv"
+    if not sr70.is_file():
+        raise PipelineError(f"SR70 snapshot does not exist: {sr70}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(sr70, destination)
     return destination
-
-
-def build(
-    config: BuildConfig,
-    *,
-    command_runner: CommandFn = run_command,
-    reporter: Reporter | None = None,
-) -> Path:
-    _validate_config(config)
-    _osm_file, osm_manifest = _resolve_osm_snapshot(config)
-    staging = create_staging(config.output, config.workdir, "national-czptt")
-    publish = staging.publish
-    sources = publish / "sources"
-    derived = publish / "derived"
-    logs = staging.stage / "logs"
-    for directory in (sources, derived, logs):
-        directory.mkdir(parents=True)
-    own_reporter = reporter is None
-    reporter = reporter or BuildReporter(config.progress)
-    timetable_year = resolve_timetable_year(config.timetable_year)
-    clock = StageClock()
-    command_results: dict[str, CommandResult | None] = {}
-
-    try:
-        reporter.note(
-            f"CZPTT GVD {timetable_year}; operational points={config.operational_points}; "
-            f"workers={_jobs(config.jobs)}; run={staging.run_root}; staging={staging.stage}"
-        )
-        if config.source_snapshot is not None:
-            clock.start("copy-source-snapshot")
-            records = _copy_snapshot(config.source_snapshot, sources)
-            catalog = sources / "kadr" / "catalog.json"
-            if not catalog.is_file():
-                raise PipelineError("Source snapshot is missing kadr/catalog.json")
-        else:
-            records, catalog = _download_sources(config, sources, timetable_year, reporter, clock)
-
-        clock.start("snapshot-sr70")
-        sr70_destination = _snapshot_sr70(config, sources)
-        _finalize_sources_manifest(sources)
-
-        clock.start("flatten-messages")
-        message_count = flatten_messages(sources, records, derived / "messages.zip")
-
-        clock.start("build-jrutil")
-        if config.build_jrutil and config.jrutil_root is not None:
-            command_results["build_jrutil"] = command_runner(
-                jrutil.build_command(config.jrutil_root),
-                config.jrutil_root,
-                logs / "jrutil-build.process.log",
-                reporter,
-                CommandProgress("Build JrUtil", stage=clock.current),
-            )
-        clock.start("validate-osm-railway-locations")
-        filtered_osm = validate_railway_locations(
-            config.workdir,
-            str(osm_manifest["merge_key"]),
-        )
-        converter_config = replace(config, osm_file=filtered_osm)
-        clock.start("convert")
-        bundle = publish / "bundle"
-        command_results["convert"] = command_runner(
-            _converter_command(converter_config, derived / "messages.zip", catalog, bundle),
-            _jrutil_cwd(config),
-            logs / "jrutil-czptt.process.log",
-            reporter,
-            CommandProgress("Convert CZPTT", stage=clock.current),
-        )
-        read_manifest(bundle)
-        clock.start("verify-bundle")
-        with extracted_gtfs(bundle) as gtfs:
-            _verify_gtfs_stops(gtfs, sr70_destination)
-        _verify_foreign_coordinate_acceptance(publish / "diagnostics-detail")
-        command_results["validate_package"] = command_runner(
-            [*_runtime_command(converter_config), "validate-package", str(bundle)],
-            _jrutil_cwd(config),
-            logs / "validate-package.process.log",
-            reporter,
-            CommandProgress("Validate production package", stage="validate-package"),
-        )
-
-        clock.start("run-manifest")
-        run_manifest = {
-            "schema_version": 1,
-            "pipeline": "obehy-national-czptt",
-            "timetable_year": timetable_year,
-            "operational_points": config.operational_points,
-            "message_count": message_count,
-            "jrutil": jrutil.provenance(config.jrutil_root, config.jrutil_command),
-            "osm_source_key": osm_manifest["merge_key"],
-            "sources_manifest_sha256": file_digest(sources / "sources.json"),
-            "messages_sha256": file_digest(derived / "messages.zip"),
-            "sr70_sha256": file_digest(sr70_destination),
-            "execution": {
-                "commands": {
-                    name: command_manifest(result)
-                    for name, result in sorted(command_results.items())
-                }
-            },
-        }
-        write_json(publish / "run-manifest.json", run_manifest)
-        if config.keep_work:
-            shutil.copytree(logs, staging.work / "logs", dirs_exist_ok=True)
-            shutil.copytree(staging.work, publish / "work", dirs_exist_ok=True)
-        write_json(publish / "manifest.json", _manifest(publish))
-        os.replace(publish, staging.output)
-        shutil.rmtree(staging.stage)
-        if not config.keep_work:
-            shutil.rmtree(staging.run_root)
-        reporter.note(f"National CZPTT bundle written to {staging.output}")
-        return staging.output
-    except Exception as error:
-        write_json(
-            staging.failure_path,
-            failure_record(
-                error,
-                clock,
-                reporter,
-                staging_directory=str(staging.stage),
-                run_directory=str(staging.run_root),
-                logs_directory=str(logs),
-            ),
-        )
-        report_failure(reporter, error, clock.current, staging.stage, staging.failure_path)
-        raise
-    finally:
-        if own_reporter:
-            reporter.close()
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="obehy-national-czptt")
-    commands = parser.add_subparsers(dest="command", required=True)
-    build_parser = commands.add_parser("build", help="build a national CZPTT bundle")
-    build_parser.add_argument("--output", required=True, type=Path)
-    build_parser.add_argument("--config", type=Path)
-    build_parser.add_argument("--timetable-year", type=parse_year, default="auto")
-    build_parser.add_argument(
-        "--operational-points", choices=("gtfs", "sidecar"), default="sidecar"
-    )
-    build_parser.add_argument("--source-base-url", default=DEFAULT_SOURCE_BASE_URL)
-    build_parser.add_argument("--source-snapshot", type=Path)
-    build_parser.add_argument("--sr70", type=Path)
-    build_parser.add_argument("--jobs", type=parse_jobs, default="auto")
-    build_parser.add_argument(
-        "--download-connections", type=int, default=DEFAULT_DOWNLOAD_CONNECTIONS
-    )
-    build_parser.add_argument(
-        "--no-source-cache",
-        action="store_true",
-        help="download every CZPTT source object instead of reusing the source cache",
-    )
-    build_parser.add_argument("--memory-budget", type=parse_memory_budget, default="auto")
-    build_parser.add_argument("--keep-work", action="store_true")
-    build_parser.add_argument(
-        "--progress", choices=("auto", "rich", "plain", "off"), default="auto"
-    )
-    return parser
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    try:
-        runtime = load_runtime_config(cast(Path | None, args.config))
-        config = BuildConfig(
-            output=cast(Path, args.output),
-            workdir=runtime.workdir,
-            osm_file=runtime.osm_file,
-            geodata_root=runtime.jrunify_ext_geodata_dir,
-            jrutil_root=runtime.jrutil.directory,
-            jrutil_command=runtime.jrutil.command,
-            timetable_year=cast(int | Literal["auto"], args.timetable_year),
-            operational_points=cast(OperationalPointMode, args.operational_points),
-            source_base_url=cast(str, args.source_base_url),
-            source_snapshot=cast(Path | None, args.source_snapshot),
-            sr70=cast(Path | None, args.sr70),
-            jobs=cast(JobSetting, args.jobs),
-            memory_budget=cast(str, args.memory_budget),
-            keep_work=cast(bool, args.keep_work),
-            progress=cast(ProgressMode, args.progress),
-            source_cache_dir=(
-                None if cast(bool, args.no_source_cache) else runtime.czptt_source_cache_dir
-            ),
-            download_connections=cast(int, args.download_connections),
-        )
-        result = build(config)
-    except (
-        ConfigurationError,
-        OsmSnapshotError,
-        OSError,
-        PipelineError,
-        ProductionPackageError,
-        subprocess.SubprocessError,
-        zipfile.BadZipFile,
-    ) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 1
-    print(f"National CZPTT bundle written to {result}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

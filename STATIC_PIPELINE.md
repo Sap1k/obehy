@@ -1,30 +1,31 @@
 # Oběhy static-pipeline contract
 
 `BASE_PLAN.md` is authoritative. This document fixes the executable boundary between Oběhy,
-JrUtil and the serving database.
+the jrutil-rs compiler and the serving database.
 
 ## Current two-package production command
 
 `obehy build` is the current production entry point. In production it runs on GitHub Actions,
-never on the application server. It validates the configured OSM/geodata,
-builds the national JDF package, freezes PID and IDS JMK GTFS snapshots, applies both overlays in
-one JrUtil invocation, and builds CZPTT using the same resolved GVD year. It publishes exactly two
+never on the application server. It validates the configured OSM snapshot, its extracts and the
+geodata, fetches every source (national JDF, CZPTT, PID and IDS JMK GTFS), builds the compiler,
+prepares the route-shapes graph, and runs one `jrutil build` that compiles both packages with the
+same resolved GVD year, the overlays and the filtered road feed. It publishes exactly two
 `jrutil-production` packages under one immutable release and atomically updates `current.json` only
-after JrUtil validation and publication-eligibility checks pass.
+after the compiler's validation, Oběhy's GTFS stop checks and the publication-eligibility check
+pass.
 
-Source snapshots, orchestration manifests, process logs and detailed diagnostics remain outside the
-closed package trees. The release loader (`obehy release load`, `src/obehy/release/`) mirrors the
-packages into PostgreSQL. Route-shape generation runs between compilation and final validation
-(see "Route shapes" below).
+Source snapshots, the build specification, process logs and detailed diagnostics remain outside
+the closed package trees. The release loader (`obehy release load`, `src/obehy/release/`) mirrors
+the packages into PostgreSQL. Route-shape generation is a phase of the compilation (see "Route
+shapes" below). `--jobs N` sets the compiler's thread count (`RAYON_NUM_THREADS`).
 
-Memory budgets are soft admission/spill targets, with no process or .NET heap hard limit. See
-`PROGRESS.md` for measured results, acceptance and the actual verification state.
+See `PROGRESS.md` for measured results, acceptance and the actual verification state.
 
 ## Ownership and build protocol
 
 1. `obehy build` (GitHub Actions) downloads each configured static source and stores it immutably
    by SHA-256.
-2. JrUtil validates and converts those snapshots, performs national compilation and
+2. The compiler validates and converts those snapshots, performs national compilation and
    regional/operator overlays, and writes deterministic GTFS plus the finalized serving package.
    Identity follows `BASE_PLAN.md` section 6: deterministic `jdf:`/`czptt:` IDs, JDF stops and
    posts pinned by the reviewed registry in `jrunify-ext-geodata/registry/`, and
@@ -41,28 +42,41 @@ matching, trip collapse, overlay precedence, fuzzy matching, or static claim arb
 
 ## Commands and build identity
 
-`obehy build` drives the JrUtil multitool (the built `jrutil-multitool.dll` or a configured
-command): `fix-jdf`, `merge-jdf` and `jdf-to-bundle` for the national JDF package,
-`regional-gtfs-overlay` for PID + IDS JMK on top of it, `czptt-to-bundle` for rail, and
-`validate-package` for each result. Every package records the exact JrUtil commit (plus a
-working-tree digest when dirty) as its `compiler` version via `--converter-version`; the overlay
-reuses the version recorded by its base package.
+`obehy build` builds the compiler from the `[jrutil] directory` checkout
+(`cargo build --release --locked -p jrutil`, or runs a configured `command`), writes the build
+specification to `<run>/build.toml` and runs `jrutil build --spec <run>/build.toml
+--progress-events` (`src/obehy/static_build.py`). The specification is the compiler's interface
+(`docs/switch.md` and `crates/jrutil/src/spec.rs` in jrutil-rs) and names every input with an
+absolute path:
 
-When `jrunify-ext-geodata/registry/stops.csv` exists, Oběhy passes the registry to `merge-jdf`,
-`jdf-to-bundle` and `regional-gtfs-overlay` and keeps the review candidates in the release's
-`stop-registry/` directory. Live source URLs and credentials never enter JrUtil inputs; sources
-reach it as checksum-pinned snapshots with descriptors.
+- `[czptt]`: the CZPTT source snapshot as fetched (`sources.json`, `annual/`, `changes/`, `kadr/`,
+  `sr70/`; the compiler orders the messages itself), the railway-location OSM extract, the GVD
+  year and the output package;
+- `[jdf]`: the stop catalogues (`jrunify-ext-geodata/other`), the gazetteers
+  (`[paths] gazetteer_dir`), the post-candidate OSM extract, the registry, the route rules, the GVD
+  year, the reference date and the output package; `[[jdf.exports]]` the two national exports as
+  downloaded;
+- `[jdf.posts]` (with `--estimated-posts`): the transit-routing base extract, the post-inference
+  policy, the review reports and the routing cache (omitted with `--no-routing-cache`);
+- `[jdf.overlay]`: PID (with `overlay/pid-stop-overrides.csv`) and IDS JMK by the source profiles
+  that ship with the compiler, and the review reports;
+- `[czptt.shapes]` and `[jdf.shapes]`: the route-shapes companion, graph and cache;
+- `[jdf.filtered]` (unless `--skip-filtered-jdf`): `filtered-jdf/rules-v1.json` and the
+  `jdf-filtered/` output.
 
-Reviewed Czech data lives in the same checkout. `routes/transport-modes.csv` and
-`routes/presentation.csv` go to `jdf-to-bundle` (`--transport-mode-rules`,
-`--route-presentation-rules`); the presentation rules go to `regional-gtfs-overlay` as well, which
-applies them last so they win over regional feed values. The overlay reads its policy override
-CSVs from `overlay/` (`--overrides-root`), and the filtered JDF feed reads
-`filtered-jdf/rules-v1.json`.
+The compiler validates every package it writes and leaves no invalid one. Each package's manifest
+names the compiler and its version and every source by ID and SHA-256; `release.json` records the
+compiler checkout (`compiler`: commit, dirty state) and the retrieval times, URLs and licences.
+
+When `jrunify-ext-geodata/registry/stops.csv` exists, the specification names the registry and the
+release's `stop-registry/` directory keeps the review candidates: `stop-candidates.csv` from the
+merge, `post-candidates.csv` from the post reports and `place-candidates.csv` from the overlay
+reports. Live source URLs and credentials never enter compiler inputs; sources reach it as
+checksum-pinned snapshots.
 
 ## Production package
 
-JrUtil's normative contract is `jrutil/docs/PRODUCTION_CONTRACT.md` with
+The normative contract is jrutil-rs's `contracts/production-v3.json` with
 `contracts/serving-v5.json` (bundle version 3, serving schema 5.0), vendored as
 `src/obehy/data/serving/serving-v5.json`. Oběhy accepts every minor of serving major 5 and
 nothing else.
@@ -99,7 +113,7 @@ The manifest inventories every payload with its size and SHA-256, declares every
 the build specification digest, source snapshots, compiler version, feed version and identity
 contract. Identical inputs must produce identical semantic output.
 
-`JDF_SEMANTICS.md` is the normative preservation addendum. The current JrUtil GTFS conversion is
+`JDF_SEMANTICS.md` is the normative preservation addendum. The GTFS projection is
 not lossless for JDF fixed codes: it collapses accessibility detail, can only approximate
 order/conditional service in GTFS, and drops luggage,
 reservation, stop facilities, and interchange hints. The production package therefore carries typed
@@ -117,32 +131,31 @@ regressions above 15 percent fail the build gate.
 
 ## Route shapes
 
-See `BASE_PLAN.md` section 17. Route shapes are an optional phase of JrUtil's
+See `BASE_PLAN.md` section 17. Route shapes are an optional phase of the compiler's
 package writer, between the route-stop order and the `gtfs.zip` projection, so nothing is
 repackaged:
 
-1. Before the overlay, `obehy build` filters the OSM snapshot to a routing PBF: bus-usable
+1. Before compiling, `obehy build` filters the OSM snapshot to a routing PBF: bus-usable
    `highway` ways, every railway osr's railway profile uses, `route=ferry`, barriers and turn
    restrictions. It is cached and manifest-validated like the other OSM filters.
 2. `obehy-motis-shapes extract` builds the osr graph from it (cached by PBF hash and osr commit).
-3. `regional-gtfs-overlay` (the final `jdf` package) and `czptt-to-bundle` get
-   `--route-shapes=<companion> --route-shapes-graph=<graph> --route-shapes-cache=<dir>`. JrUtil
-   collapses trips into match-point patterns, runs `obehy-motis-shapes route`, and writes every
-   shape it produced
-   (`generation_method = motis`, per-call offsets in metres) into the relations.
-   `jdf-to-bundle` runs without them: overlay shapes come first.
+3. The specification's `[czptt.shapes]` and `[jdf.shapes]` name the companion, the graph and the
+   results cache. The compiler collapses trips into match-point patterns, runs
+   `obehy-motis-shapes route`, and writes every shape it produced (`generation_method = motis`,
+   per-call offsets in metres) into the relations of the final `jdf` (after the overlay) and
+   `czptt` packages.
 
-Every shape is generated: the overlay policies leave the regional feeds' `shapes` capability off.
+Every shape is generated: the overlay source profiles leave the regional feeds' shapes unused.
 Shapes are best effort: a pattern osr could not route or an
 unsupported mode leaves its trips unshaped with a diagnostic; a missing companion binary means
-the options are not passed. Neither fails the build. Counts (patterns; shaped and unshaped by
+the sections are not written. Neither fails the build. Counts (patterns; shaped and unshaped by
 reason; trips shaped)
 are in each package's `diagnostics.json` (`route_shapes`) and copied into `release.json`.
 `jdf-filtered` keeps no generated shapes for now.
 
-The companion lives in JrUtil (`route-shapes/`), next to the phase that calls it. JrUtil's
-`route-shapes.yml` builds it and publishes a release `route-shapes-<source hash>`; the nightly
-build downloads the one matching its JrUtil checkout and never compiles C++.
+The companion lives in the JrUtil repository (`route-shapes/`). JrUtil's `route-shapes.yml`
+builds it and publishes a release `route-shapes-<source hash>`; the nightly build downloads the
+one matching its JrUtil checkout and never compiles C++.
 
 ## Overlay policy
 

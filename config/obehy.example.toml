@@ -5,6 +5,8 @@ workdir = "D:/obehy-work"
 artifact_root = "D:/obehy-data/artifacts"
 osm_file = "D:/obehy-data/osm/obehy-region.osm.pbf"
 jrunify_ext_geodata_dir = "D:/src/jrunify-ext-geodata"
+# The compiler's gazetteers: cz_regions.json.gz, cz_towns.json.gz, eur_towns_countries.csv.
+gazetteer_dir = "D:/src/jrutil/jrutil/data"
 # Routed post-inference evidence reused across runs (default: <workdir>/cache/routing).
 # routing_cache_dir = "D:/obehy-work/cache/routing"
 # Route shapes (BASE_PLAN.md section 17): the obehy-motis-shapes binary; without it the build
@@ -13,10 +15,11 @@ jrunify_ext_geodata_dir = "D:/src/jrunify-ext-geodata"
 # route_shapes_companion = "D:/tools/obehy-motis-shapes.exe"
 # route_shapes_cache_dir = "D:/obehy-work/cache/route-shapes"
 
+# The jrutil-rs checkout; `obehy build` builds it with cargo and runs target/release/jrutil.
 [jrutil]
-directory = "D:/src/jrutil"
-# Alternatively, remove directory and use:
-# command = ["dotnet", "D:/tools/jrutil-multitool.dll"]
+directory = "D:/src/jrutil-rs"
+# Alternatively, remove directory and use a built compiler:
+# command = ["D:/tools/jrutil.exe"]
 
 # Release mirror database (obehy db / obehy release). OBEHY_DATABASE_URL overrides it.
 # [database]

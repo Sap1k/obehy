@@ -16,8 +16,6 @@ dependencies = [
 
 [project.scripts]
 obehy = "obehy.cli:main"
-obehy-national-jdf = "obehy.national_jdf:main"
-obehy-national-czptt = "obehy.national_czptt:main"
 obehy-osm = "obehy.osm_snapshot:main"
 
 [dependency-groups]
@@ -41,7 +39,6 @@ packages = ["src/obehy"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/obehy/data/api" = "obehy/data/api"
 "src/obehy/data/post-inference" = "obehy/data/post-inference"
-"src/obehy/data/regional-gtfs-overlay" = "obehy/data/regional-gtfs-overlay"
 "src/obehy/data/realtime" = "obehy/data/realtime"
 "src/obehy/data/serving" = "obehy/data/serving"
 "src/obehy/data/stops" = "obehy/data/stops"

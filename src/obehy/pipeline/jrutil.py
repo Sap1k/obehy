@@ -1,12 +1,13 @@
-"""JrUtil runtime: how to build and invoke the multitool, and its provenance."""
+"""The jrutil-rs runtime: how to build and invoke the compiler, and its provenance."""
 
 from __future__ import annotations
 
 import hashlib
 import subprocess
-from collections.abc import Mapping, Sequence
+import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from obehy.pipeline.errors import PipelineError
 from obehy.pipeline.files import file_digest
@@ -41,40 +42,38 @@ def git_identity(repository: Path) -> dict[str, Any]:
     return identity
 
 
-def multitool_project(root: Path) -> Path:
-    return root / "jrutil-multitool" / "jrutil-multitool.fsproj"
+def binary(root: Path) -> Path:
+    """The release `jrutil` binary of a jrutil-rs checkout."""
 
-
-def multitool_dll(root: Path) -> Path:
-    return root / "jrutil-multitool" / "bin" / "Release" / "net10.0" / "jrutil-multitool.dll"
+    name = "jrutil.exe" if sys.platform == "win32" else "jrutil"
+    return root / "target" / "release" / name
 
 
 def build_command(root: Path) -> list[str]:
-    """Build the Release multitool of a JrUtil checkout."""
+    """Build the release compiler of a jrutil-rs checkout (run in the checkout)."""
 
-    project = multitool_project(root)
-    if not project.is_file():
-        raise PipelineError(f"JrUtil multitool project does not exist: {project}")
-    return ["dotnet", "build", str(project), "-c", "Release", "--no-restore", "--nologo"]
+    if not (root / "Cargo.toml").is_file():
+        raise PipelineError(f"jrutil-rs checkout has no Cargo.toml: {root}")
+    return ["cargo", "build", "--release", "--locked", "-p", "jrutil"]
 
 
 def runtime_command(root: Path | None, command: Sequence[str] | None) -> list[str]:
-    """The multitool invocation: a configured command or the checkout's built DLL."""
+    """The compiler invocation: a configured command or the checkout's release binary."""
 
     if command is not None:
         return list(command)
     if root is None:
-        raise PipelineError("JrUtil runtime is not configured")
-    return ["dotnet", str(multitool_dll(root))]
+        raise PipelineError("jrutil runtime is not configured")
+    return [str(binary(root))]
 
 
 def provenance(root: Path | None, command: Sequence[str] | None) -> dict[str, Any]:
-    """Identify the JrUtil runtime: a git checkout or the files of a configured command."""
+    """Identify the compiler: a git checkout or the files of a configured command."""
 
     if root is not None:
         return {"mode": "directory", "directory": str(root.resolve()), "git": git_identity(root)}
     if command is None:
-        raise PipelineError("JrUtil runtime is not configured")
+        raise PipelineError("jrutil runtime is not configured")
     files: list[dict[str, object]] = []
     for argument in command:
         candidate = Path(argument)
@@ -87,17 +86,3 @@ def provenance(root: Path | None, command: Sequence[str] | None) -> dict[str, An
                 }
             )
     return {"mode": "command", "command": list(command), "files": files}
-
-
-def converter_version(runtime: Mapping[str, Any]) -> str:
-    """The `--converter-version` recorded as a package's compiler version."""
-
-    if runtime.get("mode") == "command":
-        files = cast(list[dict[str, object]], runtime.get("files", []))
-        if files:
-            return f"command.{str(files[0]['sha256'])[:12]}"
-        return "configured-command"
-    git = cast(Mapping[str, Any], runtime["git"])
-    commit = cast(str, git["commit"])
-    dirty_hash = git.get("working_tree_sha256")
-    return commit if dirty_hash is None else f"{commit}+dirty.{cast(str, dirty_hash)[:12]}"

@@ -1,8 +1,8 @@
 """Route shapes for the static build (BASE_PLAN.md section 17, STATIC_PIPELINE.md "Route shapes").
 
-Oběhy prepares what the route-shapes phase of JrUtil's package writer needs: the routing PBF
-(filtered from the OSM snapshot) and the companion's osr graph. The phase itself runs inside
-`regional-gtfs-overlay` and `czptt-to-bundle`, which get `arguments()`.
+Oběhy prepares what the compiler's route-shapes phase needs: the routing PBF (filtered from the
+OSM snapshot) and the companion's osr graph. The phase itself runs inside `jrutil build`, whose
+specification names them in `[czptt.shapes]` and `[jdf.shapes]`.
 """
 
 from __future__ import annotations
@@ -28,13 +28,6 @@ class RouteShapes:
     companion: Path
     graph: Path
     cache: Path
-
-    def arguments(self) -> list[str]:
-        return [
-            f"--route-shapes={self.companion}",
-            f"--route-shapes-graph={self.graph}",
-            f"--route-shapes-cache={self.cache}",
-        ]
 
 
 def companion_osr_commit(companion: Path) -> str:
@@ -71,7 +64,7 @@ def prepare(
     route_filter: FilterFn = osm_snapshot.filter_route_shapes,
     osr_commit: Callable[[Path], str] = companion_osr_commit,
 ) -> tuple[RouteShapes | None, str | None]:
-    """The route-shapes arguments for JrUtil, or None and why the phase is skipped.
+    """The route-shapes inputs of the compiler, or None and why the phase is skipped.
 
     `cache` holds the routing PBF and the graph, rebuilt only when the snapshot or the
     companion's osr changes, and the companion's results (`results/`).

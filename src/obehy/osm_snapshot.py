@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
-import math
 import os
 import re
 import shutil
@@ -19,9 +17,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
 from urllib.request import Request, urlopen
-
-from shapely import MultiPolygon, Polygon, box, union_all
-from shapely.geometry import mapping
 
 from obehy.pipeline.download import USER_AGENT
 from obehy.pipeline.files import utc_now, write_json
@@ -618,7 +613,7 @@ JDF_ROUTING_BASE_FILTERS = (
 def filter_jdf_post_candidates(
     source: Path, destination: Path, *, source_key: str | None = None
 ) -> Path:
-    """Extract only physical stop/platform observations used by ``fix-jdf``."""
+    """Extract only the physical stop/platform observations road stops are located from."""
     return _filter_jdf_osm(
         source,
         destination,
@@ -633,7 +628,7 @@ def filter_jdf_post_candidates(
 def filter_jdf_transit_routing_base(
     source: Path, destination: Path, *, source_key: str | None = None
 ) -> Path:
-    """Extract the auditable road/tram topology later clipped to routing demand."""
+    """Extract the road/tram topology the boarding-post estimator routes on."""
     return _filter_jdf_osm(
         source,
         destination,
@@ -724,189 +719,6 @@ def validate_jdf_transit_routing_base(workdir: Path, source_key: str) -> Path:
         "jdf-transit-routing-base-v1",
         "JDF transit-routing base",
     )
-
-
-ROUTING_ENVELOPE_POLICY = "jdf-routing-envelope-v2"
-
-
-def _routing_demand_rows(
-    path: Path,
-) -> list[tuple[str, float | None, float | None, float | None, float | None]]:
-    rows: list[tuple[str, float | None, float | None, float | None, float | None]] = []
-    with path.open("r", encoding="cp1250", newline="") as stream:
-        for raw_line in stream:
-            line = raw_line.rstrip("\r\n")
-            if line.endswith(";"):
-                line = line[:-1]
-            if not line:
-                continue
-            fields = next(csv.reader([line]))
-            if len(fields) != 9:
-                raise OsmSnapshotError(
-                    f"Invalid JrutilRoutingDemands row with {len(fields)} fields: {path}"
-                )
-
-            def optional_float(value: str) -> float | None:
-                return float(value) if value else None
-
-            rows.append(
-                (
-                    fields[8],
-                    optional_float(fields[4]),
-                    optional_float(fields[5]),
-                    optional_float(fields[6]),
-                    optional_float(fields[7]),
-                )
-            )
-    return rows
-
-
-def _routing_envelope_geojson(demands: Path) -> dict[str, object]:
-    rectangles: set[tuple[float, float, float, float]] = set()
-    for (
-        search_class,
-        previous_lat,
-        previous_lon,
-        next_lat,
-        next_lon,
-    ) in _routing_demand_rows(demands):
-        points = [
-            (lat, lon)
-            for lat, lon in ((previous_lat, previous_lon), (next_lat, next_lon))
-            if lat is not None and lon is not None
-        ]
-        if not points:
-            continue
-        distance = 0.0
-        if len(points) == 2:
-            mean_lat = math.radians((points[0][0] + points[1][0]) / 2.0)
-            dy = (points[1][0] - points[0][0]) * 111_320.0
-            dx = (points[1][1] - points[0][1]) * 111_320.0 * math.cos(mean_lat)
-            distance = math.hypot(dx, dy)
-        base_halo = 2_500.0 if search_class == "terminal" else 1_000.0
-        halo = min(5_000.0, base_halo + distance * 0.25)
-        min_lat = min(value[0] for value in points)
-        max_lat = max(value[0] for value in points)
-        min_lon = min(value[1] for value in points)
-        max_lon = max(value[1] for value in points)
-        mean_lat = math.radians((min_lat + max_lat) / 2.0)
-        lat_delta = halo / 111_320.0
-        lon_delta = halo / max(20_000.0, 111_320.0 * abs(math.cos(mean_lat)))
-        rectangles.add(
-            (
-                round(min_lon - lon_delta, 7),
-                round(min_lat - lat_delta, 7),
-                round(max_lon + lon_delta, 7),
-                round(max_lat + lat_delta, 7),
-            )
-        )
-    if not rectangles:
-        raise OsmSnapshotError(f"JDF routing demand relation has no usable coordinates: {demands}")
-    unioned = union_all(
-        [
-            box(min_lon, min_lat, max_lon, max_lat)
-            for min_lon, min_lat, max_lon, max_lat in sorted(rectangles)
-        ],
-        grid_size=0.0000001,
-    ).normalize()
-    if unioned.geom_type == "Polygon":
-        unioned = MultiPolygon([cast(Polygon, unioned)])
-    if unioned.geom_type != "MultiPolygon":
-        raise OsmSnapshotError(
-            f"JDF routing demand envelope produced unsupported geometry {unioned.geom_type}"
-        )
-    # ``osmium extract --polygon`` accepts GeoJSON polygon features, not a bare
-    # geometry object. Union the overlapping rectangles first so Osmium tests
-    # each input object against a compact extraction boundary.
-    return {
-        "type": "Feature",
-        "properties": {},
-        "geometry": mapping(unioned),
-    }
-
-
-def jdf_transit_routing_demand_path(workdir: Path) -> Path:
-    return workdir.resolve() / "osm" / "jdf-transit-routing-demand.osm.pbf"
-
-
-def prepare_jdf_demand_routing(
-    workdir: Path,
-    demands: Path,
-    source_key: str,
-) -> Path:
-    """Clip the cached routing base to deterministic national conversion demand."""
-    base = validate_jdf_transit_routing_base(workdir, source_key)
-    demands = demands.resolve()
-    if not demands.is_file():
-        raise OsmSnapshotError(f"JDF routing demand relation is missing: {demands}")
-    demand_hash = file_digest(demands)
-    destination = jdf_transit_routing_demand_path(workdir)
-    manifest_path = active_manifest_path(destination)
-    if destination.is_file() and manifest_path.is_file():
-        try:
-            manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
-            output = cast(dict[str, object], manifest.get("output", {}))
-            stats = destination.stat()
-            if (
-                manifest.get("schema_version") == 1
-                and manifest.get("filter_schema") == ROUTING_ENVELOPE_POLICY
-                and manifest.get("source_key") == source_key
-                and manifest.get("routing_demand_sha256") == demand_hash
-                and output.get("bytes") == stats.st_size
-                and output.get("mtime_ns") == stats.st_mtime_ns
-            ):
-                return destination
-        except (json.JSONDecodeError, OSError, TypeError, ValueError):
-            pass
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    envelope_path = destination.with_suffix(".geojson")
-    write_json(envelope_path, _routing_envelope_geojson(demands))
-    runtime = _discover_osmium()
-    temporary = destination.with_name(f"{destination.stem}.{uuid.uuid4().hex}.part.osm.pbf")
-    try:
-        _run_osmium(
-            runtime,
-            [
-                "extract",
-                "--progress",
-                "--verbose",
-                "--overwrite",
-                "--strategy=complete_ways",
-                "--generator=Obehy JDF routing demand clip/1",
-                f"--polygon={_osmium_path(runtime, envelope_path)}",
-                "--output-format=pbf,pbf_compression=zlib",
-                "--output",
-                _osmium_path(runtime, temporary),
-                _osmium_path(runtime, base),
-            ],
-        )
-        os.replace(temporary, destination)
-        stats = destination.stat()
-        write_json(
-            manifest_path,
-            {
-                "schema_version": 1,
-                "filter_schema": ROUTING_ENVELOPE_POLICY,
-                "source_key": source_key,
-                "routing_demand_sha256": demand_hash,
-                "routing_base_sha256": file_digest(base),
-                "envelope_geojson_sha256": file_digest(envelope_path),
-                "created_at": utc_now(),
-                "output": {
-                    "file": str(destination),
-                    "bytes": stats.st_size,
-                    "mtime_ns": stats.st_mtime_ns,
-                    "sha256": file_digest(destination),
-                },
-                "osmium": runtime.identity,
-            },
-        )
-    except BaseException:
-        if temporary.exists():
-            temporary.unlink()
-        raise
-    return destination
 
 
 def _merge_key(extracts: Sequence[Extract], osmium_identity: str) -> str:

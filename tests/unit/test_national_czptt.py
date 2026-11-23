@@ -5,7 +5,6 @@ import gzip
 import io
 import json
 import zipfile
-from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import ClassVar, cast
@@ -16,35 +15,7 @@ import pytest
 from obehy import gvd, national_czptt
 from obehy.national_czptt import BuildConfig, RemoteObject, SourceRecord
 from obehy.pipeline import download, reporting
-from obehy.pipeline import jrutil as jrutil_runtime
 from obehy.pipeline.errors import PipelineError
-
-
-@pytest.fixture(autouse=True)
-def _configured_osm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "geodata").mkdir(exist_ok=True)
-
-    def valid_snapshot(_osm: Path, _workdir: Path) -> dict[str, object]:
-        return {"merge_key": "fixture-osm"}
-
-    monkeypatch.setattr(
-        national_czptt,
-        "validate_snapshot",
-        valid_snapshot,
-    )
-
-    def validate_railway_osm(_workdir: Path, source_key: str) -> Path:
-        assert source_key == "fixture-osm"
-        destination = tmp_path / "osm" / "railway-locations.osm.pbf"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(b"railway-osm")
-        return destination
-
-    monkeypatch.setattr(
-        national_czptt,
-        "validate_railway_locations",
-        validate_railway_osm,
-    )
 
 
 def _no_sleep(_seconds: float) -> None:
@@ -81,53 +52,6 @@ def _xml(
         "</PlannedCalendar></CZPTTInformation>"
         f"</{root}>"
     ).encode()
-
-
-def _source_snapshot(root: Path) -> Path:
-    sources = root / "sources"
-    annual = sources / "annual" / "JR2026.zip"
-    annual.parent.mkdir(parents=True)
-    with zipfile.ZipFile(annual, "w") as archive:
-        archive.writestr("base.xml", _xml())
-    change = sources / "changes" / "2025-12" / "cancel.xml.zip"
-    change.parent.mkdir(parents=True)
-    change.write_bytes(gzip.compress(_xml(root="CZCanceledPTTMessage"), mtime=0))
-    catalog = sources / "kadr" / "catalog.json"
-    catalog.parent.mkdir(parents=True)
-    catalog.write_text(
-        '{"companies":[],"ids":[],"lines":[],"schema_version":1}\n',
-        encoding="utf-8",
-    )
-    sr70 = sources / "sr70" / "SR70.csv"
-    sr70.parent.mkdir(parents=True)
-    sr70.write_text("570760,Praha,50.083,14.435\n", encoding="utf-8")
-    records = [
-        SourceRecord(
-            relative_path="annual/JR2026.zip",
-            url=None,
-            bytes=annual.stat().st_size,
-            sha256=national_czptt.file_digest(annual),
-            kind="annual_zip",
-        ),
-        SourceRecord(
-            relative_path="changes/2025-12/cancel.xml.zip",
-            url=None,
-            bytes=change.stat().st_size,
-            sha256=national_czptt.file_digest(change),
-            kind="monthly_gzip",
-        ),
-    ]
-    (sources / "sources.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "timetable_year": 2026,
-                "objects": [record.__dict__ for record in records],
-            }
-        ),
-        encoding="utf-8",
-    )
-    return sources
 
 
 def test_gvd_year_changes_on_second_sunday_of_december() -> None:
@@ -220,29 +144,19 @@ def _live_inventory_fixture(
 
     monkeypatch.setattr(national_czptt, "snapshot_kadr", snapshot_kadr)
 
-    def stop_after_acquisition(*_args: object) -> int:
-        raise RuntimeError("acquisition complete")
-
-    monkeypatch.setattr(national_czptt, "flatten_messages", stop_after_acquisition)
     geodata = tmp_path / "geodata"
     rail = geodata / "rail"
     rail.mkdir(parents=True)
     (rail / "SR70.csv").write_text("570760,Praha,50.083,14.435\n", encoding="utf-8")
     config = BuildConfig(
-        output=tmp_path / "out",
-        workdir=tmp_path / "workdir",
-        osm_file=tmp_path / "regional.osm.pbf",
         geodata_root=geodata,
-        jrutil_root=None,
-        jrutil_command=("fake-jrutil",),
         timetable_year=2026,
         source_base_url="https://example.test/czptt",
-        progress="off",
     )
     return config, downloads, source_roots
 
 
-def test_live_build_downloads_new_inventory_objects_until_stable(
+def test_snapshot_downloads_new_inventory_objects_until_stable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     annual = RemoteObject("annual/JR2026.zip", "https://example.test/JR2026.zip", "annual_zip")
@@ -258,8 +172,7 @@ def test_live_build_downloads_new_inventory_objects_until_stable(
         [[annual], [annual, first], [annual, first, second], [annual, first, second]],
     )
 
-    with pytest.raises(RuntimeError, match="acquisition complete"):
-        national_czptt.build(config)
+    national_czptt.snapshot_sources(config, tmp_path / "snapshot", reporting.BuildReporter("off"))
 
     assert downloads == [annual.relative_path, first.relative_path, second.relative_path]
     sources = source_roots[0]
@@ -285,11 +198,12 @@ def test_snapshot_sources_writes_a_reusable_source_snapshot(
     )
 
     assert downloads == [annual.relative_path, change.relative_path]
-    assert (snapshot / "sr70" / "SR70.csv").is_file()
-    records = national_czptt._copy_snapshot(  # pyright: ignore[reportPrivateUsage]
-        snapshot, tmp_path / "copied"
-    )
-    assert [record.relative_path for record in records] == downloads
+    manifest = json.loads((snapshot / "sources.json").read_text(encoding="utf-8"))
+    assert [item["relative_path"] for item in manifest["objects"]] == downloads
+    assert [item["relative_path"] for item in manifest["auxiliary"]] == [
+        "kadr/catalog.json",
+        "sr70/SR70.csv",
+    ]
 
 
 def test_http_downloader_gives_up_with_a_named_error(
@@ -322,7 +236,7 @@ def test_http_downloader_gives_up_with_a_named_error(
     assert len(attempts) == 3
 
 
-def test_live_build_fails_if_inventory_still_grows_after_five_download_passes(
+def test_snapshot_fails_if_inventory_still_grows_after_five_download_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     annual = RemoteObject("annual/JR2026.zip", "https://example.test/JR2026.zip", "annual_zip")
@@ -341,7 +255,9 @@ def test_live_build_fails_if_inventory_still_grows_after_five_download_passes(
     )
 
     with pytest.raises(PipelineError, match="after 5 download passes"):
-        national_czptt.build(config)
+        national_czptt.snapshot_sources(
+            config, tmp_path / "snapshot", reporting.BuildReporter("off")
+        )
 
     assert downloads == [annual.relative_path, *(item.relative_path for item in changes[:4])]
     assert not (source_roots[0] / "sources.json").exists()
@@ -462,240 +378,6 @@ def test_http_downloader_reuses_connection_and_streams_hashed_files(
     )
 
 
-def test_flatten_orders_changes_by_source_event_time(tmp_path: Path) -> None:
-    sources = _source_snapshot(tmp_path)
-    addition = sources / "changes" / "2025-12" / "add.xml.zip"
-    addition.write_bytes(gzip.compress(_xml(variant="01"), mtime=0))
-    annual = sources / "annual" / "JR2026.zip"
-    cancellation = sources / "changes" / "2025-12" / "cancel.xml.zip"
-    records = [
-        SourceRecord(
-            "annual/JR2026.zip",
-            None,
-            annual.stat().st_size,
-            national_czptt.file_digest(annual),
-            "annual_zip",
-        ),
-        SourceRecord(
-            "changes/2025-12/cancel.xml.zip",
-            None,
-            cancellation.stat().st_size,
-            national_czptt.file_digest(cancellation),
-            "monthly_gzip",
-        ),
-    ]
-    records.append(
-        SourceRecord(
-            relative_path="changes/2025-12/add.xml.zip",
-            url=None,
-            bytes=addition.stat().st_size,
-            sha256=national_czptt.file_digest(addition),
-            kind="monthly_gzip",
-        )
-    )
-    output = tmp_path / "messages.zip"
-    assert national_czptt.flatten_messages(sources, records, output) == 3
-    with zipfile.ZipFile(output) as archive:
-        roots = [
-            national_czptt.ElementTree.fromstring(archive.read(name)).tag.rsplit("}", 1)[-1]
-            for name in archive.namelist()
-        ]
-    assert roots == ["CZPTTCISMessage", "CZPTTCISMessage", "CZCanceledPTTMessage"]
-
-
-def test_flatten_rejects_monthly_object_without_gzip_magic(tmp_path: Path) -> None:
-    sources = tmp_path / "sources"
-    malformed = sources / "changes" / "2025-12" / "bad.xml.zip"
-    malformed.parent.mkdir(parents=True)
-    malformed.write_bytes(_xml())
-    record = SourceRecord(
-        "changes/2025-12/bad.xml.zip",
-        None,
-        malformed.stat().st_size,
-        national_czptt.file_digest(malformed),
-        "monthly_gzip",
-    )
-    with pytest.raises(PipelineError, match="gzip magic"):
-        national_czptt.flatten_messages(sources, [record], tmp_path / "messages.zip")
-    assert list(tmp_path.glob(".czptt-messages-*")) == []
-
-
-def test_flatten_rejects_conflicting_full_pa_identity(tmp_path: Path) -> None:
-    sources = tmp_path / "sources"
-    annual = sources / "annual" / "JR2026.zip"
-    annual.parent.mkdir(parents=True)
-    with zipfile.ZipFile(annual, "w") as archive:
-        archive.writestr("one.xml", _xml())
-        archive.writestr("two.xml", _xml().replace(b"CZPTTCreation", b"CZPTTCreation"))
-    # Make the payload different without changing the full PA identity.
-    with zipfile.ZipFile(annual, "a") as archive:
-        changed = _xml().replace(b"</CZPTTCISMessage>", b" \n</CZPTTCISMessage>")
-        archive.writestr("three.xml", changed)
-    record = SourceRecord(
-        "annual/JR2026.zip",
-        None,
-        annual.stat().st_size,
-        national_czptt.file_digest(annual),
-        "annual_zip",
-    )
-    with pytest.raises(PipelineError, match="Conflicting"):
-        national_czptt.flatten_messages(sources, [record], tmp_path / "messages.zip")
-    assert list(tmp_path.glob(".czptt-messages-*")) == []
-
-
-def test_offline_build_uses_snapshot_and_defaults_internal_points_to_gtfs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    snapshot = _source_snapshot(tmp_path / "snapshot")
-    jrutil = tmp_path / "jrutil"
-    (jrutil / "jrutil-multitool").mkdir(parents=True)
-    (jrutil / "jrutil-multitool" / "jrutil-multitool.fsproj").touch()
-    (jrutil / ".git").mkdir()
-    output = tmp_path / "result"
-    commands: list[list[str]] = []
-
-    def no_network(*_args: object, **_kwargs: object) -> bytes:
-        raise AssertionError("offline build attempted network access")
-
-    monkeypatch.setattr(national_czptt, "read_url", no_network)
-
-    def git_identity(_path: Path) -> dict[str, object]:
-        return {"commit": "abc123", "dirty": False, "status": []}
-
-    monkeypatch.setattr(jrutil_runtime, "git_identity", git_identity)
-
-    def command_runner(
-        command: Sequence[str],
-        _cwd: Path,
-        _log: Path,
-        _reporter: object,
-        _progress: object,
-    ) -> None:
-        commands.append(list(command))
-        if "czptt-to-bundle" not in command:
-            return
-        bundle = Path(command[-1])
-        bundle.mkdir(parents=True)
-        # Fixed entry timestamps: the test compares two builds byte for byte.
-        with zipfile.ZipFile(bundle / "gtfs.zip", "w") as gtfs:
-            for name, content in (
-                ("stops.txt", "stop_id,stop_name\n"),
-                ("routes.txt", "route_id\n"),
-                ("trips.txt", "trip_id\n"),
-                ("stop_times.txt", "trip_id,stop_sequence\n"),
-                ("transfers.txt", "from_trip_id,to_trip_id,transfer_type\n"),
-            ):
-                gtfs.writestr(zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0)), content)
-        (bundle / "serving").mkdir()
-        (bundle / "diagnostics.json").write_text("{}\n", encoding="utf-8")
-        (bundle / "manifest.json").write_text(
-            '{"bundle_format":"jrutil-production","bundle_version":3,'
-            '"serving_schema_version":"5.0","contract_valid":true,'
-            '"publication_eligible":true,"files":[]}\n',
-            encoding="utf-8",
-        )
-        diagnostics_arg = next(value for value in command if value.startswith("--diagnostics-out="))
-        detailed = Path(diagnostics_arg.split("=", 1)[1]) / "events"
-        detailed.mkdir(parents=True)
-        (detailed / "diagnostics.json").write_text(
-            '{"coordinate_diagnostics":{"unresolvedPointIds":[]}}\n', encoding="utf-8"
-        )
-
-    result = national_czptt.build(
-        BuildConfig(
-            output=output,
-            workdir=tmp_path / "workdir",
-            osm_file=tmp_path / "regional.osm.pbf",
-            geodata_root=tmp_path / "geodata",
-            jrutil_root=jrutil,
-            jrutil_command=None,
-            timetable_year=2026,
-            source_snapshot=snapshot,
-            sr70=None,
-            progress="off",
-        ),
-        command_runner=cast(national_czptt.CommandFn, command_runner),
-    )
-    assert result == output.resolve()
-    converter = next(command for command in commands if "czptt-to-bundle" in command)
-    assert "--operational-points=sidecar" in converter
-    assert "--jobs=auto" in converter
-    assert "--memory-budget=auto" in converter
-    assert not any(argument.startswith("--sr70-name20=") for argument in converter)
-    assert (output / "bundle" / "gtfs.zip").is_file()
-    manifest = json.loads((output / "run-manifest.json").read_text(encoding="utf-8"))
-    assert manifest["operational_points"] == "sidecar"
-    assert manifest["jrutil"]["git"]["commit"] == "abc123"
-    assert manifest["sr70_sha256"] == national_czptt.file_digest(
-        output / "sources" / "sr70" / "SR70.csv"
-    )
-
-    repeated = tmp_path / "result-repeated"
-    national_czptt.build(
-        BuildConfig(
-            output=repeated,
-            workdir=tmp_path / "workdir",
-            osm_file=tmp_path / "regional.osm.pbf",
-            geodata_root=tmp_path / "geodata",
-            jrutil_root=jrutil,
-            jrutil_command=None,
-            timetable_year=2026,
-            source_snapshot=snapshot,
-            progress="off",
-        ),
-        command_runner=cast(national_czptt.CommandFn, command_runner),
-    )
-    first_files = {
-        path.relative_to(output).as_posix(): path.read_bytes()
-        for path in output.rglob("*")
-        if path.is_file()
-    }
-    repeated_files = {
-        path.relative_to(repeated).as_posix(): path.read_bytes()
-        for path in repeated.rglob("*")
-        if path.is_file()
-    }
-    assert repeated_files == first_files
-
-
-def test_source_snapshot_and_custom_remote_are_mutually_exclusive(tmp_path: Path) -> None:
-    with pytest.raises(PipelineError, match="forbids"):
-        national_czptt.build(
-            BuildConfig(
-                output=tmp_path / "out",
-                workdir=tmp_path / "workdir",
-                osm_file=tmp_path / "regional.osm.pbf",
-                geodata_root=tmp_path / "geodata",
-                jrutil_root=tmp_path,
-                jrutil_command=None,
-                source_snapshot=tmp_path,
-                source_base_url="https://example.test/czptt",
-            )
-        )
-
-
-def test_source_snapshot_requires_sr70(tmp_path: Path) -> None:
-    snapshot = _source_snapshot(tmp_path / "snapshot")
-    (snapshot / "sr70" / "SR70.csv").unlink()
-    jrutil = tmp_path / "jrutil"
-    jrutil.mkdir()
-
-    with pytest.raises(PipelineError, match="must contain sr70/SR70"):
-        national_czptt.build(
-            BuildConfig(
-                output=tmp_path / "out",
-                workdir=tmp_path / "workdir",
-                osm_file=tmp_path / "regional.osm.pbf",
-                geodata_root=tmp_path / "geodata",
-                jrutil_root=jrutil,
-                jrutil_command=None,
-                timetable_year=2026,
-                source_snapshot=snapshot,
-                progress="off",
-            )
-        )
-
-
 def test_gtfs_stop_verifier_enforces_hierarchy_and_sr70_coordinates(
     tmp_path: Path,
 ) -> None:
@@ -713,7 +395,7 @@ def test_gtfs_stop_verifier_enforces_hierarchy_and_sr70_coordinates(
         "czptt:stop:DE:57076:platform:1,Foreign,0,0,0,czptt:stop:DE:57076,1\n",
         encoding="utf-8",
     )
-    national_czptt._verify_gtfs_stops(gtfs, sr70)  # pyright: ignore[reportPrivateUsage]
+    national_czptt.verify_gtfs_stops(gtfs, sr70)
 
     stops.write_text(
         "stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station\n"
@@ -722,9 +404,7 @@ def test_gtfs_stop_verifier_enforces_hierarchy_and_sr70_coordinates(
         encoding="utf-8",
     )
     with pytest.raises(PipelineError, match="does not carry its SR70 coordinates"):
-        national_czptt._verify_gtfs_stops(  # pyright: ignore[reportPrivateUsage]
-            gtfs, sr70
-        )
+        national_czptt.verify_gtfs_stops(gtfs, sr70)
 
     stops.write_text(
         "stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station\n"
@@ -732,51 +412,7 @@ def test_gtfs_stop_verifier_enforces_hierarchy_and_sr70_coordinates(
         encoding="utf-8",
     )
     with pytest.raises(PipelineError, match="lacks its station parent"):
-        national_czptt._verify_gtfs_stops(  # pyright: ignore[reportPrivateUsage]
-            gtfs, sr70
-        )
-
-
-def test_command_runtime_records_dll_hash_and_skips_checkout(tmp_path: Path) -> None:
-    dll = tmp_path / "jrutil.dll"
-    dll.write_bytes(b"fixture-dll")
-    config = BuildConfig(
-        output=tmp_path / "out",
-        workdir=tmp_path / "work",
-        osm_file=tmp_path / "region.osm.pbf",
-        geodata_root=tmp_path / "geodata",
-        jrutil_root=None,
-        jrutil_command=("dotnet", str(dll)),
-    )
-
-    provenance = jrutil_runtime.provenance(config.jrutil_root, config.jrutil_command)
-
-    assert provenance["mode"] == "command"
-    files = cast(list[dict[str, object]], provenance["files"])
-    assert files[0]["sha256"] == national_czptt.file_digest(dll)
-
-
-def test_foreign_unresolved_point_fails(tmp_path: Path) -> None:
-    bundle = tmp_path / "bundle"
-    bundle.mkdir()
-    diagnostics = bundle / "diagnostics.json"
-    diagnostics.write_text(
-        json.dumps({"coordinate_diagnostics": {"unresolvedPointIds": ["czptt:stop:DE:12345"]}}),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(PipelineError, match="lack coordinates"):
-        national_czptt._verify_foreign_coordinate_acceptance(  # pyright: ignore[reportPrivateUsage]
-            bundle
-        )
-
-    diagnostics.write_text(
-        json.dumps({"coordinate_diagnostics": {"unresolvedPointIds": ["czptt:stop:CZ:54321"]}}),
-        encoding="utf-8",
-    )
-    national_czptt._verify_foreign_coordinate_acceptance(  # pyright: ignore[reportPrivateUsage]
-        bundle
-    )
+        national_czptt.verify_gtfs_stops(gtfs, sr70)
 
 
 class _CountingConnection:
