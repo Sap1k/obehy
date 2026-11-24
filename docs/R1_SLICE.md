@@ -150,6 +150,10 @@ request = { method = "GET", url = "https://tabule.portabo.cz/api/v1-tabule/cis/G
 feeds = ["jdf", "czptt"]            # decode routes each observation to exactly one feed
 # live_feeds = ["jdf"]              # optional: feeds the worker processes live (default: all);
                                     # replay decodes every feed, so a new source is checked first
+# trip_key_feed = "czptt"           # optional, one of `feeds`: an observation whose trip key
+                                    # this feed's static data holds goes there, not to the
+                                    # decoder's feed; one without a trip key follows its vehicle
+                                    # (IDSJMK-Q1: GTFS-RT does not say which trips are trains)
 capabilities = ["vehicle_key", "trip_key", "position", "delay", "source_state"]
 
 [channel.semantics]

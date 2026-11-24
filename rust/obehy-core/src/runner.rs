@@ -8,20 +8,21 @@
 //! sweeps when due, then per feed (sorted) `refresh` and `estimate_all`. [`Ticks`] steps a
 //! simulated clock through ticks on round multiples of `emit.tick_s` (`advance`, `split`).
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use indexmap::IndexMap;
 
 use crate::config::Policy;
 use crate::core::{
-    Context, CoreError, Semantics, estimate_all_with, rebase, refresh, resolve, step, vehicle_of,
+    Context, CoreError, Semantics, estimate_all_with, rebase, refresh, resolve, semantics_of, step,
+    vehicle_of,
 };
 use crate::index::{Index, IndexLoader, IndexMiss, KeyRef, LoadError, Rows, RowsError};
 use crate::infer::keyed::admissible;
 use crate::model::{
     Effect, Feed, FeedState, JourneyKey, LineRef, Observation, PlatformAssignment, ServiceDay,
-    Track, TripKey,
+    Track, TripKey, VehicleId,
 };
 use crate::time::{
     Date, Instant, ServiceTime, TimeDelta, candidate_service_dates, local_date, next_multiple,
@@ -163,6 +164,8 @@ pub struct Runner<L: Loads, P: Phases = Untimed> {
     /// Threads estimating a feed's journeys (`estimate_all_with`; the output does not depend
     /// on it). 1 by default.
     pub estimate_threads: usize,
+    /// The feed each vehicle of a `trip_key_feed` channel was last routed to ([`Runner::route`]).
+    pub routed: HashMap<VehicleId, Feed>,
 }
 
 impl<L: Loads, P: Phases> std::fmt::Debug for Runner<L, P> {
@@ -200,6 +203,7 @@ impl<L: Loads, P: Phases> Runner<L, P> {
             next_compaction: None,
             next_sweep: None,
             estimate_threads: 1,
+            routed: HashMap::new(),
         })
     }
 
@@ -210,9 +214,89 @@ impl<L: Loads, P: Phases> Runner<L, P> {
         feeds
     }
 
+    /// IDSJMK-Q1: each observation on its feed. One of a `trip_key_feed` channel goes to that
+    /// feed when its static data holds one of its trip keys (loaded there to tell), else stays on
+    /// the decoder's feed; one without a trip key goes where its vehicle was last routed when
+    /// `follow_vehicles`, else stays. Keys stay literal: routing only picks the feed, whose core
+    /// resolves the key as given. Routing twice gives the same feeds.
+    fn routed(
+        &mut self,
+        observations: &[Arc<Observation>],
+        follow_vehicles: bool,
+    ) -> Result<Vec<Arc<Observation>>, RunError> {
+        let targets: Vec<Option<Feed>> = observations
+            .iter()
+            .map(|o| {
+                semantics_of(&self.semantics, o)
+                    .trip_key_feed
+                    .filter(|feed| self.runtimes.contains_key(feed))
+            })
+            .collect();
+        let mut wanted: BTreeMap<Feed, BTreeSet<KeyRef>> = BTreeMap::new();
+        for (observation, target) in observations.iter().zip(&targets) {
+            if let Some(target) = target {
+                wanted.entry(*target).or_default().extend(refs(observation));
+            }
+        }
+        for (feed, refs) in &wanted {
+            let runtime = &mut self.runtimes[feed];
+            self.phases
+                .time("index", || runtime.loader.ensure(refs, [], []).map(|_| ()))?;
+        }
+        let mut out = Vec::with_capacity(observations.len());
+        for (observation, target) in observations.iter().zip(targets) {
+            let Some(target) = target else {
+                out.push(observation.clone());
+                continue;
+            };
+            let vehicle = vehicle_of(observation);
+            let mut keys = refs(observation).peekable();
+            let feed = if keys.peek().is_some() {
+                let index = self.runtimes[&target].index();
+                let held = keys.any(|r| {
+                    index
+                        .keys(&r.namespace, &r.identifier)
+                        .is_ok_and(|entries| !entries.is_empty())
+                });
+                let feed = if held { target } else { observation.feed };
+                if follow_vehicles && let Some(vehicle) = vehicle {
+                    self.routed.insert(vehicle, feed);
+                }
+                feed
+            } else if follow_vehicles {
+                vehicle
+                    .and_then(|v| self.routed.get(&v).copied())
+                    .unwrap_or(observation.feed)
+            } else {
+                observation.feed
+            };
+            out.push(if feed == observation.feed {
+                observation.clone()
+            } else {
+                Arc::new(Observation {
+                    feed,
+                    ..(**observation).clone()
+                })
+            });
+        }
+        Ok(out)
+    }
+
+    /// The observations on the feeds [`Runner::process`] steps them on (`routed`), the vehicles'
+    /// routes updated; pass the result to [`Runner::process_routed`].
+    pub fn route(
+        &mut self,
+        observations: &[Arc<Observation>],
+    ) -> Result<Vec<Arc<Observation>>, RunError> {
+        self.routed(observations, true)
+    }
+
     /// Load the static data of the observations' keys ahead of processing them.
     pub fn prefetch(&mut self, observations: &[Arc<Observation>]) -> Result<(), RunError> {
-        let mut wanted: std::collections::BTreeMap<Feed, Batch> = std::collections::BTreeMap::new();
+        // The keys decide the feed; a vehicle's route is left to `process`, in order.
+        let routed = self.routed(observations, false)?;
+        let observations = &routed;
+        let mut wanted: BTreeMap<Feed, Batch> = BTreeMap::new();
         for observation in observations {
             if !self.runtimes.contains_key(&observation.feed) {
                 continue;
@@ -237,6 +321,15 @@ impl<L: Loads, P: Phases> Runner<L, P> {
     }
 
     pub fn process(&mut self, observations: &[Arc<Observation>]) -> Result<Vec<Effect>, RunError> {
+        let observations = self.route(observations)?;
+        self.process_routed(&observations)
+    }
+
+    /// [`Runner::process`] of observations [`Runner::route`] has put on their feeds.
+    pub fn process_routed(
+        &mut self,
+        observations: &[Arc<Observation>],
+    ) -> Result<Vec<Effect>, RunError> {
         let batches = self.batches(observations);
         self.load(&batches)?;
         self.run(&batches)
@@ -244,8 +337,7 @@ impl<L: Loads, P: Phases> Runner<L, P> {
 
     /// The observations per feed, in processing order, with the static data they name.
     pub fn batches(&mut self, observations: &[Arc<Observation>]) -> Vec<Batch> {
-        let mut by_feed: std::collections::BTreeMap<Feed, Batch> =
-            std::collections::BTreeMap::new();
+        let mut by_feed: BTreeMap<Feed, Batch> = BTreeMap::new();
         for observation in observations {
             if self.runtimes.contains_key(&observation.feed) {
                 by_feed

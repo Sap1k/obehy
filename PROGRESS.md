@@ -313,6 +313,17 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-24** — IDS JMK trains bind (IDSJMK-Q1). jrutil-rs OVL-R132 keys each IDS JMK rail
+  trip ID (`ids-jmk:gtfs_trip_line_course`) on czptt to the train numbered by its `api.txt`
+  course, on the dates its line/course runs; `obehy build` names the IDS JMK feed in
+  `[[czptt.train_keys]]`. A channel's new `trip_key_feed` sends an observation to the feed whose
+  static data holds its trip key (`Runner::route`; a trip-less one follows its vehicle), so
+  `ids-jmk` feeds and is live on jdf and czptt. On a slice of the CZPTT trains of IDS JMK's
+  numbers, 3,523 of 3,526 rail trip IDs keyed; a 10-minute recording replayed on it:
+  103 of 116 rail key groups bound on czptt (none before), 2 `ambiguous` (R 1132 has two
+  CZPTT trips on that Tuesday), 11 `not_in_service` (units naming a morning trip); every road
+  group stayed on jdf. fmt, clippy, Rust and Python unit tests pass in both repositories; database
+  tests skipped; needs a release built with OVL-R132 (jrutil-rs cbbfd65).
 - **2026-11-24** — New source IDS JMK (`ids-jmk`, KORDIS JMK GTFS-RT; `docs/sources/ids-jmk.md`)
   on jdf: positions keyed by the IDS JMK GTFS trip ID, no delays (none in the feed), and its
   alerts. GTFS-RT is decoded by two generic code decoders over typed protobuf:

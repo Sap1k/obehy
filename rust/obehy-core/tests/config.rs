@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use obehy_core::config::manifest::{self, Channel, RECORDER_FILTERS};
 use obehy_core::config::policy::{POLICY_FILE, WarmReplayMode};
 use obehy_core::config::{ConfigError, Policy};
-use obehy_core::model::SourceSemantics;
+use obehy_core::model::{Feed, SourceSemantics};
 
 fn policy_path() -> PathBuf {
     common::repo()
@@ -154,6 +154,14 @@ fn shipped_manifests_load() {
     );
     assert_eq!(by("pid/alerts").capabilities, ["alert"]);
     assert_eq!(by("ids-jmk/alerts").capabilities, ["alert"]);
+    // IDSJMK-Q1: a trip key czptt holds sends the observation there.
+    assert_eq!(
+        by("ids-jmk/vehicles").core_semantics,
+        SourceSemantics {
+            trip_key_feed: Some(Feed::Czptt),
+            ..Default::default()
+        }
+    );
     assert!(
         pid.auth.is_some()
             && pid.cursor.is_some()
@@ -304,6 +312,10 @@ fn manifest_errors() {
         (
             format!("{EVERY_5S}{GET}semantics = {{ nope = true }}\n"),
             "unknown semantics.nope",
+        ),
+        (
+            format!("{EVERY_5S}feeds = [\"jdf\"]\ntrip_key_feed = \"czptt\"\n{GET}"),
+            "trip_key_feed must be one of its feeds",
         ),
         (
             format!("{EVERY_5S}{GET}egress = \"sz\"\n"),

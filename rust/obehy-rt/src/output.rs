@@ -194,7 +194,8 @@ struct Recorder<'a, B: Book> {
 }
 
 /// A poll's `poll` record at the output level, with its observations per feed
-/// (`replay.poll_record(output=True)`).
+/// (`replay.poll_record(output=True)`); `feeds` counts the observations by the feed they were
+/// stepped on (`Runner::route`).
 pub fn poll_record(poll: &DecodedPoll) -> Value {
     let field = |k: &str| poll.entry.get(k).map_or(Value::Null, Value::clone);
     let request = match poll.entry.get("request") {

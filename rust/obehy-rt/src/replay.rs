@@ -442,12 +442,15 @@ pub fn drive<L: Loads, P: Phases>(
                 .flat_map(|p| p.observations.iter().flatten().cloned())
                 .collect();
             runner.prefetch(&observations)?;
-            for poll in chunk.drain(..) {
+            for mut poll in chunk.drain(..) {
                 clock.advance(runner, poll.at, sink)?;
-                match &poll.observations {
+                match poll.observations.take() {
                     None => sink.stepped(runner, &poll, None)?,
                     Some(observations) => {
-                        let effects = runner.process(observations)?;
+                        // The sink sees each observation on the feed it was stepped on.
+                        let routed = runner.route(&observations)?;
+                        let effects = runner.process_routed(&routed)?;
+                        poll.observations = Some(routed);
                         sink.stepped(runner, &poll, Some(effects))?;
                         *last = Some(poll.at);
                     }

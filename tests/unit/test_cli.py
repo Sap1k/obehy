@@ -217,6 +217,10 @@ osm = "{_posix(osm / "railway-locations.osm.pbf")}"
 timetable_year = 2027
 output = "{_posix(partial / "czptt")}"
 
+[[czptt.train_keys]]
+profile = "ids-jmk"
+feed = "{_posix(sources / "regional" / "ids-jmk-gtfs.zip")}"
+
 [jdf]
 catalogues = "{_posix(geodata / "other")}"
 gazetteer = "{_posix(runtime.gazetteer_dir)}"

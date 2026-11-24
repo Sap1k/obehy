@@ -71,7 +71,8 @@ impl Context<'_> {
     }
 }
 
-fn semantics_of(semantics: &Semantics, observation: &Observation) -> SourceSemantics {
+/// The semantics of the observation's channel; the default for a channel not listed.
+pub fn semantics_of(semantics: &Semantics, observation: &Observation) -> SourceSemantics {
     semantics
         .iter()
         .find(|((source, channel), _)| {

@@ -104,6 +104,8 @@ def spec_text(spec: BuildSpec) -> str:
         ],
     )
     lines += _shapes("[czptt.shapes]", spec.shapes)
+    # IDS JMK's train trip IDs key the national trains (jrutil-rs OVL-R132, IDSJMK-Q1).
+    lines += _table("[[czptt.train_keys]]", [("profile", "ids-jmk"), ("feed", spec.ids_jmk_feed)])
     lines += _table(
         "[jdf]",
         [

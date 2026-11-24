@@ -177,6 +177,9 @@ pub struct SourceSemantics {
     pub unchanged_entry_is_no_news: bool,
     /// The delay is whole minutes rounded down: `d` means `[d, d + 59 s]` (ARRIVA-Q3, SZ-Q12).
     pub delay_floor_minute: bool,
+    /// The channel's `trip_key_feed`: an observation whose trip key this feed's static data
+    /// holds goes to this feed instead of the decoder's (IDSJMK-Q1; `Runner::route`).
+    pub trip_key_feed: Option<Feed>,
 }
 
 impl SourceSemantics {

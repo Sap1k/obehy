@@ -306,6 +306,7 @@ fn core_semantics(t: &Table, at: &str) -> Result<SourceSemantics, ConfigError> {
         pre_trip_after_end_is_stale: flags[1],
         unchanged_entry_is_no_news: flags[2],
         delay_floor_minute: flags[3],
+        trip_key_feed: None,
     })
 }
 
@@ -376,8 +377,15 @@ fn channel(
         Some(Value::String(other)) => return fail(format!("{at}: unknown filter '{other}'")),
         Some(other) => return fail(format!("{at}: unknown filter {other}")),
     };
-    let core_semantics = core_semantics(t, at)?;
+    let mut core_semantics = core_semantics(t, at)?;
     let feeds = strings(t, "feeds", at, &FEED_NAMES)?;
+    core_semantics.trip_key_feed = match t.get("trip_key_feed") {
+        None => None,
+        Some(Value::String(feed)) if feeds.contains(feed) => {
+            Some(feed.parse().map_err(ConfigError::Manifest)?)
+        }
+        Some(_) => return fail(format!("{at}: trip_key_feed must be one of its feeds")),
+    };
     let live_feeds = if t.contains_key("live_feeds") {
         let allowed: Vec<&str> = feeds.iter().map(String::as_str).collect();
         Some(strings(t, "live_feeds", at, &allowed)?)

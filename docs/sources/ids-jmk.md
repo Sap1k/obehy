@@ -3,7 +3,7 @@
 Status: **probed and recorded on 2026-11-24** (Tuesday, 21:53–22:03 local: 41 polls, all
 decoded) and replayed against release `20261124T070233Z` (Replay).
 Decoders: the generic code decoders `gtfs-rt-vehicles` (version 1) and `gtfs-rt-alerts`.
-Live on `jdf` only (IDSJMK-Q1). Terms of use are still to be recorded.
+Live on `jdf` and, for its trains, `czptt` (IDSJMK-Q1). Terms of use are still to be recorded.
 
 IDS JMK is the integrated system of Jihomoravský kraj, run by KORDIS JMK: regional buses, Brno
 trams, trolleybuses and buses (DPMB), and regional trains. KORDIS publishes the static GTFS
@@ -44,9 +44,12 @@ entity { alert { informed_entity { route_id: "423" }  effect: STOP_MOVED
 
 ## Keys
 
-- Trip: `ids-jmk:gtfs_trip_line_course` `<trip_id>` on `jdf` (serving 5.3, jrutil-rs
-  OVL-R131): the trip ID names every trip of its line/course, so it resolves to the one running
-  on the day (IDSJMK-Q9). Rail trips have no key (IDSJMK-Q1).
+- Trip: `ids-jmk:gtfs_trip_line_course` `<trip_id>` (serving 5.3): on `jdf` (jrutil-rs
+  OVL-R131) the trip ID names every trip of its line/course, so it resolves to the one running
+  on the day (IDSJMK-Q9); on `czptt` (OVL-R132) a train's trip ID names the national train
+  whose number is its course on each date the line/course runs (IDSJMK-Q1). The channel's
+  `trip_key_feed = "czptt"` sends an observation to `czptt` when its static data holds the key,
+  else to `jdf`; one without a trip key follows its vehicle's last feed.
 - Vehicle: `VehicleDescriptor.id`; the label is its fleet number (IDSJMK-Q2).
 - Alerts: trips, stops and routes by their GTFS IDs in the `ids-jmk:gtfs_*` namespaces the
   overlay publishes.
@@ -55,7 +58,7 @@ entity { alert { informed_entity { route_id: "423" }  effect: STOP_MOVED
 
 | ID | Quirk | Handling |
 |---|---|---|
-| IDSJMK-Q1 | regional trains are trips of the IDS JMK GTFS too, but the static build never overlays regional rail onto CZPTT, so their GTFS trip IDs have no key, and GTFS-RT does not say which trips are trains | the channel is `jdf` only; a train's observation stays unmatched. Binding them needs jrutil-rs to publish `ids-jmk:gtfs_trip_id` on `czptt` (by the train number of `api.txt` and date) and a feed chosen by the key |
+| IDSJMK-Q1 | regional trains are trips of the IDS JMK GTFS too, but the static build never overlays regional rail onto CZPTT, so their GTFS trip IDs have no output trip, and GTFS-RT does not say which trips are trains | jrutil-rs OVL-R132 keys each rail trip ID (`gtfs_trip_line_course`) to the CZPTT train numbered by its `api.txt` course, on the dates its line/course runs; the worker routes an observation to `czptt` when `czptt` holds its key (`trip_key_feed`, `Runner::route`), and a trip-less one to its vehicle's last feed (Replay) |
 | IDSJMK-Q2 | `VehicleDescriptor.id` is the fleet number with a digit appended (`10690` for `1069`; 561 of 798), the label the fleet number itself (rail units have 6-digit IDs) | the ID is the vehicle key; the label the `fleet_number` attribute |
 | IDSJMK-Q3 | no trip updates: the dataset carries no delay | no delay fact; progress and estimates come from the positions |
 | IDSJMK-Q4 | the alerts are in the vehicles' dataset; there is no separate alerts URL | two channels on the same URL, the alerts polled every 60 s |
@@ -88,10 +91,18 @@ release), the same recording, once per key: by `gtfs_trip_id` 279 of 736 groups 
 `gtfs_trip_line_course` 378. Every group bound before stays bound to the same trip; 99 more
 bind (90 were `not_active`, 9 `not_in_service`); no key names two trips on the day.
 
+Trains (IDSJMK-Q1), recording 2026-11-24 22:42–22:52 local (40 polls, 26,527 observations)
+replayed on a slice: CZPTT compiled from the messages of the 1,339 train numbers of IDS JMK's
+`api.txt` (10,148 of 221,736) with OVL-R132, which keyed 3,523 of the feed's 3,526 rail trip
+IDs; the golden road slice as `jdf` (its bus numbers are not comparable). Before, all 116 rail
+key groups were `jdf` without a key; with `trip_key_feed`, all 116 went to `czptt`: 103 bound,
+2 `ambiguous` (R 1132 has two CZPTT trips on Tuesdays 9–24 November, in the national package
+too), 11 `not_in_service` (units already naming a morning trip). No road group went to `czptt`.
+
 ## Open questions
 
 - Terms of use.
 - How the dataset behaves around midnight and DST (no `start_date`: the core picks the service
   date of each trip).
-- Rail (IDSJMK-Q1).
+- Rail (IDSJMK-Q1) in a national release: the first build with OVL-R132.
 - IDSJMK-Q9 in a national release: the first build with OVL-R131.

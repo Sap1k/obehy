@@ -1,13 +1,15 @@
 # IDS JMK vehicle positions as GTFS-RT from KORDIS JMK (docs/sources/ids-jmk.md): Jihomoravský
-# kraj regional buses, Brno trams, trolleybuses and buses. A trip ID names its run, the trip of
-# its line/course that runs on the day (IDSJMK-Q9): the static key `gtfs_trip_line_course`.
-# The static overlay binds them on jdf only; regional trains are not bound yet (IDSJMK-Q1).
+# kraj regional buses, Brno trams, trolleybuses and buses, and regional trains. A trip ID names
+# its run, the trip of its line/course that runs on the day (IDSJMK-Q9): the static key
+# `gtfs_trip_line_course`, on jdf for road trips (the overlay) and on czptt for trains (the
+# national train of the course's number). The feed does not say which trips are trains, so an
+# observation goes to czptt when czptt holds its key (IDSJMK-Q1).
 # The feed has no trip updates, so no delays: progress comes from the positions.
 source = "ids-jmk"
 manifest_version = 1
 # The public feed list (obehy release feed-list) names the source by these.
 title = "IDS JMK vehicle positions (KORDIS JMK)"
-covers = "IDS JMK (Jihomoravský kraj) regional buses and Brno city lines: positions."
+covers = "IDS JMK (Jihomoravský kraj) regional buses and trains and Brno city lines: positions."
 
 # Which vehicle IDs are physical vehicles, by mode (oběhy follow only those): the descriptor's
 # ID names the vehicle; its label is the fleet number (IDSJMK-Q2).
@@ -20,7 +22,8 @@ poll = { kind = "interval", seconds = 15 }
 backoff = { after_failures = 5, max_s = 300 }
 timeout_s = 20
 request = { method = "GET", url = "https://kordis-jmk.cz/gtfs/gtfsReal.dat" }
-feeds = ["jdf"]
+feeds = ["jdf", "czptt"]
+trip_key_feed = "czptt"  # IDSJMK-Q1
 capabilities = ["vehicle_key", "trip_key", "position"]
 
 [channel.decode]
@@ -38,7 +41,7 @@ poll = { kind = "interval", seconds = 60 }
 backoff = { after_failures = 5, max_s = 600 }
 timeout_s = 20
 request = { method = "GET", url = "https://kordis-jmk.cz/gtfs/gtfsReal.dat" }
-feeds = ["jdf"]
+feeds = ["jdf", "czptt"]
 capabilities = ["alert"]
 
 [channel.decode]
