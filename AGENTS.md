@@ -19,7 +19,8 @@
   releases and runs the realtime core. Do not recreate PostgreSQL source reconciliation.
 - Compiler work happens in the standalone checkout `E:/Git/obehy/jrutil-rs`; its build
   specification (`docs/switch.md`, `crates/jrutil/src/spec.rs`) is the interface Oběhy writes. The
-  F# checkout `E:/Git/obehy/jrutil` supplies the gazetteers and the route-shapes companion.
+  F# checkout `E:/Git/obehy/jrutil` supplies only the route-shapes companion; the gazetteers are in
+  `jrunify-ext-geodata/gazetteer`.
   `converters/jrutil` is a pinned submodule: do not edit it or advance its pointer unless the task
   explicitly asks.
 - Stable JDF stop IDs come from the versioned stop-ID registry files applied by JrUtil. There is no

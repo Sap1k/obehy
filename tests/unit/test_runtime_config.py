@@ -50,7 +50,6 @@ schema_version = 1
 workdir = "{(tmp_path / "work").as_posix()}"
 osm_file = "{(tmp_path / "region.osm.pbf").as_posix()}"
 jrunify_ext_geodata_dir = "{(tmp_path / "geodata").as_posix()}"
-gazetteer_dir = "{(tmp_path / "gazetteer").as_posix()}"
 [jrutil]
 command = ["{(tmp_path / "jrutil").as_posix()}"]
 """,
@@ -63,6 +62,7 @@ command = ["{(tmp_path / "jrutil").as_posix()}"]
     assert loaded.czptt_source_cache_dir == tmp_path / "work" / "cache" / "czptt-sources"
     assert loaded.jrutil.directory is None
     assert loaded.jrutil.command == ((tmp_path / "jrutil").as_posix(),)
+    assert loaded.gazetteer_dir == tmp_path / "geodata" / "gazetteer"
 
 
 @pytest.mark.parametrize(
@@ -74,7 +74,6 @@ command = ["{(tmp_path / "jrutil").as_posix()}"]
             f'directory = "{Path("C:/jrutil").as_posix()}"\ncommand = ["dotnet"]',
             "exactly one",
         ),
-        ("gazetteer_dir = ", "gazetteer_dir"),
     ],
 )
 def test_invalid_configuration_fails_immediately(tmp_path: Path, change: str, match: str) -> None:
@@ -90,8 +89,6 @@ directory = "{(tmp_path / "jrutil").as_posix()}"
 """
     if change.startswith("schema_version"):
         body = body.replace("schema_version = 1", change)
-    elif change.startswith("gazetteer_dir"):
-        body = body.replace(f'gazetteer_dir = "{(tmp_path / "gazetteer").as_posix()}"\n', "")
     elif change.startswith("workdir"):
         body = body.replace(f'workdir = "{(tmp_path / "work").as_posix()}"', change)
     else:

@@ -33,7 +33,8 @@ class RuntimeConfig:
     czptt_source_cache_dir: Path
     jrunify_ext_geodata_dir: Path
     jrutil: JrUtilRuntime
-    # The compiler's gazetteers: cz_regions.json.gz, cz_towns.json.gz, eur_towns_countries.csv.
+    # The compiler's gazetteers: cz_regions.json.gz, cz_towns.json.gz, eur_towns_countries.csv
+    # (default: <jrunify_ext_geodata_dir>/gazetteer).
     gazetteer_dir: Path
     # The route-shapes companion binary (BASE_PLAN.md section 17); None skips route shapes.
     route_shapes_companion: Path | None = None
@@ -186,6 +187,7 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
         command = tuple(cast(list[str], command_parts))
 
     workdir = _absolute_path(paths, "workdir", source)
+    geodata_dir = _absolute_path(paths, "jrunify_ext_geodata_dir", source)
     artifact_root = (
         _absolute_path(paths, "artifact_root", source)
         if paths.get("artifact_root") is not None
@@ -208,9 +210,13 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
         routing_cache_dir=routing_cache_dir,
         czptt_source_cache_dir=czptt_source_cache_dir,
         osm_file=_absolute_path(paths, "osm_file", source),
-        jrunify_ext_geodata_dir=_absolute_path(paths, "jrunify_ext_geodata_dir", source),
+        jrunify_ext_geodata_dir=geodata_dir,
         jrutil=JrUtilRuntime(directory=directory, command=command),
-        gazetteer_dir=_absolute_path(paths, "gazetteer_dir", source),
+        gazetteer_dir=(
+            _absolute_path(paths, "gazetteer_dir", source)
+            if paths.get("gazetteer_dir") is not None
+            else geodata_dir / "gazetteer"
+        ),
         route_shapes_companion=(
             _absolute_path(paths, "route_shapes_companion", source)
             if paths.get("route_shapes_companion") is not None

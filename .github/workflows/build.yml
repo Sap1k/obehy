@@ -2,8 +2,8 @@ name: build
 
 # Daily production build of the JDF + CZPTT feed pair (BASE_PLAN.md section 15).
 # The jrutil-rs compiler and the geodata registry come from their standalone repositories, as in
-# local builds; the JrUtil checkout supplies the gazetteers and names the route-shapes companion
-# release. The converters/ submodule pins are not used.
+# local builds (the gazetteers are in jrunify-ext-geodata); the JrUtil checkout names the
+# route-shapes companion release. The converters/ submodule pins are not used.
 
 on:
   schedule:
@@ -14,7 +14,7 @@ on:
         description: jrutil-rs ref to build
         default: main
       jrutil_ref:
-        description: JrUtil ref (gazetteers and route-shapes companion)
+        description: JrUtil ref (route-shapes companion)
         default: main
       geodata_ref:
         description: jrunify-ext-geodata ref
@@ -133,7 +133,6 @@ jobs:
           artifact_root = "$ARTIFACT_ROOT"
           osm_file = "$WORK/osm/regional-merged.osm.pbf"
           jrunify_ext_geodata_dir = "$GITHUB_WORKSPACE/jrunify-ext-geodata"
-          gazetteer_dir = "$GITHUB_WORKSPACE/jrutil/jrutil/data"
           route_shapes_companion = "$WORK/bin/obehy-motis-shapes"
           route_shapes_cache_dir = "$WORK/cache/route-shapes"
 

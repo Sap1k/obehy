@@ -5,8 +5,9 @@ workdir = "D:/obehy-work"
 artifact_root = "D:/obehy-data/artifacts"
 osm_file = "D:/obehy-data/osm/obehy-region.osm.pbf"
 jrunify_ext_geodata_dir = "D:/src/jrunify-ext-geodata"
-# The compiler's gazetteers: cz_regions.json.gz, cz_towns.json.gz, eur_towns_countries.csv.
-gazetteer_dir = "D:/src/jrutil/jrutil/data"
+# The compiler's gazetteers: cz_regions.json.gz, cz_towns.json.gz, eur_towns_countries.csv
+# (default: <jrunify_ext_geodata_dir>/gazetteer).
+# gazetteer_dir = "D:/src/jrunify-ext-geodata/gazetteer"
 # Routed post-inference evidence reused across runs (default: <workdir>/cache/routing).
 # routing_cache_dir = "D:/obehy-work/cache/routing"
 # Route shapes (BASE_PLAN.md section 17): the obehy-motis-shapes binary; without it the build

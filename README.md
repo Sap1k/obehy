@@ -32,9 +32,8 @@ uv run pyright
 ## Machine-local configuration and shared OSM
 
 Copy `config/obehy.example.toml` to the gitignored `config/obehy.local.toml` and set absolute
-paths for the work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkout, the gazetteer
-directory (`gazetteer_dir`: `cz_regions.json.gz`, `cz_towns.json.gz`, `eur_towns_countries.csv`)
-and either a jrutil-rs checkout (`[jrutil] directory`, built with cargo) or a compiler command.
+paths for the work directory, active merged OSM PBF, JrUnify-Ext-GeoData checkout (its
+`gazetteer/` holds the compiler's gazetteers; `gazetteer_dir` overrides it) and either a jrutil-rs checkout (`[jrutil] directory`, built with cargo) or a compiler command.
 `obehy build` and `obehy-osm` accept `--config PATH`; there is no sibling-checkout or
 parent-directory fallback.
 

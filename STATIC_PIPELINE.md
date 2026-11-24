@@ -53,7 +53,7 @@ absolute path:
   `sr70/`; the compiler orders the messages itself), the railway-location OSM extract, the GVD
   year and the output package;
 - `[jdf]`: the stop catalogues (`jrunify-ext-geodata/other`), the gazetteers
-  (`[paths] gazetteer_dir`), the post-candidate OSM extract, the registry, the route rules, the GVD
+  (`jrunify-ext-geodata/gazetteer`, or `[paths] gazetteer_dir`), the post-candidate OSM extract, the registry, the route rules, the GVD
   year, the reference date and the output package; `[[jdf.exports]]` the two national exports as
   downloaded;
 - `[jdf.posts]` (with `--estimated-posts`): the transit-routing base extract, the post-inference
