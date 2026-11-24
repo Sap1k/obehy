@@ -28,7 +28,7 @@ from obehy import (
 )
 from obehy.api import commands as api_commands
 from obehy.pipeline import jrutil
-from obehy.pipeline.args import JobSetting, parse_jobs, parse_year
+from obehy.pipeline.args import JobSetting, parse_jobs, parse_run_id, parse_year
 from obehy.pipeline.errors import PipelineError
 from obehy.pipeline.files import file_digest, utc_now, write_json
 from obehy.pipeline.process import CommandFn, run_command
@@ -67,6 +67,7 @@ class BuildOptions:
     routing_cache: bool = True
     czptt_source_cache: bool = True
     route_shapes: bool = True
+    run_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -145,8 +146,8 @@ def _acquire_lock(path: Path, run_id: str) -> int:
     return descriptor
 
 
-def _start_run(runtime: RuntimeConfig) -> tuple[_Run, int]:
-    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:12]
+def _start_run(runtime: RuntimeConfig, run_id: str | None) -> tuple[_Run, int]:
+    run_id = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:12]
     releases = runtime.artifact_root / "releases"
     root = runtime.workdir / "runs" / "production" / run_id
     run = _Run(
@@ -385,7 +386,7 @@ def build(
 ) -> Release:
     runtime = options.runtime
     osm = _check_inputs(options)
-    run, lock_descriptor = _start_run(runtime)
+    run, lock_descriptor = _start_run(runtime, options.run_id)
     reporter = BuildReporter(options.progress)
     stages: list[dict[str, str]] = []
 
@@ -495,6 +496,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="build without generated route shapes (BASE_PLAN.md section 17)",
     )
+    command.add_argument(
+        "--run-id",
+        type=parse_run_id,
+        help="use this run id instead of a fresh one (CI reserves its release tag up front)",
+    )
     realtime_commands.add_parsers(commands)
     release_commands.add_parsers(commands)
     api_commands.add_parsers(commands)
@@ -530,6 +536,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 routing_cache=not cast(bool, args.no_routing_cache),
                 czptt_source_cache=not cast(bool, args.no_czptt_source_cache),
                 route_shapes=not cast(bool, args.no_route_shapes),
+                run_id=cast(str | None, args.run_id),
             )
         )
     except (

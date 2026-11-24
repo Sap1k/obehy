@@ -313,6 +313,10 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-25** — The 2026-11-24 manual build (f5f2a3c) compiled but could not publish: GitHub
+  answered 403 to the release tag because main's workflow files had changed during the build.
+  CI now reserves the tag `build-<run id>` at job start (`obehy build --run-id`), publishes
+  onto it and drops it if the run fails. Checked: unit tests, lint; no build run.
 - **2026-11-24** — Nothing comes from the F# JrUtil any more. The gazetteers moved to
   `jrunify-ext-geodata/gazetteer` (byte-identical to JrUtil's `jrutil/data`) and are read there;
   `[paths] gazetteer_dir` is gone and unknown `[paths]` keys are an error. The route-shapes

@@ -415,6 +415,21 @@ def test_unreachable_source_fails_before_any_compilation(tmp_path: Path) -> None
     assert (failure_path.parent / "sources" / "fetch-log.json").is_file()
 
 
+def test_build_uses_the_given_run_id(tmp_path: Path) -> None:
+    run_id = "20261124T070233Z-1bda58bef584"
+    options = cli.BuildOptions(_runtime(tmp_path), 2027, estimated_posts=True, run_id=run_id)
+
+    result = _build(options, _Compiler())
+
+    assert result.run_id == run_id
+    assert (tmp_path / "work" / "runs" / "production" / run_id).is_dir()
+
+
+def test_malformed_run_id_is_rejected() -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["build", "--run-id", "build-1"])
+
+
 def test_removed_build_options_are_rejected() -> None:
     for option in ("--memory-budget=8GiB", "--czptt-operational-points=gtfs"):
         with pytest.raises(SystemExit):

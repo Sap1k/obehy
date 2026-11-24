@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import re
 from typing import Literal
 
 JobSetting = Literal["auto"] | int
 YearSetting = Literal["auto"] | int
+
+# A build run: its UTC start and a random suffix; release tags are build-<run id>.
+RUN_ID = re.compile(r"^\d{8}T\d{6}Z-[0-9a-f]{12}$")
 
 
 def parse_jobs(value: str) -> JobSetting:
@@ -31,3 +35,9 @@ def parse_year(value: str) -> YearSetting:
     if not 2000 <= year <= 9999:
         raise argparse.ArgumentTypeError("must be 'auto' or a four-digit year")
     return year
+
+
+def parse_run_id(value: str) -> str:
+    if not RUN_ID.match(value):
+        raise argparse.ArgumentTypeError("must look like 20261124T070233Z-1bda58bef584")
+    return value

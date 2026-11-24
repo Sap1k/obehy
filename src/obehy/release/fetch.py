@@ -13,7 +13,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import shutil
 import tarfile
 import urllib.request
@@ -22,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, cast
 
+from obehy.pipeline.args import RUN_ID as _RUN_ID
 from obehy.pipeline.files import file_digest
 from obehy.production_package import package_digest
 
@@ -30,7 +30,6 @@ DEFAULT_KEEP = 2
 TAG_PREFIX = "build-"
 API = "https://api.github.com"
 TOKEN_ENV = ("GITHUB_TOKEN", "GH_TOKEN")
-_RUN_ID = re.compile(r"^\d{8}T\d{6}Z-[0-9a-f]{12}$")
 _CHUNK = 1024 * 1024
 
 Report = Callable[[str], None]

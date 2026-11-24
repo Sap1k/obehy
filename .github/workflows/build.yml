@@ -51,6 +51,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
+      # The release tag is created now, while the built commit is still main's head: GitHub
+      # refuses the job token a new ref on a commit whose workflow files differ from main's,
+      # so a tag made after the build fails whenever main's workflows changed meanwhile.
+      - name: Reserve release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish }}
+        run: |
+          run_id="$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 6)"
+          echo "BUILD_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          if [ "$PUBLISH" = "true" ]; then
+            gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/build-$run_id" -f sha="$GITHUB_SHA" \
+              --silent
+          fi
       - uses: actions/checkout@v7
         with:
           path: obehy
@@ -175,7 +190,7 @@ jobs:
           if [ "$REFRESH_OSM" = "true" ]; then args+=(--refresh-osm); fi
           if [ "$REFRESH_CZPTT" = "true" ]; then args+=(--no-czptt-source-cache); fi
           if [ "$ROUTE_SHAPES" != "true" ]; then args+=(--no-route-shapes); fi
-          uv run --no-sync obehy build "${args[@]}"
+          uv run --no-sync obehy build --run-id "$BUILD_RUN_ID" "${args[@]}"
 
       # Keep a fresh snapshot even when a later stage fails; a refresh costs a Geofabrik download.
       # A forced refresh replaces the month's entry: cache keys cannot be overwritten, so the
@@ -233,7 +248,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          run_id=$(jq -r .run_id "$ARTIFACT_ROOT/current.json")
+          run_id="$BUILD_RUN_ID"
           release="$ARTIFACT_ROOT/releases/$run_id"
           assets="$RUNNER_TEMP/assets"
           mkdir -p "$assets"
@@ -247,8 +262,20 @@ jobs:
           geodata_commit=$(git -C jrunify-ext-geodata rev-parse HEAD)
           printf 'Automated build %s.\n\nOběhy %s, jrutil-rs %s, jrunify-ext-geodata %s.\n' \
             "$run_id" "$GITHUB_SHA" "$compiler_commit" "$geodata_commit" > "$RUNNER_TEMP/notes.md"
-          gh release create "build-$run_id" "$assets"/* \
-            --target "$GITHUB_SHA" --title "Build $run_id" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release create "build-$run_id" "$assets"/* --verify-tag \
+            --title "Build $run_id" --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Drop unpublished release tag
+        if: failure() && (github.event_name == 'schedule' || inputs.publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="build-$BUILD_RUN_ID"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh api -X DELETE "repos/$GH_REPO/git/refs/tags/$tag" --silent ||
+              echo "::warning::Could not delete the reserved tag $tag"
+          fi
 
       - name: Prune old releases
         if: github.event_name == 'schedule' || inputs.publish
