@@ -2,8 +2,8 @@ name: build
 
 # Daily production build of the JDF + CZPTT feed pair (BASE_PLAN.md section 15).
 # The jrutil-rs compiler and the geodata registry come from their standalone repositories, as in
-# local builds (the gazetteers are in jrunify-ext-geodata); the JrUtil checkout names the
-# route-shapes companion release. The converters/ submodule pins are not used.
+# local builds; jrutil-rs also publishes the route-shapes companion release. The converters/
+# submodule pins are not used.
 
 on:
   schedule:
@@ -12,9 +12,6 @@ on:
     inputs:
       jrutil_rs_ref:
         description: jrutil-rs ref to build
-        default: main
-      jrutil_ref:
-        description: JrUtil ref (route-shapes companion)
         default: main
       geodata_ref:
         description: jrunify-ext-geodata ref
@@ -65,12 +62,6 @@ jobs:
           path: jrutil-rs
       - uses: actions/checkout@v7
         with:
-          repository: Sap1k/jrutil
-          ref: ${{ inputs.jrutil_ref || 'main' }}
-          path: jrutil
-          lfs: true
-      - uses: actions/checkout@v7
-        with:
           repository: Sap1k/jrunify-ext-geodata
           ref: ${{ inputs.geodata_ref || 'main' }}
           path: jrunify-ext-geodata
@@ -84,14 +75,14 @@ jobs:
           df -h / /mnt
           free -h
 
-      # The route-shapes companion that JrUtil's route-shapes.yml built from the checked-out
-      # JrUtil's route-shapes/; without that release the build makes no route shapes.
+      # The route-shapes companion that jrutil-rs's route-shapes.yml built from the checked-out
+      # jrutil-rs's route-shapes/; without that release the build makes no route shapes.
       - name: Download route-shapes companion
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: Sap1k/jrutil
+          GH_REPO: Sap1k/jrutil-rs
         run: |
-          hash=$(git -C jrutil ls-files -s route-shapes | sha256sum | cut -c1-16)
+          hash=$(git -C jrutil-rs ls-files -s route-shapes | sha256sum | cut -c1-16)
           echo "SHAPES_HASH=$hash" >> "$GITHUB_ENV"
           mkdir -p "$WORK/bin"
           if gh release download "route-shapes-$hash" -p obehy-motis-shapes-linux-x64.tar.gz \
@@ -99,7 +90,7 @@ jobs:
             tar -xzf "$RUNNER_TEMP/obehy-motis-shapes-linux-x64.tar.gz" -C "$WORK/bin"
             "$WORK/bin/obehy-motis-shapes" version
           else
-            echo "::warning::No JrUtil release route-shapes-$hash: building without route shapes"
+            echo "::warning::No jrutil-rs release route-shapes-$hash: building without route shapes"
           fi
 
       - name: Install osmium-tool

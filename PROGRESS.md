@@ -313,10 +313,11 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
-- **2026-11-24** — The gazetteers moved to `jrunify-ext-geodata/gazetteer` (byte-identical to
-  JrUtil's `jrutil/data`); `[paths] gazetteer_dir` is optional and defaults there, and CI no
-  longer reads them from the JrUtil checkout, which now only names the route-shapes companion.
-  Checked: config unit tests and the local config resolving; no build run.
+- **2026-11-24** — Nothing comes from the F# JrUtil any more. The gazetteers moved to
+  `jrunify-ext-geodata/gazetteer` (byte-identical to JrUtil's `jrutil/data`) and are read there;
+  `[paths] gazetteer_dir` is gone and unknown `[paths]` keys are an error. The route-shapes
+  companion moved to jrutil-rs (`route-shapes/`, same source hash); CI downloads its release
+  from jrutil-rs and no longer checks out JrUtil. Checked: unit tests; no build run.
 - **2026-11-24** — IDS JMK trains bind (IDSJMK-Q1). jrutil-rs OVL-R132 keys each IDS JMK rail
   trip ID (`ids-jmk:gtfs_trip_line_course`) on czptt to the train numbered by its `api.txt`
   course, on the dates its line/course runs; `obehy build` names the IDS JMK feed in

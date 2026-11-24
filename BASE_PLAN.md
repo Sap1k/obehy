@@ -229,7 +229,7 @@ modules (only `realtime_config.py`) and the diagnostics off the database. Live o
 replay run the same core; there is no replay-only twin of any core rule.
 
 JrUtil and JrUnify-Ext-GeoData are developed in their standalone checkouts and pinned here. The
-route-shapes companion lives in JrUtil (`route-shapes/`), pinned to the osr commit that MOTIS
+route-shapes companion lives in jrutil-rs (`route-shapes/`), pinned to the osr commit that MOTIS
 release `v2.11.0` (`dc441d684099afbf4ce82d605f26e46504c70c28`) uses, initially.
 
 ---
@@ -766,7 +766,7 @@ one meaning. A trip without a shape is preferable to a build failure.
 
 ## 17.1 Companion boundary
 
-A thin C++ CLI in JrUtil's `route-shapes/` against a pinned **osr** (MOTIS's routing
+A thin C++ CLI in jrutil-rs's `route-shapes/` against a pinned **osr** (MOTIS's routing
 library) map-matches stop patterns directly. It does what MOTIS's import-time `route_shapes` does
 per route (`osr::map_match` with the class profile, then segments concatenated by
 `segment_offsets_` into one polyline with per-stop offsets), but without a Nigiri timetable, a

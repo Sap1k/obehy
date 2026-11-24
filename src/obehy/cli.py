@@ -113,7 +113,7 @@ def _check_inputs(options: BuildOptions) -> _Osm:
         required.append(_filtered_jdf_rules(runtime))
     if options.estimated_posts:
         required.append(_post_inference_policy(options))
-    required += [runtime.gazetteer_dir / name for name in GAZETTEER_FILES]
+    required += [_gazetteer(runtime) / name for name in GAZETTEER_FILES]
     for path in required:
         if not path.is_file():
             raise PipelineError(f"Build input is missing: {path}")
@@ -165,6 +165,10 @@ def _start_run(runtime: RuntimeConfig) -> tuple[_Run, int]:
     return run, lock_descriptor
 
 
+def _gazetteer(runtime: RuntimeConfig) -> Path:
+    return runtime.jrunify_ext_geodata_dir / "gazetteer"
+
+
 def _route_rules(runtime: RuntimeConfig) -> Path:
     return runtime.jrunify_ext_geodata_dir / "routes"
 
@@ -210,7 +214,7 @@ def _build_spec(
         railway_osm=osm.railway_locations,
         czptt_output=run.partial_release / "czptt",
         catalogues=runtime.jrunify_ext_geodata_dir / "other",
-        gazetteer=runtime.gazetteer_dir,
+        gazetteer=_gazetteer(runtime),
         post_candidates_osm=osm.post_candidates,
         route_rules=_route_rules(runtime),
         reference_date=fetched.reference_date,

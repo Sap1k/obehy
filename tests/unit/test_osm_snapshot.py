@@ -50,7 +50,6 @@ def _config(tmp_path: Path) -> RuntimeConfig:
         czptt_source_cache_dir=tmp_path / "work" / "cache" / "czptt-sources",
         jrunify_ext_geodata_dir=tmp_path / "geodata",
         jrutil=JrUtilRuntime(directory=tmp_path / "jrutil", command=None),
-        gazetteer_dir=tmp_path / "gazetteer",
     )
 
 

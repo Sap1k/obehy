@@ -31,11 +31,10 @@ class RuntimeConfig:
     routing_cache_dir: Path
     # Published CZPTT source objects reused across runs; they are never rewritten upstream.
     czptt_source_cache_dir: Path
+    # The jrunify-ext-geodata checkout; the build reads its fixed layout (catalogues, gazetteers,
+    # registry, route rules, overlay overrides, filtered-feed rules, rail).
     jrunify_ext_geodata_dir: Path
     jrutil: JrUtilRuntime
-    # The compiler's gazetteers: cz_regions.json.gz, cz_towns.json.gz, eur_towns_countries.csv
-    # (default: <jrunify_ext_geodata_dir>/gazetteer).
-    gazetteer_dir: Path
     # The route-shapes companion binary (BASE_PLAN.md section 17); None skips route shapes.
     route_shapes_companion: Path | None = None
     # Routing PBF, osr graph and companion results reused across runs.
@@ -51,6 +50,20 @@ def _table(document: dict[str, Any], name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ConfigurationError(f"Missing [{name}] table")
     return cast(dict[str, Any], value)
+
+
+_PATH_KEYS = frozenset(
+    {
+        "workdir",
+        "artifact_root",
+        "routing_cache_dir",
+        "czptt_source_cache_dir",
+        "osm_file",
+        "jrunify_ext_geodata_dir",
+        "route_shapes_companion",
+        "route_shapes_cache_dir",
+    }
+)
 
 
 def _absolute_path(table: dict[str, Any], key: str, source: Path) -> Path:
@@ -162,6 +175,9 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
     if document.get("schema_version") != 1:
         raise ConfigurationError(f"{source} must contain schema_version = 1")
     paths = _table(document, "paths")
+    unknown = sorted(set(paths) - _PATH_KEYS)
+    if unknown:
+        raise ConfigurationError(f"Unknown [paths] keys in {source}: {', '.join(unknown)}")
     jrutil_table = _table(document, "jrutil")
     directory_value = jrutil_table.get("directory")
     command_value = jrutil_table.get("command")
@@ -187,7 +203,6 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
         command = tuple(cast(list[str], command_parts))
 
     workdir = _absolute_path(paths, "workdir", source)
-    geodata_dir = _absolute_path(paths, "jrunify_ext_geodata_dir", source)
     artifact_root = (
         _absolute_path(paths, "artifact_root", source)
         if paths.get("artifact_root") is not None
@@ -210,13 +225,8 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
         routing_cache_dir=routing_cache_dir,
         czptt_source_cache_dir=czptt_source_cache_dir,
         osm_file=_absolute_path(paths, "osm_file", source),
-        jrunify_ext_geodata_dir=geodata_dir,
+        jrunify_ext_geodata_dir=_absolute_path(paths, "jrunify_ext_geodata_dir", source),
         jrutil=JrUtilRuntime(directory=directory, command=command),
-        gazetteer_dir=(
-            _absolute_path(paths, "gazetteer_dir", source)
-            if paths.get("gazetteer_dir") is not None
-            else geodata_dir / "gazetteer"
-        ),
         route_shapes_companion=(
             _absolute_path(paths, "route_shapes_companion", source)
             if paths.get("route_shapes_companion") is not None

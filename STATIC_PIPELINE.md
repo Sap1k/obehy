@@ -53,8 +53,8 @@ absolute path:
   `sr70/`; the compiler orders the messages itself), the railway-location OSM extract, the GVD
   year and the output package;
 - `[jdf]`: the stop catalogues (`jrunify-ext-geodata/other`), the gazetteers
-  (`jrunify-ext-geodata/gazetteer`, or `[paths] gazetteer_dir`), the post-candidate OSM extract, the registry, the route rules, the GVD
-  year, the reference date and the output package; `[[jdf.exports]]` the two national exports as
+  (`jrunify-ext-geodata/gazetteer`), the post-candidate OSM extract, the registry, the route
+  rules, the GVD year, the reference date and the output package; `[[jdf.exports]]` the two national exports as
   downloaded;
 - `[jdf.posts]` (with `--estimated-posts`): the transit-routing base extract, the post-inference
   policy, the review reports and the routing cache (omitted with `--no-routing-cache`);
@@ -153,9 +153,9 @@ reason; trips shaped)
 are in each package's `diagnostics.json` (`route_shapes`) and copied into `release.json`.
 `jdf-filtered` keeps no generated shapes for now.
 
-The companion lives in the JrUtil repository (`route-shapes/`). JrUtil's `route-shapes.yml`
-builds it and publishes a release `route-shapes-<source hash>`; the nightly build downloads the
-one matching its JrUtil checkout and never compiles C++.
+The companion lives in the jrutil-rs repository (`route-shapes/`). Its `route-shapes.yml` builds
+it and publishes a release `route-shapes-<source hash>`; the nightly build downloads the one
+matching its jrutil-rs checkout and never compiles C++.
 
 ## Overlay policy
 

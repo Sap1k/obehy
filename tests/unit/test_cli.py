@@ -35,7 +35,7 @@ def _runtime(tmp_path: Path) -> RuntimeConfig:
     (geodata / "overlay" / "pid-stop-overrides.csv").write_text("header\n", encoding="utf-8")
     (geodata / "filtered-jdf").mkdir()
     (geodata / "filtered-jdf" / "rules-v1.json").write_text("{}\n", encoding="utf-8")
-    gazetteer = tmp_path / "gazetteer"
+    gazetteer = geodata / "gazetteer"
     gazetteer.mkdir()
     for name in cli.GAZETTEER_FILES:
         (gazetteer / name).write_bytes(b"")
@@ -51,7 +51,6 @@ def _runtime(tmp_path: Path) -> RuntimeConfig:
         czptt_source_cache_dir=tmp_path / "work" / "cache" / "czptt-sources",
         jrunify_ext_geodata_dir=geodata,
         jrutil=JrUtilRuntime(directory=jrutil, command=None),
-        gazetteer_dir=gazetteer,
     )
 
 
@@ -223,7 +222,7 @@ feed = "{_posix(sources / "regional" / "ids-jmk-gtfs.zip")}"
 
 [jdf]
 catalogues = "{_posix(geodata / "other")}"
-gazetteer = "{_posix(runtime.gazetteer_dir)}"
+gazetteer = "{_posix(runtime.jrunify_ext_geodata_dir / "gazetteer")}"
 osm = "{_posix(osm / "jdf-post-candidates.osm.pbf")}"
 route_rules = "{_posix(geodata / "routes")}"
 timetable_year = 2027
@@ -389,7 +388,7 @@ def test_existing_build_lock_rejects_concurrent_publication(tmp_path: Path) -> N
 
 def test_missing_gazetteer_fails_before_the_run_starts(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    (runtime.gazetteer_dir / "cz_towns.json.gz").unlink()
+    (runtime.jrunify_ext_geodata_dir / "gazetteer" / "cz_towns.json.gz").unlink()
 
     with pytest.raises(PipelineError, match="cz_towns"):
         _build(cli.BuildOptions(runtime, 2027), _Compiler())
