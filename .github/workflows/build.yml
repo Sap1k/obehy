@@ -188,12 +188,19 @@ jobs:
           uv run --no-sync obehy build "${args[@]}"
 
       # Keep a fresh snapshot even when a later stage fails; a refresh costs a Geofabrik download.
+      # A forced refresh replaces the month's entry: cache keys cannot be overwritten, so the
+      # old one is deleted first, or later runs would keep restoring the stale snapshot.
       - name: Check OSM snapshot
         id: osm-built
-        if: always() && steps.osm.outputs.cache-hit != 'true'
+        if: always() && (steps.osm.outputs.cache-hit != 'true' || inputs.refresh_osm)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPLACE: ${{ steps.osm.outputs.cache-hit == 'true' }}
         run: |
           if [ -f "$WORK/osm/regional-merged.osm.pbf.manifest.json" ]; then
             rm -rf "$WORK/osm/extracts"
+            if [ "$REPLACE" = "true" ]; then gh cache delete "osm-v1-$OSM_MONTH"; fi
             echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Save OSM snapshot
