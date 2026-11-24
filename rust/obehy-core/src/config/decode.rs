@@ -5,8 +5,10 @@
 //! Every table is read strictly (unknown keys are errors). The shape:
 //!
 //! - `version` (the decoder version observations carry), `reader` (`json`, `html`,
-//!   `gtfs-rt`), and either `decoder` (a code decoder: `sz-tabule`, `pid-alerts`,
-//!   `pid-infotexts`, `cd-composition`) or the declarative mapping below.
+//!   `gtfs-rt`), and either `decoder` (a code decoder: `sz-tabule`, `gtfs-rt-alerts`,
+//!   `gtfs-rt-vehicles`, `pid-infotexts`, `cd-composition`) or the declarative mapping below.
+//!   The GTFS-RT decoders read `keys` (the namespaces the feed's trip, stop and route IDs
+//!   belong to), and `gtfs-rt-vehicles` a plain `feed` and an optional `label_attribute`.
 //! - `entities`: the dotted path of the entity list (a numeric segment indexes a list);
 //!   `root` (`object`, `array`) and `non_empty` check the document first; `errors` holds the
 //!   payload error texts.
@@ -28,6 +30,8 @@ use indexmap::IndexMap;
 use serde::de::{DeserializeOwned, Error as _};
 use serde::{Deserialize, Deserializer};
 use toml::{Table, Value};
+
+use crate::model::Feed;
 
 /// One channel's (or a shared block's) decoding.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -58,6 +62,19 @@ pub struct Decode {
     pub profile: IndexMap<String, Profile>,
     #[serde(default)]
     pub fact: Vec<FactSpec>,
+    pub keys: Option<GtfsRtKeys>,
+    /// The vehicle attribute a GTFS-RT `VehicleDescriptor.label` is (`fleet_number`).
+    pub label_attribute: Option<String>,
+}
+
+/// The key namespaces of a GTFS-RT feed's IDs (`pid:gtfs_trip_id`); an ID of a kind without
+/// one is not read.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GtfsRtKeys {
+    pub trip: Option<String>,
+    pub stop: Option<String>,
+    pub route: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -72,7 +89,8 @@ pub enum Reader {
 #[serde(rename_all = "kebab-case")]
 pub enum CodeDecoder {
     SzTabule,
-    PidAlerts,
+    GtfsRtAlerts,
+    GtfsRtVehicles,
     PidInfotexts,
     CdComposition,
 }
@@ -101,6 +119,15 @@ pub struct Errors {
 pub enum FeedName {
     Jdf,
     Czptt,
+}
+
+impl From<FeedName> for Feed {
+    fn from(name: FeedName) -> Feed {
+        match name {
+            FeedName::Jdf => Feed::Jdf,
+            FeedName::Czptt => Feed::Czptt,
+        }
+    }
 }
 
 /// A source time: the value, and whether one beyond the policy's clock skew is dropped (T15).

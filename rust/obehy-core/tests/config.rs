@@ -125,6 +125,8 @@ fn shipped_manifests_load() {
             "arriva-express/buses",
             "dpmd/vehicles",
             "duk/vehicles",
+            "ids-jmk/vehicles",
+            "ids-jmk/alerts",
             "idsok/vehicles",
             "iredo/vehicles",
             "mpvnet/idol",
@@ -151,6 +153,7 @@ fn shipped_manifests_load() {
         by("sz-mapa/trains"),
     );
     assert_eq!(by("pid/alerts").capabilities, ["alert"]);
+    assert_eq!(by("ids-jmk/alerts").capabilities, ["alert"]);
     assert!(
         pid.auth.is_some()
             && pid.cursor.is_some()
@@ -236,10 +239,10 @@ fn shipped_manifests_load() {
             .all(|c| c.source == "duk")
     );
     assert!(
-        manifest::select_channels(&all, &["ids-jmk"])
+        manifest::select_channels(&all, &["no-such-source"])
             .unwrap_err()
             .to_string()
-            .contains("ids-jmk")
+            .contains("no-such-source")
     );
     // The ČD lookup answers for its own trains on the days around today.
     let cd = &source("cd").lookups[0];

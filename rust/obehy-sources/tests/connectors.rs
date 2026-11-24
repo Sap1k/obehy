@@ -210,9 +210,10 @@ fn every_case_decodes_as_expected() {
             "alerts" => {
                 let at = Instant::from_micros(case["received_at"].as_i64().unwrap());
                 let channel = case["channel"].as_str().unwrap();
-                outcome(decoders.decode_alerts("pid", channel, &body, at), |a| {
-                    alerts(a)
-                })
+                outcome(
+                    decoders.decode_alerts(case["source"].as_str().unwrap(), channel, &body, at),
+                    |a| alerts(a),
+                )
             }
             "composition" => outcome(cd::decode(&body, &dummy_request()), |u| units(u)),
             // Python's own `json` module semantics: not a connector's.

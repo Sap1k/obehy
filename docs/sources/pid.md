@@ -3,7 +3,7 @@
 Status: **probed 2026-10-15 around 00:10 local with a test API key; a 12.75 h server capture
 replayed at 97–100 % per mode; live on jdf and czptt since 2026-10-15.** Keys first checked
 against release `20261012T080259Z-8f416ec58c3a` (serving schema 5.x). Connector `sources/pid.py`
-(decoder version 4); alerts `sources/pid_alerts.py`.
+(decoder version 4); alerts by the generic `gtfs-rt-alerts`, infotexts by `pid-infotexts`.
 
 PID (Pražská integrovaná doprava) covers Prague city buses, trams, metro, trolleybuses and the
 ferry, the regional buses of Central Bohemia and the trains in its area. Golemio, Prague's data
@@ -91,7 +91,7 @@ PID's disruptions come from VYMI (JIS), ROPID's incident system. Golemio exposes
 | `/v1/jis/events/custom-format` | the full VYMI export: type, severity, display period, cs/en/de, HTML, attachments | 403 for our key: internal to Golemio |
 
 Both channels are polled every 60 s and written to `rt.alert` as whole sets
-(`realtime/sources/pid_alerts.py`, `emit/alerts.py`); entities resolve through
+(`gtfs-rt-alerts` and `pid-infotexts` in `obehy-sources`); entities resolve through
 `pid:gtfs_route_id` and `pid:gtfs_stop_id`. On dev (release `20261015T014009Z`): 47 of 56 route
 entities and 36 of 36 stops resolved, 25 alerts published in the jdf feed. A route-wide
 NO_SERVICE may describe one train (`Os 9715 NEJEDE` on `L1040`, `L1240`): alerts never

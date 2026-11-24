@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use obehy_core::config::decode::{
-    ByValue, Case, Decode, FactBody, FactGroups, FactSpec, FeedName, Gate, Guard, Invalid, Match,
-    OrChoice, Required, Root, Rule, Scalar, Selector, ValueRule, ValueSpec,
+    ByValue, Case, Decode, FactBody, FactGroups, FactSpec, Gate, Guard, Invalid, Match, OrChoice,
+    Required, Root, Rule, Scalar, Selector, ValueRule, ValueSpec,
 };
 use obehy_core::model::{
     Delay, DelayReference, Destination, Fact, Feed, Interval, LineRef, NextPoint, NextStopName,
@@ -1068,12 +1068,12 @@ impl Mapping {
         };
         let feed = match &decode.feed {
             None => return bad("a declarative decode needs `feed`"),
-            Some(OrChoice::Plain(f)) => Pick::Plain(feed_of(*f)),
+            Some(OrChoice::Plain(f)) => Pick::Plain(Feed::from(*f)),
             Some(OrChoice::Choice { by, cases }) => Pick::Choice {
                 by: c.reference(by)?,
                 cases: cases
                     .iter()
-                    .map(|k| (k.matches.clone(), feed_of(k.then)))
+                    .map(|k| (k.matches.clone(), Feed::from(k.then)))
                     .collect(),
             },
         };
@@ -1766,13 +1766,6 @@ impl Evaluated {
             slots[s] = v;
         }
         slots[slot] = self.value;
-    }
-}
-
-fn feed_of(f: FeedName) -> Feed {
-    match f {
-        FeedName::Jdf => Feed::Jdf,
-        FeedName::Czptt => Feed::Czptt,
     }
 }
 

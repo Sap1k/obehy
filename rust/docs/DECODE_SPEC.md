@@ -146,8 +146,19 @@ fact = [
 Mapping: PID-Q1, Q2, Q3. Normalizers: Q4, Q6.
 
 ### pid / alerts, pid / infotexts — code decoders
-`decoder = "pid-alerts"` / `"pid-infotexts"`: they emit Alerts, not facts (GTFS-RT protobuf,
-dedup + sort, PID-Q10 window expansion).
+`decoder = "gtfs-rt-alerts"` / `"pid-infotexts"`: they emit Alerts, not facts (GTFS-RT protobuf,
+dedup + sort; PID-Q10 window expansion). `gtfs-rt-alerts` is generic: the manifest names the
+namespaces of the feed's IDs, `keys = { trip = "pid:gtfs_trip_id", stop = …, route = … }`; an
+informed entity of a kind without one is not read.
+
+### ids-jmk / vehicles, ids-jmk / alerts — GTFS-RT code decoders
+`decoder = "gtfs-rt-vehicles"` (version 1) reads a vehicle positions dataset from the typed
+protobuf, no intermediate value tree: one observation per vehicle entity on the one `feed`; the
+vehicle key is `VehicleDescriptor.id` (entities without one, and deleted ones, are skipped), the
+trip key `trip_id` in `keys.trip`, `start_date` a `service_day`, the position (32-bit floats
+read as their shortest decimal) only with a fix time within the clock skew, which is also
+`observed_at`; the label is the vehicle attribute `label_attribute` names. No delay: that is
+trip updates'. The alerts channel is `gtfs-rt-alerts` with `ids-jmk:gtfs_*` keys.
 
 ### sz-mapa / trains (declarative, normalizers + CRS)
 ```toml
@@ -351,7 +362,7 @@ Only `document[0]` is read (arriva_express.py:79).
 
 ## 2. Readers, filters, normalizers
 
-Readers: `json` (§4.1), `html` (sz-tabule), `gtfs-rt` (pid alerts).
+Readers: `json` (§4.1), `html` (sz-tabule), `gtfs-rt` (the GTFS-RT code decoders).
 Recorder filters (reader options; byte-identical because sha256 depends on them): `arriva-express`
 (arriva_express.py:44-70), `dpmd` (JS literal reader + `recorded`, dpmd.py:62-222).
 
@@ -506,8 +517,10 @@ Where the code moved away from the sketch above:
   it raises). `offset_applied_twice` reads the raw text (`text = "gps_text"`);
   `moving_bearing` has `needs` (Python reads the arrow only for a position it keeps);
   `mpvnet_record` makes one record value (`rec.kind`, `rec.<n>`).
-- Code decoders: `decoder = "sz-tabule" | "pid-alerts" | "pid-infotexts" | "cd-composition"`
-  (ČD under `[lookup.decode]`); `version` is only for facts.
+- Code decoders: `decoder = "sz-tabule" | "gtfs-rt-vehicles" | "gtfs-rt-alerts" |
+  "pid-infotexts" | "cd-composition"` (ČD under `[lookup.decode]`); `version` is only for
+  facts. The GTFS-RT ones read `keys`, `gtfs-rt-vehicles` also a plain `feed` and
+  `label_attribute`.
 
 Declarative: DÚK, PID positions, SŽ map (with Křovák), DPMD (over the recorder filter's JSON),
 the four MPV net portals (one `[decode.portal]`), Arriva Express. Code: SŽ boards, PID alerts

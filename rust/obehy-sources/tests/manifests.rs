@@ -27,6 +27,7 @@ fn dossier(prefix: &str) -> &'static str {
         "CD" => "cd.md",
         "IREDO" => "iredo.md",
         "IDSOK" => "idsok.md",
+        "IDSJMK" => "ids-jmk.md",
         other => panic!("no dossier for quirk prefix {other}"),
     }
 }
@@ -84,6 +85,8 @@ fn every_shipped_decode_section_compiles() {
         ("cd", "composition", None),
         ("iredo", "vehicles", Some(1)),
         ("idsok", "vehicles", Some(1)),
+        ("ids-jmk", "vehicles", Some(1)),
+        ("ids-jmk", "alerts", None),
     ] {
         assert!(
             decoders.get(source, channel).is_some(),
@@ -96,7 +99,9 @@ fn every_shipped_decode_section_compiles() {
         );
     }
     assert!(decoders.is_alert_channel("pid", "infotexts"));
+    assert!(decoders.is_alert_channel("ids-jmk", "alerts"));
     assert!(decoders.decodes_facts("sz-tabule", "board"));
+    assert!(decoders.decodes_facts("ids-jmk", "vehicles"));
 }
 
 fn parse(text: &str) -> Result<Decode, String> {

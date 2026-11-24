@@ -11,7 +11,7 @@ touch_s = 3600
 # names its own order, else `live_sources`; unlisted sources after), the most recent first
 # among equals; then the model's default. Every disagreement is flagged, none is dropped.
 [precedence]
-live_sources = ["pid", "duk", "dpmd", "mpvnet", "iredo", "idsok", "arriva-express", "sz-mapa", "sz-tabule"]
+live_sources = ["pid", "duk", "dpmd", "mpvnet", "iredo", "idsok", "ids-jmk", "arriva-express", "sz-mapa", "sz-tabule"]
 
 [precedence.attributes]
 # Golemio's agency_name.real is the operator actually running the trip.

@@ -46,6 +46,7 @@ def test_realtime_sources_come_from_the_connector_manifests(tmp_path: Path) -> N
     assert feeds["mpvnet"] == ["cz-jdf-gtfs-rt.pb", "cz-czptt-gtfs-rt.pb"]
     assert feeds["iredo"] == feeds["idsok"] == ["cz-jdf-gtfs-rt.pb", "cz-czptt-gtfs-rt.pb"]
     assert feeds["pid"] == ["cz-jdf-gtfs-rt.pb", "cz-czptt-gtfs-rt.pb"]
+    assert feeds["ids-jmk"] == ["cz-jdf-gtfs-rt.pb"]
     assert set(feeds) == {source.source for source in load_sources() if source.live_feeds}
 
 

@@ -116,7 +116,8 @@ headers = { accept-encoding = "gzip" }
 
 [channel.decode]
 reader = "gtfs-rt"
-decoder = "pid-alerts"
+decoder = "gtfs-rt-alerts"
+keys = { trip = "pid:gtfs_trip_id", stop = "pid:gtfs_stop_id", route = "pid:gtfs_route_id" }
 
 # The VYMI infotexts departure boards show: stop-scoped, Czech and English, current and future.
 [[channel]]

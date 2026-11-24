@@ -313,6 +313,18 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-24** — New source IDS JMK (`ids-jmk`, KORDIS JMK GTFS-RT; `docs/sources/ids-jmk.md`)
+  on jdf: positions keyed by the IDS JMK GTFS trip ID, no delays (none in the feed), and its
+  alerts. GTFS-RT is decoded by two generic code decoders over typed protobuf:
+  `gtfs-rt-vehicles` and `gtfs-rt-alerts`, which replaces `pid-alerts` (PID output unchanged;
+  the manifest names the key namespaces). A 10-minute recording replayed against release
+  `20261124T070233Z`: 380 of 547 non-rail key groups bound; 131 more name a sibling calendar
+  variant of today's trip (IDSJMK-Q9), and 167 rail groups have no key (IDSJMK-Q1). Q9 is
+  keyed by `ids-jmk:gtfs_trip_line_course` (serving 5.3, jrutil-rs OVL-R131: a trip ID names
+  every trip of its line/course): on the golden slice 378 groups bind instead of 279, the same
+  trips plus 99, none ambiguous. Needs a release built with OVL-R131; rail still waits.
+  Pinned corpus streams rewritten (the `ids-jmk` `physical_vehicles` row). fmt, clippy, Rust
+  and Python unit tests pass; not run on the server.
 - **2026-11-22** — `obehy build` switched to jrutil-rs: one `jrutil build` over a written
   specification (`src/obehy/static_build.py`) replaces the F# stages, the Python filtered feed
   and the osmium demand clip; `[paths] gazetteer_dir` is new, `--memory-budget` and

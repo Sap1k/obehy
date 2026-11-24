@@ -1,0 +1,47 @@
+# IDS JMK vehicle positions as GTFS-RT from KORDIS JMK (docs/sources/ids-jmk.md): Jihomoravský
+# kraj regional buses, Brno trams, trolleybuses and buses. A trip ID names its run, the trip of
+# its line/course that runs on the day (IDSJMK-Q9): the static key `gtfs_trip_line_course`.
+# The static overlay binds them on jdf only; regional trains are not bound yet (IDSJMK-Q1).
+# The feed has no trip updates, so no delays: progress comes from the positions.
+source = "ids-jmk"
+manifest_version = 1
+# The public feed list (obehy release feed-list) names the source by these.
+title = "IDS JMK vehicle positions (KORDIS JMK)"
+covers = "IDS JMK (Jihomoravský kraj) regional buses and Brno city lines: positions."
+
+# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those): the descriptor's
+# ID names the vehicle; its label is the fleet number (IDSJMK-Q2).
+[vehicles]
+physical = { default = true }
+
+[[channel]]
+name = "vehicles"
+poll = { kind = "interval", seconds = 15 }
+backoff = { after_failures = 5, max_s = 300 }
+timeout_s = 20
+request = { method = "GET", url = "https://kordis-jmk.cz/gtfs/gtfsReal.dat" }
+feeds = ["jdf"]
+capabilities = ["vehicle_key", "trip_key", "position"]
+
+[channel.decode]
+version = 1
+reader = "gtfs-rt"
+decoder = "gtfs-rt-vehicles"
+feed = "jdf"
+keys = { trip = "ids-jmk:gtfs_trip_line_course" }  # IDSJMK-Q9
+label_attribute = "fleet_number"
+
+# The same dataset carries the alerts (IDSJMK-Q4); routes and stops by their GTFS IDs.
+[[channel]]
+name = "alerts"
+poll = { kind = "interval", seconds = 60 }
+backoff = { after_failures = 5, max_s = 600 }
+timeout_s = 20
+request = { method = "GET", url = "https://kordis-jmk.cz/gtfs/gtfsReal.dat" }
+feeds = ["jdf"]
+capabilities = ["alert"]
+
+[channel.decode]
+reader = "gtfs-rt"
+decoder = "gtfs-rt-alerts"
+keys = { trip = "ids-jmk:gtfs_trip_line_course", stop = "ids-jmk:gtfs_stop_id", route = "ids-jmk:gtfs_route_id" }

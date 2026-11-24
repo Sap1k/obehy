@@ -1,8 +1,12 @@
-//! GTFS-RT service alerts as protobuf (`gtfs-realtime.proto`, proto2): only the messages and
-//! fields the alert decoder reads. Fields keep proto2 presence (`Option`), enums stay `i32`
-//! (an unknown value reads as the field's default), required fields are not enforced.
+//! GTFS-RT as protobuf (`gtfs-realtime.proto`, proto2): only the messages and fields the
+//! decoders read (service alerts, vehicle positions). Fields keep proto2 presence (`Option`),
+//! enums stay `i32` (an unknown value reads as the field's default), required fields are not
+//! enforced.
 
+use obehy_core::time::{Date, Instant};
 use prost::Message;
+
+use crate::error::PayloadError;
 
 #[derive(Clone, PartialEq, Message)]
 pub struct FeedMessage {
@@ -16,8 +20,42 @@ pub struct FeedEntity {
     pub id: Option<String>,
     #[prost(bool, optional, tag = "2")]
     pub is_deleted: Option<bool>,
+    #[prost(message, optional, tag = "4")]
+    pub vehicle: Option<VehiclePosition>,
     #[prost(message, optional, tag = "5")]
     pub alert: Option<Alert>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct VehiclePosition {
+    #[prost(message, optional, tag = "1")]
+    pub trip: Option<TripDescriptor>,
+    #[prost(message, optional, tag = "2")]
+    pub position: Option<Position>,
+    /// Seconds since the epoch: when the position was measured.
+    #[prost(uint64, optional, tag = "5")]
+    pub timestamp: Option<u64>,
+    #[prost(message, optional, tag = "8")]
+    pub vehicle: Option<VehicleDescriptor>,
+}
+
+/// WGS84 degrees as `float` (32-bit), as the format has them.
+#[derive(Clone, PartialEq, Message)]
+pub struct Position {
+    #[prost(float, optional, tag = "1")]
+    pub latitude: Option<f32>,
+    #[prost(float, optional, tag = "2")]
+    pub longitude: Option<f32>,
+    #[prost(float, optional, tag = "3")]
+    pub bearing: Option<f32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct VehicleDescriptor {
+    #[prost(string, optional, tag = "1")]
+    pub id: Option<String>,
+    #[prost(string, optional, tag = "2")]
+    pub label: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -141,6 +179,31 @@ fn name(names: &[&'static str], value: Option<i32>, default: i32) -> &'static st
 }
 
 /// Parses a FeedMessage.
-pub fn parse(body: &[u8]) -> Result<FeedMessage, prost::DecodeError> {
-    FeedMessage::decode(body)
+pub fn parse(body: &[u8]) -> Result<FeedMessage, PayloadError> {
+    FeedMessage::decode(body).map_err(|_| PayloadError::new("not a GTFS-RT message"))
+}
+
+/// A POSIX time (seconds since the epoch), the format's timestamps.
+pub fn instant(epoch: u64) -> Result<Instant, PayloadError> {
+    i64::try_from(epoch)
+        .ok()
+        .filter(|s| *s < 253_402_300_800)
+        .map(Instant::from_unix_seconds)
+        .ok_or_else(|| PayloadError::new(format!("time out of range ({epoch})")))
+}
+
+/// A `TripDescriptor.start_date` (`YYYYMMDD`): the trip's service date.
+pub fn service_date(start: &str) -> Result<Date, PayloadError> {
+    let bad = || PayloadError::new(format!("bad start date {start:?}"));
+    if start.len() != 8 || !start.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(bad());
+    }
+    let part = |range: std::ops::Range<usize>| start[range].parse().map_err(|_| bad());
+    Date::new(part(0..4)? as i32, part(4..6)?, part(6..8)?).ok_or_else(bad)
+}
+
+/// A `float` field as the decimal the producer wrote: its shortest round-trip text, so
+/// `49.2130051` stays `49.2130051` and does not widen to `49.21300506591797`.
+pub fn decimal(value: f32) -> f64 {
+    value.to_string().parse().unwrap_or(f64::from(value))
 }
