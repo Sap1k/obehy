@@ -45,7 +45,12 @@ from obehy.release import commands as release_commands
 from obehy.runtime_config import ConfigurationError, RuntimeConfig, load_runtime_config
 
 ProgressMode = Literal["auto", "rich", "plain", "off"]
-GAZETTEER_FILES = ("cz_regions.json.gz", "cz_towns.json.gz", "eur_towns_countries.csv")
+GAZETTEER_FILES = (
+    "cz_regions.json.gz",
+    "eur_countries.json.gz",
+    "cz_towns.json.gz",
+    "eur_towns_countries.csv",
+)
 
 
 @dataclass(frozen=True)
