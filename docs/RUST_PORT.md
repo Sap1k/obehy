@@ -55,7 +55,7 @@ needs:
 
 - **One rule per concept.** Passed calls (`Instance.left_index`), lifecycle, the journey key
   (`[journey]` in policy), the published delay (`lateness_s`), vehicle identity: one
-  implementation each. Thresholds live in `policy-v19.toml`, not in code.
+  implementation each. Thresholds live in `policy-v20.toml`, not in code.
 - **A pure core behind a narrow boundary.** `core.py`, `timeline/`, `infer/`, `model.py` and
   `facts.py` touch no database, network or files (import-linter keeps it so). In: facts, a
   closed, versioned set (`facts.py`, schema 5; `model_json.py` reads and writes it). Out: eight

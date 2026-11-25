@@ -1,6 +1,6 @@
 //! Policy ([`policy`]) and connector manifests ([`manifest`]).
 //!
-//! The files live in the Python package (`src/obehy/data/realtime/policy-v19.toml`,
+//! The files live in the Python package (`src/obehy/data/realtime/policy-v20.toml`,
 //! `src/obehy/data/realtime/sources/*.toml`), which reads a few of their fields too (tomllib,
 //! TOML 1.0: keep the files to TOML 1.0); obehy-rt finds them, this module parses them.
 

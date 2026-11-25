@@ -167,10 +167,12 @@ raises the API rate limit but is not needed. DB tests in `tests/db/` run when
 `deploy/obehy-release-update` runs fetch, load, then `activate --if-newer`, which leaves alone
 any release no newer than one activated before (so a rollback sticks until the next build),
 and points `data/releases/active` at what it activated. Activation keeps the data of the active
-release only (`--keep 0` by default; about 7.5 GB in PostgreSQL; a rollback reloads one of the
-fetched releases) and drops older loads and what failed loads left behind; `obehy release prune`
-does the same on demand. On the server `release load --check-room` waits (until the next hourly
-run) while the disk lacks room for another copy plus the realtime guard's free space.
+release only (`--keep 0` by default; about 7.5 GB in PostgreSQL) and drops older loads and what
+failed loads left behind; `obehy release prune` does the same on demand. On the server
+`release load --check-room` waits (until the next hourly run) while the disk lacks room for
+another copy plus the realtime guard's free space. `fetch` keeps the newest fetched release
+(`--keep 1`) and the active one, so a rollback fetches the previous run again first
+(`obehy release fetch <run_id>`).
 
 ## Running the server
 
@@ -327,11 +329,11 @@ at most 60 a minute. Rail point events and the SŽ station codes need a release 
 `sr70` keys. Vehicles' working days are cut live from history (`history.vehicle_chains`);
 `obehy jobs nightly` (03:30 Prague in the server stack) drops history service dates (and their
 compositions) older than
-`[retention] history_days` (21; about 0.5 GB a day with PID) and raw archive days older than
+`[retention] history_days` (14; about 0.65 GB a day with PID) and raw archive days older than
 `raw_days` per source (yesterday and today, SŽ station boards two weeks; pin days to keep
 with `obehy rt corpus pin` first).
 `obehy jobs hourly` (every hour in the server stack) drops `rt.observation` hours older than
-`observation_hours` (8; all sources are about 10 GB a day) and keeps `[guard] free_gb` free on
+`observation_hours` (6, warm replay's window; all sources are about 0.6 GB an hour) and keeps `[guard] free_gb` free on
 the data disk by deleting the oldest raw days, then history days. The design is in
 `docs/R1_SLICE.md` and, for rail, `docs/R2_SLICE.md`.
 

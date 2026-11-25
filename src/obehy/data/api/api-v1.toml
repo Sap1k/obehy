@@ -50,9 +50,9 @@ patterns = 20
 
 [history]
 # The longest span of service dates one history or punctuality request covers.
-max_days = 21
+max_days = 14
 # By default all of it: as long as history keeps (realtime policy `[retention] history_days`).
-default_days = 21
+default_days = 14
 
 [trips]
 # A call without realtime saying so counts as passed this long after its (expected) time.

@@ -48,7 +48,7 @@ def test_the_guard_stops_at_both_minimums() -> None:
 
 def test_the_policy_window_fits_the_api() -> None:
     policy = policy_values()
-    assert policy.retention.history_days == 21
+    assert policy.retention.history_days == 14
     assert policy.retention.raw_days("pid") == 1
     assert policy.retention.raw_days("sz-tabule") == 14
     assert policy.retention.longest_raw_days == 14

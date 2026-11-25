@@ -9,10 +9,10 @@
 # for every mode: the floor at now per mode, v17 terminals: terminal_radius_m and standing_m,
 # v18 one rule per concept: [journey], constants moved here from the code, v19 MPV net, IREDO and
 # IDSOK trains lead the rail position before SŽ, and keyless inference takes the scheduled time
-# at the next stop).
+# at the next stop, v20 two weeks of history and six hours of rt.observation).
 # Every value is required; code holds no defaults. Per-mode tables need a `default` entry and
 # may override it per route mode (bus, trolleybus, tram, metro, rail, water, cable, funicular).
-policy_version = "19"
+policy_version = "20"
 
 [journey]
 # The key a trip's journey is known by everywhere (history, current state, compositions, the
@@ -211,8 +211,8 @@ poll_stall_s = 30
 # Hourly rt.observation partitions (UTC hours) are dropped by `obehy jobs hourly` once they end
 # more than this long ago. Only warm replay (the last `warm_replay.max_hours`) and the debug
 # endpoints read them; delay history and vehicle tours live in history.*. All sources together
-# are about 10 GB a day with PID, so 8 hours is about 3.5 GB.
-observation_hours = 8
+# are about 0.6 GB an hour with PID, so 6 hours (warm replay's window) is about 3.5 GB.
+observation_hours = 6
 # Raw archive day directories (data/rt-raw/<source>/<channel>/<UTC day>) older than this, per
 # source, are deleted by `obehy jobs nightly`. Nothing live reads the archive: it is for replay
 # and for pinning corpora (`obehy rt corpus pin`, copies elsewhere that stay), so a source keeps
@@ -221,8 +221,8 @@ observation_hours = 8
 raw_days = { default = 1, "sz-tabule" = 14 }
 # History service dates older than this many days before today are dropped, every table's daily
 # partition at once, by `obehy jobs nightly`; the API's history spans (`history.max_days`) stay
-# within it. History is about 0.5 GB a day with PID.
-history_days = 21
+# within it. History is about 0.65 GB a day with PID.
+history_days = 14
 
 [guard]
 # `obehy jobs hourly` keeps this much of the data disk free: below it, it deletes the oldest raw

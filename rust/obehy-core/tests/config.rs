@@ -29,7 +29,7 @@ fn policy_text() -> String {
 #[test]
 fn policy_resolves_modes_and_journey_keys() {
     let policy = Policy::from_toml(&policy_text()).unwrap();
-    assert_eq!(policy.version, "19");
+    assert_eq!(policy.version, "20");
     assert_eq!(policy.warm_replay.mode, WarmReplayMode::Vehicles);
     assert_eq!(policy.time.max_delay_s.get("rail"), 14400.0);
     assert_eq!(policy.time.max_delay_s.get("bus"), 7200.0);

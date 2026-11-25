@@ -104,7 +104,7 @@ def test_nightly_prunes_each_sources_raw_days_by_its_window(
         nightly(connection, archive, policy_values(), datetime(2026, 11, 21, 3, tzinfo=UTC))
     )
 
-    assert lines[0] == "dropped 0 history days before 2026-10-31"
+    assert lines[0] == "dropped 0 history days before 2026-11-07"
     assert lines[1].startswith("deleted 0 alerts withdrawn before 2026-11-07")
     assert lines[2].startswith("deleted 0 lookup requests before 2026-11-07")
     assert lines[3:] == [

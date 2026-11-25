@@ -27,7 +27,7 @@ from zoneinfo import ZoneInfo
 
 _PACKAGE = Path(__file__).resolve().parent
 DATA = _PACKAGE / "data" / "realtime"
-POLICY = DATA / "policy-v19.toml"
+POLICY = DATA / "policy-v20.toml"
 SOURCES = DATA / "sources"
 
 FEED_NAMES = ("jdf", "czptt")
