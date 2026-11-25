@@ -16,7 +16,7 @@ from obehy.pipeline.reporting import Reporter, StageClock
 VLD_URL = "https://portal.cisjr.cz/pub/JDF/JDF.zip"
 DRAHY_URL = "https://portal.cisjr.cz/pub/draha/mestske/JDF.zip"
 DEFAULT_POST_INFERENCE_POLICY = (
-    Path(__file__).with_name("data") / "post-inference" / "learned-v1.json"
+    Path(__file__).with_name("data") / "post-inference" / "learned-v2.json"
 )
 
 

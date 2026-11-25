@@ -112,7 +112,7 @@ given. `--progress auto` uses Rich on an interactive terminal and periodic text 
 
 Estimated posts are off by default. `--estimated-posts` adds directed road/tram routing on the
 transit-routing extract with the packaged learned scorer
-(`src/obehy/data/post-inference/learned-v1.json`) unless `--post-inference-policy=FILE` names
+(`src/obehy/data/post-inference/learned-v2.json`) unless `--post-inference-policy=FILE` names
 another. Routed contexts are reused across runs from `workdir/cache/routing` (override with
 `[paths] routing_cache_dir`; disable with `--no-routing-cache`); output is the same with or
 without the cache.
