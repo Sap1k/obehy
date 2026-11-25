@@ -47,6 +47,21 @@ def _activate(connection: psycopg.Connection, run_id: str) -> activation.Publica
     return activation.activate(connection, CONTRACT, run_id)
 
 
+def test_a_shape_is_kept_as_its_line_with_the_points_in_order(
+    connection: psycopg.Connection, tmp_path: Path
+) -> None:
+    _load(connection, write_release(tmp_path, "run-a"))
+    assert _scalar(connection, "SELECT count(*) FROM static.shape_point") == 0
+    # The realtime worker's query (rust/obehy-rt/src/index/sql.rs, SHAPE_POINTS).
+    vertices = connection.execute(
+        "SELECT s.shape_id, ST_X(d.geom), ST_Y(d.geom)"
+        " FROM static.shape_line s CROSS JOIN LATERAL ST_DumpPoints(s.geom) d"
+        " WHERE s.shape_id = ANY(%s) ORDER BY s.shape_id, d.path[1]",
+        (["jdf:shape:1"],),
+    ).fetchall()
+    assert vertices == [("jdf:shape:1", 14.54, 50.68), ("jdf:shape:1", 14.40, 50.76)]
+
+
 def test_load_and_activate_exposes_both_feeds(
     connection: psycopg.Connection, tmp_path: Path
 ) -> None:

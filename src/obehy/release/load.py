@@ -297,6 +297,9 @@ def _derive(connection: psycopg.Connection, load_id: int) -> None:
             "ORDER BY sequence) FROM {shape_point} GROUP BY shape_id HAVING count(*) >= 2"
         ).format(shape_line=name("shape_line"), shape_point=name("shape_point"))
     )
+    # The line holds the same vertices in a tenth of the space, and the worker and the API read
+    # only the line, so the points go once it is built (the relation stays, empty).
+    connection.execute(sql.SQL("TRUNCATE {}").format(name("shape_point")))
     connection.execute(
         sql.SQL(
             "INSERT INTO {location_mode} (location_id, mode) "

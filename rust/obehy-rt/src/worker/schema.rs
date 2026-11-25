@@ -10,8 +10,8 @@ use tokio_postgres::Client;
 use super::WorkerError;
 
 /// The last migration this worker was written against: version and name.
-pub const SCHEMA_VERSION: i32 = 28;
-pub const SCHEMA_NAME: &str = "trip_current";
+pub const SCHEMA_VERSION: i32 = 29;
+pub const SCHEMA_NAME: &str = "shape_point_emptied";
 
 /// Why `applied` (the recorded migrations, by version) is not the schema this worker knows.
 pub fn verdict(applied: &[(i32, String)]) -> Result<(), String> {

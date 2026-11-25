@@ -97,8 +97,11 @@ const TRACK_KEYS: &str = "SELECT identifier, public_id FROM static.source_key \
 const LOCATIONS: &str = "SELECT location_id, name, longitude, latitude FROM static.location \
  WHERE location_id = ANY($1) AND load_id = $2";
 
-const SHAPE_POINTS: &str = "SELECT shape_id, longitude, latitude FROM static.shape_point \
- WHERE shape_id = ANY($1) AND load_id = $2 ORDER BY shape_id, sequence";
+// The vertices of each shape's line, in order: the loader keeps a shape's geometry only as
+// `shape_line` (its `shape_point` rows are emptied once the line is built).
+const SHAPE_POINTS: &str = "SELECT s.shape_id, ST_X(d.geom), ST_Y(d.geom) \
+ FROM static.shape_line s CROSS JOIN LATERAL ST_DumpPoints(s.geom) d \
+ WHERE s.shape_id = ANY($1) AND s.load_id = $2 ORDER BY s.shape_id, d.path[1]";
 
 const SERVICE_DATES: &str = "SELECT service_id, service_date FROM static.service_date \
  WHERE service_id = ANY($1) AND service_date = ANY($2) AND load_id = $3";

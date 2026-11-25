@@ -169,6 +169,7 @@ def test_shipped_migrations_are_contiguous() -> None:
         "journey_line",
         "vehicle_identity",
         "trip_current",
+        "shape_point_emptied",
     ]
 
 
