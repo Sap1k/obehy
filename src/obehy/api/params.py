@@ -70,7 +70,8 @@ def parse_cell(text: str, grid: BBox) -> BBox:
     if (
         not (x.is_integer() and y.is_integer() and size in _CELL_SIZES)
         or (box.north - box.south) * 4 != size
-        or x % size or y % size
+        or x % size
+        or y % size
         or not (grid.west <= box.west < grid.east and grid.south <= box.south < grid.north)
         or text != ",".join(_quarter(v) for v in (box.west, box.south, box.east, box.north))
     ):
