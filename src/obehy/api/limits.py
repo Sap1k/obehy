@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from obehy.api.params import BBox
+
 LIMITS = Path(__file__).resolve().parents[1] / "data" / "api" / "api-v1.toml"
 
 
@@ -44,7 +46,7 @@ class Limits:
     debug_window_min: int
     debug_limit: int
     vehicle_max_age_s: int
-    vehicles_bbox_max_deg2: float
+    vehicles_grid: BBox
     vehicles_limit: int
     vehicles_search_limit: int
     vehicles_search_limit_max: int
@@ -101,7 +103,7 @@ def load_limits(path: Path = LIMITS) -> Limits:
         debug_window_min=int(debug["window_min"]),
         debug_limit=int(debug["limit"]),
         vehicle_max_age_s=int(vehicles["max_age_s"]),
-        vehicles_bbox_max_deg2=float(vehicles["bbox_max_deg2"]),
+        vehicles_grid=BBox(*(float(v) for v in vehicles["grid"])),
         vehicles_limit=int(vehicles["limit"]),
         vehicles_search_limit=int(vehicles["search_limit"]),
         vehicles_search_limit_max=int(vehicles["search_limit_max"]),

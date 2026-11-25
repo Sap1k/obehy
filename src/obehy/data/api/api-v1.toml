@@ -36,7 +36,11 @@ stops_max = 10
 [vehicles]
 # Positions older than this are not shown (the realtime policy's default stale_after_s).
 max_age_s = 300
-bbox_max_deg2 = 4.0
+# A viewport is one cell of the clients' grid (web/src/features/map/grid.ts, the app's
+# VehicleGrid.kt): a 1, 1/2 or 1/4 degree square on its own multiple, spelled as they spell it
+# ("14.25,50.5,14.5,50.75"), with its south-west corner in this area (west, south, east, north).
+# Every viewer asks for the same few hundred URLs, which the caches in front then answer.
+grid = [11, 48, 20, 52]
 limit = 3000
 # Search by line, train number, headsign, fleet number or plate: the most vehicles answered.
 search_limit = 20
@@ -86,8 +90,8 @@ window_min = 60
 limit = 50
 
 [cache]
-# Realtime answers follow the worker's 10 s tick: the reverse proxy keeps them this long
-# (X-Accel-Expires), browsers not at all. Static ones follow the hourly release update
+# Realtime answers follow the worker's 10 s tick: the reverse proxy and Cloudflare keep them this
+# long (X-Accel-Expires, CDN-Cache-Control), browsers not at all. Static ones follow the hourly release update
 # (Cache-Control max-age, with the release as ETag).
 realtime_s = 5
 static_s = 3600

@@ -843,7 +843,7 @@ def test_enrichment_takes_a_bounded_number_of_legs(client: TestClient) -> None:
 
 
 def test_vehicles_fresh_in_the_viewport_of_this_release(client: TestClient) -> None:
-    box = "14.5,50.6,14.6,50.7"
+    box = "14.5,50.5,14.75,50.75"
     (bus,) = _get(client, "/vehicles", bbox=box)["vehicles"]
     assert (bus["vehicle_id"], bus["trip_id"], bus["delay_min"]) == ("duk:1001", "jdf:trip:1", 10)
     assert bus["punctuality"] == "very_late"
@@ -1317,7 +1317,7 @@ def test_debug_shows_why_a_vehicle_is_what_it_is(client: TestClient) -> None:
 
 
 def test_one_registered_vehicle_seen_by_two_sources(client: TestClient) -> None:
-    (bus,) = _get(client, "/vehicles", bbox="14.5,50.6,14.6,50.7")["vehicles"]
+    (bus,) = _get(client, "/vehicles", bbox="14.5,50.5,14.75,50.75")["vehicles"]
     assert (bus["vehicle_id"], bus["sources"], bus["source"]) == (
         "duk:1001",
         ["duk", "mpvnet"],
@@ -1387,7 +1387,7 @@ def test_vehicles_found_by_line_headsign_or_number_nearest_first(client: TestCli
     assert 1000 < near[0]["distance_m"] < 1200  # 0.01° of latitude
     assert _get(client, "/vehicles", q="Liberec")["vehicles"] == []
     _get(client, "/vehicles", 422)
-    _get(client, "/vehicles", 422, q="1", bbox="14.5,50.6,14.6,50.7")
+    _get(client, "/vehicles", 422, q="1", bbox="14.5,50.5,14.75,50.75")
     _get(client, "/vehicles", 422, q=",,")
 
 
@@ -1410,7 +1410,7 @@ def test_one_marker_per_journey_and_a_stable_trip_per_vehicle(
     )
     shown = {
         v["vehicle_id"]: v
-        for v in _get(client, "/vehicles", bbox="14.5,50.6,14.6,50.7")["vehicles"]
+        for v in _get(client, "/vehicles", bbox="14.5,50.5,14.75,50.75")["vehicles"]
     }
     assert "sz-mapa:TR/1154/KASO--100201" not in shown
     # Asked by its ID it answers, slashes and all (SŽ train IDs have them).

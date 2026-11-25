@@ -7,12 +7,14 @@ from datetime import date, datetime
 import pytest
 
 from obehy.api.params import (
+    BBox,
     Cursor,
     ParameterError,
     date_span,
     decode_cursor,
     encode_cursor,
     parse_bbox,
+    parse_cell,
     parse_near,
     schedule_spans,
     search_words,
@@ -25,6 +27,24 @@ def local(text: str) -> Instant:
     """`2026-10-09 00:20` read as Europe/Prague wall-clock time."""
 
     return instant(datetime.fromisoformat(text).replace(tzinfo=PRAGUE))
+
+
+GRID = BBox(11, 48, 20, 52)
+
+
+def test_a_vehicle_viewport_is_a_cell_of_the_clients_grid() -> None:
+    for text in ("14,50,15,51", "14.5,50,15,50.5", "14.25,50.75,14.5,51"):
+        assert parse_cell(text, GRID).west == float(text.split(",")[0])
+    for text in (
+        "14.5,50.6,14.6,50.7",  # off the grid
+        "14.25,50,14.75,50.5",  # a half-degree square not on its own multiple
+        "14,50,16,52",  # larger than a degree
+        "14,50,15,50.5",  # not square
+        "14.0,50,15,51",  # spelled differently from the clients
+        "25,50,26,51",  # outside the grid's area
+    ):
+        with pytest.raises(ParameterError):
+            parse_cell(text, GRID)
 
 
 def test_bbox_is_west_south_east_north_within_the_area_cap() -> None:

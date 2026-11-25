@@ -50,6 +50,37 @@ def parse_bbox(text: str, max_area: float) -> BBox:
     return box
 
 
+# A grid cell's sizes, in quarter degrees.
+_CELL_SIZES = (1, 2, 4)
+
+
+def _quarter(value: float) -> str:
+    """A quarter degree as the clients print it: 14.25, 14.5, 14 (no trailing zeros)."""
+
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def parse_cell(text: str, grid: BBox) -> BBox:
+    """A vehicle viewport: one cell of the clients' grid (api-v1.toml `vehicles.grid`), spelled
+    exactly as they spell it, so every viewer asks for the same URL."""
+
+    box = parse_bbox(text, max_area=1.0)
+    x, y = box.west * 4, box.south * 4
+    size = (box.east - box.west) * 4
+    if (
+        not (x.is_integer() and y.is_integer() and size in _CELL_SIZES)
+        or (box.north - box.south) * 4 != size
+        or x % size or y % size
+        or not (grid.west <= box.west < grid.east and grid.south <= box.south < grid.north)
+        or text != ",".join(_quarter(v) for v in (box.west, box.south, box.east, box.north))
+    ):
+        raise ParameterError(
+            "bbox must be a cell of the map's grid: a 1, 1/2 or 1/4 degree square on its own"
+            " multiple inside Czechia, such as 14.25,50.5,14.5,50.75"
+        )
+    return box
+
+
 def search_words(text: str) -> list[str]:
     """The words of a stop search: runs of letters and digits, so never a LIKE wildcard
     (`Česká Lípa,,aut.` is three)."""

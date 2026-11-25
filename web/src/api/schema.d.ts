@@ -4485,7 +4485,7 @@ export interface operations {
     vehicles_api_v1_vehicles_get: {
         parameters: {
             query?: {
-                /** @description minlon,minlat,maxlon,maxlat */
+                /** @description minlon,minlat,maxlon,maxlat: one cell of the map's grid, a 1, 1/2 or 1/4 degree square on its own multiple, such as 14.25,50.5,14.5,50.75 */
                 bbox?: string | null;
                 /** @description Line, train number, headsign, fleet number or plate, regardless of case and diacritics: an exact line or train number first, then the number or plate, a line it starts, any match */
                 q?: string | null;

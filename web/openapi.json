@@ -9013,7 +9013,7 @@
         "operationId": "vehicles_api_v1_vehicles_get",
         "parameters": [
           {
-            "description": "minlon,minlat,maxlon,maxlat",
+            "description": "minlon,minlat,maxlon,maxlat: one cell of the map's grid, a 1, 1/2 or 1/4 degree square on its own multiple, such as 14.25,50.5,14.5,50.75",
             "in": "query",
             "name": "bbox",
             "required": false,
@@ -9026,7 +9026,7 @@
                   "type": "null"
                 }
               ],
-              "description": "minlon,minlat,maxlon,maxlat",
+              "description": "minlon,minlat,maxlon,maxlat: one cell of the map's grid, a 1, 1/2 or 1/4 degree square on its own multiple, such as 14.25,50.5,14.5,50.75",
               "title": "Bbox"
             }
           },

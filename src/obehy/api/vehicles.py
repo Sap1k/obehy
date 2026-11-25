@@ -29,7 +29,7 @@ from obehy.api.common import (
 )
 from obehy.api.db import Snapshot
 from obehy.api.limits import Limits
-from obehy.api.params import ParameterError, parse_bbox, parse_near, search_words
+from obehy.api.params import ParameterError, parse_cell, parse_near, search_words
 from obehy.reference.vocabulary import load_vocabulary
 
 router = APIRouter(tags=["vehicles"])
@@ -90,7 +90,13 @@ def vehicles(
     response: Response,
     snap: SnapshotDep,
     limits: LimitsDep,
-    bbox: Annotated[str | None, Query(description="minlon,minlat,maxlon,maxlat")] = None,
+    bbox: Annotated[
+        str | None,
+        Query(
+            description="minlon,minlat,maxlon,maxlat: one cell of the map's grid, a 1, 1/2 or "
+            "1/4 degree square on its own multiple, such as 14.25,50.5,14.5,50.75"
+        ),
+    ] = None,
     q: Annotated[
         str | None,
         Query(
@@ -131,7 +137,7 @@ def vehicles(
         )
     else:
         assert bbox is not None
-        box = parse_bbox(bbox, limits.vehicles_bbox_max_deg2)
+        box = parse_cell(bbox, limits.vehicles_grid)
         rows = _rows(
             snap,
             limits,

@@ -45,12 +45,14 @@ def envelope(snap: Snapshot) -> dict[str, Any]:
 
 
 def realtime_cache(response: Response, limits: Limits) -> None:
-    """The reverse proxy keeps a realtime answer for `cache_realtime_s` (X-Accel-Expires, which
-    it does not pass on); a browser asks again every time, so a reload or a cell asked again
-    never draws an answer older than one it has shown."""
+    """The reverse proxy and Cloudflare keep a realtime answer for `cache_realtime_s`
+    (X-Accel-Expires, which nginx does not pass on, and CDN-Cache-Control, which browsers
+    ignore); a browser asks again every time, so a reload or a cell asked again never draws an
+    answer older than one it has shown."""
 
     response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Accel-Expires"] = str(limits.cache_realtime_s)
+    response.headers["CDN-Cache-Control"] = f"max-age={limits.cache_realtime_s}"
 
 
 def static_cache(

@@ -1,7 +1,7 @@
 // The map asks for vehicles by fixed cells, not by its viewport: every viewer asks for the same
-// URLs (so nginx's micro-cache serves them all), and a cell stays well inside the API's largest
-// bbox (api-v1.toml `vehicles.bbox_max_deg2`). A cell answering the API's most vehicles is cut
-// into quarters, down to a quarter degree.
+// URLs (so the caches in front serve them all), and the API accepts these cells only
+// (api-v1.toml `vehicles.grid`). A cell answering the API's most vehicles is cut into quarters,
+// down to a quarter degree.
 
 export interface Bounds {
   west: number;
