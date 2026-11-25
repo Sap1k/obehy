@@ -724,6 +724,24 @@ def validate_jdf_transit_routing_base(workdir: Path, source_key: str) -> Path:
     )
 
 
+def derive_extracts(osm_file: Path, workdir: Path, merge_key: str) -> tuple[Path, Path, Path]:
+    """The railway-location, post-candidate and routing-base extracts of the active snapshot.
+
+    Each filter reuses its extract while the snapshot and the filter version are unchanged, so a
+    build after a filter change (a cached snapshot, a new filter schema) refilters only that one.
+    """
+    filter_railway_locations(osm_file, railway_locations_path(workdir), source_key=merge_key)
+    filter_jdf_post_candidates(osm_file, jdf_post_candidates_path(workdir), source_key=merge_key)
+    filter_jdf_transit_routing_base(
+        osm_file, jdf_transit_routing_base_path(workdir), source_key=merge_key
+    )
+    return (
+        validate_railway_locations(workdir, merge_key),
+        validate_jdf_post_candidates(workdir, merge_key),
+        validate_jdf_transit_routing_base(workdir, merge_key),
+    )
+
+
 def _merge_key(extracts: Sequence[Extract], osmium_identity: str) -> str:
     payload = {
         "merge_schema_version": MERGE_SCHEMA_VERSION,

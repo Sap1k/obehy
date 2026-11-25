@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -349,3 +350,16 @@ def test_osm_filters_are_single_pass_and_node_only(
     assert "w/railway=tram" in routing_command
     assert "n/barrier=*" in routing_command
     assert "r/type=restriction" in routing_command
+
+    # A cached extract from an older filter version is refiltered; the others are reused.
+    manifest_path = osm_snapshot.active_manifest_path(routing_destination)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["filter_schema"] = "jdf-transit-routing-base-v1"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert osm_snapshot.derive_extracts(source, tmp_path, "fixture-source") == (
+        destination,
+        transit_destination,
+        routing_destination,
+    )
+    assert len(commands) == 4
+    assert "w/railway=tram" in commands[3]

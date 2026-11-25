@@ -127,12 +127,14 @@ def _check_inputs(options: BuildOptions) -> _Osm:
         osm_snapshot.build_snapshot(runtime)
     snapshot = osm_snapshot.validate_snapshot(runtime.osm_file, runtime.workdir, full_hash=True)
     merge_key = cast(str, snapshot["merge_key"])
-    workdir = runtime.workdir
+    railway_locations, post_candidates, transit_routing_base = osm_snapshot.derive_extracts(
+        runtime.osm_file, runtime.workdir, merge_key
+    )
     return _Osm(
         merge_key=merge_key,
-        railway_locations=osm_snapshot.validate_railway_locations(workdir, merge_key),
-        post_candidates=osm_snapshot.validate_jdf_post_candidates(workdir, merge_key),
-        transit_routing_base=osm_snapshot.validate_jdf_transit_routing_base(workdir, merge_key),
+        railway_locations=railway_locations,
+        post_candidates=post_candidates,
+        transit_routing_base=transit_routing_base,
     )
 
 

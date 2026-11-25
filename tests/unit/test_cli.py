@@ -170,25 +170,16 @@ def _preflight(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def valid_snapshot(*_args: object, **_kwargs: object) -> dict[str, Any]:
         return {"merge_key": "fixture-osm"}
 
-    def extract(name: str) -> Any:
-        def validate(_workdir: Path, source_key: str) -> Path:
-            assert source_key == "fixture-osm"
-            return osm / name
-
-        return validate
+    def derive_extracts(_osm_file: Path, _workdir: Path, merge_key: str) -> tuple[Path, ...]:
+        assert merge_key == "fixture-osm"
+        return (
+            osm / "railway-locations.osm.pbf",
+            osm / "jdf-post-candidates.osm.pbf",
+            osm / "jdf-transit-routing-base.osm.pbf",
+        )
 
     monkeypatch.setattr(cli.osm_snapshot, "validate_snapshot", valid_snapshot)
-    monkeypatch.setattr(
-        cli.osm_snapshot, "validate_railway_locations", extract("railway-locations.osm.pbf")
-    )
-    monkeypatch.setattr(
-        cli.osm_snapshot, "validate_jdf_post_candidates", extract("jdf-post-candidates.osm.pbf")
-    )
-    monkeypatch.setattr(
-        cli.osm_snapshot,
-        "validate_jdf_transit_routing_base",
-        extract("jdf-transit-routing-base.osm.pbf"),
-    )
+    monkeypatch.setattr(cli.osm_snapshot, "derive_extracts", derive_extracts)
     monkeypatch.setattr(cli.national_jdf, "geodata_manifest", valid_snapshot)
 
     def git_identity(_path: Path) -> dict[str, object]:
