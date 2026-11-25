@@ -1,8 +1,8 @@
 {
-  "serving_schema_version": "5.3",
+  "serving_schema_version": "5.4",
   "status": "normative",
   "parquet_metadata": {
-    "obehy.schema_version": "5.3",
+    "obehy.schema_version": "5.4",
     "obehy.relation": "<relation name>",
     "jrutil.bundle_format": "jrutil-production"
   },
@@ -40,6 +40,7 @@
       "values": {
         "exact": "surveyed or catalogued position of this stop place or boarding point",
         "estimated": "position estimated by JrUtil (shown with ` [?]`)",
+        "approximate": "5.4: somewhere in an area of candidate posts, the position its centre (shown with ` [?]`)",
         "missing": "no usable position; longitude/latitude are null"
       }
     },
@@ -51,7 +52,8 @@
         "catalogue": "regional stop catalogue in jrunify-ext-geodata",
         "overlay": "regional GTFS overlay source",
         "route_time": "interpolated along the route by scheduled time",
-        "route_end": "placed past the last anchor of a route (route-end-north)"
+        "route_end": "placed past the last anchor of a route (route-end-north)",
+        "post_estimate": "5.4: a boarding post chosen by the post estimator"
       }
     },
     "route_mode": {

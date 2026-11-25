@@ -601,8 +601,11 @@ JDF_POST_CANDIDATE_FILTERS = (
     "n/amenity=bus_station",
 )
 
+# Link roads are routable for the post estimator (jrutil-rs POST-R011, post B5).
 JDF_ROUTING_BASE_FILTERS = (
-    "w/highway=motorway,trunk,primary,secondary,tertiary,unclassified,residential,living_street,service,road,busway",
+    "w/highway=motorway,motorway_link,trunk,trunk_link,primary,primary_link,secondary,"
+    "secondary_link,tertiary,tertiary_link,unclassified,residential,living_street,service,road,"
+    "busway",
     "w/railway=tram",
     "w/construction",
     "n/barrier=*",
@@ -632,7 +635,7 @@ def filter_jdf_transit_routing_base(
     return _filter_jdf_osm(
         source,
         destination,
-        filter_schema="jdf-transit-routing-base-v1",
+        filter_schema="jdf-transit-routing-base-v2",
         generator="Obehy JDF transit routing base filter/1",
         filters=JDF_ROUTING_BASE_FILTERS,
         omit_referenced=False,
@@ -716,7 +719,7 @@ def validate_jdf_transit_routing_base(workdir: Path, source_key: str) -> Path:
     return _validate_jdf_filter(
         jdf_transit_routing_base_path(workdir),
         source_key,
-        "jdf-transit-routing-base-v1",
+        "jdf-transit-routing-base-v2",
         "JDF transit-routing base",
     )
 
