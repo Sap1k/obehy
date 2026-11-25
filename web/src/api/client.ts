@@ -24,8 +24,11 @@ export type ScopedChain = Schemas["ScopedChain"];
 export type ScopeRoute = Schemas["ScopeRoute"];
 export type ChainJourney = Schemas["ChainJourney"];
 
-/** Same origin: nginx in production, Vite's proxy in development. */
-export const api = createClient<paths>({ baseUrl: "" });
+/** Same origin: nginx in production, Vite's proxy in development. Every answer is revalidated
+ * (`no-cache`): the API's own headers decide freshness, and a copy a cache in front once marked
+ * as fresh for hours (Cloudflare's Browser TTL did, for realtime answers) is never drawn
+ * unchecked. Static answers come back as 304 by their ETag. */
+export const api = createClient<paths>({ baseUrl: "", cache: "no-cache" });
 
 /** An answer that is not 2xx, with the API's problem+json when it sent one. */
 export class ApiError extends Error {
