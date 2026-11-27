@@ -1,16 +1,18 @@
 -- A trip's passenger calls with their realtime state: the trip's slice of the current
 -- journey's calls (a rail run's part, rt.trip_current), matched by sequence. Railway points are
--- not public stops. A call is placed at its post when the post's position is known exactly (not
--- JrUtil's estimate), else at its stop place.
+-- not public stops. A call is placed at its post when the post's position is known exactly or the
+-- post estimator chose it (a real candidate post; the stop place's own position is often a centre
+-- off the road between its posts), else at its stop place.
 WITH live AS (
     SELECT e.value AS call
     FROM rt.trip_current(%(trip_id)s, %(service_date)s, %(release_id)s) x,
     jsonb_array_elements(x.calls) AS e (value)
 )
 SELECT c.sequence, c.location_id, l.name,
-       CASE WHEN bp.coordinate_precision = 'exact' THEN bp.latitude ELSE l.latitude END AS latitude,
-       CASE WHEN bp.coordinate_precision = 'exact' THEN bp.longitude ELSE l.longitude END
-           AS longitude,
+       CASE WHEN bp.coordinate_precision = 'exact' OR bp.coordinate_source = 'post_estimate'
+           THEN bp.latitude ELSE l.latitude END AS latitude,
+       CASE WHEN bp.coordinate_precision = 'exact' OR bp.coordinate_source = 'post_estimate'
+           THEN bp.longitude ELSE l.longitude END AS longitude,
        c.pickup_type,
        c.dropoff_type, bp.public_code AS platform,
        control.obehy_instant_fast(%(service_date)s, c.scheduled_arrival) AS scheduled_arrival,

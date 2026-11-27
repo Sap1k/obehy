@@ -55,13 +55,28 @@ def _jdf() -> Rows:
             "latitude": 50.76,
         }
     )
+    # A post the post estimator chose, at a stop place whose own position is its centre.
+    rows["location"].append(
+        {
+            "location_id": "jdf:stop:1:est:1",
+            "kind": "boarding_point",
+            "domain": "surface",
+            "parent_location_id": "jdf:stop:1",
+            "name": "Česká Lípa,,aut.nádr.",
+            "coordinate_precision": "estimated",
+            "coordinate_source": "post_estimate",
+            "longitude": 14.542,
+            "latitude": 50.682,
+        }
+    )
+    posts = {1: "jdf:stop:1:est:1", 2: "jdf:stop:2:post:1"}
     for sequence, location, seconds in ((1, "jdf:stop:1", 88200), (2, "jdf:stop:2", 89100)):
         rows["trip_call"].append(
             {
                 "trip_id": "jdf:trip:2",
                 "sequence": sequence,
                 "location_id": location,
-                "boarding_point_id": "jdf:stop:2:post:1" if sequence == 2 else None,
+                "boarding_point_id": posts[sequence],
                 "passenger_service": True,
                 "scheduled_arrival": seconds,
                 "scheduled_departure": seconds,
@@ -613,7 +628,8 @@ def test_a_stop_place_with_its_posts_lines_and_release_etag(client: TestClient) 
     body = response.json()
     assert body["stop"]["location_id"] == "jdf:stop:1"
     assert [(b["location_id"], b["public_code"]) for b in body["boarding_points"]] == [
-        ("jdf:stop:1:post:1", "1")
+        ("jdf:stop:1:post:1", "1"),
+        ("jdf:stop:1:est:1", None),
     ]
     assert body["lines"] is None  # only asked for: a hub has hundreds
     with_lines = _get(client, "/stop-places/jdf:stop:1", include="lines")
@@ -917,13 +933,14 @@ def test_the_openapi_document_names_every_endpoint(database_url: str) -> None:
     }
 
 
-def test_a_call_stands_at_its_post_when_its_position_is_exact(client: TestClient) -> None:
-    # Trip 1 boards at a post placed by JrUtil's estimate: the stop place's position.
+def test_a_call_stands_at_its_post_when_its_position_is_known(client: TestClient) -> None:
+    # Trip 1 boards at a post placed by a guess along the route: the stop place's position.
     first = _get(client, "/trips/jdf:trip:1/2026-10-06")["calls"][0]
     assert (first["latitude"], first["longitude"]) == (50.68, 14.54)
-    # Trip 2 ends at a surveyed post of a stop place without a position: the post's.
+    # Trip 2 starts at a post the post estimator chose, not the stop place's centre, and ends
+    # at a surveyed post of a stop place without a position: the posts'.
     calls = _get(client, "/trips/jdf:trip:2/2026-10-06")["calls"]
-    assert [(c["latitude"], c["longitude"]) for c in calls] == [(50.68, 14.54), (50.76, 14.6)]
+    assert [(c["latitude"], c["longitude"]) for c in calls] == [(50.682, 14.542), (50.76, 14.6)]
 
 
 def test_fixed_codes_are_readable(client: TestClient) -> None:
