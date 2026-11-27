@@ -313,6 +313,12 @@ and static acceptance (MobilityData GTFS validator, MOTIS import) is still open.
 
 ## Recent log
 
+- **2026-11-27** — IDS JMK vehicles are no longer followed as oběhy (`[vehicles] physical`
+  false): the GTFS-RT names trips too unreliably (IDSJMK-Q9). Positions, binding and alerts are
+  unchanged. The map's API would bind literally (`docs/sources/ids-jmk.md`); KORDIS JMK is to be
+  asked for access. Checked: worker and unit tests; the corpus streams rewritten (ids-jmk's
+  `physical_vehicles` row, and the header's policy version, left at 19 since f5d89fa).
+  Remains: delete ids-jmk's rows from `history.vehicle_assignment` on the server.
 - **2026-11-25** — The 2026-11-24 manual build (f5f2a3c) compiled but could not publish: GitHub
   answered 403 to the release tag because main's workflow files had changed during the build.
   CI now reserves the tag `build-<run id>` at job start (`obehy build --run-id`), publishes

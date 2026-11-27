@@ -11,10 +11,12 @@ manifest_version = 1
 title = "IDS JMK vehicle positions (KORDIS JMK)"
 covers = "IDS JMK (Jihomoravský kraj) regional buses and trains and Brno city lines: positions."
 
-# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those): the descriptor's
-# ID names the vehicle; its label is the fleet number (IDSJMK-Q2).
+# Which vehicle IDs are physical vehicles, by mode (oběhy follow only those): none. The
+# descriptor's ID names the vehicle and its label is the fleet number (IDSJMK-Q2), but the trip
+# IDs are too unreliable to follow a vehicle through a day (IDSJMK-Q9); to revisit with the map's
+# API (docs/sources/ids-jmk.md, Open questions).
 [vehicles]
-physical = { default = true }
+physical = { default = false }
 
 [[channel]]
 name = "vehicles"

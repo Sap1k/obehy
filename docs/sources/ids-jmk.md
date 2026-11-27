@@ -4,12 +4,14 @@ Status: **probed and recorded on 2026-11-24** (Tuesday, 21:53–22:03 local: 41 
 decoded) and replayed against release `20261124T070233Z` (Replay).
 Decoders: the generic code decoders `gtfs-rt-vehicles` (version 1) and `gtfs-rt-alerts`.
 Live on `jdf` and, for its trains, `czptt` (IDSJMK-Q1). Terms of use are still to be recorded.
+Since 2026-11-27 its vehicles are not followed as oběhy (Keys).
 
 IDS JMK is the integrated system of Jihomoravský kraj, run by KORDIS JMK: regional buses, Brno
 trams, trolleybuses and buses (DPMB), and regional trains. KORDIS publishes the static GTFS
 (`ids-jmk-gtfs`, the overlay on `jdf`) and this GTFS-RT dataset. Its public map
-(`https://mapa.idsjmk.cz`) shows the same vehicles with a delay, but names each vehicle's run
-(*pořadí*), not its trip, and needs the access token embedded in the page; it is not used.
+(`https://mapa.idsjmk.cz`) shows the same vehicles with a delay and names each one's trip and
+run; it forbids automated download and needs the access token embedded in the page, so it is not
+used (The map's API).
 
 ## Endpoint
 
@@ -50,7 +52,10 @@ entity { alert { informed_entity { route_id: "423" }  effect: STOP_MOVED
   whose number is its course on each date the line/course runs (IDSJMK-Q1). The channel's
   `trip_key_feed = "czptt"` sends an observation to `czptt` when its static data holds the key,
   else to `jdf`; one without a trip key follows its vehicle's last feed.
-- Vehicle: `VehicleDescriptor.id`; the label is its fleet number (IDSJMK-Q2).
+- Vehicle: `VehicleDescriptor.id`; the label is its fleet number (IDSJMK-Q2). Not a physical
+  vehicle to follow (`[vehicles] physical = { default = false }`): with the trip named
+  unreliably (IDSJMK-Q9) and no delays (IDSJMK-Q3), the oběhy cut from it were wrong. The
+  assignments recorded until then are deleted from `history.vehicle_assignment` by hand, once.
 - Alerts: trips, stops and routes by their GTFS IDs in the `ids-jmk:gtfs_*` namespaces the
   overlay publishes.
 
@@ -99,9 +104,29 @@ key groups were `jdf` without a key; with `trip_key_feed`, all 116 went to `czpt
 2 `ambiguous` (R 1132 has two CZPTT trips on Tuesdays 9–24 November, in the national package
 too), 11 `not_in_service` (units already naming a morning trip). No road group went to `czptt`.
 
+## The map's API
+
+Looked at by hand on 2026-11-27, not recorded: every response says automated download is
+forbidden and to ask KORDIS JMK for API access (Open questions).
+
+- `GET https://mapa.idsjmk.cz/api/vehicles`, read by the page every 5 s, about 117 KB. Needs the
+  header `X-Access-Token`, a token inlined in the page's HTML that expires (the page reloads
+  itself on 403); the runtime has no such fetch.
+- A vehicle: `ID`, `IDB` and `IDC` (the fleet numbers of a coupled set), `VType` (5 is a train),
+  `LineID`, `RouteID`, `Course` (the run, *pořadí*), `Delay` (minutes), `LastStopID`,
+  `FinalStopID`, `IsInactive`, a position and bearing.
+- `LineID`/`RouteID` is the line/course of `api.txt`, the key `ids-jmk:line_course` the overlay
+  already publishes: 24 of 25 vehicles looked up in the snapshot of 2026-11-20 (the 25th a
+  special line). A train's `RouteID` is its national train number. So the map would bind
+  literally with neither OVL-R131 nor OVL-R132.
+- `/api/tweets`: the current events (*mimořádnosti*) with their lines. `/api/diversions`: the
+  planned ones (*výluky*) with a point, a type (`Z`, `P`: a stop moved; `V`: a closure), a
+  validity and line names. `/api/alerts`: a site-wide banner, usually empty.
+
 ## Open questions
 
 - Terms of use.
+- The map's API in place of this dataset: KORDIS JMK is to be asked for access.
 - How the dataset behaves around midnight and DST (no `start_date`: the core picks the service
   date of each trip).
 - Rail (IDSJMK-Q1) in a national release: the first build with OVL-R132.
